@@ -59,8 +59,10 @@ def grid(rows, cols, jitter=0, drop=0.0):
 
 def main():
     np.random.seed(0)
-    box = np.zeros((H, W), np.uint8); box[100:350, 100:350] = 255
-    shop = grid(4, 6); shop[H - 110:H - 40, 40:W - 40] = 255
+    box = np.zeros((H, W), np.uint8)
+    box[100:350, 100:350] = 255
+    shop = grid(4, 6)
+    shop[H - 110:H - 40, 40:W - 40] = 255
     cases = [
         ('идеальная решётка 5x6', grid(5, 6)),
         ('идеальная решётка 12x14', grid(12, 14)),
@@ -80,7 +82,8 @@ def main():
     for d in (0.0, 0.5, 0.75, 0.9):
         np.random.seed(1)
         m = grid(5, 6, jitter=5, drop=d)
-        print(f'  выброшено {int(d * 100):>2}%: score {score(m):.4f}, окон осталось ~{int(30 * (1 - d))}')
+        left = int(30 * (1 - d))
+        print(f'  выброшено {int(d * 100):>2}%: score {score(m):.4f}, окон осталось ~{left}')
 
 
 if __name__ == '__main__':
