@@ -27,3 +27,4 @@ wandb/
 .DS_Store
 .idea/
 .vscode/
+backlog-kit/
