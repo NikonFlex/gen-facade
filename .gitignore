@@ -31,3 +31,10 @@ wandb/
 # чужие документы: статьи под копирайтом, презентации научрука
 *.pdf
 *.pptx
+
+# из baseline-kit
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.ruff_cache/

@@ -8,7 +8,11 @@
 
 Результат — data/solar-decathlon/ и manifest.json рядом.
 """
-import json, re, subprocess, sys, time
+import json
+import re
+import subprocess
+import sys
+import time
 from pathlib import Path
 
 OUT = Path('data/solar-decathlon')
