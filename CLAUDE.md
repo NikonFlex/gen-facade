@@ -4,7 +4,7 @@
 Руководитель темы — Валерия Ефимова, фактический научрук — Егор Баженов.
 Стек по требованию темы: Python + PyTorch.
 
-Постановка, скоуп и текущий статус — в [docs/task.md](docs/task.md).
+Постановка, скоуп и текущий статус — в [docs/statement.md](docs/statement.md).
 База знаний — [docs/](docs/), индекс в [docs/README.md](docs/README.md).
 Исходное ТЗ от Валерии — [important.md](important.md), не редактировать.
 

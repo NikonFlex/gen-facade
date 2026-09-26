@@ -139,8 +139,6 @@ https://cmp.felk.cvut.cz/~tylecr1/facade/ · лицензия CC `[провер�
 Разметка — пиксельные маски `[из абстракта]`. Объём и классы не выяснены.
 Не скачан.
 
-> TODO: посмотреть объём, классы, есть ли векторная разметка.
-
 ## City-Facade
 
 https://github.com/gorgeouseping/City-Facade ·

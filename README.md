@@ -28,7 +28,7 @@
 
 | Документ | Содержание |
 |---|---|
-| [docs/task.md](docs/task.md) | Постановка задачи, скоуп, открытые вопросы, риски |
+| [docs/statement.md](docs/statement.md) | Постановка задачи, скоуп, открытые вопросы, риски |
 | [docs/datasets.md](docs/datasets.md) | Датасеты фасадов, разбор формата CMP |
 | [docs/methods.md](docs/methods.md) | Подходы к генерации и векторизации |
 | [docs/lab-repos.md](docs/lab-repos.md) | Что уже есть в CTLab-ITMO |

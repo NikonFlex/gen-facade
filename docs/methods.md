@@ -181,9 +181,6 @@ axis-aligned прямоугольник. Это даёт прямой мост: 
 - Условная генерация: ControlNet / LoRA-файнтюн на фасадах, управление числом этажей
   и типами элементов (требование ТЗ)
 
-> TODO по правилу 1: поискать готовые файнтюны диффузионок на фасадах/архитектуре
-> на HuggingFace, прежде чем обучать своё.
-
 ## GenPlan — референсная архитектура
 
 https://github.com/CTLab-ITMO/GenPlan · лаборатория CTLab ITMO
@@ -197,6 +194,3 @@ https://github.com/CTLab-ITMO/GenPlan · лаборатория CTLab ITMO
 - модули: `decorator/`, `dto/`, `generator/`, `preprocessor/`, `vectorization/`,
   `optimizer/`, `three_dimensional/`, `metrics/`, `textures/`
 
-> TODO: прочитать код, а не README. Особенно `vectorization/`, `optimizer/` и `metrics/` —
-> оттуда видно, как они решают (или не решают) проблему структурной корректности,
-> и что можно переиспользовать.
