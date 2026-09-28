@@ -1,0 +1,249 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 760" width="2640" height="1520" role="img"
+           aria-label="Схема модулей: текст и план проходят разбор и препроцессор, генератор строит элементы каждой стороны с общими параметрами дома, затем привязка к сетке, валидатор и лист фасадов; снизу данные для обучения, метрики и будущий 3D-конвертер">
+        <rect width="1320" height="760" fill="#FFFFFF"/><defs><style>
+  .box { fill: #FFFFFF; stroke: #C7CFD8; stroke-width: 1.2; }
+  .box-acc { fill: #E7ECFA; stroke: #2952C7; stroke-width: 1.6; }
+  .box-mod { fill: #FBEDE6; stroke: #C2552C; stroke-width: 1.6; }
+  .box-later { fill: none; stroke: #5B6875; stroke-width: 1.2; stroke-dasharray: 5 4; }
+  .card { fill: #FFFFFF; stroke: #C2552C; stroke-width: 1; }
+  .col { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: 0.1em; fill: #5B6875; }
+  .t { font-family: "Golos Text", system-ui, sans-serif; font-size: 14.5px; font-weight: 600; fill: #16202B; }
+  .t-acc { fill: #2952C7; }
+  .t-mod { fill: #C2552C; }
+  .s { font-family: "Golos Text", system-ui, sans-serif; font-size: 12px; fill: #5B6875; }
+  .m { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11.5px; fill: #16202B; }
+  .lbl { font-family: "Golos Text", system-ui, sans-serif; font-size: 11.5px; fill: #5B6875; }
+  .lbl-acc { fill: #2952C7; }
+  .lbl-mod { fill: #C2552C; }
+  .flow { fill: none; stroke: #5B6875; stroke-width: 1.4; }
+  .flow-acc { fill: none; stroke: #2952C7; stroke-width: 2; }
+  .flow-mod { fill: none; stroke: #C2552C; stroke-width: 1.4; stroke-dasharray: 5 4; }
+  .flow-later { fill: none; stroke: #5B6875; stroke-width: 1.4; stroke-dasharray: 5 4; }
+  .head { fill: #5B6875; }
+  .head-acc { fill: #2952C7; }
+  .head-mod { fill: #C2552C; }
+  .wall { stroke: #16202B; stroke-width: 5; stroke-linecap: square; }
+  .inner { stroke: #16202B; stroke-width: 2.5; }
+  .gap { stroke: #9DB6E8; stroke-width: 2; }
+  .zone { fill: #C2552C; }
+  .side { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; fill: #2952C7; }
+  .fw { fill: #FFFFFF; stroke: #16202B; stroke-width: 1.2; }
+  .fr { fill: #5B6875; fill-opacity: 0.35; stroke: #16202B; stroke-width: 1.2; }
+  .fg { fill: #9DB6E8; }
+  .fd { fill: #C2552C; fill-opacity: 0.75; }
+  .eave { stroke: #2952C7; stroke-width: 1.2; stroke-dasharray: 3 3; }
+  .ground { stroke: #16202B; stroke-width: 1.2; }
+</style>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="head"/>
+          </marker>
+          <marker id="ah-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="head-acc"/>
+          </marker>
+          <marker id="ah-mod" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="head-mod"/>
+          </marker>
+        </defs>
+
+        <!-- заголовки колонок -->
+        <text class="col" x="24" y="46">ВХОД</text>
+        <text class="col" x="280" y="46">РАЗБОР</text>
+        <text class="col" x="560" y="46">ГЕНЕРАЦИЯ</text>
+        <text class="col" x="860" y="46">ПРОВЕРКА</text>
+        <text class="col" x="1080" y="46">ВЫХОД</text>
+
+        <!-- вход: текст -->
+        <rect class="box" x="24" y="90" width="190" height="120" rx="6"/>
+        <text class="t" x="40" y="116">Текст</text>
+        <text class="m" x="40" y="142">«двухэтажный коттедж,</text>
+        <text class="m" x="40" y="160">вальмовая крыша,</text>
+        <text class="m" x="40" y="178">красный кирпич»</text>
+
+        <!-- вход: план -->
+        <rect class="box" x="24" y="260" width="190" height="240" rx="6"/>
+        <text class="t" x="40" y="286">Векторный план</text>
+        <text class="s" x="40" y="304">SVG: стены, окна, двери</text>
+        <!-- наружные стены с разрывами -->
+        <line class="wall" x1="54" y1="334" x2="96" y2="334"/>
+        <line class="wall" x1="114" y1="334" x2="140" y2="334"/>
+        <line class="wall" x1="156" y1="334" x2="184" y2="334"/>
+        <line class="gap" x1="98" y1="334" x2="112" y2="334"/>
+        <line class="gap" x1="142" y1="334" x2="154" y2="334"/>
+        <line class="wall" x1="54" y1="440" x2="78" y2="440"/>
+        <line class="wall" x1="96" y1="440" x2="130" y2="440"/>
+        <line class="wall" x1="148" y1="440" x2="184" y2="440"/>
+        <line class="gap" x1="132" y1="440" x2="146" y2="440"/>
+        <line class="wall" x1="54" y1="334" x2="54" y2="372"/>
+        <line class="wall" x1="54" y1="390" x2="54" y2="440"/>
+        <line class="gap" x1="54" y1="374" x2="54" y2="388"/>
+        <line class="wall" x1="184" y1="334" x2="184" y2="360"/>
+        <line class="wall" x1="184" y1="378" x2="184" y2="410"/>
+        <line class="wall" x1="184" y1="424" x2="184" y2="440"/>
+        <line class="gap" x1="184" y1="362" x2="184" y2="376"/>
+        <line class="gap" x1="184" y1="412" x2="184" y2="422"/>
+        <!-- внутренняя стена и запретная зона у её примыкания -->
+        <line class="inner" x1="120" y1="336" x2="120" y2="404"/>
+        <line class="inner" x1="56" y1="404" x2="120" y2="404"/>
+        <rect class="zone" x="116" y="325" width="8" height="4"/>
+        <!-- вход -->
+        <path d="M80,440 A14,14 0 0 1 94,454" class="flow" />
+        <text class="side" x="115" y="462">А</text>
+        <text class="side" x="70" y="324">В</text>
+        <text class="side" x="38" y="391">Г</text>
+        <text class="side" x="192" y="391">Б</text>
+        <text class="s" x="40" y="486">режим: с окнами или глухой</text>
+
+        <!-- разбор описания -->
+        <rect class="box" x="280" y="90" width="210" height="120" rx="6"/>
+        <text class="t" x="296" y="116">Разбор описания</text>
+        <text class="s" x="296" y="140">извлекает тип дома, этажность,</text>
+        <text class="s" x="296" y="158">высоты, крышу и материалы</text>
+        <line class="flow" x1="214" y1="150" x2="276" y2="150" marker-end="url(#ah)"/>
+
+        <!-- препроцессор плана -->
+        <rect class="box" x="280" y="260" width="210" height="240" rx="6"/>
+        <text class="t" x="296" y="286">Препроцессор плана</text>
+        <text class="s" x="296" y="312">адаптер: GenPlan или МКД</text>
+        <text class="s" x="296" y="332">сливает стены, находит контур</text>
+        <text class="s" x="296" y="352">режет контур на стороны</text>
+        <text class="s" x="296" y="372">проёмы вдоль каждой стороны</text>
+        <text class="s" x="296" y="392">запретные зоны у внутренних</text>
+        <text class="s" x="296" y="410">стен — туда окна не ставим</text>
+        <text class="s" x="296" y="436">глухой режим: заделывает</text>
+        <text class="s" x="296" y="454">разрывы, кроме входа</text>
+        <line class="flow" x1="214" y1="380" x2="276" y2="380" marker-end="url(#ah)"/>
+
+        <!-- параметры дома -->
+        <rect class="box-acc" x="560" y="90" width="230" height="120" rx="6"/>
+        <text class="t t-acc" x="576" y="116">Параметры дома</text>
+        <text class="m" x="576" y="142">тип: коттедж</text>
+        <text class="m" x="576" y="160">этажей: 2 · высота 2.7 м</text>
+        <text class="m" x="576" y="178">крыша: вальмовая, 30°</text>
+        <text class="m" x="576" y="196">стены: кирпич</text>
+        <line class="flow" x1="490" y1="150" x2="556" y2="150" marker-end="url(#ah)"/>
+        <text class="lbl" x="523" y="141" text-anchor="middle">спека</text>
+
+        <!-- генератор элементов -->
+        <rect class="box-mod" x="560" y="260" width="230" height="240" rx="6"/>
+        <text class="t" x="576" y="286">Генератор элементов</text>
+        <text class="s" x="576" y="304">класс + прямоугольник</text>
+        <text class="lbl lbl-mod" x="576" y="324">модель · сейчас правило GenPlan</text>
+        <rect class="card" x="576" y="336" width="198" height="32" rx="4"/>
+        <text class="m" x="590" y="356">сторона А · вход</text>
+        <rect class="card" x="576" y="376" width="198" height="32" rx="4"/>
+        <text class="m" x="590" y="396">сторона Б</text>
+        <rect class="card" x="576" y="416" width="198" height="32" rx="4"/>
+        <text class="m" x="590" y="436">сторона В</text>
+        <rect class="card" x="576" y="456" width="198" height="32" rx="4"/>
+        <text class="m" x="590" y="476">сторона Г</text>
+        <line class="flow" x1="490" y1="380" x2="556" y2="380" marker-end="url(#ah)"/>
+        <text class="lbl" x="523" y="371" text-anchor="middle">стороны</text>
+
+        <!-- общие параметры: вниз в генератор и вправо в лист -->
+        <line class="flow-acc" x1="680" y1="210" x2="680" y2="255" marker-end="url(#ah-acc)"/>
+        <text class="lbl lbl-acc" x="690" y="238">одни на все стороны</text>
+        <polyline class="flow-acc" points="790,130 1192,130 1192,195" marker-end="url(#ah-acc)"/>
+        <text class="lbl lbl-acc" x="996" y="121" text-anchor="middle">отметки этажей, карниза и крыши</text>
+
+        <!-- проверка -->
+        <rect class="box" x="860" y="260" width="170" height="90" rx="6"/>
+        <text class="t" x="876" y="286">Привязка к сетке</text>
+        <text class="s" x="876" y="308">по линиям этажей и осям</text>
+        <text class="s" x="876" y="326">соседние окна — ровно</text>
+        <line class="flow" x1="790" y1="305" x2="856" y2="305" marker-end="url(#ah)"/>
+        <text class="lbl" x="823" y="296" text-anchor="middle">элементы</text>
+
+        <rect class="box" x="860" y="400" width="170" height="100" rx="6"/>
+        <text class="t" x="876" y="426">Валидатор</text>
+        <text class="s" x="876" y="448">внутри стены</text>
+        <text class="s" x="876" y="466">проёмы не пересекаются</text>
+        <text class="s" x="876" y="484">окна вне запретных зон</text>
+        <line class="flow" x1="945" y1="350" x2="945" y2="396" marker-end="url(#ah)"/>
+
+        <!-- лист фасадов -->
+        <rect class="box" x="1080" y="200" width="224" height="300" rx="6"/>
+        <text class="t" x="1096" y="226">Лист фасадов</text>
+        <text class="s" x="1096" y="244">силуэт крыши из параметров</text>
+        <line class="flow" x1="1030" y1="450" x2="1076" y2="450" marker-end="url(#ah)"/>
+        <text class="lbl" x="1053" y="441" text-anchor="middle">ок</text>
+
+        <!-- фасад А: длинная сторона, вход -->
+        <text class="side" x="1098" y="266">А</text>
+        <polygon class="fr" points="1098,302 1190,302 1168,278 1120,278"/>
+        <rect class="fw" x="1104" y="302" width="80" height="46"/>
+        <rect class="fg" x="1112" y="309" width="8" height="10"/>
+        <rect class="fg" x="1132" y="309" width="8" height="10"/>
+        <rect class="fg" x="1152" y="309" width="8" height="10"/>
+        <rect class="fg" x="1170" y="309" width="8" height="10"/>
+        <rect class="fg" x="1112" y="330" width="8" height="10"/>
+        <rect class="fd" x="1139" y="328" width="12" height="20"/>
+        <rect class="fg" x="1170" y="330" width="8" height="10"/>
+        <!-- фасад Б: короткая сторона -->
+        <text class="side" x="1202" y="266">Б</text>
+        <polygon class="fr" points="1210,302 1282,302 1246,278"/>
+        <rect class="fw" x="1216" y="302" width="60" height="46"/>
+        <rect class="fg" x="1226" y="309" width="8" height="10"/>
+        <rect class="fg" x="1258" y="309" width="8" height="10"/>
+        <rect class="fg" x="1226" y="330" width="8" height="10"/>
+        <rect class="fg" x="1258" y="330" width="8" height="10"/>
+        <line class="eave" x1="1092" y1="302" x2="1296" y2="302"/>
+        <line class="eave" x1="1092" y1="325" x2="1296" y2="325"/>
+        <line class="ground" x1="1092" y1="348" x2="1296" y2="348"/>
+
+        <!-- фасад В: длинная сторона -->
+        <text class="side" x="1098" y="374">В</text>
+        <polygon class="fr" points="1098,410 1190,410 1168,386 1120,386"/>
+        <rect class="fw" x="1104" y="410" width="80" height="46"/>
+        <rect class="fg" x="1112" y="417" width="8" height="10"/>
+        <rect class="fg" x="1142" y="417" width="8" height="10"/>
+        <rect class="fg" x="1170" y="417" width="8" height="10"/>
+        <rect class="fg" x="1112" y="438" width="8" height="10"/>
+        <rect class="fg" x="1142" y="438" width="8" height="10"/>
+        <rect class="fg" x="1170" y="438" width="8" height="10"/>
+        <!-- фасад Г: короткая сторона -->
+        <text class="side" x="1202" y="374">Г</text>
+        <polygon class="fr" points="1210,410 1282,410 1246,386"/>
+        <rect class="fw" x="1216" y="410" width="60" height="46"/>
+        <rect class="fg" x="1242" y="417" width="8" height="10"/>
+        <rect class="fg" x="1226" y="438" width="8" height="10"/>
+        <rect class="fg" x="1258" y="438" width="8" height="10"/>
+        <line class="eave" x1="1092" y1="410" x2="1296" y2="410"/>
+        <line class="eave" x1="1092" y1="433" x2="1296" y2="433"/>
+        <line class="ground" x1="1092" y1="456" x2="1296" y2="456"/>
+
+        <text class="m" x="1096" y="484">SVG + JSON</text>
+
+        <!-- нижняя полоса: источники, данные, метрики, 3D -->
+        <rect class="box" x="24" y="590" width="290" height="120" rx="6"/>
+        <text class="t" x="40" y="616">Откуда планы</text>
+        <text class="s" x="40" y="640">GenPlan: текст → план, коттеджи</text>
+        <text class="s" x="40" y="660">коллеги: планы многоквартирных</text>
+        <text class="s" x="40" y="680">формат МКД уточняется</text>
+        <line class="flow" x1="119" y1="590" x2="119" y2="504" marker-end="url(#ah)"/>
+        <text class="lbl" x="127" y="552">SVG-план</text>
+
+        <rect class="box" x="520" y="590" width="320" height="120" rx="6"/>
+        <text class="t" x="536" y="616">Данные для обучения</text>
+        <text class="s" x="536" y="640">синтетика building_tools: план + фасады</text>
+        <text class="s" x="536" y="660">CMP — многоквартирные</text>
+        <text class="s" x="536" y="680">Solar Decathlon — реальный тест</text>
+        <text class="s" x="536" y="700">описания — из разметки</text>
+        <line class="flow-mod" x1="680" y1="590" x2="680" y2="504" marker-end="url(#ah-mod)"/>
+        <text class="lbl lbl-mod" x="690" y="552">обучение</text>
+
+        <rect class="box" x="880" y="590" width="250" height="120" rx="6"/>
+        <text class="t" x="896" y="616">Метрики</text>
+        <text class="s" x="896" y="640">геометрия · структура</text>
+        <text class="s" x="896" y="660">разнообразие · валидность SVG</text>
+        <text class="s" x="896" y="680">согласованность с планом</text>
+        <text class="s" x="896" y="700">соответствие описанию</text>
+        <line class="flow" x1="945" y1="500" x2="945" y2="586" marker-end="url(#ah)"/>
+        <text class="lbl" x="953" y="552">нарушения</text>
+
+        <rect class="box-later" x="1160" y="610" width="144" height="90" rx="6"/>
+        <text class="t" x="1176" y="636">3D-конвертер</text>
+        <text class="s" x="1176" y="656">GenPlan</text>
+        <text class="s" x="1176" y="680">позже, с Егором</text>
+        <line class="flow-later" x1="1232" y1="500" x2="1232" y2="606" marker-end="url(#ah)"/>
+        <text class="lbl" x="1240" y="556">JSON</text>
+      </svg>
