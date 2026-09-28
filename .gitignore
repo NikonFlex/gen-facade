@@ -38,3 +38,6 @@ wandb/
 !.env.example
 .pytest_cache/
 .ruff_cache/
+
+# чужие примеры (GenPlan без лицензии)
+materials/*.svg
