@@ -1,0 +1,2 @@
+# разбор docs/incoming/index.yaml в tools/spec_check.py
+pyyaml>=6

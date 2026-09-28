@@ -13,8 +13,10 @@ description: Войти в контекст диплома в пустом ча�
 1. `python3 tools/backlog.py sync` — копия задач могла устареть.
 2. `git status -sb` и `git log --oneline -15 --date=short --format='%h %ad %s'` —
    что делалось последним и нет ли незакоммиченных хвостов.
-3. Постановка: верх `docs/statement.md` до раздела «Контракт задачи»
-   (блоки ⚠ — это актуальная постановка, старый контракт ниже устарел).
+3. Постановка: `specs/README.md` и `specs/task.md` (правила и «Открыто»);
+   `python3 tools/spec_check.py` и `docs/incoming/index.yaml` — нет ли входящих
+   со статусом `incoming` / `reviewed`, то есть неразобранных.
+   `docs/statement.md` — история до 28.09, для постановки не читать.
 4. Журнал: последние 2–3 записи `docs/journal/JOURNAL.md` и весь
    `docs/journal/INSIGHTS.md` (уроки — держать в голове всю сессию).
 5. Задачи: `docs/tasks/INDEX.md`. Для открытых задач, упомянутых в

@@ -28,7 +28,9 @@
 
 | Документ | Содержание |
 |---|---|
-| [docs/statement.md](docs/statement.md) | Постановка задачи, скоуп, открытые вопросы, риски |
+| [specs/](specs/README.md) | **Требования: постановка, вход, представление, метод, данные, оценка** |
+| [docs/plan.md](docs/plan.md) | План работы для научруков |
+| [docs/statement.md](docs/statement.md) | Постановка до 28.09 — история; актуальное в specs/ |
 | [docs/datasets.md](docs/datasets.md) | Датасеты фасадов, разбор формата CMP |
 | [docs/methods.md](docs/methods.md) | Подходы к генерации и векторизации |
 | [docs/lab-repos.md](docs/lab-repos.md) | Что уже есть в CTLab-ITMO |
@@ -37,7 +39,8 @@
 | [docs/decisions.md](docs/decisions.md) | Журнал решений |
 
 Правила работы над проектом — [CLAUDE.md](CLAUDE.md).
-Исходная постановка от руководителя — [important.md](important.md).
+Исходная постановка от руководителя — [docs/incoming/](docs/incoming/README.md).
+Порядок работы с требованиями — [docs/SPEC-DRIVEN.md](docs/SPEC-DRIVEN.md).
 
 ## Связанные проекты лаборатории
 

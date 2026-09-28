@@ -1,0 +1,15 @@
+# Индекс входящих документов. Порядок работы — docs/SPEC-DRIVEN.md.
+# Проверка: python3 tools/spec_check.py
+- path: docs/incoming/ТЗ Валерии и заметка Егора.md
+  received: '2026-09-25'
+  source: >-
+    описание темы 1.5 из гугл-дока Валерии Ефимовой и заметка Егора Баженова
+    (переписка 21.09); до 28.09 лежал в корне как important.md
+  status: distilled
+  sha256: 21729d5d1f700b4561811a0ebbd93aa7c973942c516a22f388792e895967b0e2
+  distilled_into:
+  - specs/task.md
+  - specs/facade.md
+  - specs/generation.md
+  - specs/evaluation.md
+  - specs/data.md

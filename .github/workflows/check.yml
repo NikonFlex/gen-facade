@@ -33,3 +33,6 @@ jobs:
 
       - name: Самопроверка скрипта задач
         run: python3 tools/backlog.py --selftest
+
+      - name: Спеки и входящие
+        run: python3 tools/spec_check.py
