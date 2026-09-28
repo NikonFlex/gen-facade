@@ -309,16 +309,15 @@
         <text class="t" x="88" y="966">Препроцессор</text>
         <rect class="pill" x="206" y="950" width="44" height="22" rx="11"/>
         <text class="pill-t" x="217" y="965">код</text>
-        <line class="pw" x1="90" y1="996" x2="160" y2="996"/><line class="pw" x1="182" y1="996" x2="250" y2="996"/>
+        <line class="pw" x1="90" y1="996" x2="196" y2="996"/><line class="pw" x1="216" y1="996" x2="250" y2="996"/>
         <line class="pw" x1="90" y1="1066" x2="112" y2="1066"/><line class="pw" x1="126" y1="1066" x2="170" y2="1066"/><line class="pw" x1="186" y1="1066" x2="250" y2="1066"/>
         <line class="pw" x1="90" y1="996" x2="90" y2="1066"/><line class="pw" x1="250" y1="996" x2="250" y2="1066"/>
         <line class="pi" x1="170" y1="998" x2="170" y2="1040"/><line class="pi" x1="92" y1="1040" x2="170" y2="1040"/>
-        <rect class="fg" x="161" y="994" width="20" height="4"/>
+        <rect class="fg" x="197" y="994" width="18" height="4"/>
         <rect class="fg" x="171" y="1064" width="14" height="4"/>
-        <circle cx="171" cy="996" r="10" style="fill: none; stroke: #C2552C; stroke-width: 2"/>
         <text class="side" x="140" y="1084">А</text>
         <text class="s" x="58" y="1106">окна берём из плана</text>
-        <text class="lbl lbl-mod" x="58" y="1126">◯ окно упирается во внутреннюю стену</text>
+        <text class="s" x="58" y="1124">и раскладываем по сторонам</text>
         <line class="flow" x1="300" y1="1042" x2="336" y2="1042" marker-end="url(#ah)"/>
 
         <!-- 3' -->
@@ -363,8 +362,6 @@
         <text class="s" x="878" y="1004">те же проверки, плюс:</text>
         <text class="s" x="878" y="1026">окна стоят там же,</text>
         <text class="s" x="878" y="1044">где на плане</text>
-        <text class="lbl lbl-mod" x="878" y="1080">окно у внутренней стены:</text>
-        <text class="lbl lbl-mod" x="878" y="1098">как исправлять — решаем</text>
         <line class="flow" x1="1100" y1="1042" x2="1116" y2="1042" marker-end="url(#ah)"/>
 
         <!-- 6' -->
