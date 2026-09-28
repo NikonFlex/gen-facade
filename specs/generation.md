@@ -2,8 +2,8 @@
 
 > **Статус: provisional.** Собрано агентом 28.09.2026.
 > Источники: docs/incoming/ТЗ Валерии и заметка Егора.md (архитектуры, условная
-> генерация, заметка Егора про растр → EvoVec); пересказ переписки 28.09 в
-> docs/tasks/gf-0001.md (два режима); docs/plan.md §5; разбор Text2SVG — docs/lab-repos.md.
+> генерация, заметка Егора про растр → EvoVec); docs/incoming/Переписка в Telegram 26–28.09.md
+> (два режима, Егор 28.09 13:00); docs/plan.md §5; разбор Text2SVG — docs/lab-repos.md.
 > Владелец дельт: Никон Парвицкий.
 
 Как по `Request` (task.md) получить `FacadeSheet` (facade.md). Выбор
