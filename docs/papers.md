@@ -493,3 +493,58 @@ Drawings (ECCV 2020) · StarVector, Chat2SVG, OmniSVG, SVGFusion, LLM4SVG.
 
 > Осторожно: arXiv:2303.12755 «Text Semantics to Image Generation» **отозвана
 > автором**, ссылаться только на версию Springer `10.1007/978-981-99-8405-3_3`.
+
+---
+
+# Фасады по плану: поиск 2026-09-28 (gf#37)
+
+Искали работы «план / контур → фасады или экстерьер», «план + текст → дом»,
+векторные фасады. Поиск делал агент, ключевое перепроверено лично.
+
+**Ближайшие — назвать в обзоре обязательно:**
+
+- **ShellMaker: Language-Guided Exterior Completion under Structural Constraints** ·
+  Xu, Aliaga · **ECCV 2026** · arXiv:2606.31680 · https://ruiqixu37.github.io/ShellMaker_web/
+  `[проверено: страница arXiv + HTML-версия]`. Вход — каркас здания (контур, стены,
+  **заданные** проёмы) + текст стиля; выход — 3D-меш с PBR-материалами
+  и параметрической крышей. Проёмы не генерирует. Ограничение из §4.7 дословно:
+  «treats the facade as a single massing shell and stylizes openings uniformly
+  without modeling per-floor articulation». Код обещан («All code and data will
+  be released»). Мотивация совпадает с нашей: «Existing methods can generate floor
+  plans and wall layouts but typically stop at a structural shell».
+- **ArchyBase, Floor Plan to Elevation AI** — коммерческий сервис,
+  https://www.archybase.com/floor-plan-to-elevation `[проверено: страница]`.
+  План (картинка, PDF, DXF) → фасады front / rear / left / right, экспорт
+  PDF, PNG, **SVG, DXF**; «infers wall heights, roof pitch, window sizes, and door
+  positions». Текст — необязательное поле. Метода и статьи нет.
+  **Из-за него нельзя заявлять «первыми генерируем фасады по плану».**
+- **GeoTexBuild: 3D Building Model Generation from Map Footprints** · Wang, Yang, Wang ·
+  arXiv:2504.08419 `[проверено: страница arXiv]`. Контур → карта высот → геометрия →
+  стиль (ControlNet, NSF, multi-view diffusion) → 3D. Проёмов на входе нет.
+- **Text2BIM** · Du, Esser, Nousias, Borrmann · J. Computing in Civil Engineering ·
+  arXiv:2408.08054 `[проверено: страница arXiv + HTML v1]`. Текст → BIM через
+  LLM-агентов, плана на входе нет. Подпись к рис. 12 дословно: «the reasonable
+  arrangement of building openings, a task requiring advanced spatial
+  understanding, poses a challenge for all LLMs» — аргумент для режима,
+  где модуль ставит проёмы сам.
+
+**ProxyBuild** (Tang, Li, Fan, arXiv:2609.23386, 20.09.2026) — текст →
+структурированное редактируемое 3D-здание `[проверено: аннотация]`; ставит ли
+модель окна сама, по аннотации не видно — агент утверждал, что да, не подтверждено.
+
+**Из отчёта агента, лично не открывал** `[не проверено]`: BuildingBlock (SIGGRAPH 2025, arXiv:2505.04051),
+CityGenAgent (arXiv:2602.05362), Retrieval-Augmented Sketch-Guided 3D Building
+Generation (arXiv:2603.16612), Multi-View Depth Consistent Image Generation
+(CAADRIA 2025, arXiv:2503.03068), Daylight-driven Architectural Design
+(CVPR 2024 W, arXiv:2404.13353), HouseCrafter (ICCV 2025) и Plan2Scene
+(CVPR 2021) — интерьеры, Building-GAN (ICCV 2021), Sketch2BIM (arXiv:2510.20838),
+две работы по сельским фасадам Чжэцзяна (FoAR 2025, Buildings 2026).
+
+**Искали и не нашли** (arXiv API по аннотациям): `facade AND floorplan` — 0;
+`facade AND SVG` — 0; `facade AND vector AND generation` — 0; `"elevation drawing"` —
+0 релевантных. Русскоязычный поиск («генерация фасада по плану нейросеть»,
+cyberleninka) — только коммерческие сервисы рестайлинга по фото и проекции
+готовой 3D-модели в Revit/Renga.
+
+**Вывод:** открытого воспроизводимого метода «векторный план + текст → четыре
+согласованных векторных фасада» не найдено. Новизна — в сочетании, см. `docs/plan.md`, раздел 3.
