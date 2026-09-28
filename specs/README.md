@@ -15,7 +15,7 @@
 | [glossary.md](glossary.md) | термины работы | — |
 | [task.md](task.md) | постановка: вход, выход, типы домов, режимы, границы, что сдаём по ТЗ | Request |
 | [plan-input.md](plan-input.md) | вход-план: формат GenPlan, препроцессор, стороны дома | Plan, Side, Opening, ForbiddenZone |
-| [facade.md](facade.md) | представление фасада и формат выхода | HouseSpec, Roof, SideFacade, Element, FacadeSheet |
+| [facade.md](facade.md) | представление фасада и формат выхода | HouseSpec, Roof, SideFacade, Element, MaterialZone, FacadeSheet |
 | [generation.md](generation.md) | метод: разбор текста, генератор, привязка к сетке | — |
 | [data.md](data.md) | данные для обучения и теста, синтез описаний | Sample |
 | [evaluation.md](evaluation.md) | валидатор, метрики, базовые подходы, ablation | Violation |
