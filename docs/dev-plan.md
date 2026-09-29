@@ -64,7 +64,7 @@ diploma/
 │   ├── unfold.py
 │   ├── layout/      rule.py  model/
 │   ├── snap.py  validate.py
-│   ├── render/      svg.py  json.py  preview.py
+│   ├── render/      svg.py  parse.py  preview.py
 │   ├── pipeline.py  cli.py
 │   ├── datasets/    buildingnet.py  synthetic.py  cmp.py  manual.py  texts.py
 │   ├── train/

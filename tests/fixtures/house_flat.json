@@ -1,0 +1,69 @@
+{
+  "spec": {
+    "building_type": "cottage", "floors": 2, "floor_heights_m": [3.2, 3.0],
+    "plinth_m": 0.3, "eaves_m": 6.5, "style": "современный",
+    "roof": {"kind": "flat", "pitch_deg": 0, "overhang_m": 0},
+    "materials": [
+      {"id": "white", "kind": "plaster", "color": "#f2f2f0"},
+      {"id": "concrete", "kind": "concrete", "color": "#9a9a96"},
+      {"id": "larch", "kind": "wood", "color": "#b07d4f"},
+      {"id": "metal", "kind": "metal", "color": "#33373b"}
+    ]
+  },
+  "facades": [
+    {
+      "side": {"index": 0, "length_m": 11, "orientation": [0, -1], "has_entrance": true},
+      "zones": [
+        {"role": "plinth", "material": "concrete", "shape": [[0, 0], [11, 0], [11, 0.3], [0, 0.3]]},
+        {"role": "main", "material": "white", "shape": [[0, 0.3], [11, 0.3], [11, 6.5], [0, 6.5]]},
+        {"role": "accent", "material": "larch", "shape": [[8.2, 0.3], [11, 0.3], [11, 6.5], [8.2, 6.5]]},
+        {"role": "band", "material": "metal", "shape": [[0, 6.2], [11, 6.2], [11, 6.5], [0, 6.5]]}
+      ],
+      "elements": [
+        {"id": "w1", "cls": "window", "x_m": 1.0, "y_m": 0.3, "w_m": 4.0, "h_m": 2.8, "floor": 1, "material": "metal", "variant": {"kind": "panoramic", "cols": 4}},
+        {"id": "d1", "cls": "door", "x_m": 6.6, "y_m": 0.3, "w_m": 1.1, "h_m": 2.3, "floor": 1, "material": "metal"},
+        {"id": "w2", "cls": "window", "x_m": 1.0, "y_m": 4.4, "w_m": 6.7, "h_m": 1.0, "floor": 2, "material": "metal", "variant": {"kind": "strip", "cols": 5}}
+      ]
+    },
+    {
+      "side": {"index": 1, "length_m": 9, "orientation": [-1, 0]},
+      "zones": [
+        {"role": "plinth", "material": "concrete", "shape": [[0, 0], [9, 0], [9, 0.3], [0, 0.3]]},
+        {"role": "main", "material": "white", "shape": [[0, 0.3], [9, 0.3], [9, 6.5], [0, 6.5]]},
+        {"role": "band", "material": "metal", "shape": [[0, 6.2], [9, 6.2], [9, 6.5], [0, 6.5]]}
+      ],
+      "elements": [
+        {"id": "w1", "cls": "window", "x_m": 3.5, "y_m": 1.2, "w_m": 2.0, "h_m": 1.4, "floor": 1, "material": "metal", "variant": {"kind": "regular", "cols": 2}},
+        {"id": "w2", "cls": "window", "x_m": 3.5, "y_m": 4.3, "w_m": 2.0, "h_m": 1.3, "floor": 2, "material": "metal", "variant": {"kind": "regular", "cols": 2}}
+      ]
+    },
+    {
+      "side": {"index": 2, "length_m": 11, "orientation": [0, 1]},
+      "zones": [
+        {"role": "plinth", "material": "concrete", "shape": [[0, 0], [11, 0], [11, 0.3], [0, 0.3]]},
+        {"role": "main", "material": "white", "shape": [[0, 0.3], [11, 0.3], [11, 6.5], [0, 6.5]]},
+        {"role": "band", "material": "metal", "shape": [[0, 6.2], [11, 6.2], [11, 6.5], [0, 6.5]]}
+      ],
+      "elements": [
+        {"id": "w1", "cls": "window", "x_m": 1.5, "y_m": 0.3, "w_m": 3.0, "h_m": 2.8, "floor": 1, "material": "metal", "variant": {"kind": "panoramic", "cols": 3}},
+        {"id": "w2", "cls": "window", "x_m": 7.0, "y_m": 1.4, "w_m": 1.2, "h_m": 1.2, "floor": 1, "material": "metal", "variant": {"kind": "regular"}},
+        {"id": "w3", "cls": "window", "x_m": 1.5, "y_m": 4.3, "w_m": 1.2, "h_m": 1.3, "floor": 2, "material": "metal", "variant": {"kind": "regular"}},
+        {"id": "w4", "cls": "window", "x_m": 5.0, "y_m": 4.3, "w_m": 1.2, "h_m": 1.3, "floor": 2, "material": "metal", "variant": {"kind": "regular"}},
+        {"id": "w5", "cls": "window", "x_m": 8.3, "y_m": 4.3, "w_m": 1.2, "h_m": 1.3, "floor": 2, "material": "metal", "variant": {"kind": "regular"}}
+      ]
+    },
+    {
+      "side": {"index": 3, "length_m": 9, "orientation": [1, 0]},
+      "zones": [
+        {"role": "plinth", "material": "concrete", "shape": [[0, 0], [9, 0], [9, 0.3], [0, 0.3]]},
+        {"role": "main", "material": "white", "shape": [[0, 0.3], [9, 0.3], [9, 6.5], [0, 6.5]]},
+        {"role": "accent", "material": "larch", "shape": [[0, 3.5], [3.5, 3.5], [3.5, 6.2], [0, 6.2]]},
+        {"role": "band", "material": "metal", "shape": [[0, 6.2], [9, 6.2], [9, 6.5], [0, 6.5]]}
+      ],
+      "elements": [
+        {"id": "w1", "cls": "window", "x_m": 5.5, "y_m": 1.2, "w_m": 2.0, "h_m": 1.4, "floor": 1, "material": "metal", "variant": {"kind": "regular", "cols": 2}},
+        {"id": "w2", "cls": "window", "x_m": 7.0, "y_m": 4.3, "w_m": 2.0, "h_m": 1.4, "floor": 2, "material": "metal", "variant": {"kind": "corner", "cols": 2}}
+      ]
+    }
+  ]
+}
