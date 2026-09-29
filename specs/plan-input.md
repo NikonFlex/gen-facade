@@ -22,7 +22,7 @@
 | `outline` | наружный контур, замкнутый многоугольник по часовой стрелке |
 | `openings` | все проёмы — `Opening` |
 | `scale_m_per_px` | масштаб, метры на пиксель |
-| `source` | `genplan` \| `mkd` \| `synthetic` — откуда пришёл |
+| `source` | `genplan` \| `mkd` \| `synthetic` \| `buildingnet` \| `bio` \| `manual` — откуда пришёл (последние три — для обучения и теста, data.md) |
 
 ### Side
 
