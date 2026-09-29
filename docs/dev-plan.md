@@ -171,8 +171,8 @@ Streamlit и Gradio плохо подходят под интерактивны�
 1. `genfacade render tests/fixtures/house_gable.json` кладёт в `outputs/runs/<id>/`
    `sheet.svg`, `sheet.json`, `preview.png`, `meta.json`.
 2. Критерии facade.md: отметки на углах совпадают — тест; JSON → SVG → JSON без
-   потерь — тест; SVG открывается в Inkscape и конвертируется в DXF — руками.
-   Критерий про CMP — gf#12, этап 2.
+   потерь — тест. Критерий про CMP — gf#12, этап 2; Inkscape → DXF — ближе к защите
+   *(хозяин 29.09)*.
 3. Каждый тест проверен на сломанном коде.
 4. Лист проверен глазами — агентом, потом хозяином; ориентир — эскизный проект
    ИЖС из `materials/`.
