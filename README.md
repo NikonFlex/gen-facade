@@ -25,7 +25,13 @@ python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"      # код, тесты, линтер
 .venv/bin/pip install -e ".[dev,train]" # + torch, для обучения
 .venv/bin/pytest && .venv/bin/ruff check .
+
+.venv/bin/genfacade render tests/fixtures/house_gable.json          # лист фасадов → outputs/runs/
+.venv/bin/genfacade render tests/fixtures/house_gable.json -c мои/  # со своими настройками
 ```
+
+Настройки по умолчанию — [genfacade/config/](genfacade/config/): библиотека материалов,
+размеры и стиль листа. Своя папка с любыми из этих файлов переопределяет их.
 
 ## Статус
 

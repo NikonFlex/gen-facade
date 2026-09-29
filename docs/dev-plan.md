@@ -59,12 +59,13 @@
 diploma/
 ├── genfacade/                  код, pip install -e .
 │   ├── schema.py
+│   ├── config/      library.toml  sheet.toml  sheet.css — настройки по умолчанию
 │   ├── spec/        rule.py  model.py
 │   ├── plan/        parse.py  sides.py  zones.py  modes.py
 │   ├── unfold.py
 │   ├── layout/      rule.py  model/
 │   ├── snap.py  validate.py
-│   ├── render/      svg.py  parse.py  preview.py
+│   ├── render/      svg.py  parse.py  format.py  preview.py
 │   ├── pipeline.py  cli.py
 │   ├── datasets/    buildingnet.py  synthetic.py  cmp.py  manual.py  texts.py
 │   ├── train/

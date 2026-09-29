@@ -29,9 +29,9 @@ def _ridge_seen(f) -> float:
 
 
 @pytest.mark.parametrize("axis", ["x", "y"])
-def test_corners_meet(house, axis):
+def test_corners_meet(house, axis, cfg):
     """На углах соседних фасадов совпадают отметки карниза и конька."""
-    sheet = unfold(_with_ridge(house, axis))
+    sheet = unfold(_with_ridge(house, axis), cfg.library.roof.thickness_m)
     facades = sheet.facades
     for a, b in zip(facades, facades[1:] + facades[:1], strict=True):
         # Левый край a (x = 0) — угол i+1; у следующей стороны b это правый край (x = длина).
@@ -41,10 +41,10 @@ def test_corners_meet(house, axis):
     assert seen == pytest.approx([seen[0]] * len(seen)), "конёк с разных сторон на разной высоте"
 
 
-def test_json_svg_json_roundtrip(house):
+def test_json_svg_json_roundtrip(house, cfg):
     """JSON → SVG → разбор SVG → JSON даёт тот же набор элементов."""
-    sheet = unfold(house)
-    parsed = parse_sheet_svg(sheet_svg(sheet))
+    sheet = unfold(house, cfg.library.roof.thickness_m)
+    parsed = parse_sheet_svg(sheet_svg(sheet, cfg))
     assert sorted(parsed) == [f.side.index for f in sheet.facades]
     for f in sheet.facades:
         elements, zones = parsed[f.side.index]
@@ -52,7 +52,7 @@ def test_json_svg_json_roundtrip(house):
         assert zones == f.zones
 
 
-def test_svg_is_deterministic(house):
+def test_svg_is_deterministic(house, cfg):
     """SVG получается из JSON детерминированно (facade.md, правило 7)."""
-    sheet = unfold(house)
-    assert sheet_svg(sheet) == sheet_svg(sheet.model_copy(deep=True))
+    sheet = unfold(house, cfg.library.roof.thickness_m)
+    assert sheet_svg(sheet, cfg) == sheet_svg(sheet.model_copy(deep=True), cfg)

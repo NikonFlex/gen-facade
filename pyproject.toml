@@ -22,5 +22,9 @@ train = ["torch"]
 [tool.setuptools.packages.find]
 include = ["genfacade*"]
 
+[tool.setuptools.package-data]
+# настройки по умолчанию — внутри пакета, чтобы работали и при обычной установке
+"genfacade.config" = ["*.toml", "*.css"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

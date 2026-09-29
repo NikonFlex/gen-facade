@@ -9,6 +9,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+EPS = 1e-6  # допуск сравнения координат, м
+
 Point = tuple[float, float]
 Polygon = list[Point]
 
@@ -28,15 +30,15 @@ class Material(Model):
     """Материал палитры дома: зоны и элементы ссылаются на него по `id`."""
 
     id: str
-    kind: str  # из библиотеки: plaster, brick, siding, wood, stone, metal_roof…
-    color: str  # #rrggbb
+    kind: str  # вид из библиотеки материалов (config/library.toml)
+    color: str | None = None  # #rrggbb; нет — цвет вида из библиотеки
 
 
 class Roof(Model):
     kind: Literal["flat", "gable", "hip", "shed"]
     pitch_deg: float = Field(ge=0, lt=90)
     ridge_axis: Literal["x", "y"] = "x"  # конёк вдоль оси плана
-    overhang_m: float = Field(default=0.4, ge=0)
+    overhang_m: float = Field(ge=0)
     material: str | None = None  # покрытие из палитры
 
 
@@ -93,6 +95,12 @@ class Side(Model):
     openings: list[Opening] = []
     forbidden: list[ForbiddenZone] = []
     has_entrance: bool = False
+
+    @property
+    def runs_along_x(self) -> bool:
+        """Стена идёт вдоль оси x плана: нормаль смотрит по y."""
+        nx, ny = self.orientation
+        return abs(ny) > abs(nx)
 
 
 class OpeningVariant(Model):

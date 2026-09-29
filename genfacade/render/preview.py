@@ -5,7 +5,7 @@ import subprocess  # noqa: S404 — вызываем только rsvg-convert �
 from pathlib import Path
 
 
-def to_png(svg: Path, png: Path, width_px: int = 2400) -> bool:
+def to_png(svg: Path, png: Path, width_px: int) -> bool:
     """rsvg-convert, если он есть в системе; нет — превью пропускается (False)."""
     exe = shutil.which("rsvg-convert")
     if exe is None:

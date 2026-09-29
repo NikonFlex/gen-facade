@@ -24,3 +24,11 @@ def load_house():
 def raw_house() -> dict:
     """Двускатный дом как словарь — портить поля в тестах схемы."""
     return json.loads(FIXTURES["house_gable"].read_text())
+
+
+@pytest.fixture(scope="session")
+def cfg():
+    """Настройки пакета по умолчанию."""
+    from genfacade import config
+
+    return config.load()

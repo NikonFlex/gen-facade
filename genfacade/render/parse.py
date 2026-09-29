@@ -2,10 +2,10 @@
 
 import xml.etree.ElementTree as ET
 
-from genfacade.render.svg import SVG_NS
-from genfacade.schema import Element, MaterialZone, OpeningVariant
+from genfacade.render import format as fmt
+from genfacade.schema import Element, MaterialZone
 
-NS = {"svg": SVG_NS}
+NS = {"svg": fmt.SVG_NS}
 
 
 def parse_sheet_svg(text: str) -> dict[int, tuple[list[Element], list[MaterialZone]]]:
@@ -13,30 +13,29 @@ def parse_sheet_svg(text: str) -> dict[int, tuple[list[Element], list[MaterialZo
     # Разбираем только свой же лист, не чужие файлы — защита defusedxml не нужна.
     root = ET.fromstring(text)  # noqa: S314
     result = {}
-    for g in root.findall("svg:g[@class='facade']", NS):
-        elements = [_element(r) for r in g.findall("svg:rect[@data-cls]", NS)]
-        zones = [_zone(p) for p in g.findall("svg:polygon[@data-role]", NS)]
-        result[int(g.get("data-side"))] = (elements, zones)
+    for g in root.findall(f"svg:g[@class='{fmt.FACADE_CLASS}']", NS):
+        elements = [_element(r) for r in g.findall(f"svg:rect[@{fmt.CLS}]", NS)]
+        zones = [_zone(p) for p in g.findall(f"svg:polygon[@{fmt.ROLE}]", NS)]
+        result[int(g.get(fmt.SIDE))] = (elements, zones)
     return result
 
 
 def _element(r: ET.Element) -> Element:
     data = {
-        "id": r.get("data-id"), "cls": r.get("data-cls"),
+        "id": r.get(fmt.ID), "cls": r.get(fmt.CLS),
         "x_m": float(r.get("x")), "y_m": float(r.get("y")),
         "w_m": float(r.get("width")), "h_m": float(r.get("height")),
-        "parent": r.get("data-parent"), "material": r.get("data-material"),
+        "parent": r.get(fmt.PARENT), "material": r.get(fmt.MATERIAL),
     }
-    if r.get("data-floor") is not None:
-        data["floor"] = int(r.get("data-floor"))
-    if r.get("data-variant"):
-        kind, cols, rows = r.get("data-variant").split(":")
-        data["variant"] = OpeningVariant(kind=kind, cols=int(cols), rows=int(rows))
-    if r.get("data-fixed"):
-        data["fixed"] = r.get("data-fixed").split(",")
+    if r.get(fmt.FLOOR) is not None:
+        data["floor"] = int(r.get(fmt.FLOOR))
+    if r.get(fmt.VARIANT):
+        data["variant"] = fmt.decode_variant(r.get(fmt.VARIANT))
+    if r.get(fmt.FIXED):
+        data["fixed"] = r.get(fmt.FIXED).split(",")
     return Element(**data)
 
 
 def _zone(p: ET.Element) -> MaterialZone:
     pts = [tuple(float(c) for c in pair.split(",")) for pair in p.get("points").split()]
-    return MaterialZone(shape=pts, material=p.get("data-material"), role=p.get("data-role"))
+    return MaterialZone(shape=pts, material=p.get(fmt.MATERIAL), role=p.get(fmt.ROLE))
