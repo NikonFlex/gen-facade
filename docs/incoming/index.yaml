@@ -26,3 +26,17 @@
   - specs/plan-input.md
   - specs/data.md
   - specs/integration.md
+- path: docs/incoming/Сообщение научрукам и ответы 29.09.md
+  received: '2026-09-29'
+  source: >-
+    сообщение хозяина в общий чат с Валерией Ефимовой и Егором Баженовым
+    (схема модуля + состав данных + три вопроса), вставлено в сессию 29.09;
+    ответы — пересказ хозяина, оригиналов нет
+  status: distilled
+  sha256: 0eb8e4f490cda6526c09df1e9dd6d82b63f97803d71996fa3af51d2902c89596
+  distilled_into:
+  - specs/generation.md
+  - specs/task.md
+  - specs/data.md
+  - specs/plan-input.md
+  - specs/integration.md
