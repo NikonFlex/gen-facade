@@ -14,6 +14,11 @@ EPS = 1e-6  # допуск сравнения координат, м
 Point = tuple[float, float]
 Polygon = list[Point]
 
+
+def top_y(*polygons: Polygon) -> float:
+    """Самая высокая точка нескольких многоугольников."""
+    return max(y for poly in polygons for _, y in poly)
+
 # 11 классов объектов CMP + классы коттеджей (facade.md, Element.cls)
 ElementClass = Literal[
     "window", "pillar", "sill", "blind", "deco", "cornice", "balcony",

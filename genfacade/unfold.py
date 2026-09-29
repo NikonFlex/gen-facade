@@ -7,7 +7,12 @@
 
 import math
 
-from genfacade.schema import EPS, FacadeSheet, HouseSpec, Point, Polygon, Side
+from genfacade.schema import EPS, FacadeSheet, HouseSpec, Point, Polygon, Roof, Side
+
+
+def _slope(roof: Roof) -> float:
+    """Подъём ската на метр по горизонтали."""
+    return math.tan(math.radians(roof.pitch_deg))
 
 
 def plan_corners(sides: list[Side]) -> list[Point]:
@@ -48,7 +53,7 @@ def ridge_height(spec: HouseSpec, sides: list[Side]) -> float:
     if roof.kind == "shed":
         raise NotImplementedError("односкатная крыша: где высокий край — открыто в facade.md")
     gable_end = next(s for s in sides if not along_ridge(s, roof.ridge_axis))
-    return spec.eaves_m + gable_end.length_m / 2 * math.tan(math.radians(roof.pitch_deg))
+    return spec.eaves_m + gable_end.length_m / 2 * _slope(roof)
 
 
 def wall_silhouette(spec: HouseSpec, side: Side, ridge: float) -> Polygon:
@@ -70,7 +75,7 @@ def roof_outline(spec: HouseSpec, side: Side, ridge: float, thickness_m: float) 
     if roof.kind == "flat":
         return None
     o = roof.overhang_m
-    low = eaves - o * math.tan(math.radians(roof.pitch_deg))
+    low = eaves - o * _slope(roof)
     if along_ridge(side, roof.ridge_axis):
         top = _ridge_span(spec, side, ridge)
         return [(-o, low), (length + o, low), (top[1], ridge), (top[0], ridge)]
@@ -87,7 +92,7 @@ def _ridge_span(spec: HouseSpec, side: Side, ridge: float) -> Point:
     o = spec.roof.overhang_m
     if spec.roof.kind != "hip":
         return (-o, side.length_m + o)
-    half_depth = (ridge - spec.eaves_m) / math.tan(math.radians(spec.roof.pitch_deg))
+    half_depth = (ridge - spec.eaves_m) / _slope(spec.roof)
     x0 = min(half_depth, side.length_m / 2)
     return (x0, side.length_m - x0)
 

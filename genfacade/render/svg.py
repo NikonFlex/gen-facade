@@ -2,19 +2,28 @@
 
 Координаты — метры натуры; оформление — config/sheet.toml (размеры) и
 config/sheet.css (линии, шрифты), заливки по умолчанию — config/library.toml.
-Каждый элемент и зона несут в `data-*` всё, что есть в JSON (format.py), поэтому
+Каждый элемент и зона несут в `data-*` всё, что есть в JSON (sheet_format.py), поэтому
 SVG разбирается обратно без потерь. Геометрия фасада — в группе с осью y вверх,
 подписи — в обычной.
 """
 
 import math
-import xml.etree.ElementTree as ET
 from typing import NamedTuple
+from xml.etree import ElementTree
 
 from genfacade.config import Axes, Config, Levels, Sheet, SheetLayout
-from genfacade.render import format as fmt
-from genfacade.render.format import num
-from genfacade.schema import EPS, Element, FacadeSheet, MaterialZone, Polygon, SideFacade
+from genfacade.render import sheet_format
+from genfacade.render.sheet_format import num
+from genfacade.schema import (
+    EPS,
+    Element,
+    FacadeSheet,
+    MaterialZone,
+    Point,
+    Polygon,
+    SideFacade,
+    top_y,
+)
 from genfacade.unfold import plan_corners, ridge_height
 
 
@@ -38,24 +47,36 @@ def points(poly: Polygon) -> str:
     return " ".join(f"{num(x)},{num(y)}" for x, y in poly)
 
 
+def _line(g: ElementTree.Element, css_class: str, start: Point, end: Point) -> None:
+    (x1, y1), (x2, y2) = start, end
+    ElementTree.SubElement(g, "line", {"class": css_class, "x1": num(x1), "y1": num(y1),
+                                       "x2": num(x2), "y2": num(y2)})
+
+
+def _text(g: ElementTree.Element, css_class: str, at: Point, text: str) -> None:
+    x, y = at
+    node = ElementTree.SubElement(g, "text", {"class": css_class, "x": num(x), "y": num(y)})
+    node.text = text
+
+
 def sheet_svg(sheet: FacadeSheet, cfg: Config) -> str:
     """Лист всех фасадов; силуэты должны быть посчитаны (unfold)."""
     cells, width, height = _layout(sheet, cfg.sheet.sheet)
     mm_per_m = 1000 / cfg.sheet.sheet.scale
-    root = ET.Element("svg", {
-        "xmlns": fmt.SVG_NS, "viewBox": f"0 0 {num(width)} {num(height)}",
+    root = ElementTree.Element("svg", {
+        "xmlns": sheet_format.SVG_NS, "viewBox": f"0 0 {num(width)} {num(height)}",
         "width": f"{width * mm_per_m:.0f}mm", "height": f"{height * mm_per_m:.0f}mm",
     })
-    ET.SubElement(root, "style").text = cfg.css
-    ET.SubElement(root, "rect", {"class": "background", "width": "100%", "height": "100%"})
+    ElementTree.SubElement(root, "style").text = cfg.css
+    ElementTree.SubElement(root, "rect", {"class": "background", "width": "100%", "height": "100%"})
     pen = _pen(sheet, cfg)
     axes, levels = _axis_labels(sheet, cfg.sheet.axes.letters), _levels(sheet, cfg.sheet.levels)
     for facade, origin in zip(sheet.facades, cells, strict=True):
         _facade_geometry(root, facade, origin, pen)
         marks = Marks(levels, axes[facade.side.index], cfg.sheet)
         _annotations(root, origin, facade.side.length_m, marks)
-    ET.indent(root)
-    return ET.tostring(root, encoding="unicode")
+    ElementTree.indent(root)
+    return ElementTree.tostring(root, encoding="unicode")
 
 
 def _pen(sheet: FacadeSheet, cfg: Config) -> Pen:
@@ -70,7 +91,7 @@ def _pen(sheet: FacadeSheet, cfg: Config) -> Pen:
 
 
 def _top(facade: SideFacade) -> float:
-    return max(y for _, y in (facade.silhouette or []) + (facade.roof or []))
+    return top_y(facade.silhouette or [], facade.roof or [])
 
 
 def _layout(sheet: FacadeSheet, lay: SheetLayout) -> tuple[list[tuple[float, float]], float, float]:
@@ -86,65 +107,69 @@ def _layout(sheet: FacadeSheet, lay: SheetLayout) -> tuple[list[tuple[float, flo
     return cells, lay.margin_left_m + lay.columns * col_w, lay.margin_top_m + rows * row_h
 
 
-def _facade_geometry(root: ET.Element, facade: SideFacade, origin, pen: Pen) -> None:
+def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin, pen: Pen) -> None:
     ox, oy = origin
-    g = ET.SubElement(root, "g", {
-        "class": fmt.FACADE_CLASS, fmt.SIDE: str(facade.side.index),
+    g = ElementTree.SubElement(root, "g", {
+        "class": sheet_format.FACADE_CLASS, sheet_format.SIDE: str(facade.side.index),
         "transform": f"translate({num(ox)},{num(oy)}) scale(1,-1)",
     })
     silhouette = points(facade.silhouette or [])
-    ET.SubElement(g, "polygon", {"class": "wall", "points": silhouette,
+    ElementTree.SubElement(g, "polygon", {"class": "wall", "points": silhouette,
                                  "fill": pen.cfg.library.fill.wall})
     for z in facade.zones:
         _zone(g, z, pen)
     # Контур до крыши: свес закрывает верх стены, линия карниза не должна просвечивать.
-    ET.SubElement(g, "polygon", {"class": "outline", "points": silhouette})
+    ElementTree.SubElement(g, "polygon", {"class": "outline", "points": silhouette})
     if facade.roof:
-        ET.SubElement(g, "polygon", {"class": "roof", "points": points(facade.roof),
+        ElementTree.SubElement(g, "polygon", {"class": "roof", "points": points(facade.roof),
                                      "fill": pen.roof})
     for e in facade.elements:
         _element(g, e, pen)
 
 
-def _zone(g: ET.Element, z: MaterialZone, pen: Pen) -> None:
-    ET.SubElement(g, "polygon", {
-        fmt.ROLE: z.role, fmt.MATERIAL: z.material, "points": points(z.shape),
+def _zone(g: ElementTree.Element, z: MaterialZone, pen: Pen) -> None:
+    ElementTree.SubElement(g, "polygon", {
+        sheet_format.ROLE: z.role, sheet_format.MATERIAL: z.material, "points": points(z.shape),
         "fill": pen.colors[z.material],
     })
 
 
-def _element(g: ET.Element, e: Element, pen: Pen) -> None:
+def _element(g: ElementTree.Element, e: Element, pen: Pen) -> None:
     lib = pen.cfg.library
     attrs = {
-        fmt.CLS: e.cls, fmt.ID: e.id,
+        sheet_format.CLS: e.cls, sheet_format.ID: e.id,
         "x": num(e.x_m), "y": num(e.y_m), "width": num(e.w_m), "height": num(e.h_m),
         "fill": pen.colors.get(e.material or "", lib.class_fill.get(e.cls, lib.fill.other)),
     }
-    optional = {fmt.FLOOR: e.floor, fmt.PARENT: e.parent, fmt.MATERIAL: e.material}
+    optional = {
+        sheet_format.FLOOR: e.floor,
+        sheet_format.PARENT: e.parent,
+        sheet_format.MATERIAL: e.material,
+    }
     attrs |= {k: str(v) for k, v in optional.items() if v is not None}
     if e.variant is not None:
-        attrs[fmt.VARIANT] = fmt.encode_variant(e.variant)
+        attrs[sheet_format.VARIANT] = sheet_format.encode_variant(e.variant)
     if e.fixed:
-        attrs[fmt.FIXED] = ",".join(e.fixed)
+        attrs[sheet_format.FIXED] = ",".join(e.fixed)
     if e.cls == "window":
         attrs["fill"] = lib.fill.glass  # материал окна красит раму
         if e.material:
             attrs["stroke"] = pen.colors[e.material]
-    ET.SubElement(g, "rect", attrs)
+    ElementTree.SubElement(g, "rect", attrs)
     if e.cls == "window" and e.variant is not None:
         _mullions(g, e)
 
 
-def _mullions(g: ET.Element, e: Element) -> None:
+def _mullions(g: ElementTree.Element, e: Element) -> None:
     """Деление рамы на створки — линии поверх стекла, в разбор не входят."""
     v = e.variant
     cuts = [("x", e.x_m + e.w_m * i / v.cols) for i in range(1, v.cols)]
     cuts += [("y", e.y_m + e.h_m * j / v.rows) for j in range(1, v.rows)]
     for axis, c in cuts:
-        x1, y1, x2, y2 = (c, e.y_m, c, e.y_m + e.h_m) if axis == "x" else (
-            e.x_m, c, e.x_m + e.w_m, c)
-        ET.SubElement(g, "line", {"class": "mullion", "x1": num(x1), "y1": num(y1),
-                                  "x2": num(x2), "y2": num(y2)})
+        if axis == "x":
+            _line(g, "mullion", (c, e.y_m), (c, e.y_m + e.h_m))
+        else:
+            _line(g, "mullion", (e.x_m, c), (e.x_m + e.w_m, c))
 
 
 def _axis_labels(sheet: FacadeSheet, letters: str) -> dict[int, tuple[str, str]]:
@@ -184,44 +209,37 @@ def _levels(sheet: FacadeSheet, cfg: Levels) -> list[float]:
     return uniq
 
 
-def _annotations(root: ET.Element, origin, length: float, marks: Marks) -> None:
+def _annotations(root: ElementTree.Element, origin, length: float, marks: Marks) -> None:
     """Линия земли, отметки уровней справа, оси по краям, подпись снизу."""
     ox, oy = origin
     cfg = marks.sheet
-    g = ET.SubElement(root, "g", {"class": "annotations",
+    g = ElementTree.SubElement(root, "g", {"class": "annotations",
                                   "transform": f"translate({num(ox)},{num(oy)})"})
     ext = cfg.ground.extend_m
-    ET.SubElement(g, "line", {"class": "ground", "x1": num(-ext), "y1": "0",
-                              "x2": num(length + ext), "y2": "0"})
+    _line(g, "ground", (-ext, 0.0), (length + ext, 0.0))
     for v in marks.levels:
         _level_mark(g, length + cfg.levels.offset_m, v, cfg.levels)
     for x, name in ((0.0, marks.axes[0]), (length, marks.axes[1])):
         _axis_bubble(g, x, name, cfg.axes)
-    t = ET.SubElement(g, "text", {"class": "title", "x": num(length / 2), "y": num(cfg.title.y_m)})
-    t.text = f"Фасад в осях {marks.axes[0]}–{marks.axes[1]}"
+    _text(g, "title", (length / 2, cfg.title.y_m), f"Фасад в осях {marks.axes[0]}–{marks.axes[1]}")
 
 
-def _level_mark(g: ET.Element, x: float, level: float, cfg: Levels) -> None:
+def _level_mark(g: ElementTree.Element, x: float, level: float, cfg: Levels) -> None:
     """Отметка уровня: треугольник на полке и значение над ней, «+3,300»."""
     y = -level
-    ET.SubElement(g, "line", {"class": "level-shelf", "x1": num(x - cfg.shelf_left_m),
-                              "y1": num(y), "x2": num(x + cfg.shelf_right_m), "y2": num(y)})
+    _line(g, "level-shelf", (x - cfg.shelf_left_m, y), (x + cfg.shelf_right_m, y))
     half, height = cfg.marker_half_width_m, cfg.marker_height_m
     marker = [(x, y), (x - half, y - height), (x + half, y - height)]
-    ET.SubElement(g, "polygon", {"class": "level-marker", "points": points(marker)})
+    ElementTree.SubElement(g, "polygon", {"class": "level-marker", "points": points(marker)})
     ground = level == 0.0
     # Земля подписана под полкой: цоколь бывает ниже высоты шрифта, подписи слиплись бы.
     ty = y + cfg.text_below_m if ground else y - cfg.text_above_m
-    t = ET.SubElement(g, "text", {"class": "level-text", "x": num(x + cfg.text_dx_m),
-                                  "y": num(ty)})
-    t.text = f"{'±' if ground else '+'}{level:.3f}".replace(".", ",")
+    label = f"{'±' if ground else '+'}{level:.3f}".replace(".", ",")
+    _text(g, "level-text", (x + cfg.text_dx_m, ty), label)
 
 
-def _axis_bubble(g: ET.Element, x: float, name: str, cfg: Axes) -> None:
-    ET.SubElement(g, "line", {"class": "axis-line", "x1": num(x), "y1": num(cfg.line_from_m),
-                              "x2": num(x), "y2": num(cfg.line_to_m)})
-    ET.SubElement(g, "circle", {"class": "axis-bubble", "cx": num(x),
+def _axis_bubble(g: ElementTree.Element, x: float, name: str, cfg: Axes) -> None:
+    _line(g, "axis-line", (x, cfg.line_from_m), (x, cfg.line_to_m))
+    ElementTree.SubElement(g, "circle", {"class": "axis-bubble", "cx": num(x),
                                 "cy": num(cfg.bubble_y_m), "r": num(cfg.bubble_radius_m)})
-    t = ET.SubElement(g, "text", {"class": "axis-text", "x": num(x),
-                                  "y": num(cfg.bubble_y_m + cfg.text_dy_m)})
-    t.text = name
+    _text(g, "axis-text", (x, cfg.bubble_y_m + cfg.text_dy_m), name)

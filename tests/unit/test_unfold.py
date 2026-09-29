@@ -2,8 +2,8 @@ import math
 
 import pytest
 
-from genfacade.schema import Side
-from genfacade.unfold import plan_corners, ridge_height, unfold
+from genfacade.schema import Side, top_y
+from genfacade.unfold import plan_corners, ridge_height
 
 
 def test_gable_ridge_height(load_house):
@@ -13,22 +13,22 @@ def test_gable_ridge_height(load_house):
     assert ridge == pytest.approx(3.3 + 4 * math.tan(math.radians(35)))
 
 
-def test_gable_only_on_ends(load_house, cfg):
-    sheet = unfold(load_house("house_gable"), cfg.library.roof.thickness_m)
+def test_gable_only_on_ends(unfold_sheet):
+    sheet = unfold_sheet("house_gable")
     vertices = [len(f.silhouette) for f in sheet.facades]
     assert vertices == [4, 5, 4, 5]  # конёк вдоль x: фронтоны на западе и востоке
 
 
-def test_hip_ridge_shorter_than_wall(load_house, cfg):
-    sheet = unfold(load_house("house_hip"), cfg.library.roof.thickness_m)
+def test_hip_ridge_shorter_than_wall(unfold_sheet):
+    sheet = unfold_sheet("house_hip")
     south = sheet.facades[0]
-    ridge_xs = [x for x, y in south.roof if y == max(yy for _, yy in south.roof)]
+    ridge_xs = [x for x, y in south.roof if y == top_y(south.roof)]
     # Вальма под 45° в плане: конёк короче стены на глубину дома (9 м).
     assert max(ridge_xs) - min(ridge_xs) == pytest.approx(12 - 9)
 
 
-def test_flat_roof_has_no_roof_outline(load_house, cfg):
-    sheet = unfold(load_house("house_flat"), cfg.library.roof.thickness_m)
+def test_flat_roof_has_no_roof_outline(unfold_sheet):
+    sheet = unfold_sheet("house_flat")
     assert all(f.roof is None for f in sheet.facades)
 
 

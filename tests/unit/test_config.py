@@ -4,7 +4,6 @@ from pydantic import ValidationError
 from genfacade import config
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import FacadeSheet
-from genfacade.unfold import unfold
 
 
 def test_user_toml_overrides_one_key(tmp_path, cfg):
@@ -28,15 +27,15 @@ def test_user_css_goes_after_defaults(tmp_path, cfg):
     assert css.startswith(cfg.css) and css.rstrip().endswith(".ground { stroke-width: 0.2px; }")
 
 
-def test_material_color_from_library(raw_house, cfg):
+def test_material_color_from_library(raw_house, cfg, unfold_sheet):
     # В палитре дома цвет не задан — берётся цвет вида из библиотеки.
     del raw_house["spec"]["materials"][1]["color"]  # brick
-    sheet = unfold(FacadeSheet.model_validate(raw_house), cfg.library.roof.thickness_m)
+    sheet = unfold_sheet(FacadeSheet.model_validate(raw_house))
     assert f'fill="{cfg.library.kinds["brick"]}"' in sheet_svg(sheet, cfg)
 
 
-def test_unknown_kind_without_color_rejected(raw_house, cfg):
+def test_unknown_kind_without_color_rejected(raw_house, cfg, unfold_sheet):
     raw_house["spec"]["materials"][1] = {"id": "brick", "kind": "unobtainium"}
-    sheet = unfold(FacadeSheet.model_validate(raw_house), cfg.library.roof.thickness_m)
+    sheet = unfold_sheet(FacadeSheet.model_validate(raw_house))
     with pytest.raises(ValueError, match="unobtainium"):
         sheet_svg(sheet, cfg)
