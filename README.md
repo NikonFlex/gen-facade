@@ -28,8 +28,15 @@ python3 -m venv .venv
 npx -y jscpd@5.3.3 -c .jscpd.json genfacade tests tools   # копипаста, нужен Node
 
 .venv/bin/genfacade render tests/fixtures/house_gable.json          # лист фасадов → outputs/runs/
-.venv/bin/genfacade render tests/fixtures/house_gable.json -c мои/  # со своими настройками
+.venv/bin/genfacade -c мои/ render tests/fixtures/house_gable.json  # со своими настройками
+.venv/bin/genfacade serve                                            # смотрелка: http://127.0.0.1:8000
 ```
+
+**Смотрелка** — запустить дом, пройти по шагам конвейера, рассмотреть чертёж
+(масштаб, слои, карточка элемента при наведении), поправить JSON дома и прогнать
+заново. Каждый прогон — папка с трассой шагов в `outputs/runs/`.
+
+![Смотрелка прогонов](docs/assets/viewer.png)
 
 Настройки по умолчанию — [genfacade/config/](genfacade/config/): библиотека материалов,
 размеры и стиль листа. Своя папка с любыми из этих файлов переопределяет их.

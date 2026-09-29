@@ -68,7 +68,10 @@ def sheet_svg(sheet: FacadeSheet, cfg: Config) -> str:
         "width": f"{width * mm_per_m:.0f}mm", "height": f"{height * mm_per_m:.0f}mm",
     })
     ElementTree.SubElement(root, "style").text = cfg.css
-    ElementTree.SubElement(root, "rect", {"class": "background", "width": "100%", "height": "100%"})
+    # Размер листа числом, не 100%: проценты считаются от viewBox, и при масштабе
+    # в смотрелке фон обрезался бы.
+    ElementTree.SubElement(root, "rect", {"class": "background",
+                                          "width": num(width), "height": num(height)})
     pen = _pen(sheet, cfg)
     axes, levels = _axis_labels(sheet, cfg.sheet.axes.letters), _levels(sheet, cfg.sheet.levels)
     for facade, origin in zip(sheet.facades, cells, strict=True):

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GenFacade · смотрелка</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M4 15 16 5l12 10v13H4z' fill='%232f5d8a'/%3E%3Crect x='9' y='17' width='5' height='5' fill='%23fff'/%3E%3Crect x='18' y='17' width='5' height='11' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M4 15 16 5l12 10v13H4z"/><rect x="9" y="17" width="5" height="5"/><rect x="18" y="17" width="5" height="11"/>
+      </svg>
+      <span class="brand-name">GenFacade</span>
+      <span class="brand-sub">смотрелка прогонов</span>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="theme-btn" title="Тема: как в системе / светлая / тёмная" aria-label="Сменить тему"></button>
+    </div>
+  </header>
+
+  <aside class="sidebar">
+    <section class="side-section">
+      <div class="side-head"><h2>Дома</h2><span class="count" id="houses-count"></span></div>
+      <ul class="house-list" id="houses"></ul>
+      <label class="dropzone" id="dropzone">
+        <input type="file" accept=".json,application/json" id="file-input" hidden>
+        <span class="dropzone-icon" aria-hidden="true"></span>
+        <span class="dropzone-text"><b>Свой дом</b><span>перетащите JSON или нажмите</span></span>
+      </label>
+    </section>
+    <section class="side-section side-runs">
+      <div class="side-head"><h2>Прогоны</h2><span class="count" id="runs-count"></span></div>
+      <ul class="run-list" id="runs"></ul>
+    </section>
+  </aside>
+
+  <main class="main" id="main">
+    <div class="empty" id="empty">
+      <svg viewBox="0 0 220 140" aria-hidden="true" class="empty-art">
+        <path d="M30 118h160" class="ea-ground"/>
+        <path d="M50 118V66l60-38 60 38v52z" class="ea-wall"/>
+        <path d="M40 72l70-48 70 48" class="ea-roof"/>
+        <rect x="66" y="80" width="22" height="20" class="ea-win"/><rect x="132" y="80" width="22" height="20" class="ea-win"/>
+        <rect x="99" y="86" width="22" height="32" class="ea-door"/>
+      </svg>
+      <h1>Выберите дом слева</h1>
+      <p>Конвейер построит развёртку стен и лист фасадов.<br>Каждый шаг можно открыть отдельно и рассмотреть.</p>
+    </div>
+
+    <div class="run" id="run" hidden>
+      <div class="run-head">
+        <div>
+          <h1 id="run-title"></h1>
+          <div class="chips" id="run-chips"></div>
+        </div>
+        <div class="run-actions" id="run-actions"></div>
+      </div>
+      <nav class="stepper" id="stepper" aria-label="Шаги конвейера"></nav>
+      <section class="stage" id="stage"></section>
+    </div>
+  </main>
+
+  <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>
