@@ -7,7 +7,8 @@
 Требования берутся из specs/, а не из docs/incoming/. Порядок работы — docs/SPEC-DRIVEN.md.
 
 Постановка и замысел — в [specs/](specs/README.md): постановка, вход, представление
-фасада, метод, данные, оценка, стыковка с GenPlan. План для научруков —
+фасада, метод, данные, оценка, стыковка с GenPlan. Как это строим — модули,
+раскладка репо, этапы, проверка — [docs/dev-plan.md](docs/dev-plan.md). План для научруков —
 [docs/plan.md](docs/plan.md), изложение спек на 28.09.
 База знаний — [docs/](docs/), индекс в [docs/README.md](docs/README.md).
 Исходное ТЗ от Валерии — [docs/incoming/](docs/incoming/README.md), входящие не редактируются.
