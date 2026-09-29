@@ -447,33 +447,25 @@
         <line x1="36" y1="1182" x2="1364" y2="1182" style="stroke: #C7CFD8; stroke-width: 1.2; stroke-dasharray: 6 5"/>
         <text class="lane-t lt-mine" x="36" y="1208">ОБУЧЕНИЕ И ОЦЕНКА</text>
 
-        <rect class="card" x="40" y="1222" width="360" height="108" rx="8"/>
-        <text class="t" x="58" y="1248">Данные</text>
-        <text class="s" x="58" y="1270">синтетика building_tools: план + все фасады</text>
-        <text class="s" x="58" y="1286">CMP — многоквартирные фасады</text>
-        <text class="s" x="58" y="1302">реальные: Solar Decathlon, рендеры Егора</text>
-        <text class="s" x="58" y="1318">описания — из разметки и написанные вручную</text>
-        <line class="flow" x1="400" y1="1276" x2="436" y2="1276" marker-end="url(#ah)"/>
+        <rect class="card-model" x="40" y="1222" width="420" height="108" rx="8"/>
+        <text class="t" x="58" y="1248">Обучение модели</text>
+        <text class="s" x="58" y="1270">для шагов 1 и 4</text>
+        <text class="s" x="58" y="1286">сначала на синтетике,</text>
+        <text class="s" x="58" y="1302">потом на реальных домах</text>
+        <line class="flow" x1="460" y1="1276" x2="486" y2="1276" marker-end="url(#ah)"/>
 
-        <rect class="card-model" x="440" y="1222" width="220" height="108" rx="8"/>
-        <text class="t" x="458" y="1248">Обучение модели</text>
-        <text class="s" x="458" y="1270">для шагов 1 и 4</text>
-        <text class="s" x="458" y="1286">сначала на синтетике,</text>
-        <text class="s" x="458" y="1302">потом на реальных</text>
-        <line class="flow" x1="660" y1="1276" x2="696" y2="1276" marker-end="url(#ah)"/>
+        <rect class="card" x="490" y="1222" width="420" height="108" rx="8"/>
+        <text class="t" x="508" y="1248">Метрики на реальных домах</text>
+        <text class="s" x="508" y="1270">геометрия · структура · разнообразие</text>
+        <text class="s" x="508" y="1286">доля валидных SVG</text>
+        <text class="s" x="508" y="1302">согласованность с планом</text>
+        <text class="s" x="508" y="1318">соответствие описанию</text>
+        <line class="flow" x1="910" y1="1276" x2="936" y2="1276" marker-end="url(#ah)"/>
 
-        <rect class="card" x="700" y="1222" width="320" height="108" rx="8"/>
-        <text class="t" x="718" y="1248">Метрики на реальных домах</text>
-        <text class="s" x="718" y="1270">геометрия · структура · разнообразие</text>
-        <text class="s" x="718" y="1286">доля валидных SVG</text>
-        <text class="s" x="718" y="1302">согласованность с планом</text>
-        <text class="s" x="718" y="1318">соответствие описанию</text>
-        <line class="flow" x1="1020" y1="1276" x2="1056" y2="1276" marker-end="url(#ah)"/>
-
-        <rect class="card" x="1060" y="1222" width="300" height="108" rx="8"/>
-        <text class="t" x="1078" y="1248">Сравнение</text>
-        <text class="s" x="1078" y="1270">с правилом GenPlan, LLM без дообучения,</text>
-        <text class="s" x="1078" y="1286">растр + EvoVec</text>
-        <text class="s" x="1078" y="1302">ablation: без плана, без общих</text>
-        <text class="s" x="1078" y="1318">параметров, без привязки к сетке</text>
+        <rect class="card" x="940" y="1222" width="420" height="108" rx="8"/>
+        <text class="t" x="958" y="1248">Сравнение</text>
+        <text class="s" x="958" y="1270">с правилом GenPlan, LLM без дообучения,</text>
+        <text class="s" x="958" y="1286">растр + EvoVec</text>
+        <text class="s" x="958" y="1302">ablation: без плана, без общих параметров,</text>
+        <text class="s" x="958" y="1318">без привязки к сетке</text>
       </svg>
