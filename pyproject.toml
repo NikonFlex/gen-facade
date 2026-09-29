@@ -8,7 +8,10 @@ version = "0.0.1"
 description = "Генерация векторных чертежей фасадов по плану дома и текстовому описанию"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["pydantic>=2.13"]
+
+[project.scripts]
+genfacade = "genfacade.cli:main"
 
 [project.optional-dependencies]
 # pyyaml — для tools/spec_check.py, он проверяет входящие и в пакет не входит
@@ -18,6 +21,10 @@ train = ["torch"]
 
 [tool.setuptools.packages.find]
 include = ["genfacade*"]
+
+[tool.setuptools.package-data]
+# настройки по умолчанию — внутри пакета, чтобы работали и при обычной установке
+"genfacade.config" = ["*.toml", "*.css"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

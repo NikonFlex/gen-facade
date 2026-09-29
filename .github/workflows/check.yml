@@ -30,6 +30,11 @@ jobs:
           pytest -q || code=$?
           if [ "${code:-0}" -ne 0 ] && [ "${code:-0}" -ne 5 ]; then exit "$code"; fi
 
+      - name: Копипаста
+        # jscpd ловит скопированные блоки и в одном файле, и между файлами (pylint —
+        # только между файлами). Пороги — в .jscpd.json. Node на раннере уже есть.
+        run: npx -y jscpd@5.3.3 -c .jscpd.json genfacade tests tools
+
       - name: Самопроверка скрипта задач
         run: python3 tools/backlog.py --selftest
 

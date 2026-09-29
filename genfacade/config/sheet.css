@@ -1,0 +1,20 @@
+/* Оформление листа фасадов. Единицы — метры натуры (viewBox в метрах).
+   Свой файл sheet.css в --config дописывается после этого и переопределяет его. */
+
+svg { font-family: "Golos Text", "DejaVu Sans", sans-serif; font-size: 0.3px; }
+.background { fill: #ffffff; }
+
+.facade { stroke: #2b2b2b; stroke-width: 0.02px; stroke-linejoin: round; }
+.facade [data-role] { stroke: none; }
+.outline { fill: none; stroke-width: 0.04px; }
+.facade [data-cls="window"] { stroke-width: 0.06px; }
+.mullion { stroke-width: 0.04px; }
+
+.annotations { stroke: #2b2b2b; stroke-width: 0.015px; fill: #2b2b2b; }
+.annotations text { stroke: none; }
+.ground { stroke-width: 0.05px; }
+.level-marker, .axis-bubble { fill: none; }
+.level-text { font-size: 0.27px; }
+.axis-line { stroke-dasharray: 0.15 0.1; }
+.axis-text { text-anchor: middle; }
+.title { font-size: 0.42px; text-anchor: middle; }
