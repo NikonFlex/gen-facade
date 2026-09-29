@@ -1,0 +1,9 @@
+{
+  "format": ["python"],
+  "mode": "weak",
+  "minLines": 3,
+  "minTokens": 30,
+  "ignore": ["**/tools/backlog.py", "**/.venv/**"],
+  "reporters": ["console"],
+  "exitCode": 1
+}
