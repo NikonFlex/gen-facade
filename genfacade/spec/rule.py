@@ -16,16 +16,16 @@ Found = dict[str, str | None]  # поле → найденная фраза; Non
 def from_text(text: str, rule: SpecRule) -> tuple[HouseSpec, Found]:
     found: Found = {}
     d = rule.defaults
-    apartment = _search(rule.words.apartment, text)
+    apartment = find_phrase(rule.words.apartment, text)
     found["building_type"] = apartment
     building = "apartment" if apartment else d.building_type
     floors = _floors(text, rule, building, found)
-    level, found["height"] = _choice(text, rule.words.height, d.height)
+    level, found["height"] = choose(text, rule.words.height, d.height)
     height = rule.floor_height_m[level]
     styles = {k: s.words for k, s in rule.styles.items()}
-    style, found["style"] = _choice(text, styles, d.style)
+    style, found["style"] = choose(text, styles, d.style)
     default_roof = d.apartment_roof if apartment else rule.styles[style].roof
-    roof, found["roof"] = _choice(text, rule.words.roof, default_roof)
+    roof, found["roof"] = choose(text, rule.words.roof, default_roof)
     spec = HouseSpec(
         building_type=building, floors=floors, floor_heights_m=[height] * floors,
         plinth_m=d.plinth_m, eaves_m=d.plinth_m + height * floors,
@@ -36,7 +36,7 @@ def from_text(text: str, rule: SpecRule) -> tuple[HouseSpec, Found]:
     return spec, found
 
 
-def _search(patterns: list[str], text: str) -> str | None:
+def find_phrase(patterns: list[str], text: str) -> str | None:
     """Первая найденная фраза по списку шаблонов, целыми словами, без учёта регистра."""
     for p in patterns:
         m = re.search(rf"\b(?:{p})\b", text, re.IGNORECASE)
@@ -45,17 +45,17 @@ def _search(patterns: list[str], text: str) -> str | None:
     return None
 
 
-def _choice(text: str, options: dict[str, list[str]], default: str) -> tuple[str, str | None]:
+def choose(text: str, options: dict[str, list[str]], default: str) -> tuple[str, str | None]:
     """Первый вариант, чей шаблон нашёлся в тексте, и фраза; иначе — по умолчанию и None."""
     for key, patterns in options.items():
-        phrase = _search(patterns, text)
+        phrase = find_phrase(patterns, text)
         if phrase:
             return key, phrase
     return default, None
 
 
 def _floors(text: str, rule: SpecRule, building: str, found: Found) -> int:
-    one = _search(rule.words.one_floor, text)
+    one = find_phrase(rule.words.one_floor, text)
     if one:
         found["floors"] = one
         return 1
@@ -73,6 +73,6 @@ def _palette(text: str, rule: SpecRule, style: str, found: Found) -> list[Materi
     """Палитра стиля по ролям; материал, названный в тексте, заменяет вид своей роли."""
     materials = []
     for role, kind in rule.styles[style].palette.items():
-        named, found[f"material.{role}"] = _choice(text, rule.materials.get(role, {}), kind)
+        named, found[f"material.{role}"] = choose(text, rule.materials.get(role, {}), kind)
         materials.append(Material(id=role, kind=named))
     return materials

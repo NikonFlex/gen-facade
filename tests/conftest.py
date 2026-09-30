@@ -4,8 +4,10 @@ from pathlib import Path
 import pytest
 
 from genfacade import config
+from genfacade.layout.rule import LayoutContext, place
 from genfacade.plan.preprocess import preprocess
-from genfacade.schema import FacadeSheet
+from genfacade.schema import FacadeSheet, SideFacade
+from genfacade.spec.rule import from_text
 from genfacade.unfold import unfold
 
 FIXTURES = {p.stem: p for p in sorted((Path(__file__).parent / "fixtures").glob("house_*.json"))}
@@ -97,3 +99,18 @@ def box_svg():
         return _genplan_svg(_box_walls(gaps) + list(inner), windows, extra)
 
     return make
+
+
+@pytest.fixture
+def lay_out(cfg):
+    """План + текст → стены после развёртки и раскладки правилом: шаги 1–4 без трассы."""
+    def run(svg, text: str, mode: str = "with_openings", seed: int = 0) -> FacadeSheet:
+        plan = preprocess(svg, mode, cfg.plan)
+        spec, _ = from_text(text, cfg.spec)
+        bare = FacadeSheet(spec=spec, facades=[SideFacade(side=s) for s in plan.sides])
+        sheet = unfold(bare, cfg.library.roof.thickness_m)
+        ctx = LayoutContext(spec, mode, text, seed)
+        facades = [place(f, ctx, cfg.layout) for f in sheet.facades]
+        return sheet.model_copy(update={"facades": facades})
+
+    return run

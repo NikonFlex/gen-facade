@@ -147,6 +147,54 @@ class SpecRule(Section):
     styles: dict[str, Style]
 
 
+class Windows(Section):
+    size: dict[str, tuple[float, float]]
+    default_size: str
+    words: dict[str, list[str]]
+    sash_max_w_m: float
+    transom_min_h_m: float
+    lintel_m: float
+
+
+class Blind(Section):
+    widths_m: list[float]
+    pitches_m: list[float]
+    edge_m: float
+    clearance_m: float
+    min_gap_m: float
+
+
+class Casing(Section):
+    styles: list[str]
+    width_m: float
+
+
+class Height(Section):
+    height_m: float
+
+
+class Sill(Section):
+    overhang_m: float
+    height_m: float
+
+
+class Accent(Section):
+    entrance_pad_m: float
+
+
+class LayoutRule(Section):
+    """Правило шага 4: раскладка стены (config/layout.toml)."""
+
+    windows: Windows
+    blind: Blind
+    door: Height
+    sill: Sill
+    casing: Casing
+    cornice: Height
+    band: Height
+    accent: Accent
+
+
 class Server(Section):
     host: str
     port: int
@@ -168,6 +216,7 @@ class Config(Section):
     viewer: Viewer
     plan: PlanConfig
     spec: SpecRule
+    layout: LayoutRule
     css: str
 
 
@@ -182,6 +231,7 @@ def load(user_dir: Path | None = None) -> Config:
         viewer=Viewer(**_toml("viewer.toml", user_dir)),
         plan=PlanConfig(**_toml("plan.toml", user_dir)),
         spec=SpecRule(**_toml("spec.toml", user_dir)),
+        layout=LayoutRule(**_toml("layout.toml", user_dir)),
         css=css,
     )
 
