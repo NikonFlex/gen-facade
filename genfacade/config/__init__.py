@@ -1,8 +1,9 @@
-"""Настройки, вынесенные из кода: материалы, лист, смотрелка, план, правила шагов.
+"""Настройки, вынесенные из кода: материалы, лист, смотрелка, план, дом.
 
 По умолчанию — файлы этой папки. Свой конфиг — папка с любыми из тех же файлов:
 TOML сливается с умолчаниями поключно, sheet.css дописывается после умолчаний
-(правила CSS переопределяют предыдущие). Опечатка в ключе TOML — ошибка, а не молчание.
+(правила CSS переопределяют предыдущие), house.json заменяется целиком — это один дом.
+Опечатка в ключе — ошибка, а не молчание.
 """
 
 import tomllib
@@ -10,6 +11,8 @@ from importlib.resources import files
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
+
+from genfacade.schema import HouseSpec
 
 DEFAULTS = files(__package__)
 
@@ -110,47 +113,9 @@ class PlanConfig(Section):
     outline: Outline
 
 
-class SpecDefaults(Section):
-    building_type: str
-    cottage_floors: int
-    apartment_floors: int
-    apartment_roof: str
-    height: str
-    plinth_m: float
-    overhang_m: float
-    style: str
-
-
-class Words(Section):
-    apartment: list[str]
-    one_floor: list[str]
-    floors: str  # шаблон с {numbers} — подставляются слова из [numbers]
-    height: dict[str, list[str]]
-    roof: dict[str, list[str]]
-
-
-class Style(Section):
-    words: list[str]
-    roof: str
-    palette: dict[str, str]  # роль → вид материала
-
-
-class SpecRule(Section):
-    """Правило шага 1: текст → HouseSpec (config/spec.toml)."""
-
-    defaults: SpecDefaults
-    floor_height_m: dict[str, float]
-    pitch_deg: dict[str, float]
-    words: Words
-    numbers: dict[str, int]
-    materials: dict[str, dict[str, list[str]]]  # роль → вид → шаблоны
-    styles: dict[str, Style]
-
-
 class Windows(Section):
     size: dict[str, tuple[float, float]]
-    default_size: str
-    words: dict[str, list[str]]
+    level: str  # уровень высоты окон — один на все дома, пока нет модели
     sash_max_w_m: float
     transom_min_h_m: float
     lintel_m: float
@@ -215,7 +180,7 @@ class Config(Section):
     sheet: Sheet
     viewer: Viewer
     plan: PlanConfig
-    spec: SpecRule
+    house: HouseSpec  # шаг 1 до модели: параметры дома — отсюда, текст не читается
     layout: LayoutRule
     css: str
 
@@ -230,10 +195,17 @@ def load(user_dir: Path | None = None) -> Config:
         sheet=Sheet(**_toml("sheet.toml", user_dir)),
         viewer=Viewer(**_toml("viewer.toml", user_dir)),
         plan=PlanConfig(**_toml("plan.toml", user_dir)),
-        spec=SpecRule(**_toml("spec.toml", user_dir)),
+        house=HouseSpec.model_validate_json(_file("house.json", user_dir)),
         layout=LayoutRule(**_toml("layout.toml", user_dir)),
         css=css,
     )
+
+
+def _file(name: str, user_dir: Path | None) -> str:
+    """Файл целиком: свой в user_dir заменяет умолчание, а не сливается с ним."""
+    if user_dir is not None and (user_dir / name).exists():
+        return (user_dir / name).read_text()
+    return DEFAULTS.joinpath(name).read_text()
 
 
 def _toml(name: str, user_dir: Path | None) -> dict:
