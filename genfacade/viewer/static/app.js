@@ -1,5 +1,6 @@
-// Смотрелка прогонов: дома и история слева, шаги конвейера сверху, чертёж в центре.
-// Состояние открытого прогона — в адресе (#run=…&step=…): перезагрузка и ссылка его сохраняют.
+// Смотрелка прогонов. Два экрана: главная (дома, свой JSON, история прогонов) и прогон
+// на весь экран (шаги конвейера, чертёж). Открытый прогон — в адресе (#run=…&step=…):
+// перезагрузка и ссылка его сохраняют, «назад» в браузере возвращает на главную.
 
 import { SvgStage, metres } from "/static/stage.js";
 
@@ -11,6 +12,7 @@ const LAYERS = {
 const STEP_LAYERS = { 3: ["roof", "annotations"], 6: ["zones", "elements", "mullions", "roof", "annotations"] };
 const THEMES = ["auto", "light", "dark"];
 const ICON = {
+  back: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',
   play: '<svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>',
   plus: '<svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
   minus: '<svg viewBox="0 0 16 16"><path d="M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
@@ -115,15 +117,15 @@ function houseCard(h) {
 async function loadRuns() {
   state.runs = await api("/api/runs");
   $("runs-count").textContent = state.runs.length || "";
-  const items = state.runs.map(runItem);
-  $("runs").replaceChildren(...(items.length ? items : [el("li", { className: "side-empty", textContent: "Пока пусто — запустите дом выше." })]));
+  const items = state.runs.map(runCard);
+  $("runs").replaceChildren(...(items.length ? items : [el("li", { className: "empty-note", textContent: "Пока пусто — запустите дом выше." })]));
 }
 
-function runItem(r) {
+function runCard(r) {
   const thumb = r.preview ? `<img class="run-thumb" src="/files/${r.id}/${r.preview}" alt="" loading="lazy">` : '<span class="run-thumb"></span>';
-  const btn = el("button", { className: `run-item${r.id === state.runId ? " active" : ""}`, title: r.id },
-    `${thumb}<span><div class="run-name">${runName(r.id)}</div><div class="run-when">${ago(r.date)}</div></span>`);
-  btn.addEventListener("click", () => openRun(r.id));
+  const btn = el("button", { className: "run-card", title: r.id },
+    `${thumb}<span class="run-info"><span class="run-name">${runName(r.id)}</span><span class="run-when">${ago(r.date)} · ${fmtDate(r.date)}</span></span>`);
+  btn.addEventListener("click", () => goToRun(r.id));
   return listItem(btn);
 }
 
@@ -132,8 +134,7 @@ async function startRun(body, busyEl, { quiet = false } = {}) {
   const t0 = performance.now();
   try {
     const { id } = await api("/api/runs", body);
-    await loadRuns();
-    await openRun(id, state.step === "input" ? "input" : null);
+    await goToRun(id, state.step === "input" ? "input" : null);
     toast(`Готово за ${Math.round(performance.now() - t0)} мс`);
   } catch (err) {
     if (!quiet) toast(err.message, "error");
@@ -143,15 +144,54 @@ async function startRun(body, busyEl, { quiet = false } = {}) {
   }
 }
 
+// ——— переходы между экранами ———
+
+async function goToRun(id, step = null) {
+  // С главной — новая запись в истории: «назад» в браузере вернёт на главную.
+  // Из прогона в прогон (перезапуск) — замена, чтобы история не копила промежуточные.
+  const url = `#run=${encodeURIComponent(id)}`;
+  if ($("run").hidden) history.pushState({ fromHome: true }, "", url);
+  else history.replaceState(history.state, "", url);
+  await openRun(id, step);
+}
+
+function goHome() {
+  if (history.state?.fromHome) return history.back();
+  history.replaceState(null, "", location.pathname);
+  return showHome();
+}
+
+function showHome() {
+  Object.assign(state, { meta: null, runId: null, step: null, stage: null });
+  $("run").hidden = true;
+  $("run-bar").hidden = true;
+  $("home").hidden = false;
+  $("brand-sub").hidden = false;
+  $("run-actions").replaceChildren();
+  $("tooltip").hidden = true;
+  document.title = "GenFacade · смотрелка";
+  return loadRuns();
+}
+
+async function route() {
+  const hash = new URLSearchParams(location.hash.slice(1));
+  if (!hash.get("run")) return showHome();
+  return openRun(hash.get("run"), hash.get("step")).catch(() => {
+    toast("Прогон из ссылки не найден", "error");
+    return showHome();
+  });
+}
+
 // ——— открытый прогон ———
 
 async function openRun(id, step = null) {
   state.meta = await api(`/api/runs/${encodeURIComponent(id)}`);
   state.runId = id;
-  $("empty").hidden = true;
+  $("home").hidden = true;
+  $("brand-sub").hidden = true;
   $("run").hidden = false;
+  $("run-bar").hidden = false;
   renderHead();
-  document.querySelectorAll(".run-item").forEach((b) => b.classList.toggle("active", b.title === id));
   const done = state.meta.steps.filter((s) => s.file);
   showStep(step ?? state.step ?? String(done.at(-1)?.n ?? "input"));
 }
@@ -159,6 +199,7 @@ async function openRun(id, step = null) {
 function renderHead() {
   const m = state.meta, id = state.runId, file = (f) => `/files/${id}/${f}`;
   $("run-title").textContent = runName(id);
+  document.title = `${runName(id)} · GenFacade`;
   $("run-chips").innerHTML = [
     `<span class="chip">${fmtDate(m.date)}</span>`,
     m.git_sha ? `<span class="chip">коммит <code>${m.git_sha.slice(0, 7)}</code></span>` : "",
@@ -166,8 +207,8 @@ function renderHead() {
   ].join("");
   const sheet = m.steps.find((s) => s.n === 6)?.file;
   const links = [[sheet, "SVG"], [m.sheet_json, "JSON"], [m.preview, "PNG"]].filter(([f]) => f)
-    .map(([f, label]) => `<a class="btn" href="${file(f)}" target="_blank" rel="noopener">${ICON.file}${label}</a>`);
-  $("run-actions").innerHTML = `${links.join("")}<button class="btn" id="rerun">${ICON.redo}Прогнать заново</button>`;
+    .map(([f, label]) => `<a class="btn" href="${file(f)}" target="_blank" rel="noopener" title="Открыть ${label}">${ICON.file}<span>${label}</span></a>`);
+  $("run-actions").innerHTML = `${links.join("")}<button class="btn" id="rerun" title="Прогнать тот же вход ещё раз">${ICON.redo}<span>Прогнать заново</span></button>`;
   $("rerun").addEventListener("click", rerun);
 }
 
@@ -193,7 +234,7 @@ function renderStepper() {
 
 function showStep(key) {
   state.step = key;
-  history.replaceState(null, "", `#run=${encodeURIComponent(state.runId)}&step=${key}`);
+  history.replaceState(history.state, "", `#run=${encodeURIComponent(state.runId)}&step=${key}`);
   renderStepper();
   if (key === "input") return renderInput();
   const step = state.meta.steps.find((s) => String(s.n) === key);
@@ -327,6 +368,7 @@ function bindDropzone() {
 
 function onKey(e) {
   if (e.target.closest("textarea, input") || !state.meta) return;
+  if (e.key === "Escape") return goHome();
   const keys = [...document.querySelectorAll(".step:not(:disabled)")].map((b) => b.dataset.key);
   const i = keys.indexOf(state.step);
   if (e.key === "ArrowRight" && i < keys.length - 1) showStep(keys[i + 1]);
@@ -344,10 +386,13 @@ async function init() {
   });
   systemDark.addEventListener("change", () => applyTheme(store.get("theme", "auto")));
   bindDropzone();
+  $("back-btn").innerHTML = `${ICON.back}<span>Все прогоны</span>`;
+  $("back-btn").addEventListener("click", goHome);
+  $("home-link").addEventListener("click", (e) => { e.preventDefault(); goHome(); });
+  window.addEventListener("popstate", route);
   document.addEventListener("keydown", onKey);
-  await Promise.all([loadHouses(), loadRuns()]);
-  const hash = new URLSearchParams(location.hash.slice(1));
-  if (hash.get("run")) await openRun(hash.get("run"), hash.get("step")).catch(() => toast("Прогон из ссылки не найден", "error"));
+  await loadHouses();
+  await route();
 }
 
 init().catch((err) => toast(err.message, "error"));

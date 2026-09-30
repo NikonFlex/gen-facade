@@ -9,58 +9,54 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">
-      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-        <path d="M4 15 16 5l12 10v13H4z"/><rect x="9" y="17" width="5" height="5"/><rect x="18" y="17" width="5" height="11"/>
-      </svg>
-      <span class="brand-name">GenFacade</span>
-      <span class="brand-sub">смотрелка прогонов</span>
+    <div class="top-left">
+      <a class="brand" href="#" id="home-link" title="Все дома и прогоны">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <path d="M4 15 16 5l12 10v13H4z"/><rect x="9" y="17" width="5" height="5"/><rect x="18" y="17" width="5" height="11"/>
+        </svg>
+        <span class="brand-name">GenFacade</span>
+      </a>
+      <span class="brand-sub" id="brand-sub">смотрелка прогонов</span>
+      <div class="run-bar" id="run-bar" hidden>
+        <button class="btn ghost" id="back-btn" title="Все дома и прогоны (Esc)"></button>
+        <h1 id="run-title"></h1>
+        <div class="chips" id="run-chips"></div>
+      </div>
     </div>
     <div class="topbar-actions">
+      <div class="run-actions" id="run-actions"></div>
       <button class="icon-btn" id="theme-btn" title="Тема: как в системе / светлая / тёмная" aria-label="Сменить тему"></button>
     </div>
   </header>
 
-  <aside class="sidebar">
-    <section class="side-section">
-      <div class="side-head"><h2>Дома</h2><span class="count" id="houses-count"></span></div>
-      <ul class="house-list" id="houses"></ul>
-      <label class="dropzone" id="dropzone">
-        <input type="file" accept=".json,application/json" id="file-input" hidden>
-        <span class="dropzone-icon" aria-hidden="true"></span>
-        <span class="dropzone-text"><b>Свой дом</b><span>перетащите JSON или нажмите</span></span>
-      </label>
-    </section>
-    <section class="side-section side-runs">
-      <div class="side-head"><h2>Прогоны</h2><span class="count" id="runs-count"></span></div>
-      <ul class="run-list" id="runs"></ul>
-    </section>
-  </aside>
-
-  <main class="main" id="main">
-    <div class="empty" id="empty">
-      <svg viewBox="0 0 220 140" aria-hidden="true" class="empty-art">
-        <path d="M30 118h160" class="ea-ground"/>
-        <path d="M50 118V66l60-38 60 38v52z" class="ea-wall"/>
-        <path d="M40 72l70-48 70 48" class="ea-roof"/>
-        <rect x="66" y="80" width="22" height="20" class="ea-win"/><rect x="132" y="80" width="22" height="20" class="ea-win"/>
-        <rect x="99" y="86" width="22" height="32" class="ea-door"/>
-      </svg>
-      <h1>Выберите дом слева</h1>
-      <p>Конвейер построит развёртку стен и лист фасадов.<br>Каждый шаг можно открыть отдельно и рассмотреть.</p>
-    </div>
-
-    <div class="run" id="run" hidden>
-      <div class="run-head">
-        <div>
-          <h1 id="run-title"></h1>
-          <div class="chips" id="run-chips"></div>
+  <main class="main">
+    <section class="home" id="home">
+      <div class="home-inner">
+        <div class="section-head">
+          <h2>Дома</h2><span class="count" id="houses-count"></span>
+          <span class="section-note">нажмите на дом — конвейер построит фасады</span>
         </div>
-        <div class="run-actions" id="run-actions"></div>
+        <div class="house-grid">
+          <ul class="contents" id="houses"></ul>
+          <label class="dropzone" id="dropzone">
+            <input type="file" accept=".json,application/json" id="file-input" hidden>
+            <span class="dropzone-icon" aria-hidden="true"></span>
+            <span class="dropzone-text"><b>Свой дом</b><span>перетащите JSON или нажмите</span></span>
+          </label>
+        </div>
+
+        <div class="section-head">
+          <h2>Прогоны</h2><span class="count" id="runs-count"></span>
+          <span class="section-note">новые сверху; открываются без пересчёта</span>
+        </div>
+        <ul class="run-grid" id="runs"></ul>
       </div>
+    </section>
+
+    <section class="run" id="run" hidden>
       <nav class="stepper" id="stepper" aria-label="Шаги конвейера"></nav>
       <section class="stage" id="stage"></section>
-    </div>
+    </section>
   </main>
 
   <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
