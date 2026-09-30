@@ -20,7 +20,7 @@ BOX = ROOT / "tests" / "fixtures" / "genplan" / "door_top.svg"
 @pytest.fixture
 def clean(lay_out):
     """Лист без нарушений: коробка, режим 1."""
-    return lay_out(BOX, mode="blind", seed=1)
+    return lay_out(BOX, mode="blind")
 
 
 def _edit(sheet, side, element_id, **update):
