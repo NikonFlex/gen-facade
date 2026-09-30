@@ -32,13 +32,13 @@ def test_run_dirs_do_not_collide(tmp_path):
     assert second != first and pipeline.RUN_ID.match(second.name)
 
 
-EXAMPLE = Path(__file__).parents[2] / "materials" / "genplan-plan-example.svg"
+HOUSE = Path(__file__).parents[2] / "tests" / "fixtures" / "genplan" / "house.svg"
 TEXT = "Two-storey classic house with a gable roof."
 
 
 def _generate(cfg, out, mode="with_openings", seed=0):
-    req = pipeline.PlanRun(plan=str(EXAMPLE), text=TEXT, mode=mode, seed=seed)
-    return pipeline.generate(req, EXAMPLE.read_text(), out, cfg)
+    req = pipeline.PlanRun(plan=str(HOUSE), text=TEXT, mode=mode, seed=seed)
+    return pipeline.generate(req, HOUSE.read_text(), out, cfg)
 
 
 def test_plan_run_traces_all_six_steps(cfg, tmp_path):
@@ -49,11 +49,11 @@ def test_plan_run_traces_all_six_steps(cfg, tmp_path):
     spec = json.loads((out / pipeline.SPEC).read_text())
     assert spec["spec"]["floors"] == 2 and spec["from_text"]["floors"] == "Two-storey"
     assert json.loads((out / pipeline.VIOLATIONS).read_text()) == []
-    assert (out / pipeline.INPUT_PLAN).read_text() == EXAMPLE.read_text()
+    assert (out / pipeline.INPUT_PLAN).read_text() == HOUSE.read_text()
 
 
 def test_violations_marked_on_step_5_only(cfg, tmp_path):
-    # режим 2 на примере: окно плана в запретной зоне — дефект GenPlan
+    # режим 2: окно плана в запретной зоне — дефект GenPlan, как в примере
     out = _generate(cfg, tmp_path / "run")
     violations = json.loads((out / pipeline.VIOLATIONS).read_text())
     assert {v["rule"] for v in violations} == {"forbidden"}
@@ -86,7 +86,7 @@ def test_retry_takes_next_seed_until_clean(cfg, tmp_path, monkeypatch):
 
 def test_ridge_along_longest_side(cfg, tmp_path):
     spec = json.loads((_generate(cfg, tmp_path / "run") / pipeline.SPEC).read_text())["spec"]
-    # пример: 5.47 м вдоль x, 4.23 м вдоль y
+    # дом: 4 м вдоль x, 3 м вдоль y
     assert spec["roof"]["ridge_axis"] == "x"
 
 

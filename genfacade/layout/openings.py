@@ -104,16 +104,26 @@ def _cut(span: Span, b0: float, b1: float) -> list[Span]:
 
 
 def _rhythm(spans: list[Span], rhythm: Rhythm, blind: Blind) -> list[Column]:
-    """В каждом свободном отрезке — окна с шагом осей около выбранного, поровну по отрезку."""
-    width, pitch = rhythm.width_m, rhythm.pitch_m
+    """В каждом свободном отрезке — окна с шагом осей около выбранного, поровну по отрезку.
+
+    Не влезает выбранная ширина — самая широкая из config, что влезает: иначе у маленького
+    дома в глухом режиме не оказалось бы ни одного окна.
+    """
     out = []
     for a, b in spans:
         length = b - a
+        width = _fitting_width(length, rhythm.width_m, blind.widths_m)
+        if width is None:
+            continue
         fits = int((length + blind.min_gap_m) // (width + blind.min_gap_m))
-        n = min(fits, max(1, round(length / pitch)))
+        n = min(fits, max(1, round(length / rhythm.pitch_m)))
         gap = (length - n * width) / (n + 1)
         out += [Column(a + gap + i * (width + gap), width) for i in range(n)]
     return out
+
+
+def _fitting_width(length: float, chosen: float, widths: list[float]) -> float | None:
+    return max((w for w in widths if w <= chosen and w <= length + EPS), default=None)
 
 
 def _inside(c: Column, spans: list[Span]) -> bool:
