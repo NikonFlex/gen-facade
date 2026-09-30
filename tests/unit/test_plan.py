@@ -9,7 +9,6 @@ from genfacade.plan.genplan_svg import Box, PlanError
 from genfacade.plan.outline import straighten
 
 ROOT = Path(__file__).parents[2]
-EXAMPLE = ROOT / "materials" / "genplan-plan-example.svg"
 DOORS = ROOT / "tests" / "fixtures" / "genplan"
 M = 0.01  # у синтетических коробок вход 90 px — 1 px = 0.01 м
 
@@ -52,16 +51,24 @@ def test_second_outer_door_sealed_in_blind_mode(preprocess_svg):
     assert sum(len(s.openings) for s in plan.sides) == 1
 
 
-def test_example_forbidden_zones(preprocess_svg):
-    sides = preprocess_svg(EXAMPLE).sides
-    # вход-сторона — левая; внутренняя стена y = 525 прорисована насквозь до наружной грани
-    assert _zones(sides[0]) == [(1.72, 1.79)]
-    # верх: стена x = 714 заходит в полосу окна — дефект GenPlan, зона внутри окна остаётся
-    assert _zones(sides[1]) == [(1.38, 1.45)]
+def test_house_forbidden_zones(preprocess_svg):
+    sides = preprocess_svg(DOORS / "house.svg").sides
+    # вход-сторона — левая; внутренняя стена y = 310 прорисована насквозь до наружной грани
+    assert _zones(sides[0]) == [(1.6, 1.7)]
+    # верх: стена x = 330 заходит в полосу окна — дефект GenPlan, зона внутри окна остаётся
+    assert _zones(sides[1]) == [(1.61, 1.7)]
     window = sides[1].openings[0]
-    assert window.x_m < 1.38 and 1.45 < window.x_m + window.width_m
+    assert window.x_m < 1.61 and 1.7 < window.x_m + window.width_m
     assert _zones(sides[2]) == []
-    assert _zones(sides[3]) == [(1.93, 2.01), (2.84, 2.92)]
+    assert _zones(sides[3]) == [(2.0, 2.1)]  # стена x = 300 до наружной грани снизу
+
+
+def test_false_genplan_window_ignored(preprocess_svg):
+    """Decorator GenPlan залил окном комнату между стенами равной длины — это не проём."""
+    plan = preprocess_svg(DOORS / "house.svg")
+    assert sorted(o.kind for o in plan.openings) == ["entrance", "window", "window"]
+    assert all(o.rect.x1_m - o.rect.x0_m < 0.2 or o.rect.y1_m - o.rect.y0_m < 0.2
+               for o in plan.openings)  # все проёмы — в толще стены
 
 
 def test_duplicated_inner_walls_give_one_zone(box_svg, preprocess_svg):
