@@ -5,7 +5,7 @@ import pytest
 
 from genfacade import cli, pipeline
 from genfacade.render.parse import parse_sheet_svg
-from genfacade.schema import Violation
+from genfacade.schema import HouseSpec, Plan, Violation
 
 
 def test_trace_has_every_step_file(load_house, cfg, tmp_path):
@@ -46,10 +46,26 @@ def test_plan_run_traces_all_six_steps(cfg, tmp_path):
     meta = json.loads((out / pipeline.META).read_text())
     assert meta["kind"] == "plan" and meta["request"]["mode"] == "blind"
     assert all(s["file"] and (out / s["file"]).stat().st_size > 0 for s in meta["steps"])
-    spec = json.loads((out / pipeline.SPEC).read_text())
-    assert spec["spec"]["floors"] == 2 and spec["from_text"]["floors"] == "Two-storey"
+    # шаг 1 до модели: дом из config/house.json, текст не читается — меняется только конёк по плану
+    spec = HouseSpec.model_validate(json.loads((out / pipeline.SPEC).read_text())["spec"])
+    assert spec == pipeline.ridge_along_longest(cfg.house, spec_sides(out))
     assert json.loads((out / pipeline.VIOLATIONS).read_text()) == []
     assert (out / pipeline.INPUT_PLAN).read_text() == HOUSE.read_text()
+
+
+def spec_sides(out):
+    return Plan.model_validate_json((out / pipeline.PLAN_JSON).read_text()).sides
+
+
+def test_text_does_not_change_house(cfg, tmp_path):
+    """Текст сохраняется в запросе, но до модели не читается: дом один и тот же."""
+    specs = []
+    for i, text in enumerate(["A one-storey flat-roofed cabin.", "Five-storey apartment block."]):
+        req = pipeline.PlanRun(plan=str(HOUSE), text=text)
+        out = pipeline.generate(req, HOUSE.read_text(), tmp_path / f"run{i}", cfg)
+        assert json.loads((out / pipeline.REQUEST).read_text())["text"] == text
+        specs.append((out / pipeline.SPEC).read_text())
+    assert specs[0] == specs[1]
 
 
 def test_violations_marked_on_step_5_only(cfg, tmp_path):

@@ -7,8 +7,7 @@ from genfacade import config
 from genfacade.layout.rule import LayoutContext, place_all
 from genfacade.pipeline import walls
 from genfacade.plan.preprocess import preprocess
-from genfacade.schema import FacadeSheet
-from genfacade.spec.rule import from_text
+from genfacade.schema import FacadeSheet, HouseSpec
 from genfacade.unfold import unfold
 
 FIXTURES = {p.stem: p for p in sorted((Path(__file__).parent / "fixtures").glob("house_*.json"))}
@@ -102,12 +101,33 @@ def box_svg():
     return make
 
 
+SPECS = Path(__file__).parent / "fixtures" / "specs"
+# Вариант дома для тестов раскладки: файл HouseSpec из SPECS (None — config/house.json)
+# и уровень высоты окон (None — из config/layout.toml).
+VARIANTS = {
+    "house": (None, None),
+    "small_windows": (None, "small"),
+    "high_windows": (None, "high"),
+    "modern_flat": ("modern_flat", None),
+    "modern_panoramic": ("modern_flat", "high"),
+    "three_hip": ("three_hip", "small"),
+}
+
+
 @pytest.fixture
 def lay_out(cfg):
-    """План + текст → стены после развёртки и раскладки правилом: шаги 1–4 без трассы."""
-    def run(svg, text: str, mode: str = "with_openings", seed: int = 0) -> FacadeSheet:
+    """План → стены после развёртки и раскладки правилом: шаги 2–4 без трассы."""
+    def run(svg, variant: str = "house", mode: str = "with_openings", seed: int = 0) -> FacadeSheet:
+        house, rule = _variant(cfg, variant)
         plan = preprocess(svg, mode, cfg.plan)
-        spec, _ = from_text(text, cfg.spec)
-        return place_all(walls(spec, plan, cfg), LayoutContext(spec, mode, text, seed), cfg.layout)
+        return place_all(walls(house, plan, cfg), LayoutContext(house, mode, "", seed), rule)
 
     return run
+
+
+def _variant(cfg, name: str):
+    spec, level = VARIANTS[name]
+    house = cfg.house if spec is None else HouseSpec.model_validate_json(
+        (SPECS / f"{spec}.json").read_text())
+    windows = cfg.layout.windows.model_copy(update={"level": level or cfg.layout.windows.level})
+    return house, cfg.layout.model_copy(update={"windows": windows})

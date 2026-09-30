@@ -13,18 +13,16 @@ ROOT = Path(__file__).parents[2]
 # наши планы в формате GenPlan; пример GenPlan — если лежит локально (в git нет, gf#20)
 PLANS = [*sorted((ROOT / "tests" / "fixtures" / "genplan").glob("*.svg")),
          *[p for p in [ROOT / "materials" / "genplan-plan-example.svg"] if p.exists()]]
-TEXTS = ["Two-storey classic house with a gable roof.",
-         "Modern villa with a flat roof and panoramic windows.",
-         "Small wooden bungalow in Scandinavian style.",
-         "Three-story townhouse, hip roof, small windows."]
+# варианты дома — VARIANTS в tests/conftest.py
+SPECS = ["house", "modern_panoramic", "three_hip"]
 SEEDS = range(6)
 
 
 @pytest.mark.parametrize("plan", PLANS, ids=lambda p: p.stem)
-@pytest.mark.parametrize("text", TEXTS, ids=lambda t: t[:20])
-def test_plan_openings_kept_in_place(lay_out, plan, text):
+@pytest.mark.parametrize("spec", SPECS)
+def test_plan_openings_kept_in_place(lay_out, plan, spec):
     """Режим с референсами: все проёмы плана на фасаде в тех же положениях."""
-    sheet = lay_out(plan, text)
+    sheet = lay_out(plan, spec)
     for f in sheet.facades:
         ground = [e for e in f.elements if e.floor == 1 and e.cls in ("window", "door")]
         for o in f.side.openings:
@@ -37,7 +35,7 @@ def test_plan_openings_kept_in_place(lay_out, plan, text):
 @pytest.mark.parametrize("seed", SEEDS)
 def test_blind_no_window_in_forbidden_zone(lay_out, plan, seed):
     """Режим без референсов: ни одно окно не попадает в запретную зону."""
-    sheet = lay_out(plan, TEXTS[seed % len(TEXTS)], mode="blind", seed=seed)
+    sheet = lay_out(plan, SPECS[seed % len(SPECS)], mode="blind", seed=seed)
     for f in sheet.facades:
         for w in (e for e in f.elements if e.cls == "window"):
             for z in f.side.forbidden:
@@ -47,10 +45,10 @@ def test_blind_no_window_in_forbidden_zone(lay_out, plan, seed):
 
 @pytest.mark.parametrize("mode", ["with_openings", "blind"])
 def test_same_seed_same_result(lay_out, mode):
-    runs = [lay_out(PLANS[0], TEXTS[0], mode=mode, seed=3) for _ in range(2)]
+    runs = [lay_out(PLANS[0], mode=mode, seed=3) for _ in range(2)]
     assert runs[0] == runs[1]
 
 
 def test_seed_changes_blind_layout(lay_out):
-    layouts = {lay_out(PLANS[0], TEXTS[0], mode="blind", seed=s).model_dump_json() for s in SEEDS}
+    layouts = {lay_out(PLANS[0], mode="blind", seed=s).model_dump_json() for s in SEEDS}
     assert len(layouts) > 1

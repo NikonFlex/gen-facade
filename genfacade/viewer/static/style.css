@@ -171,7 +171,6 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 /* ——— шаг-JSON и нарушения ——— */
 .json-view { margin: 0; padding: 14px 16px; overflow: auto; font: 12.5px/1.6 var(--mono); white-space: pre; }
-.from-text dd.default { color: var(--faint); }
 .summary .palette + h2, .summary .facts + h2 { margin-top: 18px; }
 .violations-chip.bad { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
 .plan-picture { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #fff; margin-bottom: 18px; }

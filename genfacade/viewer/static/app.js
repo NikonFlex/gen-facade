@@ -14,11 +14,6 @@ const STEP_LAYERS = {
   3: ["roof", "annotations"], 4: [...SHEET_LAYERS, "forbidden"],
   5: [...SHEET_LAYERS, "forbidden", "violations"], 6: SHEET_LAYERS,
 };
-const FIELD = {
-  building_type: "тип дома", floors: "этажи", height: "высота этажа", style: "стиль", roof: "крыша",
-  window_size: "окна", "material.main": "стены", "material.plinth": "цоколь",
-  "material.accent": "акцент", "material.trim": "отделка", "material.roof": "кровля",
-};
 const ICON = {
   back: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',
   play: '<svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>',
@@ -318,13 +313,6 @@ async function renderJsonStep(step) {
   view.querySelector(".json-view").textContent = JSON.stringify(data, null, 2);
   $("stage").replaceChildren(view);
   renderSummary({ spec: data.spec, facades: [], colors: data.colors });
-  $("summary").insertAdjacentHTML("beforeend", fromTextHtml(data.from_text ?? {}));
-}
-
-function fromTextHtml(found) {
-  const rows = Object.entries(found).map(([k, v]) =>
-    `<dt>${FIELD[k] ?? k}</dt><dd class="${v ? "" : "default"}">${v ? `«${v}»` : "по умолчанию"}</dd>`);
-  return `<h2>Что понято из текста</h2><dl class="facts from-text">${rows.join("")}</dl>`;
 }
 
 // ——— шаг с чертежом ———
@@ -415,7 +403,6 @@ function renderPlanSummary() {
   const tries = (m.attempts ?? []).map((a) => `seed ${a.seed}: ошибок ${a.errors}, предупреждений ${a.warnings}`);
   $("summary").innerHTML = `<h2>План</h2>
     <img class="plan-picture" src="/files/${state.runId}/${m.plan_input}" alt="План">
-    ${fromTextHtml(m.from_text ?? {})}
     <h2>Попытки раскладки</h2><dl class="facts">${tries.map((t, i) => `<dt>${i + 1}</dt><dd>${t}</dd>`).join("")}</dl>`;
 }
 

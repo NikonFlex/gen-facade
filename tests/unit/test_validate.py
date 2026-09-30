@@ -15,13 +15,12 @@ from genfacade.validate import errors, validate, validate_svg
 ROOT = Path(__file__).parents[2]
 HOUSE = ROOT / "tests" / "fixtures" / "genplan" / "house.svg"
 BOX = ROOT / "tests" / "fixtures" / "genplan" / "door_top.svg"
-TEXT = "Two-storey classic house with a gable roof."
 
 
 @pytest.fixture
 def clean(lay_out):
     """Лист без нарушений: коробка, режим 1."""
-    return lay_out(BOX, TEXT, mode="blind", seed=1)
+    return lay_out(BOX, mode="blind", seed=1)
 
 
 def _edit(sheet, side, element_id, **update):
@@ -61,12 +60,12 @@ def test_openings_overlap(clean, cfg):
 
 def test_window_in_forbidden_zone(lay_out, cfg):
     # режим 2: окно плана, в которое упирается внутренняя стена (дефект GenPlan, как в примере)
-    found = validate(lay_out(HOUSE, TEXT), cfg.checks)
+    found = validate(lay_out(HOUSE), cfg.checks)
     assert {(v.rule, v.side) for v in found} == {("forbidden", 1)}
 
 
 def test_plan_opening_moved(lay_out, cfg):
-    sheet = lay_out(HOUSE, TEXT)
+    sheet = lay_out(HOUSE)
     door = next(e for e in sheet.facades[0].elements if e.cls == "door")
     assert "plan_opening" in _rules(_edit(sheet, 0, door.id, x_m=door.x_m + 0.3), cfg)
 
@@ -125,7 +124,7 @@ def _sill(sheet, window_id):
 
 
 def test_snap_keeps_plan_windows(lay_out, cfg):
-    sheet = lay_out(HOUSE, TEXT)
+    sheet = lay_out(HOUSE)
     w = _window(sheet, side=1, floor=2)
     snapped = snap(_edit(sheet, 1, w.id, x_m=w.x_m + 0.1), cfg.checks)
     plan_w = _window(snapped, side=1, floor=1)

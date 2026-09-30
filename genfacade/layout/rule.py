@@ -10,7 +10,6 @@ from genfacade.config import LayoutRule
 from genfacade.layout import decor, openings
 from genfacade.layout.zones import palette_roles, zones
 from genfacade.schema import FacadeSheet, HouseSpec, Mode, SideFacade
-from genfacade.spec.rule import choose
 
 
 @dataclass(frozen=True)
@@ -19,13 +18,8 @@ class LayoutContext:
 
     spec: HouseSpec
     mode: Mode
-    text: str
+    text: str  # для модели шага 4 (generation.md, п. 3); правило текст не читает
     seed: int
-
-
-def window_size(text: str, rule: LayoutRule) -> tuple[str, str | None]:
-    """Уровень высоты окон по словам описания и найденная фраза (None — по умолчанию)."""
-    return choose(text, rule.windows.words, rule.windows.default_size)
 
 
 def place(wall: SideFacade, ctx: LayoutContext, rule: LayoutRule) -> SideFacade:
@@ -33,7 +27,7 @@ def place(wall: SideFacade, ctx: LayoutContext, rule: LayoutRule) -> SideFacade:
     rhythm = openings.Rhythm.pick(ctx.seed, rule.blind)
     doors = openings.doors(wall.side, spec, rule)
     cols = openings.columns(wall.side, ctx.mode, rhythm, rule.blind)
-    windows = openings.windows(cols, spec, window_size(ctx.text, rule)[0], rule.windows)
+    windows = openings.windows(cols, spec, rule.windows.level, rule.windows)
     # порядок — порядок отрисовки: наличник под окном, подоконник и карниз поверх стены
     elements = [
         *decor.casings(windows, spec, rule, trim), *windows, *doors,
