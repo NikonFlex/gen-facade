@@ -7,9 +7,18 @@ import { SvgStage, metres } from "/static/stage.js";
 const ROOF = { flat: "плоская", gable: "двускатная", hip: "вальмовая", shed: "односкатная" };
 const LAYERS = {
   zones: "Зоны отделки", elements: "Элементы", mullions: "Створки",
-  roof: "Крыша", annotations: "Подписи",
+  roof: "Крыша", annotations: "Подписи", forbidden: "Запретные зоны", violations: "Нарушения",
 };
-const STEP_LAYERS = { 3: ["roof", "annotations"], 6: ["zones", "elements", "mullions", "roof", "annotations"] };
+const SHEET_LAYERS = ["zones", "elements", "mullions", "roof", "annotations"];
+const STEP_LAYERS = {
+  3: ["roof", "annotations"], 4: [...SHEET_LAYERS, "forbidden"],
+  5: [...SHEET_LAYERS, "forbidden", "violations"], 6: SHEET_LAYERS,
+};
+const FIELD = {
+  building_type: "тип дома", floors: "этажи", height: "высота этажа", style: "стиль", roof: "крыша",
+  window_size: "окна", "material.main": "стены", "material.plinth": "цоколь",
+  "material.accent": "акцент", "material.trim": "отделка", "material.roof": "кровля",
+};
 const ICON = {
   back: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',
   play: '<svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>',
@@ -77,6 +86,57 @@ function ago(iso) {
     if (Math.abs(sec) >= size) return rtf.format(Math.round(sec / size), unit);
   }
   return "только что";
+}
+
+// ——— план и описание ———
+
+const planState = { svg: null, name: null };
+
+async function loadPlans() {
+  const plans = await api("/api/plans");
+  $("plan-select").replaceChildren(...plans.map((p) => el("option", { value: p.name, textContent: p.name })));
+  const last = store.get("plan.name", null);
+  if (plans.some((p) => p.name === last)) $("plan-select").value = last;
+  showPlanThumb(`/api/plans/${encodeURIComponent($("plan-select").value)}`);
+}
+
+function showPlanThumb(src) {
+  $("plan-thumb").replaceChildren(el("img", { src, alt: "План" }));
+}
+
+function bindPlanForm() {
+  const form = $("plan-form");
+  $("plan-go").innerHTML = `${ICON.play}<span>Построить фасады</span>`;
+  $("plan-text").value = store.get("plan.text", "Two-storey classic house with a gable roof and a stone plinth.");
+  const mode = store.get("plan.mode", "with_openings");
+  form.querySelector(`input[name=mode][value=${mode}]`).checked = true;
+  $("plan-select").addEventListener("change", () => {
+    Object.assign(planState, { svg: null, name: null });
+    showPlanThumb(`/api/plans/${encodeURIComponent($("plan-select").value)}`);
+  });
+  $("plan-file").addEventListener("change", async () => {
+    const file = $("plan-file").files[0];
+    if (!file) return;
+    Object.assign(planState, { svg: await file.text(), name: file.name.replace(/\.svg$/i, "") });
+    showPlanThumb(URL.createObjectURL(file));
+    $("plan-select").replaceChildren(el("option", { textContent: `свой: ${file.name}` }), ...$("plan-select").children);
+    $("plan-select").selectedIndex = 0;
+  });
+  form.addEventListener("submit", (e) => { e.preventDefault(); submitPlan().catch(() => {}); });
+}
+
+async function submitPlan() {
+  const form = $("plan-form");
+  const run = {
+    plan: planState.name ?? $("plan-select").value,
+    text: $("plan-text").value.trim(),
+    mode: form.querySelector("input[name=mode]:checked").value,
+    seed: Number($("plan-seed").value) || 0,
+  };
+  store.set("plan.text", run.text);
+  store.set("plan.mode", run.mode);
+  if (!planState.svg) store.set("plan.name", run.plan);
+  await startRun({ plan_run: run, svg: planState.svg }, $("plan-go"));
 }
 
 // ——— дома и прогоны ———
@@ -208,8 +268,15 @@ function renderHead() {
 }
 
 async function rerun() {
-  const sheet = await (await fetch(`/files/${state.runId}/${state.meta.input}`)).json();
-  await startRun({ sheet, name: runName(state.runId) }, $("rerun")).catch(() => {});
+  const input = await (await fetch(`/files/${state.runId}/${state.meta.input}`)).json();
+  await startRun(await runBody(input), $("rerun")).catch(() => {});
+}
+
+// Тело запуска из входа прогона: у прогона по плану — запрос и тот же SVG-план.
+async function runBody(input) {
+  if (state.meta.kind !== "plan") return { sheet: input, name: runName(state.runId) };
+  const svg = await (await fetch(`/files/${state.runId}/${state.meta.plan_input}`)).text();
+  return { plan_run: input, svg };
 }
 
 function renderStepper() {
@@ -233,7 +300,31 @@ function showStep(key) {
   renderStepper();
   if (key === "input") return renderInput();
   const step = state.meta.steps.find((s) => String(s.n) === key);
-  return step?.file ? renderSvgStep(step) : renderInput();
+  if (!step?.file) return renderInput();
+  return step.file.endsWith(".json") ? renderJsonStep(step) : renderSvgStep(step);
+}
+
+// ——— шаг-JSON: параметры дома ———
+
+async function renderJsonStep(step) {
+  state.stage = null;
+  const data = await (await fetch(`/files/${state.runId}/${step.file}`)).json();
+  const view = el("div", { className: "input-view" }, `
+    <div class="editor-pane">
+      <div class="pane-head"><h2>${step.file}</h2><span class="pane-note">шаг ${step.n}: ${step.title}</span></div>
+      <pre class="json-view"></pre>
+    </div>
+    <div class="summary" id="summary"></div>`);
+  view.querySelector(".json-view").textContent = JSON.stringify(data, null, 2);
+  $("stage").replaceChildren(view);
+  renderSummary({ spec: data.spec, facades: [], colors: data.colors });
+  $("summary").insertAdjacentHTML("beforeend", fromTextHtml(data.from_text ?? {}));
+}
+
+function fromTextHtml(found) {
+  const rows = Object.entries(found).map(([k, v]) =>
+    `<dt>${FIELD[k] ?? k}</dt><dd class="${v ? "" : "default"}">${v ? `«${v}»` : "по умолчанию"}</dd>`);
+  return `<h2>Что понято из текста</h2><dl class="facts from-text">${rows.join("")}</dl>`;
 }
 
 // ——— шаг с чертежом ———
@@ -245,6 +336,18 @@ async function renderSvgStep(step) {
   state.stage = new SvgStage(wrap, { tooltip: $("tooltip"), onZoom: (p) => { zoomVal.textContent = `${p}%`; } });
   await state.stage.load(`/files/${state.runId}/${step.file}`);
   applyLayers(step.n);
+  if (step.n === 5 && state.meta.violations) await violationsChip($("stage").querySelector(".toolbar"));
+}
+
+async function violationsChip(bar) {
+  const list = await (await fetch(`/files/${state.runId}/${state.meta.violations}`)).json();
+  const bad = list.filter((v) => v.severity === "error").length;
+  const chip = el("span", {
+    className: `chip violations-chip${bad ? " bad" : ""}`,
+    title: list.map((v) => `сторона ${v.side ?? "—"}: ${v.message}`).join("\n") || "валидатор ничего не нашёл",
+    textContent: list.length ? `нарушений: ${list.length}, ошибок: ${bad}` : "нарушений нет",
+  });
+  bar.insertBefore(chip, bar.querySelector(".hint"));
 }
 
 function toolbar(n, zoomVal) {
@@ -284,7 +387,7 @@ async function renderInput() {
   const view = el("div", { className: "input-view" }, `
     <div class="editor-pane">
       <div class="pane-head">
-        <h2>Дом, JSON</h2><span class="pane-note">правка → новый прогон</span>
+        <h2>${state.meta.kind === "plan" ? "Запрос, JSON" : "Дом, JSON"}</h2><span class="pane-note">правка → новый прогон</span>
         <span class="pane-actions"><button class="btn" id="reset">Сбросить</button><button class="btn primary" id="go">${ICON.play}Прогнать</button></span>
       </div>
       <textarea class="editor" id="editor" spellcheck="false"></textarea>
@@ -294,7 +397,8 @@ async function renderInput() {
   $("stage").replaceChildren(view);
   const editor = $("editor");
   editor.value = text;
-  renderSummary(JSON.parse(text));
+  if (state.meta.kind === "plan") renderPlanSummary();
+  else renderSummary(JSON.parse(text));
   editor.addEventListener("keydown", indentOnTab);
   $("reset").addEventListener("click", () => { editor.value = text; showErrors([]); });
   $("go").addEventListener("click", () => runEdited(editor.value));
@@ -306,12 +410,21 @@ function indentOnTab(e) {
   e.target.setRangeText("  ", e.target.selectionStart, e.target.selectionEnd, "end");
 }
 
+function renderPlanSummary() {
+  const m = state.meta;
+  const tries = (m.attempts ?? []).map((a) => `seed ${a.seed}: ошибок ${a.errors}, предупреждений ${a.warnings}`);
+  $("summary").innerHTML = `<h2>План</h2>
+    <img class="plan-picture" src="/files/${state.runId}/${m.plan_input}" alt="План">
+    ${fromTextHtml(m.from_text ?? {})}
+    <h2>Попытки раскладки</h2><dl class="facts">${tries.map((t, i) => `<dt>${i + 1}</dt><dd>${t}</dd>`).join("")}</dl>`;
+}
+
 async function runEdited(text) {
-  let sheet;
-  try { sheet = JSON.parse(text); } catch (err) { return showErrors([`JSON: ${err.message}`]); }
+  let input;
+  try { input = JSON.parse(text); } catch (err) { return showErrors([`JSON: ${err.message}`]); }
   try {
     // Ошибки показываем под редактором, рядом с тем, что их вызвало, — без всплывашки.
-    await startRun({ sheet, name: runName(state.runId) }, $("go"), { quiet: true });
+    await startRun(await runBody(input), $("go"), { quiet: true });
   } catch (err) {
     showErrors(err.message.split("\n"));
   }
@@ -325,6 +438,10 @@ function showErrors(lines) {
 
 function renderSummary(house) {
   const s = house.spec, sides = house.facades.map((f) => f.side.length_m);
+  const walls = sides.length ? [
+    ["Стороны", sides.map((v) => v.toLocaleString("ru-RU")).join(" · ") + " м"],
+    ["Элементов", house.facades.reduce((n, f) => n + (f.elements?.length ?? 0), 0)],
+  ] : [];
   const facts = [
     ["Тип", s.building_type === "cottage" ? "коттедж" : "многоквартирный"],
     ["Стиль", s.style || "—"],
@@ -332,10 +449,10 @@ function renderSummary(house) {
     ["Цоколь", metres(s.plinth_m)],
     ["Карниз", metres(s.eaves_m)],
     ["Крыша", `${ROOF[s.roof.kind]}${s.roof.kind === "flat" ? "" : `, ${s.roof.pitch_deg}°, свес ${metres(s.roof.overhang_m)}`}`],
-    ["Стороны", sides.map((v) => v.toLocaleString("ru-RU")).join(" · ") + " м"],
-    ["Элементов", house.facades.reduce((n, f) => n + (f.elements?.length ?? 0), 0)],
+    ...walls,
   ];
-  const palette = s.materials.map((m) => `<div class="palette-row"><span class="swatch" style="background:${m.color ?? "transparent"}"></span>${m.id}<code>${m.kind}</code></div>`);
+  const color = (m) => m.color ?? house.colors?.[m.id] ?? "transparent";
+  const palette = s.materials.map((m) => `<div class="palette-row"><span class="swatch" style="background:${color(m)}"></span>${m.id}<code>${m.kind}</code></div>`);
   $("summary").innerHTML = `<h2>Параметры дома</h2>
     <dl class="facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
     <h2>Палитра</h2><div class="palette">${palette.join("")}</div>`;
@@ -380,7 +497,8 @@ async function init() {
   $("home-link").addEventListener("click", (e) => { e.preventDefault(); goHome(); });
   window.addEventListener("popstate", route);
   document.addEventListener("keydown", onKey);
-  await loadHouses();
+  bindPlanForm();
+  await Promise.all([loadPlans(), loadHouses()]);
   await route();
 }
 

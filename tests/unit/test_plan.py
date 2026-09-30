@@ -104,6 +104,11 @@ def test_open_contour_rejected(box_svg, preprocess_svg):
         preprocess_svg(walls_missing_side)
 
 
+def test_empty_plan_rejected(preprocess_svg):
+    with pytest.raises(PlanError, match="нет ни одной стены"):
+        preprocess_svg('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>')
+
+
 def test_disconnected_parts_rejected(box_svg, preprocess_svg):
     # не на одной линии со стенами коробки — иначе разрыв между ними честно перекрывается
     far = [(530, 200, 590, 210), (530, 200, 540, 400)]

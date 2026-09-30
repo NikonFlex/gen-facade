@@ -28,4 +28,10 @@ svg { font-family: "Golos Text", "DejaVu Sans", sans-serif; font-size: 0.3px; }
 .plan-sealed { fill: #f2a33a; }
 .plan-forbidden { stroke: #d33a2c; stroke-width: 0.12px; stroke-linecap: butt; }
 .plan-label { font-size: 0.35px; text-anchor: middle; fill: #2b2b2b; }
-.plan-legend { font-size: 0.25px; fill: #2b2b2b; }
+.plan-legend { font-size: 0.2px; fill: #6a707a; }
+
+/* Трасса шагов 4–5: запретные зоны и нарушения валидатора поверх листа */
+.forbidden-zone { fill: #d33a2c; fill-opacity: 0.12; stroke: none; }
+.violation { fill: none; stroke-width: 0.06px; stroke-dasharray: 0.15 0.08; }
+.violation.error { stroke: #d33a2c; }
+.violation.warning { stroke: #e8a33a; }

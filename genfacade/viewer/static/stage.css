@@ -19,4 +19,7 @@ svg { display: block; width: 100%; height: 100%; }
 :host(.no-elements) .mullion,
 :host(.no-mullions) .mullion,
 :host(.no-roof) .roof,
-:host(.no-annotations) .annotations { display: none; }
+:host(.no-annotations) .annotations,
+:host(.no-forbidden) .forbidden-zone,
+:host(.no-violations) .violation { display: none; }
+.forbidden-zone { pointer-events: none; }

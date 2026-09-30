@@ -4,9 +4,10 @@ from pathlib import Path
 import pytest
 
 from genfacade import config
-from genfacade.layout.rule import LayoutContext, place
+from genfacade.layout.rule import LayoutContext, place_all
+from genfacade.pipeline import walls
 from genfacade.plan.preprocess import preprocess
-from genfacade.schema import FacadeSheet, SideFacade
+from genfacade.schema import FacadeSheet
 from genfacade.spec.rule import from_text
 from genfacade.unfold import unfold
 
@@ -107,10 +108,6 @@ def lay_out(cfg):
     def run(svg, text: str, mode: str = "with_openings", seed: int = 0) -> FacadeSheet:
         plan = preprocess(svg, mode, cfg.plan)
         spec, _ = from_text(text, cfg.spec)
-        bare = FacadeSheet(spec=spec, facades=[SideFacade(side=s) for s in plan.sides])
-        sheet = unfold(bare, cfg.library.roof.thickness_m)
-        ctx = LayoutContext(spec, mode, text, seed)
-        facades = [place(f, ctx, cfg.layout) for f in sheet.facades]
-        return sheet.model_copy(update={"facades": facades})
+        return place_all(walls(spec, plan, cfg), LayoutContext(spec, mode, text, seed), cfg.layout)
 
     return run

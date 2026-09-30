@@ -55,3 +55,35 @@ def test_page_and_static_revalidated(client):
     # Без этого браузер держит старый app.js при новом index.html — кнопки ломаются.
     for path in ("/", "/static/app.js", "/static/style.css", "/static/stage.js"):
         assert client.get(path).headers["cache-control"] == "no-cache", path
+
+
+PLAN_RUN = {"plan": "genplan-plan-example", "text": "Two-storey classic house.",
+            "mode": "blind", "seed": 0}
+
+
+def test_plans_listed_and_served(client):
+    names = [p["name"] for p in client.get("/api/plans").json()]
+    assert "genplan-plan-example" in names and "door_top" in names
+    svg = client.get("/api/plans/genplan-plan-example")
+    assert svg.status_code == 200 and svg.text.startswith("<?xml")
+    assert client.get("/api/plans/nope").status_code == 404
+
+
+def test_plan_run_traces_every_step(client):
+    run_id = client.post("/api/runs", json={"plan_run": PLAN_RUN}).json()["id"]
+    meta = client.get(f"/api/runs/{run_id}").json()
+    assert meta["kind"] == "plan" and all(s["file"] for s in meta["steps"])
+    assert client.get(f"/files/{run_id}/{meta['plan_input']}").status_code == 200
+
+
+def test_plan_run_with_sent_svg(client):
+    svg = (Path(__file__).resolve().parents[1] / "fixtures" / "genplan" / "door_left.svg")
+    svg = svg.read_text()
+    res = client.post("/api/runs", json={"plan_run": {**PLAN_RUN, "plan": "мой план"}, "svg": svg})
+    assert res.status_code == 200
+
+
+def test_defective_plan_explained(client):
+    bad = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>'
+    res = client.post("/api/runs", json={"plan_run": PLAN_RUN, "svg": bad})
+    assert res.status_code == 400 and "план отклонён" in res.json()["detail"]

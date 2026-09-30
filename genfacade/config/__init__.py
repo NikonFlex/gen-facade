@@ -212,6 +212,7 @@ class Server(Section):
 class ViewerPaths(Section):
     runs_dir: Path
     houses_dirs: list[Path]
+    plans_dirs: list[Path]
 
 
 class Viewer(Section):

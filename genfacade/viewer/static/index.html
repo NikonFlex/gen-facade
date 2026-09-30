@@ -32,8 +32,34 @@
     <section class="home" id="home">
       <div class="home-inner">
         <div class="section-head">
+          <h2>План и описание</h2>
+          <span class="section-note">SVG-план GenPlan + описание по-английски → фасады, все шаги конвейера</span>
+        </div>
+        <form class="plan-form" id="plan-form">
+          <div class="plan-thumb" id="plan-thumb"></div>
+          <div class="plan-fields">
+            <div class="plan-row">
+              <select id="plan-select" aria-label="План"></select>
+              <label class="btn" title="Свой SVG-план в формате GenPlan">
+                <input type="file" accept=".svg,image/svg+xml" id="plan-file" hidden><span>Свой SVG</span>
+              </label>
+            </div>
+            <textarea id="plan-text" rows="3" spellcheck="false" aria-label="Описание дома"
+              placeholder="Two-storey classic house with a gable roof and a stone plinth."></textarea>
+            <div class="plan-row">
+              <div class="segmented" role="radiogroup" aria-label="Режим">
+                <label title="Режим 2: окна стоят там, где их задал план"><input type="radio" name="mode" value="with_openings" checked><span>Окна из плана</span></label>
+                <label title="Режим 1: разрывы плана заделаны, кроме входа; окна ставит правило"><input type="radio" name="mode" value="blind"><span>Глухой куб</span></label>
+              </div>
+              <label class="seed">seed <input type="number" id="plan-seed" value="0" min="0" step="1"></label>
+              <button class="btn primary" id="plan-go" type="submit"></button>
+            </div>
+          </div>
+        </form>
+
+        <div class="section-head">
           <h2>Дома</h2><span class="count" id="houses-count"></span>
-          <span class="section-note">нажмите на дом — конвейер построит фасады</span>
+          <span class="section-note">готовые дома в JSON — только развёртка и лист (этап 0)</span>
         </div>
         <div class="house-grid">
           <ul class="contents" id="houses"></ul>
