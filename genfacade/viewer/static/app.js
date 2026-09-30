@@ -10,7 +10,6 @@ const LAYERS = {
   roof: "Крыша", annotations: "Подписи",
 };
 const STEP_LAYERS = { 3: ["roof", "annotations"], 6: ["zones", "elements", "mullions", "roof", "annotations"] };
-const THEMES = ["auto", "light", "dark"];
 const ICON = {
   back: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',
   play: '<svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>',
@@ -20,9 +19,6 @@ const ICON = {
   file: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 1.5h5l3 3v10H4z"/><path d="M9 1.5v3h3"/></svg>',
   redo: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M13 3v4H9"/><path d="M13 7a5 5 0 1 0-1.4 4"/></svg>',
   upload: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M10 13V3M6 7l4-4 4 4M3 13v3h14v-3"/></svg>',
-  auto: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor"/></svg>',
-  light: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg>',
-  dark: '<svg viewBox="0 0 16 16"><path d="M13.5 10A6 6 0 0 1 6 2.5a6 6 0 1 0 7.5 7.5z" fill="currentColor"/></svg>',
 };
 
 const $ = (id) => document.getElementById(id);
@@ -83,17 +79,6 @@ function ago(iso) {
   return "только что";
 }
 
-// ——— тема ———
-
-const systemDark = matchMedia("(prefers-color-scheme: dark)");
-
-function applyTheme(theme) {
-  const dark = theme === "dark" || (theme === "auto" && systemDark.matches);
-  document.documentElement.dataset.theme = dark ? "dark" : "light";
-  $("theme-btn").innerHTML = ICON[theme];
-  store.set("theme", theme);
-}
-
 // ——— дома и прогоны ———
 
 async function loadHouses() {
@@ -131,11 +116,17 @@ function runCard(r) {
 
 async function startRun(body, busyEl, { quiet = false } = {}) {
   busyEl?.classList.add("busy");
-  const t0 = performance.now();
+  const t0 = performance.now(), nav = state.nav;
   try {
     const { id } = await api("/api/runs", body);
+    const ms = Math.round(performance.now() - t0);
+    if (nav !== state.nav) { // пока считали, пользователь ушёл — не выдёргиваем его обратно
+      toast(`Прогон ${runName(id)} готов за ${ms} мс — он в списке`);
+      if (!$("home").hidden) await loadRuns();
+      return;
+    }
     await goToRun(id, state.step === "input" ? "input" : null);
-    toast(`Готово за ${Math.round(performance.now() - t0)} мс`);
+    toast(`Готово за ${ms} мс`);
   } catch (err) {
     if (!quiet) toast(err.message, "error");
     throw err;
@@ -383,12 +374,6 @@ function onKey(e) {
 }
 
 async function init() {
-  applyTheme(store.get("theme", "auto"));
-  $("theme-btn").addEventListener("click", () => {
-    const cur = store.get("theme", "auto");
-    applyTheme(THEMES[(THEMES.indexOf(cur) + 1) % THEMES.length]);
-  });
-  systemDark.addEventListener("change", () => applyTheme(store.get("theme", "auto")));
   bindDropzone();
   $("back-btn").innerHTML = `${ICON.back}<span>Все прогоны</span>`;
   $("back-btn").addEventListener("click", goHome);
