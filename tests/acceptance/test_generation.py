@@ -1,28 +1,26 @@
-"""Критерии приёмки specs/generation.md для правила шага 4 (gf#50).
+"""Критерии приёмки specs/generation.md для правила шага 4 — на простом доме (gf#58).
 
 Критерии «разбор текста с точностью из evaluation.md» и «один seed — один результат» —
 для модели (этап 4): до неё текст не читается, а правило детерминировано.
 """
 
-from pathlib import Path
-
 import pytest
 
 from genfacade.schema import EPS
 
-ROOT = Path(__file__).parents[2]
-# наши планы в формате GenPlan; пример GenPlan — если лежит локально (в git нет, gf#20)
-PLANS = [*sorted((ROOT / "tests" / "fixtures" / "genplan").glob("*.svg")),
-         *[p for p in [ROOT / "materials" / "genplan-plan-example.svg"] if p.exists()]]
-# варианты дома — VARIANTS в tests/conftest.py
-SPECS = ["house", "modern_panoramic", "three_hip"]
+LEAF = '<rect x="800" y="495" width="5" height="90" fill="#000000" />'
+# Внутренние стены упираются в стены простого дома — запретные зоны на трёх сторонах.
+# Слева зона на 3.0–3.1 м — там, где без обхода встало бы окно (по центру отрезка 0.8–4.2 м).
+INNER = ('<rect x="500" y="115" width="10" height="285" fill="#000000" />'
+         '<rect x="115" y="250" width="285" height="10" fill="#000000" />'
+         '<rect x="115" y="400" width="285" height="10" fill="#000000" />'
+         '<rect x="450" y="300" width="10" height="285" fill="#000000" />')
 
 
-@pytest.mark.parametrize("plan", PLANS, ids=lambda p: p.stem)
-@pytest.mark.parametrize("spec", SPECS)
-def test_plan_openings_kept_in_place(lay_out, plan, spec):
+@pytest.mark.parametrize("roof", ["flat", "gable", "hip"])
+def test_plan_openings_kept_in_place(lay_out, roof):
     """Режим с референсами: все проёмы плана на фасаде в тех же положениях."""
-    sheet = lay_out(plan, spec)
+    sheet = lay_out(roof=roof)
     for f in sheet.facades:
         ground = [e for e in f.elements if e.floor == 1 and e.cls in ("window", "door")]
         for o in f.side.openings:
@@ -31,11 +29,10 @@ def test_plan_openings_kept_in_place(lay_out, plan, spec):
             assert same, f"сторона {f.side.index}: проём {o} потерян"
 
 
-@pytest.mark.parametrize("plan", PLANS, ids=lambda p: p.stem)
-@pytest.mark.parametrize("spec", SPECS)
-def test_blind_no_window_in_forbidden_zone(lay_out, plan, spec):
+def test_blind_no_window_in_forbidden_zone(lay_out, simple_svg):
     """Режим без референсов: ни одно окно не попадает в запретную зону."""
-    sheet = lay_out(plan, spec, mode="blind")
+    sheet = lay_out("blind", svg=simple_svg((LEAF, INNER + LEAF)))
+    assert sum(len(f.side.forbidden) for f in sheet.facades) == 4
     for f in sheet.facades:
         for w in (e for e in f.elements if e.cls == "window"):
             for z in f.side.forbidden:
@@ -46,4 +43,4 @@ def test_blind_no_window_in_forbidden_zone(lay_out, plan, spec):
 @pytest.mark.parametrize("mode", ["with_openings", "blind"])
 def test_same_input_same_result(lay_out, mode):
     """Правило детерминировано: seed и случайность появятся с моделью (этап 4)."""
-    assert lay_out(PLANS[0], mode=mode) == lay_out(PLANS[0], mode=mode)
+    assert lay_out(mode) == lay_out(mode)

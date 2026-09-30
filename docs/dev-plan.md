@@ -51,7 +51,7 @@
 | `train/` | обучение моделей шагов 1 и 4; токенизация `SideFacade` ↔ последовательность |
 | `eval/` | метрики, базовые подходы, сводная таблица (evaluation.md) |
 | `viewer/` | смотрелка прогонов (раздел ниже) |
-| `cli.py` | `run`, `render`, `serve`, `prepare-data`, `train`, `eval` |
+| `cli.py` | `run`, `serve`, `prepare-data`, `train`, `eval` |
 
 ## На диске
 

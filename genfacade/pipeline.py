@@ -1,7 +1,6 @@
 """Конвейер и его трасса: выход каждого шага — в папку прогона (generation.md, п. 1, 9, 10).
 
-Два входа. `generate` — настоящий: SVG-план GenPlan + текст → шаги 1–6. `run` — дом из JSON
-(этап 0, тестовые дома): только развёртка и лист. Смотрелка и CLI читают одно и то же — папку
+`generate`: SVG-план GenPlan + текст → шаги 1–6. Смотрелка и CLI читают одно и то же — папку
 прогона с `meta.json`, где перечислены шаги и файлы.
 """
 
@@ -28,11 +27,12 @@ from genfacade.validate import errors, validate
 # Семь шагов схемы (docs/assets/facade-modules.png); седьмой — позже, вместе с Егором.
 STEPS = {1: "Параметры дома", 2: "План", 3: "Развёртка", 4: "Раскладка стен",
          5: "Сетка и проверка", 6: "Лист фасадов"}
-INPUT, UNFOLD, SHEET, SHEET_JSON, PREVIEW, META = (
-    "input.json", "03_unfold.svg", "06_sheet.svg", "sheet.json", "preview.png", "meta.json")
+UNFOLD, SHEET, SHEET_JSON, PREVIEW, META = (
+    "03_unfold.svg", "06_sheet.svg", "sheet.json", "preview.png", "meta.json")
 REQUEST, INPUT_PLAN, SPEC, PLAN_JSON, PLAN_SVG, LAYOUT, SNAPPED, VIOLATIONS = (
     "request.json", "input_plan.svg", "01_spec.json", "02_plan.json", "02_plan.svg",
     "04_layout.svg", "05_snapped.svg", "violations.json")
+STEP_FILES = {1: SPEC, 2: PLAN_SVG, 3: UNFOLD, 4: LAYOUT, 5: SNAPPED, 6: SHEET}
 RUN_ID = re.compile(r"^[\w.-]+$")  # имя папки прогона: без / и .., чтобы не выйти из runs_dir
 
 
@@ -71,24 +71,12 @@ def generate(req: PlanRun, svg: str, out: Path, cfg: Config) -> Path:
     (out / SNAPPED).write_text(sheet_svg(sheet, cfg, violations=violations))
     (out / VIOLATIONS).write_text(json.dumps(
         [v.model_dump() for v in violations], ensure_ascii=False, indent=2))
-    files = {1: SPEC, 2: PLAN_SVG, 3: UNFOLD, 4: LAYOUT, 5: SNAPPED, 6: SHEET}
     extra = {
-        "kind": "plan", "input": REQUEST, "plan_input": INPUT_PLAN, "violations": VIOLATIONS,
+        "source": req.plan, "input": REQUEST, "plan_input": INPUT_PLAN, "violations": VIOLATIONS,
         "request": req.model_dump(),
         "errors": len(errors(violations)), "warnings": len(violations) - len(errors(violations)),
     }
-    return _finish(sheet, out, cfg, (files, extra))
-
-
-def run(house: FacadeSheet, out: Path, cfg: Config, source: str) -> Path:
-    """Дом из JSON (этап 0): развёртка и лист с трассой в out; source — откуда дом."""
-    out.mkdir(parents=True, exist_ok=True)
-    (out / INPUT).write_text(house.model_dump_json(indent=2, exclude_none=True))
-    sheet = unfold(house, cfg.library.roof.thickness_m)
-    bare = [f.model_copy(update={"elements": [], "zones": []}) for f in sheet.facades]
-    (out / UNFOLD).write_text(sheet_svg(sheet.model_copy(update={"facades": bare}), cfg))
-    extra = {"kind": "house", "input": INPUT, "source": source}
-    return _finish(sheet, out, cfg, ({3: UNFOLD, 6: SHEET}, extra))
+    return _finish(sheet, out, cfg, extra)
 
 
 def ridge_along_longest(spec: HouseSpec, sides: list[Side]) -> HouseSpec:
@@ -122,18 +110,16 @@ def _prepare(req: PlanRun, svg: str, out: Path, cfg: Config) -> FacadeSheet:
     return bare
 
 
-def _finish(sheet: FacadeSheet, out: Path, cfg: Config, trace: tuple[dict, dict]) -> Path:
-    """Шаг 6 и meta.json: лист, JSON, PNG; trace — файлы шагов и поля прогона."""
-    files, extra = trace
+def _finish(sheet: FacadeSheet, out: Path, cfg: Config, extra: dict) -> Path:
+    """Шаг 6 и meta.json: лист, JSON, PNG; extra — поля прогона."""
     (out / SHEET).write_text(sheet_svg(sheet, cfg))
     (out / SHEET_JSON).write_text(sheet.model_dump_json(indent=2))
     has_png = to_png(out / SHEET, out / PREVIEW, cfg.sheet.preview.width_px)
     meta = {
-        "source": extra.pop("source", None) or extra["request"]["plan"],
         "date": datetime.now().isoformat(timespec="seconds"),
         "git_sha": _git_sha(), "genfacade": version("genfacade"),
         "sheet_json": SHEET_JSON, "preview": PREVIEW if has_png else None,
-        "steps": [{"n": n, "title": t, "file": files.get(n)} for n, t in STEPS.items()],
+        "steps": [{"n": n, "title": t, "file": STEP_FILES[n]} for n, t in STEPS.items()],
         **extra,
         # Итоговые настройки целиком: прогон повторяется без исходной папки конфига.
         "config": cfg.model_dump(mode="json"),

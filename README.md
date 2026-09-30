@@ -27,15 +27,14 @@ python3 -m venv .venv
 .venv/bin/pytest && .venv/bin/ruff check .
 npx -y jscpd@5.3.3 -c .jscpd.json genfacade tests tools   # копипаста, нужен Node
 
-.venv/bin/genfacade run materials/genplan-plan-example.svg \
-    -t "Two-storey classic house with a gable roof" -m with_openings   # план + описание → фасады
-.venv/bin/genfacade render tests/fixtures/house_gable.json          # лист из готового JSON дома
-.venv/bin/genfacade -c мои/ render tests/fixtures/house_gable.json  # со своими настройками
+.venv/bin/genfacade run tests/fixtures/simple_house.svg \
+    -t "A simple one-storey house" -m with_openings   # план + описание → фасады
+.venv/bin/genfacade -c мои/ run tests/fixtures/simple_house.svg -t "…"  # со своими настройками
 .venv/bin/genfacade serve                                            # смотрелка: http://127.0.0.1:8000
 ```
 
 **Смотрелка** — на главной запуск «план + описание» (план из списка или свой SVG
-GenPlan, режим), дома и история прогонов; прогон открывается на весь экран:
+GenPlan, режим) и история прогонов; прогон открывается на весь экран:
 шаги 1–6 конвейера, чертёж (масштаб, слои — запретные зоны и нарушения на шагах 4–5,
 карточка элемента при наведении), вход прогона с перезапуском. Esc или «назад» в браузере — на главную. Каждый прогон — папка
 с трассой шагов в `outputs/runs/`.
@@ -49,7 +48,8 @@ GenPlan, режим), дома и история прогонов; прогон 
 
 **Этап 1 сделан 30.09.2026, ждёт проверки** ([план разработки](docs/dev-plan.md)):
 сквозной конвейер на правилах — `genfacade run план.svg -t описание` проходит шаги 1–6
-в обоих режимах: параметры дома, препроцессор плана GenPlan, развёртка, раскладка стен
+в обоих режимах — пока на одном простом доме 10 × 5 м с плоской крышей (gf#58): параметры
+дома, препроцессор плана GenPlan, развёртка, раскладка стен
 правилом, привязка к сетке и валидатор, лист фасадов. Модели пока нет: на шаге 1 текст
 не читается, дом — из `genfacade/config/house.json`; на шаге 4 — правило.
 
@@ -58,7 +58,7 @@ GenPlan, режим), дома и история прогонов; прогон 
 - этап 1: `genfacade run` — план GenPlan + описание по-английски → фасады всех сторон
   с трассой шагов 1–6; валидатор ловит окно плана, в которое упирается внутренняя стена
   (дефект GenPlan)
-- этап 0: `genfacade render дом.json` строит лист фасадов 1:100 в осях с отметками
+- этап 0: лист фасадов 1:100 в осях с отметками
   уровней (SVG + JSON + PNG), `genfacade serve` — смотрелка прогонов; настройки —
   в `genfacade/config/`
 - постановка согласована с научруками и сведена в спеки; семь шагов конвейера,

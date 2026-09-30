@@ -16,19 +16,14 @@ from pydantic import BaseModel
 from genfacade import pipeline
 from genfacade.config import Config
 from genfacade.plan.genplan_svg import PlanError
-from genfacade.schema import FacadeSheet
 
 STATIC = files(__package__).joinpath("static")
 
 
 class RunRequest(BaseModel):
-    """Запустить дом из списка (house), присланный JSON (sheet) под именем name или
-    план с описанием (plan_run): план — из списка по имени или присланный SVG (svg)."""
+    """План с описанием (plan_run): план — из списка по имени или присланный SVG (svg)."""
 
-    house: str | None = None
-    sheet: FacadeSheet | None = None
-    name: str = "house"
-    plan_run: pipeline.PlanRun | None = None
+    plan_run: pipeline.PlanRun
     svg: str | None = None
 
 
@@ -59,10 +54,6 @@ async def _revalidate_page(request: Request, call_next):
 
 
 def _api(app: FastAPI, cfg: Config, runs_dir: Path) -> None:
-    @app.get("/api/houses")
-    def houses() -> list[dict]:
-        return [_house_card(name, path) for name, path in _houses(cfg).items()]
-
     @app.get("/api/runs")
     def runs() -> list[dict]:
         return _runs(runs_dir)
@@ -84,12 +75,7 @@ def _api(app: FastAPI, cfg: Config, runs_dir: Path) -> None:
 
     @app.post("/api/runs")
     def start(req: RunRequest) -> dict:
-        if req.plan_run is not None:
-            return {"id": _start_plan(req.plan_run, req.svg, cfg).name}
-        house, name, source = _resolve(req, cfg)
-        out = pipeline.new_run_dir(runs_dir, name)
-        pipeline.run(house, out, cfg, source=source)
-        return {"id": out.name}
+        return {"id": _start_plan(req.plan_run, req.svg, cfg).name}
 
 
 def _plans(cfg: Config) -> dict[str, Path]:
@@ -111,35 +97,6 @@ def _start_plan(run: pipeline.PlanRun, svg: str | None, cfg: Config) -> Path:
         return pipeline.generate(run, text, out, cfg)
     except PlanError as e:
         raise HTTPException(400, f"план отклонён: {e}") from e
-
-
-def _houses(cfg: Config) -> dict[str, Path]:
-    found = {}
-    for folder in cfg.viewer.paths.houses_dirs:
-        for path in sorted(folder.glob("*.json")):
-            found.setdefault(path.stem, path)
-    return found
-
-
-def _house_card(name: str, path: Path) -> dict:
-    """Сводка для списка домов: этажи, крыша, габариты — без запуска конвейера."""
-    sheet = FacadeSheet.model_validate_json(path.read_text())
-    spec, sides = sheet.spec, [f.side for f in sheet.facades]
-    return {
-        "name": name, "floors": spec.floors, "roof": spec.roof.kind, "style": spec.style,
-        "size_m": [sides[0].length_m, sides[1].length_m] if len(sides) > 1 else [],
-        "palette": [m.color for m in spec.materials if m.color],
-    }
-
-
-def _resolve(req: RunRequest, cfg: Config) -> tuple[FacadeSheet, str, str]:
-    if req.sheet is not None:
-        return req.sheet, req.name, "смотрелка: присланный JSON"
-    houses = _houses(cfg)
-    if req.house not in houses:
-        raise HTTPException(404, f"нет дома {req.house!r}")
-    path = houses[req.house]
-    return FacadeSheet.model_validate_json(path.read_text()), req.house, str(path)
 
 
 def _runs(runs_dir: Path) -> list[dict]:

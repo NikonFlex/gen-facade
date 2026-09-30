@@ -1,11 +1,9 @@
-import json
-
 import pytest
 from pydantic import ValidationError
 
 from genfacade import config
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import FacadeSheet, HouseSpec
+from genfacade.schema import FacadeSheet
 
 
 def test_user_toml_overrides_one_key(tmp_path, cfg):
@@ -31,25 +29,26 @@ def test_user_css_goes_after_defaults(tmp_path, cfg):
 
 def test_house_is_default_spec(cfg):
     """Шаг 1 до модели: дом из config/house.json, палитра по ролям для раскладки."""
-    assert cfg.house.floors == 2 and cfg.house.roof.kind == "gable"
+    assert cfg.house.floors == 1 and cfg.house.roof.kind == "flat"
     assert [m.id for m in cfg.house.materials] == ["main", "plinth", "accent", "trim", "roof"]
 
 
-def test_user_house_replaces_default(tmp_path, cfg, raw_house):
-    (tmp_path / "house.json").write_text(json.dumps(raw_house["spec"]))
+def test_user_house_replaces_default(tmp_path, cfg):
+    mine = cfg.house.model_copy(update={"style": "classic", "plinth_m": 0.6, "eaves_m": 3.35})
+    (tmp_path / "house.json").write_text(mine.model_dump_json())
     house = config.load(tmp_path).house
-    assert house == HouseSpec.model_validate(raw_house["spec"]) and house != cfg.house
+    assert house == mine and house != cfg.house
 
 
 def test_material_color_from_library(raw_house, cfg, unfold_sheet):
     # В палитре дома цвет не задан — берётся цвет вида из библиотеки.
-    del raw_house["spec"]["materials"][1]["color"]  # brick
+    assert raw_house["spec"]["materials"][1] == {"id": "plinth", "kind": "concrete", "color": None}
     sheet = unfold_sheet(FacadeSheet.model_validate(raw_house))
-    assert f'fill="{cfg.library.kinds["brick"]}"' in sheet_svg(sheet, cfg)
+    assert f'fill="{cfg.library.kinds["concrete"]}"' in sheet_svg(sheet, cfg)
 
 
 def test_unknown_kind_without_color_rejected(raw_house, cfg, unfold_sheet):
-    raw_house["spec"]["materials"][1] = {"id": "brick", "kind": "unobtainium"}
+    raw_house["spec"]["materials"][1] = {"id": "plinth", "kind": "unobtainium"}
     sheet = unfold_sheet(FacadeSheet.model_validate(raw_house))
     with pytest.raises(ValueError, match="unobtainium"):
         sheet_svg(sheet, cfg)

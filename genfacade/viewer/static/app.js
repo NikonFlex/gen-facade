@@ -22,7 +22,6 @@ const ICON = {
   fit: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>',
   file: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 1.5h5l3 3v10H4z"/><path d="M9 1.5v3h3"/></svg>',
   redo: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M13 3v4H9"/><path d="M13 7a5 5 0 1 0-1.4 4"/></svg>',
-  upload: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M10 13V3M6 7l4-4 4 4M3 13v3h14v-3"/></svg>',
 };
 
 const $ = (id) => document.getElementById(id);
@@ -102,7 +101,7 @@ function showPlanThumb(src) {
 function bindPlanForm() {
   const form = $("plan-form");
   $("plan-go").innerHTML = `${ICON.play}<span>Построить фасады</span>`;
-  $("plan-text").value = store.get("plan.text", "Two-storey classic house with a gable roof and a stone plinth.");
+  $("plan-text").value = store.get("plan.text", "A simple one-storey house with a flat roof.");
   const mode = store.get("plan.mode", "with_openings");
   form.querySelector(`input[name=mode][value=${mode}]`).checked = true;
   $("plan-select").addEventListener("change", () => {
@@ -135,29 +134,11 @@ async function submitPlan() {
 
 // ——— дома и прогоны ———
 
-async function loadHouses() {
-  const houses = await api("/api/houses");
-  $("houses-count").textContent = houses.length;
-  $("houses").replaceChildren(...houses.map(houseCard));
-}
-
-function houseCard(h) {
-  const size = h.size_m.length ? ` · ${h.size_m.map((v) => v.toLocaleString("ru-RU")).join(" × ")} м` : "";
-  const floors = `${h.floors} ${h.floors === 1 ? "этаж" : "этажа"}`;
-  const btn = el("button", { className: "house", title: `Запустить конвейер: ${h.name}` },
-    `<span class="house-name">${h.name}</span>
-     <span class="house-meta">${floors} · ${ROOF[h.roof] ?? h.roof}${size}</span>
-     <span class="swatches">${h.palette.map((c) => `<span class="swatch" style="background:${c}"></span>`).join("")}</span>
-     <span class="house-go">${ICON.play}</span>`);
-  btn.addEventListener("click", () => startRun({ house: h.name }, btn));
-  return listItem(btn);
-}
-
 async function loadRuns() {
   state.runs = await api("/api/runs");
   $("runs-count").textContent = state.runs.length || "";
   const items = state.runs.map(runCard);
-  $("runs").replaceChildren(...(items.length ? items : [el("li", { className: "empty-note", textContent: "Пока пусто — запустите дом выше." })]));
+  $("runs").replaceChildren(...(items.length ? items : [el("li", { className: "empty-note", textContent: "Пока пусто — постройте фасады по плану выше." })]));
 }
 
 function runCard(r) {
@@ -268,7 +249,6 @@ async function rerun() {
 
 // Тело запуска из входа прогона: у прогона по плану — запрос и тот же SVG-план.
 async function runBody(input) {
-  if (state.meta.kind !== "plan") return { sheet: input, name: runName(state.runId) };
   const svg = await (await fetch(`/files/${state.runId}/${state.meta.plan_input}`)).text();
   return { plan_run: input, svg };
 }
@@ -311,7 +291,7 @@ async function renderJsonStep(step) {
     <div class="summary" id="summary"></div>`);
   view.querySelector(".json-view").textContent = JSON.stringify(data, null, 2);
   $("stage").replaceChildren(view);
-  renderSummary({ spec: data.spec, facades: [], colors: data.colors });
+  renderSummary(data.spec, data.colors);
 }
 
 // ——— шаг с чертежом ———
@@ -374,7 +354,7 @@ async function renderInput() {
   const view = el("div", { className: "input-view" }, `
     <div class="editor-pane">
       <div class="pane-head">
-        <h2>${state.meta.kind === "plan" ? "Запрос, JSON" : "Дом, JSON"}</h2><span class="pane-note">правка → новый прогон</span>
+        <h2>Запрос, JSON</h2><span class="pane-note">правка → новый прогон</span>
         <span class="pane-actions"><button class="btn" id="reset">Сбросить</button><button class="btn primary" id="go">${ICON.play}Прогнать</button></span>
       </div>
       <textarea class="editor" id="editor" spellcheck="false"></textarea>
@@ -384,8 +364,7 @@ async function renderInput() {
   $("stage").replaceChildren(view);
   const editor = $("editor");
   editor.value = text;
-  if (state.meta.kind === "plan") renderPlanSummary();
-  else renderSummary(JSON.parse(text));
+  renderPlanSummary();
   editor.addEventListener("keydown", indentOnTab);
   $("reset").addEventListener("click", () => { editor.value = text; showErrors([]); });
   $("go").addEventListener("click", () => runEdited(editor.value));
@@ -421,12 +400,8 @@ function showErrors(lines) {
   box.replaceChildren(...lines.map((line) => el("li", { textContent: line })));
 }
 
-function renderSummary(house) {
-  const s = house.spec, sides = house.facades.map((f) => f.side.length_m);
-  const walls = sides.length ? [
-    ["Стороны", sides.map((v) => v.toLocaleString("ru-RU")).join(" · ") + " м"],
-    ["Элементов", house.facades.reduce((n, f) => n + (f.elements?.length ?? 0), 0)],
-  ] : [];
+// Сводка шага 1: параметры дома и палитра; colors — цвета видов из библиотеки.
+function renderSummary(s, colors) {
   const facts = [
     ["Тип", s.building_type === "cottage" ? "коттедж" : "многоквартирный"],
     ["Стиль", s.style || "—"],
@@ -434,9 +409,8 @@ function renderSummary(house) {
     ["Цоколь", metres(s.plinth_m)],
     ["Карниз", metres(s.eaves_m)],
     ["Крыша", `${ROOF[s.roof.kind]}${s.roof.kind === "flat" ? "" : `, ${s.roof.pitch_deg}°, свес ${metres(s.roof.overhang_m)}`}`],
-    ...walls,
   ];
-  const color = (m) => m.color ?? house.colors?.[m.id] ?? "transparent";
+  const color = (m) => m.color ?? colors?.[m.id] ?? "transparent";
   const palette = s.materials.map((m) => `<div class="palette-row"><span class="swatch" style="background:${color(m)}"></span>${m.id}<code>${m.kind}</code></div>`);
   $("summary").innerHTML = `<h2>Параметры дома</h2>
     <dl class="facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
@@ -444,24 +418,6 @@ function renderSummary(house) {
 }
 
 // ——— свой файл, клавиши, запуск ———
-
-function bindDropzone() {
-  const zone = $("dropzone"), input = $("file-input");
-  $("dropzone").querySelector(".dropzone-icon").innerHTML = ICON.upload;
-  const send = async (file) => {
-    try {
-      await startRun({ sheet: JSON.parse(await file.text()), name: file.name.replace(/\.json$/i, "") }, zone);
-    } catch { /* ошибка уже показана */ }
-  };
-  input.addEventListener("change", () => input.files[0] && send(input.files[0]));
-  zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("over"); });
-  zone.addEventListener("dragleave", () => zone.classList.remove("over"));
-  zone.addEventListener("drop", (e) => {
-    e.preventDefault();
-    zone.classList.remove("over");
-    if (e.dataTransfer.files[0]) send(e.dataTransfer.files[0]);
-  });
-}
 
 function onKey(e) {
   if (e.target.closest("textarea, input") || !state.meta) return;
@@ -476,14 +432,13 @@ function onKey(e) {
 }
 
 async function init() {
-  bindDropzone();
   $("back-btn").innerHTML = `${ICON.back}<span>Все прогоны</span>`;
   $("back-btn").addEventListener("click", goHome);
   $("home-link").addEventListener("click", (e) => { e.preventDefault(); goHome(); });
   window.addEventListener("popstate", route);
   document.addEventListener("keydown", onKey);
   bindPlanForm();
-  await Promise.all([loadPlans(), loadHouses()]);
+  await loadPlans();
   await route();
 }
 

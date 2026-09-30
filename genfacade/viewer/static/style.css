@@ -77,50 +77,9 @@ h1, h2 { margin: 0; font-weight: 600; }
 .contents { display: contents; }
 ul { list-style: none; margin: 0; padding: 0; }
 
-.house-grid, .run-grid { display: grid; gap: 12px; }
-.house-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
-.run-grid { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+.run-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
 
-.house {
-  position: relative;
-  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 10px;
-  width: 100%; height: 100%; padding: 14px 14px 12px;
-  text-align: left; background: var(--panel);
-  border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer;
-  transition: border-color .15s, box-shadow .15s, transform .15s;
-  overflow: hidden;
-}
-.house:hover { border-color: var(--line-strong); box-shadow: var(--shadow); }
-.house:active { transform: translateY(1px); }
-.house-name { font-weight: 600; }
-.house-meta { grid-column: 1; color: var(--muted); font-size: 12.5px; }
-.house-go {
-  grid-row: 1 / span 3; grid-column: 2;
-  width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
-  background: var(--accent-soft); color: var(--accent); transition: background .15s, color .15s;
-}
-.house:hover .house-go { background: var(--accent); color: var(--accent-ink); }
-.house-go svg { width: 14px; height: 14px; }
-.swatches { display: flex; gap: 3px; margin-top: 6px; grid-column: 1; }
 .swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0, 0, 0, 0.12); }
-.house.busy, .dropzone.busy { pointer-events: none; }
-.house.busy::after, .dropzone.busy::after {
-  content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 40%;
-  background: var(--accent); animation: slide 0.9s ease-in-out infinite;
-}
-@keyframes slide { from { left: -40%; } to { left: 100%; } }
-
-.dropzone {
-  position: relative; overflow: hidden;
-  display: flex; gap: 12px; align-items: center; padding: 14px;
-  border: 1.5px dashed var(--line-strong); border-radius: var(--radius);
-  color: var(--muted); font-size: 12.5px; cursor: pointer;
-  transition: border-color .15s, background .15s, color .15s;
-}
-.dropzone b { color: var(--ink); font-weight: 600; font-size: 14px; }
-.dropzone-text { display: grid; gap: 2px; }
-.dropzone:hover, .dropzone.over { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
-.dropzone-icon svg { width: 22px; height: 22px; color: var(--accent); display: block; }
 
 .run-card {
   display: flex; flex-direction: column; width: 100%; padding: 0; overflow: hidden;

@@ -33,7 +33,8 @@ def zones(wall: SideFacade, spec: HouseSpec, doors: list[Element],
     if gable:
         out.append(MaterialZone(role="accent", material=roles["accent"], shape=gable))
     elif doors:
-        pad, d = rule.accent.entrance_pad_m, doors[0]
+        # полоса у входа — на ширину зазора, куда окна не ставятся: окно не заходит на акцент
+        pad, d = rule.blind.clearance_m, doors[0]
         x0, x1 = max(0.0, d.x_m - pad), min(length, d.x_m + d.w_m + pad)
         out.append(MaterialZone(role="accent", material=roles["accent"],
                                 shape=_rect(x0, spec.plinth_m, x1, spec.eaves_m)))
