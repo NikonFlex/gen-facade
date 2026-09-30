@@ -1,9 +1,11 @@
+import json
+
 import pytest
 from pydantic import ValidationError
 
 from genfacade import config
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import FacadeSheet
+from genfacade.schema import FacadeSheet, HouseSpec
 
 
 def test_user_toml_overrides_one_key(tmp_path, cfg):
@@ -25,6 +27,18 @@ def test_user_css_goes_after_defaults(tmp_path, cfg):
     (tmp_path / "sheet.css").write_text(".ground { stroke-width: 0.2px; }")
     css = config.load(tmp_path).css
     assert css.startswith(cfg.css) and css.rstrip().endswith(".ground { stroke-width: 0.2px; }")
+
+
+def test_house_is_default_spec(cfg):
+    """Шаг 1 до модели: дом из config/house.json, палитра по ролям для раскладки."""
+    assert cfg.house.floors == 2 and cfg.house.roof.kind == "gable"
+    assert [m.id for m in cfg.house.materials] == ["main", "plinth", "accent", "trim", "roof"]
+
+
+def test_user_house_replaces_default(tmp_path, cfg, raw_house):
+    (tmp_path / "house.json").write_text(json.dumps(raw_house["spec"]))
+    house = config.load(tmp_path).house
+    assert house == HouseSpec.model_validate(raw_house["spec"]) and house != cfg.house
 
 
 def test_material_color_from_library(raw_house, cfg, unfold_sheet):
