@@ -8,7 +8,7 @@ import json
 from importlib.resources import files
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -32,6 +32,7 @@ def create_app(cfg: Config) -> FastAPI:
     runs_dir = cfg.viewer.paths.runs_dir
     runs_dir.mkdir(parents=True, exist_ok=True)
     app = FastAPI(title="GenFacade · смотрелка")
+    app.middleware("http")(_revalidate_page)
     _api(app, cfg, runs_dir)
     app.mount("/files", StaticFiles(directory=runs_dir), name="files")
     app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
@@ -41,6 +42,16 @@ def create_app(cfg: Config) -> FastAPI:
         return FileResponse(str(STATIC.joinpath("index.html")))
 
     return app
+
+
+async def _revalidate_page(request: Request, call_next):
+    """Страница и её JS/CSS — всегда с перепроверкой: иначе после обновления браузер
+    берёт старый app.js к новому index.html, и страница ломается (хозяин, 30.09).
+    Файлы прогонов не меняются — их кэш не трогаем."""
+    response = await call_next(request)
+    if not request.url.path.startswith("/files/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 def _api(app: FastAPI, cfg: Config, runs_dir: Path) -> None:

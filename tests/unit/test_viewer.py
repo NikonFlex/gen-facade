@@ -49,3 +49,9 @@ def test_unknown_house_and_run(client):
 
 def test_page_served(client):
     assert "смотрелка" in client.get("/").text
+
+
+def test_page_and_static_revalidated(client):
+    # Без этого браузер держит старый app.js при новом index.html — кнопки ломаются.
+    for path in ("/", "/static/app.js", "/static/style.css", "/static/stage.js"):
+        assert client.get(path).headers["cache-control"] == "no-cache", path

@@ -26,7 +26,7 @@ const ICON = {
 };
 
 const $ = (id) => document.getElementById(id);
-const state = { runs: [], meta: null, runId: null, step: null, stage: null };
+const state = { runs: [], meta: null, runId: null, step: null, stage: null, nav: 0 };
 
 // ——— мелочи ———
 
@@ -162,6 +162,7 @@ function goHome() {
 }
 
 function showHome() {
+  state.nav += 1; // загрузка прогона, начатая до ухода на главную, не откроет его поверх
   Object.assign(state, { meta: null, runId: null, step: null, stage: null });
   $("run").hidden = true;
   $("run-bar").hidden = true;
@@ -185,7 +186,10 @@ async function route() {
 // ——— открытый прогон ———
 
 async function openRun(id, step = null) {
-  state.meta = await api(`/api/runs/${encodeURIComponent(id)}`);
+  const nav = ++state.nav;
+  const meta = await api(`/api/runs/${encodeURIComponent(id)}`);
+  if (nav !== state.nav) return; // пока грузили, пользователь ушёл — не перехватываем экран
+  state.meta = meta;
   state.runId = id;
   $("home").hidden = true;
   $("brand-sub").hidden = true;
