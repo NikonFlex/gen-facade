@@ -8,8 +8,9 @@ from genfacade.plan import genplan_svg
 from genfacade.plan.genplan_svg import Box, PlanError, parse
 
 ROOT = Path(__file__).parents[2]
-EXAMPLE = ROOT / "materials" / "genplan-plan-example.svg"
+EXAMPLE = ROOT / "materials" / "genplan-plan-example.svg"  # в git нет (gf#20) — только локально
 DOORS = ROOT / "tests" / "fixtures" / "genplan"
+HOUSE = DOORS / "house.svg"  # наш дом, окна и двери нарисовал decorator GenPlan
 # Разрывы дверей (петля, другой край) — как заданы в tests/fixtures/genplan/make_fixtures.py
 DOOR_GAPS = {
     "door_top": [((250, 100), (340, 100))],  # створка BOTTOM, наружу
@@ -23,6 +24,18 @@ def _swings(plan):
     return [(d.hinge, d.jamb) for d in plan.doors]
 
 
+def test_house_primitives():
+    plan = parse(HOUSE)
+    assert (plan.width, plan.height) == (600, 600)
+    assert len(plan.walls) == 10  # 11 чёрных <rect> минус створка входа
+    # второе окно — ложное окно GenPlan поперёк комнаты; разбор его честно читает,
+    # отбрасывает препроцессор (test_plan)
+    assert plan.windows == [Box(250, 150, 400, 165), Box(100, 165, 250, 310),
+                            Box(100, 330, 115, 420)]
+    assert _swings(plan) == [((100, 200), (100, 290))]
+
+
+@pytest.mark.skipif(not EXAMPLE.exists(), reason="materials/*.svg в git нет (gf#20)")
 def test_example_primitives():
     plan = parse(EXAMPLE)
     assert (plan.width, plan.height) == (1024, 1024)
@@ -60,16 +73,16 @@ def test_leaf_not_confused_with_wall_along_it(wall):
 
 
 def test_parse_accepts_text():
-    assert parse(EXAMPLE.read_text()) == parse(EXAMPLE)
+    assert parse(HOUSE.read_text()) == parse(HOUSE)
 
 
 def _broken(old: str, new: str) -> str:
-    text = EXAMPLE.read_text()
+    text = HOUSE.read_text()
     assert old in text
     return text.replace(old, new, 1)
 
 
-LEAF = '<rect x="69" y="368" width="118" height="5" fill="#000000" />'
+LEAF = '<rect x="10" y="200" width="90" height="5" fill="#000000" />'
 
 
 @pytest.mark.parametrize(
@@ -79,11 +92,11 @@ LEAF = '<rect x="69" y="368" width="118" height="5" fill="#000000" />'
         (_broken("</svg>", '<line x1="0" y1="0" x2="1" y2="1" /></svg>'), "неожиданный элемент"),
         (_broken(LEAF, LEAF.replace("/>", 'transform="rotate(90)" />')), "transform"),
         (_broken(LEAF, ""), "без створки"),
-        (_broken('d="M187.0,486.0 A', 'd="M187.0,486.0 L'), "не дуга"),
-        (_broken('width="118" height="5"', 'width="0" height="5"'), "нулевого размера"),
+        (_broken('d="M100.0,290.0 A', 'd="M100.0,290.0 L'), "не дуга"),
+        (_broken('width="90" height="5"', 'width="0" height="5"'), "нулевого размера"),
         (_broken("</svg>", ""), "не разбирается"),
-        (_broken('viewBox="0 0 1024 1024"', 'viewBox="10 0 1024 1024"'), "не от нуля"),
-        (_broken(' viewBox="0 0 1024 1024"', ""), "нет viewBox"),
+        (_broken('viewBox="0 0 600 600"', 'viewBox="10 0 600 600"'), "не от нуля"),
+        (_broken(' viewBox="0 0 600 600"', ""), "нет viewBox"),
     ],
     ids=["color", "element", "transform", "no-leaf", "not-arc", "empty-rect", "xml",
          "viewbox-offset", "no-viewbox"],
@@ -96,4 +109,4 @@ def test_defects_rejected_with_reason(svg, reason):
 def test_old_expat_refused(monkeypatch):
     monkeypatch.setattr(genplan_svg.pyexpat, "version_info", (2, 5, 0))
     with pytest.raises(PlanError, match="expat"):
-        parse(EXAMPLE)
+        parse(HOUSE)
