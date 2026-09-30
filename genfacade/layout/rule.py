@@ -19,14 +19,12 @@ class LayoutContext:
     spec: HouseSpec
     mode: Mode
     text: str  # для модели шага 4 (generation.md, п. 3); правило текст не читает
-    seed: int
 
 
 def place(wall: SideFacade, ctx: LayoutContext, rule: LayoutRule) -> SideFacade:
     spec, trim = ctx.spec, palette_roles(ctx.spec)["trim"]
-    rhythm = openings.Rhythm.pick(ctx.seed, rule.blind)
     doors = openings.doors(wall.side, spec, rule)
-    cols = openings.columns(wall.side, ctx.mode, rhythm, rule.blind)
+    cols = openings.columns(wall.side, ctx.mode, rule.blind)
     windows = openings.windows(cols, spec, rule.windows.level, rule.windows)
     # порядок — порядок отрисовки: наличник под окном, подоконник и карниз поверх стены
     elements = [
