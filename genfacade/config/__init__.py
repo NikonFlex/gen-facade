@@ -1,4 +1,4 @@
-"""Настройки, вынесенные из кода: библиотека материалов и оформление листа.
+"""Настройки, вынесенные из кода: библиотека материалов, оформление листа, смотрелка.
 
 По умолчанию — файлы этой папки. Свой конфиг — папка с любыми из тех же файлов:
 TOML сливается с умолчаниями поключно, sheet.css дописывается после умолчаний
@@ -87,9 +87,25 @@ class Sheet(Section):
     preview: Preview
 
 
+class Server(Section):
+    host: str
+    port: int
+
+
+class ViewerPaths(Section):
+    runs_dir: Path
+    houses_dirs: list[Path]
+
+
+class Viewer(Section):
+    server: Server
+    paths: ViewerPaths
+
+
 class Config(Section):
     library: Library
     sheet: Sheet
+    viewer: Viewer
     css: str
 
 
@@ -101,6 +117,7 @@ def load(user_dir: Path | None = None) -> Config:
     return Config(
         library=Library(**_toml("library.toml", user_dir)),
         sheet=Sheet(**_toml("sheet.toml", user_dir)),
+        viewer=Viewer(**_toml("viewer.toml", user_dir)),
         css=css,
     )
 

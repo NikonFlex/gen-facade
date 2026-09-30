@@ -63,7 +63,7 @@ class HouseSpec(Model):
     def _check(self) -> "HouseSpec":
         if len(self.floor_heights_m) != self.floors:
             n = len(self.floor_heights_m)
-            raise ValueError(f"floor_heights_m: {n} высот на {self.floors} этажей")
+            raise ValueError(f"floor_heights_m: высот этажей {n}, а этажей {self.floors}")
         ids = [m.id for m in self.materials]
         if len(ids) != len(set(ids)):
             raise ValueError(f"materials: повторяются id {ids}")

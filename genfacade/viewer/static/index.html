@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GenFacade · смотрелка</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M4 15 16 5l12 10v13H4z' fill='%232f5d8a'/%3E%3Crect x='9' y='17' width='5' height='5' fill='%23fff'/%3E%3Crect x='18' y='17' width='5' height='11' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="top-left">
+      <a class="brand" href="#" id="home-link" title="Все дома и прогоны">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <path d="M4 15 16 5l12 10v13H4z"/><rect x="9" y="17" width="5" height="5"/><rect x="18" y="17" width="5" height="11"/>
+        </svg>
+        <span class="brand-name">GenFacade</span>
+      </a>
+      <span class="brand-sub" id="brand-sub">смотрелка прогонов</span>
+      <div class="run-bar" id="run-bar" hidden>
+        <button class="btn ghost" id="back-btn" title="Все дома и прогоны (Esc)"></button>
+        <h1 id="run-title"></h1>
+        <div class="chips" id="run-chips"></div>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div class="run-actions" id="run-actions"></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="home" id="home">
+      <div class="home-inner">
+        <div class="section-head">
+          <h2>Дома</h2><span class="count" id="houses-count"></span>
+          <span class="section-note">нажмите на дом — конвейер построит фасады</span>
+        </div>
+        <div class="house-grid">
+          <ul class="contents" id="houses"></ul>
+          <label class="dropzone" id="dropzone">
+            <input type="file" accept=".json,application/json" id="file-input" hidden>
+            <span class="dropzone-icon" aria-hidden="true"></span>
+            <span class="dropzone-text"><b>Свой дом</b><span>перетащите JSON или нажмите</span></span>
+          </label>
+        </div>
+
+        <div class="section-head">
+          <h2>Прогоны</h2><span class="count" id="runs-count"></span>
+          <span class="section-note">новые сверху; открываются без пересчёта</span>
+        </div>
+        <ul class="run-grid" id="runs"></ul>
+      </div>
+    </section>
+
+    <section class="run" id="run" hidden>
+      <nav class="stepper" id="stepper" aria-label="Шаги конвейера"></nav>
+      <section class="stage" id="stage"></section>
+    </section>
+  </main>
+
+  <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>
