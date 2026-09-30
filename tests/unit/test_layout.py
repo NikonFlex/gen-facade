@@ -7,7 +7,7 @@ import pytest
 from genfacade.layout.rule import LayoutContext, place
 from genfacade.schema import EPS, FacadeSheet
 
-EXAMPLE = Path(__file__).parents[2] / "materials" / "genplan-plan-example.svg"
+HOUSE = Path(__file__).parents[2] / "tests" / "fixtures" / "genplan" / "house.svg"
 CLASSIC = "Two-storey classic house with a gable roof."
 MODERN = "Two-storey modern villa with a flat roof and panoramic windows."
 
@@ -17,7 +17,7 @@ def _of(sheet, cls):
 
 
 def test_windows_stacked_on_every_floor(lay_out):
-    sheet = lay_out(EXAMPLE, CLASSIC)
+    sheet = lay_out(HOUSE, CLASSIC)
     for f in sheet.facades:
         by_floor = {}
         for w in (e for e in f.elements if e.cls == "window"):
@@ -26,7 +26,7 @@ def test_windows_stacked_on_every_floor(lay_out):
 
 
 def test_plan_fields_fixed_only_where_plan_sets_them(lay_out):
-    sheet = lay_out(EXAMPLE, CLASSIC)
+    sheet = lay_out(HOUSE, CLASSIC)
     windows = _of(sheet, "window")
     assert all(w.fixed == ["x_m", "w_m"] for w in windows if w.floor == 1)
     assert all(w.fixed == [] for w in windows if w.floor > 1)
@@ -35,7 +35,7 @@ def test_plan_fields_fixed_only_where_plan_sets_them(lay_out):
 
 @pytest.mark.parametrize("text", [CLASSIC, MODERN])
 def test_windows_between_floor_and_lintel(lay_out, cfg, text):
-    sheet = lay_out(EXAMPLE, text, mode="blind")
+    sheet = lay_out(HOUSE, text, mode="blind")
     spec, levels = sheet.spec, sheet.spec.floor_levels()
     for w in _of(sheet, "window"):
         base, top = levels[w.floor - 1], levels[w.floor]
@@ -45,20 +45,20 @@ def test_windows_between_floor_and_lintel(lay_out, cfg, text):
 
 
 def test_sills_and_casings_follow_style(lay_out):
-    classic = lay_out(EXAMPLE, CLASSIC)
+    classic = lay_out(HOUSE, CLASSIC)
     windows = {w.id for w in _of(classic, "window")}
     assert {s.parent for s in _of(classic, "sill")} == windows
     assert {m.parent for m in _of(classic, "molding")} == windows
-    panoramic = lay_out(EXAMPLE, MODERN)
+    panoramic = lay_out(HOUSE, MODERN)
     assert all(w.variant.kind == "panoramic" for w in _of(panoramic, "window"))
     assert _of(panoramic, "sill") == [] and _of(panoramic, "molding") == []
     # модерн с обычными окнами: подоконники есть, наличников у стиля нет
-    modern = lay_out(EXAMPLE, "Two-storey modern villa with a flat roof.")
+    modern = lay_out(HOUSE, "Two-storey modern villa with a flat roof.")
     assert _of(modern, "sill") and _of(modern, "molding") == []
 
 
 def test_casing_drawn_under_its_window(lay_out):
-    for f in lay_out(EXAMPLE, CLASSIC).facades:
+    for f in lay_out(HOUSE, CLASSIC).facades:
         order = [e.id for e in f.elements]
         for m in (e for e in f.elements if e.cls == "molding"):
             assert order.index(m.id) < order.index(m.parent)
@@ -66,7 +66,7 @@ def test_casing_drawn_under_its_window(lay_out):
 
 def test_zone_heights_same_on_all_sides(lay_out):
     """Цоколь, основная отделка и пояса — по отметкам HouseSpec: углы сходятся."""
-    sheet = lay_out(EXAMPLE, CLASSIC)
+    sheet = lay_out(HOUSE, CLASSIC)
     bands = [{(round(min(y for _, y in z.shape), 6), round(max(y for _, y in z.shape), 6))
               for z in f.zones if z.role in ("plinth", "main", "band")} for f in sheet.facades]
     assert all(b == bands[0] for b in bands)
@@ -74,13 +74,13 @@ def test_zone_heights_same_on_all_sides(lay_out):
 
 
 def test_accent_gable_or_entrance(lay_out):
-    gable = lay_out(EXAMPLE, CLASSIC)
+    gable = lay_out(HOUSE, CLASSIC)
     for f in gable.facades:
         accents = [z for z in f.zones if z.role == "accent"]
         has_gable = len(f.silhouette) == 5
         assert bool(accents) == has_gable
         assert all(min(y for _, y in z.shape) >= gable.spec.eaves_m - EPS for z in accents)
-    flat = lay_out(EXAMPLE, MODERN)
+    flat = lay_out(HOUSE, MODERN)
     with_accent = [f.side.index for f in flat.facades if any(z.role == "accent" for z in f.zones)]
     assert with_accent == [0]  # только сторона входа
 
@@ -89,15 +89,27 @@ def test_accent_gable_or_entrance(lay_out):
                                             ("Cottage.", "standard"),
                                             ("Cottage with floor-to-ceiling glazing.", "high")])
 def test_window_height_level_from_text(lay_out, cfg, text, size):
-    sheet = lay_out(EXAMPLE, text)
+    sheet = lay_out(HOUSE, text)
     low, _ = cfg.layout.windows.size[size]
     base, fh = sheet.spec.plinth_m, sheet.spec.floor_heights_m[0]
     assert all(w.y_m == pytest.approx(base + low * fh) for w in _of(sheet, "window"))
 
 
-def test_blind_rhythm_same_width_on_all_sides(lay_out):
-    sheet = lay_out(EXAMPLE, CLASSIC, mode="blind", seed=5)
+BOX = HOUSE.parent / "door_left.svg"  # коробка 4 × 4 м без внутренних стен
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_blind_rhythm_same_width_on_all_sides(lay_out, seed):
+    sheet = lay_out(BOX, CLASSIC, mode="blind", seed=seed)
     assert len({round(w.w_m, 6) for w in _of(sheet, "window")}) == 1
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_blind_small_house_still_gets_windows(lay_out, cfg, seed):
+    """Выбранная ширина не влезает между зонами — берётся уже, но окна есть."""
+    sheet = lay_out(HOUSE, CLASSIC, mode="blind", seed=seed)
+    assert _of(sheet, "window")
+    assert {round(w.w_m, 6) for w in _of(sheet, "window")} <= set(cfg.layout.blind.widths_m)
 
 
 def test_hand_written_palettes_get_roles(cfg, house):

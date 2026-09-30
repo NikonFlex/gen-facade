@@ -10,8 +10,9 @@ import pytest
 from genfacade.schema import EPS
 
 ROOT = Path(__file__).parents[2]
-PLANS = [ROOT / "materials" / "genplan-plan-example.svg",
-         *sorted((ROOT / "tests" / "fixtures" / "genplan").glob("*.svg"))]
+# наши планы в формате GenPlan; пример GenPlan — если лежит локально (в git нет, gf#20)
+PLANS = [*sorted((ROOT / "tests" / "fixtures" / "genplan").glob("*.svg")),
+         *[p for p in [ROOT / "materials" / "genplan-plan-example.svg"] if p.exists()]]
 TEXTS = ["Two-storey classic house with a gable roof.",
          "Modern villa with a flat roof and panoramic windows.",
          "Small wooden bungalow in Scandinavian style.",
