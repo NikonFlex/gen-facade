@@ -1,9 +1,9 @@
-"""Настройки, вынесенные из кода: материалы, лист, смотрелка, план, дом.
+"""Настройки, вынесенные из кода: материалы, лист, смотрелка, план, проверка.
 
 По умолчанию — файлы этой папки. Свой конфиг — папка с любыми из тех же файлов:
 TOML сливается с умолчаниями поключно, sheet.css дописывается после умолчаний
-(правила CSS переопределяют предыдущие), house.json заменяется целиком — это один дом.
-Опечатка в ключе — ошибка, а не молчание.
+(правила CSS переопределяют предыдущие). Опечатка в ключе — ошибка, а не молчание.
+Здесь только настройки приложения; данные заглушек моделей — в genfacade/models/.
 """
 
 import tomllib
@@ -11,8 +11,6 @@ from importlib.resources import files
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
-
-from genfacade.schema import HouseSpec
 
 DEFAULTS = files(__package__)
 
@@ -113,48 +111,6 @@ class PlanConfig(Section):
     outline: Outline
 
 
-class Windows(Section):
-    size: dict[str, tuple[float, float]]
-    level: str  # уровень высоты окон — один на все дома, пока нет модели
-    sash_max_w_m: float
-    transom_min_h_m: float
-    lintel_m: float
-
-
-class Blind(Section):
-    widths_m: list[float]
-    pitch_m: float
-    edge_m: float
-    clearance_m: float
-    min_gap_m: float
-
-
-class Casing(Section):
-    styles: list[str]
-    width_m: float
-
-
-class Height(Section):
-    height_m: float
-
-
-class Sill(Section):
-    overhang_m: float
-    height_m: float
-
-
-class LayoutRule(Section):
-    """Правило шага 4: раскладка стены (config/layout.toml)."""
-
-    windows: Windows
-    blind: Blind
-    door: Height
-    sill: Sill
-    casing: Casing
-    cornice: Height
-    band: Height
-
-
 class Checks(Section):
     """Шаг 5: допуски привязки и валидатора (config/checks.toml)."""
 
@@ -183,8 +139,6 @@ class Config(Section):
     sheet: Sheet
     viewer: Viewer
     plan: PlanConfig
-    house: HouseSpec  # шаг 1 до модели: параметры дома — отсюда, текст не читается
-    layout: LayoutRule
     checks: Checks
     css: str
 
@@ -199,18 +153,9 @@ def load(user_dir: Path | None = None) -> Config:
         sheet=Sheet(**_toml("sheet.toml", user_dir)),
         viewer=Viewer(**_toml("viewer.toml", user_dir)),
         plan=PlanConfig(**_toml("plan.toml", user_dir)),
-        house=HouseSpec.model_validate_json(_file("house.json", user_dir)),
-        layout=LayoutRule(**_toml("layout.toml", user_dir)),
         checks=Checks(**_toml("checks.toml", user_dir)),
         css=css,
     )
-
-
-def _file(name: str, user_dir: Path | None) -> str:
-    """Файл целиком: свой в user_dir заменяет умолчание, а не сливается с ним."""
-    if user_dir is not None and (user_dir / name).exists():
-        return (user_dir / name).read_text()
-    return DEFAULTS.joinpath(name).read_text()
 
 
 def _toml(name: str, user_dir: Path | None) -> dict:

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from genfacade import cli, pipeline
+from genfacade.models import stub
 from genfacade.render.parse import parse_sheet_svg
 from genfacade.schema import HouseSpec, Plan
 
@@ -36,20 +37,21 @@ def test_simple_house_traces_all_six_steps(cfg, tmp_path, mode):
     assert (out / pipeline.INPUT_PLAN).read_text() == SIMPLE.read_text()
 
 
-def test_house_from_config(cfg, tmp_path):
-    """Шаг 1 до модели: дом из config/house.json — меняется только конёк по плану."""
+def test_house_from_spec_stub(cfg, tmp_path):
+    """Шаг 1 — стаб модели: его спека, конвейер меняет только конёк по плану."""
     out = _generate(cfg, tmp_path / "run")
     spec = HouseSpec.model_validate(json.loads((out / pipeline.SPEC).read_text())["spec"])
     sides = Plan.model_validate_json((out / pipeline.PLAN_JSON).read_text()).sides
-    assert spec == pipeline.ridge_along_longest(cfg.house, sides)
+    assert spec == pipeline.ridge_along_longest(stub.spec_model(TEXT), sides)
     assert spec.roof.ridge_axis == "x"  # простой дом: 10 м вдоль x, 5 м вдоль y
 
 
-def test_ridge_along_longest_side(cfg, tmp_path):
-    """Конёк из house.json поперёк длинной стороны — конвейер разворачивает его по плану."""
-    roof = cfg.house.roof.model_copy(update={"kind": "gable", "pitch_deg": 30, "ridge_axis": "y"})
-    across = cfg.model_copy(update={"house": cfg.house.model_copy(update={"roof": roof})})
-    spec = json.loads((_generate(across, tmp_path / "run") / pipeline.SPEC).read_text())["spec"]
+def test_ridge_along_longest_side(cfg, tmp_path, monkeypatch):
+    """Модель дала конёк поперёк длинной стороны — конвейер разворачивает его по плану."""
+    house = stub.spec_model(TEXT)
+    roof = house.roof.model_copy(update={"kind": "gable", "pitch_deg": 30, "ridge_axis": "y"})
+    monkeypatch.setattr(stub, "spec_model", lambda text: house.model_copy(update={"roof": roof}))
+    spec = json.loads((_generate(cfg, tmp_path / "run") / pipeline.SPEC).read_text())["spec"]
     assert spec["roof"]["ridge_axis"] == "x"
 
 
@@ -94,6 +96,19 @@ def test_cli_runs_simple_house(tmp_path, capsys):
     cli.main(["run", str(SIMPLE), "-t", TEXT, "-o", str(tmp_path / "run")])
     assert capsys.readouterr().out.strip() == str(tmp_path / "run")
     assert (tmp_path / "run" / pipeline.SHEET).exists()
+
+
+def test_cli_explains_plan_stub_does_not_know(tmp_path, simple_svg):
+    """Дом 9 × 5 м — план честный, но стаб знает только простой дом 10 × 5."""
+    shorter = tmp_path / "shorter.svg"
+    shorter.write_text(simple_svg(
+        ('<rect x="800" y="100" width="300"', '<rect x="800" y="100" width="200"'),
+        ('<rect x="890" y="585" width="210"', '<rect x="890" y="585" width="110"'),
+        ('<rect x="1085" y="100"', '<rect x="985" y="100"'),
+        ('<rect x="1085" y="400"', '<rect x="985" y="400"'),
+        ('<rect x="1085" y="250"', '<rect x="985" y="250"')))
+    with pytest.raises(SystemExit, match="модель не ответила: стаб знает только простой дом"):
+        cli.main(["run", str(shorter), "-t", "house", "-o", str(tmp_path / "run")])
 
 
 def test_cli_rejects_defective_plan(tmp_path):

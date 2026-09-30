@@ -28,10 +28,9 @@
 | Модуль | Шаг | Вход → выход | Кто работает | Спека |
 |---|---|---|---|---|
 | `schema.py` | — | `Request`, `Plan`, `Side`, `Opening`, `ForbiddenZone`, `HouseSpec`, `Roof`, `SideFacade`, `Element`, `MaterialZone`, `FacadeSheet` | — | все |
-| `spec/` | 1 | текст → `HouseSpec` | правило → модель | generation, facade |
+| `models/` | 1, 4 | текст → `HouseSpec`; стена + контекст → `SideFacade` | стаб → модель | generation, facade |
 | `plan/` | 2 | SVG-план → `Plan`: стороны, проёмы, заделанные разрывы, запретные зоны, метры | код | plan-input |
 | `unfold.py` | 3 | `HouseSpec` + длина стороны → пустая стена с силуэтом | код | facade |
-| `layout/` | 4 | стена + запретные зоны + `HouseSpec` + текст → `SideFacade` | правило → модель | generation |
 | `snap.py`, `validate.py` | 5 | привязка к сетке этажей и осей; нарушения `Violation`; брак → заново — с моделью | код | generation, evaluation |
 | `render/` | 6 | `FacadeSheet` → лист SVG + JSON + PNG-превью; SVG для трассы каждого шага | код | facade |
 | `pipeline.py` | 1–6 | склейка шагов, режим `blind` / `with_openings`, запись трассы | код | task |
@@ -59,11 +58,11 @@
 diploma/
 ├── genfacade/                  код, pip install -e .
 │   ├── schema.py
-│   ├── config/      library.toml  sheet.toml  sheet.css — настройки по умолчанию
-│   ├── spec/        rule.py  model.py
+│   ├── config/      library.toml  sheet.toml  sheet.css  viewer.toml  plan.toml  checks.toml
+│   │                — только настройки приложения
+│   ├── models/      stub.py  stub_data/ — стабы моделей шагов 1 и 4, потом сами модели
 │   ├── plan/        parse.py  sides.py  zones.py  modes.py
 │   ├── unfold.py
-│   ├── layout/      rule.py  model/
 │   ├── snap.py  validate.py
 │   ├── render/      svg.py  parse.py  sheet_format.py  preview.py
 │   ├── pipeline.py  cli.py
@@ -163,13 +162,13 @@ Streamlit и Gradio плохо подходят под интерактивны�
 | # | Подзадача | Результат | Задача |
 |---|---|---|---|
 | 1.1–1.3 | Препроцессор плана | `genfacade/plan/`: разбор SVG, разрывы, контур, стороны, вход и масштаб, запретные зоны, глухой режим; `02_plan.svg` | gf#14 |
-| 1.4 | Шаг 1 до модели | `config/house.json`: `HouseSpec` из конфига, текст не читается (хозяин 30.09) | gf#51 |
-| 1.5 | Правило шага 4 | `genfacade/layout/`, `config/layout.toml`: проёмы, декор, зоны | gf#50 |
+| 1.4 | Шаг 1 до модели | стаб: фиксированная `HouseSpec`, текст не читается (хозяин 30.09) | gf#51, gf#60 |
+| 1.5 | Шаг 4 до модели | правило раскладки сделало заготовку фасадов простого дома; теперь стаб отдаёт её, правило удалено | gf#50, gf#60 |
 | 1.6 | Шаг 5 | `validate.py`, `snap.py`, `config/checks.toml` | gf#15 |
 | 1.7 | Конвейер | `genfacade run`, трасса 01–06, нарушения в трассе, смотрелка со всеми шагами | gf#52 |
 
 Решения по ходу — в отчётах задач и decisions.md (30.09): масштаб по входу 0.9 м и высоты окон
-долями этажа — как в GenPlan; дом по умолчанию из `config/house.json`, палитра по ролям; конёк вдоль длинной стороны; окна
+долями этажа — как в GenPlan; на шагах 1 и 4 — стабы моделей (`genfacade/models/`), палитра по ролям; конёк вдоль длинной стороны; окна
 столбцами по этажам; до модели всё детерминировано — без seed и повтора при браке (хозяин 30.09).
 
 ### Этап 0 подробно

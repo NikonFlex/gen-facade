@@ -14,7 +14,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from genfacade.config import Config
-from genfacade.layout.rule import LayoutContext, place_all
+from genfacade.models import stub
 from genfacade.plan.preprocess import preprocess
 from genfacade.render.plan_svg import plan_svg
 from genfacade.render.preview import to_png
@@ -57,14 +57,17 @@ def new_run_dir(runs_dir: Path, name: str) -> Path:
 
 
 def generate(req: PlanRun, svg: str, out: Path, cfg: Config) -> Path:
-    """План GenPlan + текст → трасса шагов 1–6; дефектный план — PlanError с причиной."""
+    """План GenPlan + текст → трасса шагов 1–6.
+
+    Дефектный план — PlanError, вход, на который не ответит модель (стаб), — ModelError.
+    """
     out.mkdir(parents=True, exist_ok=True)
     (out / INPUT_PLAN).write_text(svg)
     (out / REQUEST).write_text(req.model_dump_json(indent=2))
     bare = _prepare(req, svg, out, cfg)
-    # Шаги 4–5. Брак не перегенерируем: правило детерминировано, повтор дал бы то же самое;
+    # Шаги 4–5. Брак не перегенерируем: стаб детерминирован, повтор дал бы то же самое;
     # «брак — заново» (generation.md, п. 1) вернётся с моделью. Нарушения — в трассу.
-    raw = place_all(bare, LayoutContext(bare.spec, req.mode, req.text), cfg.layout)
+    raw = stub.layout_all(bare, stub.LayoutContext(bare.spec, req.mode, req.text))
     sheet = snap(raw, cfg.checks)
     violations = validate(sheet, cfg.checks)
     (out / LAYOUT).write_text(sheet_svg(raw, cfg, violations=[]))
@@ -95,10 +98,10 @@ def walls(spec: HouseSpec, plan: Plan, cfg: Config) -> FacadeSheet:
 def _prepare(req: PlanRun, svg: str, out: Path, cfg: Config) -> FacadeSheet:
     """Шаги 1–3: параметры дома, план, развёртка — с трассой.
 
-    Шаг 1 до модели: HouseSpec — из config/house.json, текст не читается (generation.md, п. 2).
+    Шаг 1 — модель (пока стаб): текст → HouseSpec; ось конька зависит от плана — её ставим тут.
     """
     plan = preprocess(svg, req.mode, cfg.plan)
-    spec = ridge_along_longest(cfg.house, plan.sides)
+    spec = ridge_along_longest(stub.spec_model(req.text), plan.sides)
     # цвета — для смотрелки: у палитры без цвета берётся цвет вида из библиотеки
     colors = {m.id: m.color or cfg.library.kinds.get(m.kind) for m in spec.materials}
     (out / SPEC).write_text(json.dumps({"spec": spec.model_dump(), "colors": colors},

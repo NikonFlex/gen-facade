@@ -26,8 +26,9 @@ include = ["genfacade*"]
 
 [tool.setuptools.package-data]
 # настройки по умолчанию — внутри пакета, чтобы работали и при обычной установке
-"genfacade.config" = ["*.toml", "*.css", "*.json"]
+"genfacade.config" = ["*.toml", "*.css"]
 "genfacade.viewer" = ["static/*"]
+"genfacade.models" = ["stub_data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
