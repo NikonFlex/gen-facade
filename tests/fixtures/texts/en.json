@@ -1,0 +1,33 @@
+{
+  "_about": "Описания для правила шага 1 (gf#51), написаны до кода. null — в тексте нет, берётся по умолчанию.",
+  "cases": [
+    {"text": "A single-story cottage with a gable roof and white plaster walls.",
+     "floors": 1, "roof": "gable", "building_type": "cottage"},
+    {"text": "Two-storey family house with a hipped roof, brick facade and a stone plinth.",
+     "floors": 2, "roof": "hip", "building_type": "cottage"},
+    {"text": "Modern minimalist villa, flat roof, large panoramic windows.",
+     "floors": null, "roof": "flat", "building_type": "cottage"},
+    {"text": "A contemporary villa with expansive glazing and a grand entrance.",
+     "floors": null, "roof": null, "building_type": "cottage"},
+    {"text": "Small wooden bungalow in Scandinavian style with a pitched roof.",
+     "floors": 1, "roof": "gable", "building_type": "cottage"},
+    {"text": "3-story townhouse with a flat roof and dark metal details.",
+     "floors": 3, "roof": "flat", "building_type": "cottage"},
+    {"text": "A two storey timber house with a lean-to roof.",
+     "floors": 2, "roof": "shed", "building_type": "cottage"},
+    {"text": "Five-storey apartment building with a flat roof and brick walls.",
+     "floors": 5, "roof": "flat", "building_type": "apartment"},
+    {"text": "Nine-story residential block of flats, concrete panels.",
+     "floors": 9, "roof": null, "building_type": "apartment"},
+    {"text": "Classic country house, 2 floors, hip roof covered with clay tiles.",
+     "floors": 2, "roof": "hip", "building_type": "cottage"},
+    {"text": "One-storey house with a mono-pitch roof and siding.",
+     "floors": 1, "roof": "shed", "building_type": "cottage"},
+    {"text": "Cozy chalet with a steep gabled roof and tall ceilings.",
+     "floors": null, "roof": "gable", "building_type": "cottage"},
+    {"text": "A multi-family apartment house with four floors.",
+     "floors": 4, "roof": null, "building_type": "apartment"},
+    {"text": "Compact low-ceiling cabin, single floor, flat roofed.",
+     "floors": 1, "roof": "flat", "building_type": "cottage"}
+  ]
+}

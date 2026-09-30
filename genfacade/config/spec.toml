@@ -1,0 +1,82 @@
+# Правило шага 1: описание на английском → HouseSpec (specs/generation.md, п. 2; gf#51).
+# Шаблоны — регулярные выражения Python, без учёта регистра, ищутся как отдельные слова.
+# Чего в тексте нет — берётся отсюда и помечается в трассе как «по умолчанию».
+
+[defaults]
+building_type = "cottage"
+cottage_floors = 1
+apartment_floors = 5
+apartment_roof = "flat"     # у многоквартирного без крыши в тексте; у коттеджа — крыша стиля
+height = "standard"        # уровень высоты этажа, ключ из [floor_height_m]
+plinth_m = 0.5
+overhang_m = 0.5
+style = "classic"          # ключ из [styles]
+
+[floor_height_m]
+# три уровня, как WallSizeType GenPlan: 250 / 275 / 300 см (three_dimensional/classifier.py)
+low = 2.5
+standard = 2.75
+high = 3.0
+
+[pitch_deg]
+# уклон по виду крыши; двускатная 30° и односкатная 15° — как у GenPlan (convertor.py:35-36)
+flat = 0
+gable = 30
+hip = 30
+shed = 15
+
+[words]
+apartment = ["apartments?", "block of flats", "multi-family", "residential (building|block)", "flats"]
+one_floor = ["bungalow", "single[- ](floor|stor(e)?y|level)"]
+floors = '(\d+|{numbers})[- ]?(stor(e)?ys?|stories|floors?|levels?)'
+height.low = ["low[- ]ceilings?", "low walls"]
+height.high = ["tall ceilings?", "high ceilings?", "double[- ]height", "high walls"]
+# порядок важен: частное раньше общего («flat roof» раньше «roof»)
+roof.flat = ["flat[- ]roof(ed)?", "flat-roofed"]
+roof.shed = ["lean[- ]to", "mono[- ]pitch", "shed roof", "single[- ]pitch", "skillion"]
+roof.hip = ["hip(ped)? roof", "hip"]
+roof.gable = ["gabled?( roof)?", "pitched roof", "saddle roof"]
+
+[numbers]
+one = 1
+two = 2
+three = 3
+four = 4
+five = 5
+six = 6
+seven = 7
+eight = 8
+nine = 9
+ten = 10
+
+[materials]
+# слово в тексте → вид материала (config/library.toml [kinds]) для роли
+main.brick = ["brick"]
+main.wood = ["wood(en)?", "timber", "log"]
+main.siding = ["siding"]
+main.concrete = ["concrete", "panels?"]
+main.plaster = ["plaster", "stucco", "white walls"]
+plinth.stone = ["stone (plinth|base|basement)"]
+roof.tile_roof = ["(clay )?tiles?", "tiled"]
+roof.metal_roof = ["metal roof"]
+
+# Стиль задаёт палитру по ролям и крышу по умолчанию. Ключ — имя стиля в HouseSpec.style.
+[styles.classic]
+words = ["classic", "traditional", "country"]
+roof = "gable"
+palette = { main = "plaster", plinth = "stone", accent = "brick", trim = "wood", roof = "tile_roof" }
+
+[styles.scandinavian]
+words = ["scandinavian", "nordic"]
+roof = "gable"
+palette = { main = "wood", plinth = "concrete", accent = "siding", trim = "plaster", roof = "metal_roof" }
+
+[styles.modern]
+words = ["modern", "contemporary", "minimalist"]
+roof = "flat"
+palette = { main = "plaster", plinth = "concrete", accent = "wood", trim = "metal", roof = "metal_roof" }
+
+[styles.chalet]
+words = ["chalet", "alpine"]
+roof = "gable"
+palette = { main = "wood", plinth = "stone", accent = "plaster", trim = "wood", roof = "tile_roof" }

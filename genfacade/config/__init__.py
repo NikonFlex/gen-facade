@@ -1,4 +1,4 @@
-"""Настройки, вынесенные из кода: библиотека материалов, оформление листа, смотрелка, план.
+"""Настройки, вынесенные из кода: материалы, лист, смотрелка, план, правила шагов.
 
 По умолчанию — файлы этой папки. Свой конфиг — папка с любыми из тех же файлов:
 TOML сливается с умолчаниями поключно, sheet.css дописывается после умолчаний
@@ -110,6 +110,43 @@ class PlanConfig(Section):
     outline: Outline
 
 
+class SpecDefaults(Section):
+    building_type: str
+    cottage_floors: int
+    apartment_floors: int
+    apartment_roof: str
+    height: str
+    plinth_m: float
+    overhang_m: float
+    style: str
+
+
+class Words(Section):
+    apartment: list[str]
+    one_floor: list[str]
+    floors: str  # шаблон с {numbers} — подставляются слова из [numbers]
+    height: dict[str, list[str]]
+    roof: dict[str, list[str]]
+
+
+class Style(Section):
+    words: list[str]
+    roof: str
+    palette: dict[str, str]  # роль → вид материала
+
+
+class SpecRule(Section):
+    """Правило шага 1: текст → HouseSpec (config/spec.toml)."""
+
+    defaults: SpecDefaults
+    floor_height_m: dict[str, float]
+    pitch_deg: dict[str, float]
+    words: Words
+    numbers: dict[str, int]
+    materials: dict[str, dict[str, list[str]]]  # роль → вид → шаблоны
+    styles: dict[str, Style]
+
+
 class Server(Section):
     host: str
     port: int
@@ -130,6 +167,7 @@ class Config(Section):
     sheet: Sheet
     viewer: Viewer
     plan: PlanConfig
+    spec: SpecRule
     css: str
 
 
@@ -143,6 +181,7 @@ def load(user_dir: Path | None = None) -> Config:
         sheet=Sheet(**_toml("sheet.toml", user_dir)),
         viewer=Viewer(**_toml("viewer.toml", user_dir)),
         plan=PlanConfig(**_toml("plan.toml", user_dir)),
+        spec=SpecRule(**_toml("spec.toml", user_dir)),
         css=css,
     )
 
