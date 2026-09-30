@@ -3,8 +3,12 @@
     python make_fixtures.py <клон GenPlan> <папка для SVG>
 
 Нужны клон https://github.com/CTLab-ITMO/GenPlan (сверено на HEAD 2ed651c) и `pip install drawsvg`.
-Геометрия коробок — наша; GenPlan только рисует. Положения створки: door_top — BOTTOM,
+Геометрия — наша; GenPlan только рисует. Положения створки: door_top — BOTTOM,
 door_left — RIGHT, door_edge — UP и LEFT (у края холста снаружи места нет).
+house — дом с теми же особенностями, что пример GenPlan (materials/, в git не лежит — gf#20):
+вход со створкой на левой стене, окна на верхней и левой, внутренняя стена заходит в полосу
+верхнего окна (дефект GenPlan), внутренние стены прорисованы насквозь до наружной грани.
+Окна и двери расставляет decorator GenPlan (create_windows_and_doors_2d).
 """
 
 import sys
@@ -18,7 +22,7 @@ def main(genplan: Path, out: Path) -> None:
     sys.path.insert(0, str(genplan))
     # модули GenPlan и drawsvg есть только рядом с клоном — импорт после sys.path
     import drawsvg
-    from decorator.decoration import create_opened_doors
+    from decorator.decoration import create_opened_doors, create_windows_and_doors_2d
     from dto.enum.rect_type import RectType
     from dto.point import Point
     from dto.rect import Rect
@@ -41,6 +45,24 @@ def main(genplan: Path, out: Path) -> None:
     walls = [w for w in walls if not (w.start_point.x == 0 and w.end_point.x == 15)]
     walls += [rect(0, 0, 15, 150), rect(0, 240, 15, 400)]
     save("door_edge", walls, [top, left])
+    walls = _house(rect)
+    pic = drawsvg.Drawing(CANVAS, CANVAS)
+    for r in walls + create_windows_and_doors_2d(walls, CANVAS, CANVAS):
+        r.to_svg(pic)
+    pic.save_svg(str(out / "house.svg"))
+
+
+def _house(rect):
+    """Коробка 100..500 × 150..450, стены 15 px; разрывы: вход 90 px и окно 100 px слева,
+    окно 150 px сверху; внутренние стены — одна заходит в полосу верхнего окна."""
+    return [
+        rect(100, 150, 250, 165), rect(400, 150, 500, 165),  # верх, окно 250–400
+        rect(100, 150, 115, 200), rect(100, 290, 115, 330), rect(100, 420, 115, 450),  # лево
+        rect(485, 150, 500, 450), rect(100, 435, 500, 450),  # право, низ
+        rect(330, 158, 339, 300),  # в полосу окна сверху: 158 > 150 — не насквозь
+        rect(100, 310, 250, 320),  # от наружной грани слева — насквозь
+        rect(300, 350, 310, 450),  # до наружной грани снизу — насквозь
+    ]
 
 
 def _box(rect, lo: int, hi: int, gap_side: str):
