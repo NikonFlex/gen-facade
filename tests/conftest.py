@@ -116,12 +116,12 @@ VARIANTS = {
 @pytest.fixture
 def lay_out(cfg):
     """План → стены после развёртки и раскладки правилом: шаги 2–4 без трассы."""
-    def run(svg, variant: str = "house", mode: str = "with_openings", seed: int = 0) -> FacadeSheet:
+    def run(svg, variant: str = "house", mode: str = "with_openings") -> FacadeSheet:
         house, rule = _variant(cfg, variant)
         plan = preprocess(svg, mode, cfg.plan)
         bare = FacadeSheet(spec=house, facades=[SideFacade(side=s) for s in plan.sides])
         sheet = unfold(bare, cfg.library.roof.thickness_m)
-        ctx = LayoutContext(house, mode, "", seed)
+        ctx = LayoutContext(house, mode, "")
         return sheet.model_copy(update={"facades": [place(f, ctx, rule) for f in sheet.facades]})
 
     return run

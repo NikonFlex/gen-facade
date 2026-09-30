@@ -123,7 +123,7 @@ class Windows(Section):
 
 class Blind(Section):
     widths_m: list[float]
-    pitches_m: list[float]
+    pitch_m: float
     edge_m: float
     clearance_m: float
     min_gap_m: float
