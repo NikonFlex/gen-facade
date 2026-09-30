@@ -18,3 +18,14 @@ svg { font-family: "Golos Text", "DejaVu Sans", sans-serif; font-size: 0.3px; }
 .axis-line { stroke-dasharray: 0.15 0.1; }
 .axis-text { text-anchor: middle; }
 .title { font-size: 0.42px; text-anchor: middle; }
+
+/* Трасса шага 2: план после препроцессора (render/plan_svg.py) */
+.plan-wall { fill: #9a9a9a; stroke: none; }
+.plan-outline { fill: none; stroke: #2b2b2b; stroke-width: 0.04px; }
+.plan-window { fill: #99ccff; }
+.plan-door { fill: #b07a4a; }
+.plan-entrance { fill: #3aa655; }
+.plan-sealed { fill: #f2a33a; }
+.plan-forbidden { stroke: #d33a2c; stroke-width: 0.12px; stroke-linecap: butt; }
+.plan-label { font-size: 0.35px; text-anchor: middle; fill: #2b2b2b; }
+.plan-legend { font-size: 0.25px; fill: #2b2b2b; }

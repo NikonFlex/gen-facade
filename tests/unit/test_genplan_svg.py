@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from genfacade.plan import genplan_svg
-from genfacade.plan.genplan_svg import Box, PlanError, box_to_rect, parse
+from genfacade.plan.genplan_svg import Box, PlanError, parse
 
 ROOT = Path(__file__).parents[2]
 EXAMPLE = ROOT / "materials" / "genplan-plan-example.svg"
@@ -97,9 +97,3 @@ def test_old_expat_refused(monkeypatch):
     monkeypatch.setattr(genplan_svg.pyexpat, "version_info", (2, 5, 0))
     with pytest.raises(PlanError, match="expat"):
         parse(EXAMPLE)
-
-
-def test_box_to_rect_flips_y():
-    # холст 1000 px высотой, 1 px = 0.01 м: верх SVG — верх плана
-    rect = box_to_rect(Box(100, 0, 300, 50), scale_m_per_px=0.01, height_px=1000)
-    assert (rect.x0_m, rect.y0_m, rect.x1_m, rect.y1_m) == pytest.approx((1, 9.5, 3, 10))

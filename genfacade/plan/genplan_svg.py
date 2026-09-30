@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from xml.etree import ElementTree
 
-from genfacade.schema import Point, Rect
+from genfacade.schema import Point
 
 SVG_NS = "{http://www.w3.org/2000/svg}"
 WALL_FILL = "#000000"
@@ -95,16 +95,6 @@ def parse(svg: Path | str) -> GenPlanSvg:
             raise PlanError(f"неожиданный элемент <{tag}>")
     doors = [_door(arc, walls) for arc in arcs]
     return GenPlanSvg(width, height, walls, windows, doors)
-
-
-def box_to_rect(box: Box, scale_m_per_px: float, height_px: float) -> Rect:
-    """Пиксели SVG (y вниз) → метры плана (y вверх от низа холста)."""
-    return Rect(
-        x0_m=box.x0 * scale_m_per_px,
-        y0_m=(height_px - box.y1) * scale_m_per_px,
-        x1_m=box.x1 * scale_m_per_px,
-        y1_m=(height_px - box.y0) * scale_m_per_px,
-    )
 
 
 def _load(svg: Path | str) -> ElementTree.Element:

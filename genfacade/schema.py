@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 EPS = 1e-6  # допуск сравнения координат, м
 
 Point = tuple[float, float]
+Mode = Literal["with_openings", "blind"]  # режим 2 «окна из плана» / режим 1 «глухой куб»
 Polygon = list[Point]
 
 

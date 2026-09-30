@@ -1,4 +1,4 @@
-"""Настройки, вынесенные из кода: библиотека материалов, оформление листа, смотрелка.
+"""Настройки, вынесенные из кода: библиотека материалов, оформление листа, смотрелка, план.
 
 По умолчанию — файлы этой папки. Свой конфиг — папка с любыми из тех же файлов:
 TOML сливается с умолчаниями поключно, sheet.css дописывается после умолчаний
@@ -78,6 +78,14 @@ class Preview(Section):
     width_px: int
 
 
+class PlanLook(Section):
+    margin_m: float
+    label_offset_m: float
+    forbidden_inset_m: float
+    legend_margin_m: float
+    legend_line_m: float
+
+
 class Sheet(Section):
     sheet: SheetLayout
     ground: Ground
@@ -85,6 +93,21 @@ class Sheet(Section):
     axes: Axes
     title: Title
     preview: Preview
+    plan: PlanLook
+
+
+class Gaps(Section):
+    min_opening_px: float
+    min_band_overlap: float
+
+
+class Outline(Section):
+    jog_px: float
+
+
+class PlanConfig(Section):
+    gaps: Gaps
+    outline: Outline
 
 
 class Server(Section):
@@ -106,6 +129,7 @@ class Config(Section):
     library: Library
     sheet: Sheet
     viewer: Viewer
+    plan: PlanConfig
     css: str
 
 
@@ -118,6 +142,7 @@ def load(user_dir: Path | None = None) -> Config:
         library=Library(**_toml("library.toml", user_dir)),
         sheet=Sheet(**_toml("sheet.toml", user_dir)),
         viewer=Viewer(**_toml("viewer.toml", user_dir)),
+        plan=PlanConfig(**_toml("plan.toml", user_dir)),
         css=css,
     )
 
