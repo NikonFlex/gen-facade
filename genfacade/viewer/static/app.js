@@ -126,7 +126,6 @@ async function submitPlan() {
     plan: planState.name ?? $("plan-select").value,
     text: $("plan-text").value.trim(),
     mode: form.querySelector("input[name=mode]:checked").value,
-    seed: Number($("plan-seed").value) || 0,
   };
   store.set("plan.text", run.text);
   store.set("plan.mode", run.mode);
@@ -400,10 +399,9 @@ function indentOnTab(e) {
 
 function renderPlanSummary() {
   const m = state.meta;
-  const tries = (m.attempts ?? []).map((a) => `seed ${a.seed}: ошибок ${a.errors}, предупреждений ${a.warnings}`);
   $("summary").innerHTML = `<h2>План</h2>
     <img class="plan-picture" src="/files/${state.runId}/${m.plan_input}" alt="План">
-    <h2>Попытки раскладки</h2><dl class="facts">${tries.map((t, i) => `<dt>${i + 1}</dt><dd>${t}</dd>`).join("")}</dl>`;
+    <h2>Проверка</h2><dl class="facts"><dt>Ошибок</dt><dd>${m.errors ?? "—"}</dd><dt>Предупреждений</dt><dd>${m.warnings ?? "—"}</dd></dl>`;
 }
 
 async function runEdited(text) {

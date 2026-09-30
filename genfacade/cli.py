@@ -20,7 +20,7 @@ def render(src: Path, out: Path | None, config_dir: Path | None) -> Path:
 def run(args: argparse.Namespace) -> Path:
     """План GenPlan + текст → трасса шагов 1–6 (generation.md, п. 1)."""
     cfg = config.load(args.config)
-    req = pipeline.PlanRun(plan=str(args.plan), text=args.text, mode=args.mode, seed=args.seed)
+    req = pipeline.PlanRun(plan=str(args.plan), text=args.text, mode=args.mode)
     out = args.out or pipeline.new_run_dir(cfg.viewer.paths.runs_dir, args.plan.stem)
     return pipeline.generate(req, args.plan.read_text(), out, cfg)
 
@@ -45,7 +45,6 @@ def main(argv: list[str] | None = None) -> None:
     g.add_argument("-t", "--text", required=True, help="описание дома по-английски")
     g.add_argument("-m", "--mode", choices=["with_openings", "blind"], default="with_openings",
                    help="with_openings — окна из плана (режим 2), blind — глухой куб (режим 1)")
-    g.add_argument("-s", "--seed", type=int, default=0)
     g.add_argument("-o", "--out", type=Path,
                    help="папка прогона; по умолчанию runs_dir/<время>-<имя>")
     r = sub.add_parser("render", help="лист фасадов из JSON дома")

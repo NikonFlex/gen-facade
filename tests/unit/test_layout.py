@@ -97,23 +97,22 @@ def test_window_height_level_from_config(lay_out, cfg, variant, size):
 BOX = HOUSE.parent / "door_left.svg"  # коробка 4 × 4 м без внутренних стен
 
 
-@pytest.mark.parametrize("seed", range(6))
-def test_blind_rhythm_same_width_on_all_sides(lay_out, seed):
-    sheet = lay_out(BOX, mode="blind", seed=seed)
-    assert len({round(w.w_m, 6) for w in _of(sheet, "window")}) == 1
+@pytest.mark.parametrize("variant", ["house", "three_hip"])
+def test_blind_rhythm_same_width_on_all_sides(lay_out, cfg, variant):
+    sheet = lay_out(BOX, variant, mode="blind")
+    assert {round(w.w_m, 6) for w in _of(sheet, "window")} == {cfg.layout.blind.widths_m[0]}
 
 
-@pytest.mark.parametrize("seed", range(6))
-def test_blind_small_house_still_gets_windows(lay_out, cfg, seed):
-    """Выбранная ширина не влезает между зонами — берётся уже, но окна есть."""
-    sheet = lay_out(HOUSE, mode="blind", seed=seed)
-    assert _of(sheet, "window")
-    assert {round(w.w_m, 6) for w in _of(sheet, "window")} <= set(cfg.layout.blind.widths_m)
+def test_blind_small_house_still_gets_windows(lay_out, cfg):
+    """Основная ширина не везде влезает между зонами — там берётся запасная, но окна есть."""
+    sheet = lay_out(HOUSE, mode="blind")
+    widths = {round(w.w_m, 6) for w in _of(sheet, "window")}
+    assert widths == set(cfg.layout.blind.widths_m)  # и основная, и запасная
 
 
 def test_hand_written_palettes_get_roles(cfg, house):
     """Дом из тестовых JSON: палитра не по ролям — роли по порядку, без материала крыши."""
-    ctx = LayoutContext(house.spec, "with_openings", "", 0)
+    ctx = LayoutContext(house.spec, "with_openings", "")
     sheet = FacadeSheet.model_validate(house.model_copy(
         update={"facades": [place(f, ctx, cfg.layout) for f in house.facades]}).model_dump())
     used = {z.material for f in sheet.facades for z in f.zones}

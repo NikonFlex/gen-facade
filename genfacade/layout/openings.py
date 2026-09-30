@@ -5,26 +5,12 @@
 """
 
 import math
-import random
 from dataclasses import dataclass
 
 from genfacade.config import Blind, LayoutRule, Windows
 from genfacade.schema import EPS, Element, HouseSpec, Mode, OpeningVariant, Side
 
 Span = tuple[float, float]
-
-
-@dataclass(frozen=True)
-class Rhythm:
-    """Ширина окна и шаг осей — один выбор на дом, чтобы стороны были в одном ритме."""
-
-    width_m: float
-    pitch_m: float
-
-    @classmethod
-    def pick(cls, seed: int, blind: Blind) -> "Rhythm":
-        rng = random.Random(seed)  # noqa: S311 — разнообразие раскладки, не криптография
-        return cls(rng.choice(blind.widths_m), rng.choice(blind.pitches_m))
 
 
 @dataclass(frozen=True)
@@ -45,13 +31,13 @@ def doors(side: Side, spec: HouseSpec, rule: LayoutRule) -> list[Element]:
     ]
 
 
-def columns(side: Side, mode: Mode, rhythm: Rhythm, blind: Blind) -> tuple[list[Column], ...]:
+def columns(side: Side, mode: Mode, blind: Blind) -> tuple[list[Column], ...]:
     """Столбцы окон всех этажей и добавочные над дверями — только для верхних этажей."""
-    width = rhythm.width_m
+    width = blind.widths_m[0]
     if mode == "with_openings":
         main = [Column(o.x_m, o.width_m, fixed=True) for o in side.openings if o.kind == "window"]
     else:
-        main = _rhythm(_free(side, blind, with_doors=True), rhythm, blind)
+        main = _rhythm(_free(side, blind, with_doors=True), blind)
     over_doors = [
         Column(o.x_m + (o.width_m - width) / 2, width)
         for o in side.openings if o.kind in ("door", "entrance")
@@ -103,27 +89,23 @@ def _cut(span: Span, b0: float, b1: float) -> list[Span]:
     return [p for p in ((a0, b0), (b1, a1)) if p[1] - p[0] > EPS]
 
 
-def _rhythm(spans: list[Span], rhythm: Rhythm, blind: Blind) -> list[Column]:
-    """В каждом свободном отрезке — окна с шагом осей около выбранного, поровну по отрезку.
+def _rhythm(spans: list[Span], blind: Blind) -> list[Column]:
+    """В каждом свободном отрезке — окна с шагом осей около pitch_m, поровну по отрезку.
 
-    Не влезает выбранная ширина — самая широкая из config, что влезает: иначе у маленького
-    дома в глухом режиме не оказалось бы ни одного окна.
+    Не влезает основная ширина — следующая из config: иначе у маленького дома в глухом режиме
+    не оказалось бы ни одного окна.
     """
     out = []
     for a, b in spans:
         length = b - a
-        width = _fitting_width(length, rhythm.width_m, blind.widths_m)
+        width = next((w for w in blind.widths_m if w <= length + EPS), None)
         if width is None:
             continue
         fits = int((length + blind.min_gap_m) // (width + blind.min_gap_m))
-        n = min(fits, max(1, round(length / rhythm.pitch_m)))
+        n = min(fits, max(1, round(length / blind.pitch_m)))
         gap = (length - n * width) / (n + 1)
         out += [Column(a + gap + i * (width + gap), width) for i in range(n)]
     return out
-
-
-def _fitting_width(length: float, chosen: float, widths: list[float]) -> float | None:
-    return max((w for w in widths if w <= chosen and w <= length + EPS), default=None)
 
 
 def _inside(c: Column, spans: list[Span]) -> bool:

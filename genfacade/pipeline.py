@@ -8,7 +8,6 @@
 import json
 import re
 import subprocess  # noqa: S404 — только git rev-parse
-from dataclasses import dataclass
 from datetime import datetime
 from importlib.metadata import version
 from pathlib import Path
@@ -21,7 +20,7 @@ from genfacade.plan.preprocess import preprocess
 from genfacade.render.plan_svg import plan_svg
 from genfacade.render.preview import to_png
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import FacadeSheet, HouseSpec, Mode, Plan, Side, SideFacade, Violation
+from genfacade.schema import FacadeSheet, HouseSpec, Mode, Plan, Side, SideFacade
 from genfacade.snap import snap
 from genfacade.unfold import unfold
 from genfacade.validate import errors, validate
@@ -38,22 +37,14 @@ RUN_ID = re.compile(r"^[\w.-]+$")  # имя папки прогона: без / 
 
 
 class PlanRun(BaseModel):
-    """Запрос на прогон (task.md, Request): план — имя или путь, откуда он пришёл."""
+    """Запрос на прогон (task.md, Request): план — имя или путь, откуда он пришёл.
+
+    seed нет: до модели всё детерминировано; появится с ней (этап 4, хозяин 30.09).
+    """
 
     plan: str
     text: str
     mode: Mode = "with_openings"
-    seed: int = 0
-
-
-@dataclass(frozen=True)
-class Attempt:
-    """Одна попытка шагов 4–5: раскладка, после привязки, нарушения."""
-
-    seed: int
-    raw: FacadeSheet
-    sheet: FacadeSheet
-    violations: list[Violation]
 
 
 def new_run_dir(runs_dir: Path, name: str) -> Path:
@@ -71,20 +62,22 @@ def generate(req: PlanRun, svg: str, out: Path, cfg: Config) -> Path:
     (out / INPUT_PLAN).write_text(svg)
     (out / REQUEST).write_text(req.model_dump_json(indent=2))
     bare = _prepare(req, svg, out, cfg)
-    attempts = _attempts(bare, req, cfg)
-    best = min(attempts, key=lambda a: len(errors(a.violations)))
-    (out / LAYOUT).write_text(sheet_svg(best.raw, cfg, violations=[]))
-    (out / SNAPPED).write_text(sheet_svg(best.sheet, cfg, violations=best.violations))
+    # Шаги 4–5. Брак не перегенерируем: правило детерминировано, повтор дал бы то же самое;
+    # «брак — заново» (generation.md, п. 1) вернётся с моделью. Нарушения — в трассу.
+    raw = place_all(bare, LayoutContext(bare.spec, req.mode, req.text), cfg.layout)
+    sheet = snap(raw, cfg.checks)
+    violations = validate(sheet, cfg.checks)
+    (out / LAYOUT).write_text(sheet_svg(raw, cfg, violations=[]))
+    (out / SNAPPED).write_text(sheet_svg(sheet, cfg, violations=violations))
     (out / VIOLATIONS).write_text(json.dumps(
-        [v.model_dump() for v in best.violations], ensure_ascii=False, indent=2))
+        [v.model_dump() for v in violations], ensure_ascii=False, indent=2))
     files = {1: SPEC, 2: PLAN_SVG, 3: UNFOLD, 4: LAYOUT, 5: SNAPPED, 6: SHEET}
     extra = {
         "kind": "plan", "input": REQUEST, "plan_input": INPUT_PLAN, "violations": VIOLATIONS,
-        "request": req.model_dump(), "seed_used": best.seed,
-        "attempts": [{"seed": a.seed, "errors": len(errors(a.violations)),
-                      "warnings": len(a.violations) - len(errors(a.violations))} for a in attempts],
+        "request": req.model_dump(),
+        "errors": len(errors(violations)), "warnings": len(violations) - len(errors(violations)),
     }
-    return _finish(best.sheet, out, cfg, (files, extra))
+    return _finish(sheet, out, cfg, (files, extra))
 
 
 def run(house: FacadeSheet, out: Path, cfg: Config, source: str) -> Path:
@@ -127,28 +120,6 @@ def _prepare(req: PlanRun, svg: str, out: Path, cfg: Config) -> FacadeSheet:
     bare = walls(spec, plan, cfg)
     (out / UNFOLD).write_text(sheet_svg(bare, cfg))
     return bare
-
-
-def _attempts(bare: FacadeSheet, req: PlanRun, cfg: Config) -> list[Attempt]:
-    """Шаги 4–5 с повтором (generation.md, п. 1): брак — заново со следующим seed.
-
-    Не больше max_attempts; и стоп, если повтор дал те же ошибки — их не лечит раскладка
-    (окно плана в запретной зоне — дефект плана, plan-input.md «Открыто»).
-    """
-    out: list[Attempt] = []
-    for k in range(cfg.checks.max_attempts):
-        ctx = LayoutContext(bare.spec, req.mode, req.text, req.seed + k)
-        raw = place_all(bare, ctx, cfg.layout)
-        sheet = snap(raw, cfg.checks)
-        out.append(Attempt(ctx.seed, raw, sheet, validate(sheet, cfg.checks)))
-        now = _error_keys(out[-1])
-        if not now or (len(out) > 1 and now == _error_keys(out[-2])):
-            break
-    return out
-
-
-def _error_keys(a: Attempt) -> set[tuple]:
-    return {(v.rule, v.side, v.element) for v in errors(a.violations)}
 
 
 def _finish(sheet: FacadeSheet, out: Path, cfg: Config, trace: tuple[dict, dict]) -> Path:

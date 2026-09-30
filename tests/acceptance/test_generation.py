@@ -1,6 +1,7 @@
-"""Критерии приёмки specs/generation.md для правил шагов 1 и 4 (gf#50).
+"""Критерии приёмки specs/generation.md для правила шага 4 (gf#50).
 
-Критерий «разбор текста с точностью из evaluation.md» — на ручном наборе, этап 2 (gf#13).
+Критерии «разбор текста с точностью из evaluation.md» и «один seed — один результат» —
+для модели (этап 4): до неё текст не читается, а правило детерминировано.
 """
 
 from pathlib import Path
@@ -15,7 +16,6 @@ PLANS = [*sorted((ROOT / "tests" / "fixtures" / "genplan").glob("*.svg")),
          *[p for p in [ROOT / "materials" / "genplan-plan-example.svg"] if p.exists()]]
 # варианты дома — VARIANTS в tests/conftest.py
 SPECS = ["house", "modern_panoramic", "three_hip"]
-SEEDS = range(6)
 
 
 @pytest.mark.parametrize("plan", PLANS, ids=lambda p: p.stem)
@@ -32,10 +32,10 @@ def test_plan_openings_kept_in_place(lay_out, plan, spec):
 
 
 @pytest.mark.parametrize("plan", PLANS, ids=lambda p: p.stem)
-@pytest.mark.parametrize("seed", SEEDS)
-def test_blind_no_window_in_forbidden_zone(lay_out, plan, seed):
+@pytest.mark.parametrize("spec", SPECS)
+def test_blind_no_window_in_forbidden_zone(lay_out, plan, spec):
     """Режим без референсов: ни одно окно не попадает в запретную зону."""
-    sheet = lay_out(plan, SPECS[seed % len(SPECS)], mode="blind", seed=seed)
+    sheet = lay_out(plan, spec, mode="blind")
     for f in sheet.facades:
         for w in (e for e in f.elements if e.cls == "window"):
             for z in f.side.forbidden:
@@ -44,11 +44,6 @@ def test_blind_no_window_in_forbidden_zone(lay_out, plan, seed):
 
 
 @pytest.mark.parametrize("mode", ["with_openings", "blind"])
-def test_same_seed_same_result(lay_out, mode):
-    runs = [lay_out(PLANS[0], mode=mode, seed=3) for _ in range(2)]
-    assert runs[0] == runs[1]
-
-
-def test_seed_changes_blind_layout(lay_out):
-    layouts = {lay_out(PLANS[0], mode="blind", seed=s).model_dump_json() for s in SEEDS}
-    assert len(layouts) > 1
+def test_same_input_same_result(lay_out, mode):
+    """Правило детерминировано: seed и случайность появятся с моделью (этап 4)."""
+    assert lay_out(PLANS[0], mode=mode) == lay_out(PLANS[0], mode=mode)

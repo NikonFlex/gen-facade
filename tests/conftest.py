@@ -117,10 +117,10 @@ VARIANTS = {
 @pytest.fixture
 def lay_out(cfg):
     """План → стены после развёртки и раскладки правилом: шаги 2–4 без трассы."""
-    def run(svg, variant: str = "house", mode: str = "with_openings", seed: int = 0) -> FacadeSheet:
+    def run(svg, variant: str = "house", mode: str = "with_openings") -> FacadeSheet:
         house, rule = _variant(cfg, variant)
         plan = preprocess(svg, mode, cfg.plan)
-        return place_all(walls(house, plan, cfg), LayoutContext(house, mode, "", seed), rule)
+        return place_all(walls(house, plan, cfg), LayoutContext(house, mode, ""), rule)
 
     return run
 

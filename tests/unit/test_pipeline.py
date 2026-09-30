@@ -5,7 +5,7 @@ import pytest
 
 from genfacade import cli, pipeline
 from genfacade.render.parse import parse_sheet_svg
-from genfacade.schema import HouseSpec, Plan, Violation
+from genfacade.schema import HouseSpec, Plan
 
 
 def test_trace_has_every_step_file(load_house, cfg, tmp_path):
@@ -36,8 +36,8 @@ HOUSE = Path(__file__).parents[2] / "tests" / "fixtures" / "genplan" / "house.sv
 TEXT = "Two-storey classic house with a gable roof."
 
 
-def _generate(cfg, out, mode="with_openings", seed=0):
-    req = pipeline.PlanRun(plan=str(HOUSE), text=TEXT, mode=mode, seed=seed)
+def _generate(cfg, out, mode="with_openings"):
+    req = pipeline.PlanRun(plan=str(HOUSE), text=TEXT, mode=mode)
     return pipeline.generate(req, HOUSE.read_text(), out, cfg)
 
 
@@ -79,25 +79,12 @@ def test_violations_marked_on_step_5_only(cfg, tmp_path):
     assert 'class="forbidden-zone"' in (out / pipeline.LAYOUT).read_text()
 
 
-def test_retry_stops_when_errors_do_not_change(cfg, tmp_path):
-    meta = json.loads((_generate(cfg, tmp_path / "run") / pipeline.META).read_text())
-    assert [a["seed"] for a in meta["attempts"]] == [0, 1]  # дефект плана повтором не лечится
-
-
-def test_retry_takes_next_seed_until_clean(cfg, tmp_path, monkeypatch):
-    """Первые две попытки — с подложенной ошибкой, каждый раз новой: третья чистая."""
-    real, calls = pipeline.validate, []
-
-    def fake(sheet, checks):
-        calls.append(1)
-        planted = Violation(rule="overlap", severity="error", side=0, element=f"x{len(calls)}",
-                            message="подложено")
-        return real(sheet, checks) + ([planted] if len(calls) < 3 else [])
-
-    monkeypatch.setattr(pipeline, "validate", fake)
-    out = _generate(cfg, tmp_path / "run", mode="blind", seed=10)
+def test_errors_counted_in_meta(cfg, tmp_path):
+    """Брак не перегенерируется — правило детерминировано; число нарушений — в meta.json."""
+    out = _generate(cfg, tmp_path / "run")
     meta = json.loads((out / pipeline.META).read_text())
-    assert [a["errors"] for a in meta["attempts"]] == [1, 1, 0] and meta["seed_used"] == 12
+    assert (meta["errors"], meta["warnings"]) == (2, 0)  # окно плана в запретной зоне, 2 этажа
+    assert "seed" not in meta["request"]
 
 
 def test_ridge_along_longest_side(cfg, tmp_path):

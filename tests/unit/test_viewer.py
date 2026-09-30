@@ -57,8 +57,7 @@ def test_page_and_static_revalidated(client):
         assert client.get(path).headers["cache-control"] == "no-cache", path
 
 
-PLAN_RUN = {"plan": "house", "text": "Two-storey classic house.",
-            "mode": "blind", "seed": 0}
+PLAN_RUN = {"plan": "house", "text": "Two-storey classic house.", "mode": "blind"}
 
 
 def test_plans_listed_and_served(client):

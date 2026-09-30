@@ -123,7 +123,7 @@ class Windows(Section):
 
 class Blind(Section):
     widths_m: list[float]
-    pitches_m: list[float]
+    pitch_m: float
     edge_m: float
     clearance_m: float
     min_gap_m: float
@@ -166,7 +166,6 @@ class Checks(Section):
     eps_m: float
     align_m: float
     snap_m: float
-    max_attempts: int
 
 
 class Server(Section):

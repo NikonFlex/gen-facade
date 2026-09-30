@@ -28,14 +28,14 @@ python3 -m venv .venv
 npx -y jscpd@5.3.3 -c .jscpd.json genfacade tests tools   # копипаста, нужен Node
 
 .venv/bin/genfacade run materials/genplan-plan-example.svg \
-    -t "Two-storey classic house with a gable roof" -m with_openings -s 0   # план + описание → фасады
+    -t "Two-storey classic house with a gable roof" -m with_openings   # план + описание → фасады
 .venv/bin/genfacade render tests/fixtures/house_gable.json          # лист из готового JSON дома
 .venv/bin/genfacade -c мои/ render tests/fixtures/house_gable.json  # со своими настройками
 .venv/bin/genfacade serve                                            # смотрелка: http://127.0.0.1:8000
 ```
 
 **Смотрелка** — на главной запуск «план + описание» (план из списка или свой SVG
-GenPlan, режим, seed), дома и история прогонов; прогон открывается на весь экран:
+GenPlan, режим), дома и история прогонов; прогон открывается на весь экран:
 шаги 1–6 конвейера, чертёж (масштаб, слои — запретные зоны и нарушения на шагах 4–5,
 карточка элемента при наведении), вход прогона с перезапуском. Esc или «назад» в браузере — на главную. Каждый прогон — папка
 с трассой шагов в `outputs/runs/`.
