@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from genfacade import pipeline
 from genfacade.config import Config
+from genfacade.models.stub import ModelError
 from genfacade.plan.genplan_svg import PlanError
 
 STATIC = files(__package__).joinpath("static")
@@ -97,6 +98,8 @@ def _start_plan(run: pipeline.PlanRun, svg: str | None, cfg: Config) -> Path:
         return pipeline.generate(run, text, out, cfg)
     except PlanError as e:
         raise HTTPException(400, f"план отклонён: {e}") from e
+    except ModelError as e:
+        raise HTTPException(400, f"модель не ответила: {e}") from e
 
 
 def _runs(runs_dir: Path) -> list[dict]:

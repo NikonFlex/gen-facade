@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from genfacade import config, pipeline
+from genfacade.models.stub import ModelError
 from genfacade.plan.genplan_svg import PlanError
 
 
@@ -45,5 +46,7 @@ def main(argv: list[str] | None = None) -> None:
             print(run(args))
         except PlanError as e:
             sys.exit(f"план отклонён: {e}")
+        except ModelError as e:
+            sys.exit(f"модель не ответила: {e}")
     else:
         serve(args.config)

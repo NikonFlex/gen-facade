@@ -1,8 +1,9 @@
 """Общие фикстуры: всё — на одном простом доме (tests/fixtures/simple_house.svg, gf#58).
 
 План 10 × 5 м в формате GenPlan: вход 0.9 м и окна 1.2 м снизу, 1.0 м слева, 2.0 м сверху,
-1.5 м справа; дом — config/house.json (один этаж, плоская крыша). Для кода, который умеет
-и другие крыши (развёртка, лист), тот же дом берётся с двускатной и вальмовой крышей.
+1.5 м справа; дом и фасады — стабы моделей (genfacade/models/): один этаж, плоская крыша.
+Для кода, который умеет и другие крыши (развёртка, лист), тот же дом берётся с двускатной
+и вальмовой крышей.
 """
 
 import json
@@ -11,15 +12,15 @@ from pathlib import Path
 import pytest
 
 from genfacade import config
-from genfacade.layout.rule import LayoutContext, place_all
+from genfacade.models import stub
 from genfacade.pipeline import ridge_along_longest, walls
 from genfacade.plan.preprocess import preprocess
-from genfacade.schema import FacadeSheet, Roof, SideFacade
+from genfacade.schema import FacadeSheet, Roof
 from genfacade.unfold import unfold
 
 SIMPLE = Path(__file__).parent / "fixtures" / "simple_house.svg"
 ROOFS = {
-    "flat": None,  # как в config/house.json
+    "flat": None,  # как у стаба шага 1 (genfacade/models/stub_data/house.json)
     "gable": Roof(kind="gable", pitch_deg=30, overhang_m=0.5, material="roof"),
     "hip": Roof(kind="hip", pitch_deg=30, overhang_m=0.5, material="roof"),
 }
@@ -55,15 +56,16 @@ def simple_svg():
 
 @pytest.fixture
 def lay_out(cfg):
-    """Простой дом после шагов 2–4: план → стены с силуэтами → раскладка правилом.
+    """Простой дом после шагов 1–4: стаб шага 1 → план → стены с силуэтами → стаб шага 4.
 
-    roof — крыша вместо плоской из config/house.json; svg — план вместо простого.
+    roof — крыша вместо плоской у стаба; svg — план вместо простого.
     """
     def run(mode: str = "with_openings", roof: str = "flat", svg=SIMPLE) -> FacadeSheet:
         plan = preprocess(svg, mode, cfg.plan)
-        house = cfg.house.model_copy(update={"roof": ROOFS[roof] or cfg.house.roof})
-        house = ridge_along_longest(house, plan.sides)
-        return place_all(walls(house, plan, cfg), LayoutContext(house, mode, ""), cfg.layout)
+        house = stub.spec_model("")
+        house = ridge_along_longest(house.model_copy(update={"roof": ROOFS[roof] or house.roof}),
+                                    plan.sides)
+        return stub.layout_all(walls(house, plan, cfg), stub.LayoutContext(house, mode, ""))
 
     return run
 
@@ -87,24 +89,3 @@ def unfold_sheet(cfg):
         return unfold(sheet, cfg.library.roof.thickness_m)
 
     return run
-
-
-@pytest.fixture
-def relayout(cfg):
-    """Тот же план, другие параметры дома или раскладки: стороны из sheet, заново шаги 3–4.
-
-    Для того, что правило умеет сверх простого дома (этажи, стиль, уровень окон).
-    """
-    def run(sheet: FacadeSheet, mode: str = "with_openings", rule=None, **spec) -> FacadeSheet:
-        house = sheet.spec.model_copy(update=spec)
-        bare = FacadeSheet(spec=house, facades=[SideFacade(side=f.side) for f in sheet.facades])
-        bare = unfold(bare, cfg.library.roof.thickness_m)
-        return place_all(bare, LayoutContext(house, mode, ""), rule or cfg.layout)
-
-    return run
-
-
-@pytest.fixture
-def two_floors():
-    """Параметры двухэтажного варианта простого дома для relayout."""
-    return {"floors": 2, "floor_heights_m": [2.75, 2.75], "eaves_m": 6.0}
