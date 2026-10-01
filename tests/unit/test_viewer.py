@@ -115,11 +115,20 @@ def test_sample_thumbnail_is_its_sheet(client, sample, tmp_path, cfg):
     assert client.get(f"/api/samples/{sample.source}/nope/sheet.svg").status_code == 404
 
 
-def test_sample_opens_as_plan_and_sheet(client, sample, tmp_path):
-    """Пример открывается тем же экраном, что прогон: план и лист; в прогоны не попадает."""
-    store.write(sample, tmp_path / "samples")
-    run_id = client.post(f"/api/samples/{sample.source}/{sample.id}").json()["id"]
-    meta = client.get(f"/api/runs/{run_id}").json()
+@pytest.fixture
+def opened(client, tmp_path):
+    """Записать пример и открыть его в смотрелке → (имя папки просмотра, её meta)."""
+    def open_(sample) -> tuple[str, dict]:
+        store.write(sample, tmp_path / "samples")
+        run_id = client.post(f"/api/samples/{sample.source}/{sample.id}").json()["id"]
+        return run_id, client.get(f"/api/runs/{run_id}").json()
+
+    return open_
+
+
+def test_sample_opens_as_plan_tokens_and_sheet(client, sample, opened):
+    """Пример открывается тем же экраном, что прогон; в список прогонов не попадает."""
+    run_id, meta = opened(sample)
     assert [s["n"] for s in meta["steps"]] == [2, 4, 6] and "input" not in meta
     assert meta["sample"]["split"] == sample.split
     for step in meta["steps"]:
@@ -128,11 +137,9 @@ def test_sample_opens_as_plan_and_sheet(client, sample, tmp_path):
     assert client.get("/api/runs").json() == []
 
 
-def test_sample_tokens_shown_for_every_mode(client, sample, tmp_path, cfg):
+def test_sample_tokens_shown_for_every_mode(client, sample, opened, cfg):
     """Шаг «Токены»: по режиму — условие и ответ; строки складываются в ту же цепочку."""
-    store.write(sample, tmp_path / "samples")
-    run_id = client.post(f"/api/samples/{sample.source}/{sample.id}").json()["id"]
-    meta = client.get(f"/api/runs/{run_id}").json()
+    run_id, meta = opened(sample)
     shown = client.get(f"/files/{run_id}/{meta['tokens']}").json()
     assert set(shown) == set(Mode)
     for mode in Mode:
@@ -146,13 +153,11 @@ def test_sample_tokens_shown_for_every_mode(client, sample, tmp_path, cfg):
         assert len(answer["lines"]) == rows
 
 
-def test_sample_that_cannot_be_tokenized_opens_without_tokens(client, sample, tmp_path):
+def test_sample_that_cannot_be_tokenized_opens_without_tokens(sample, opened):
     """Дом со стилем не из словаря: план и лист открываются, шага «Токены» нет."""
     odd = sample.sheet.spec.model_copy(update={"style": "gothic"})
-    store.write(sample.model_copy(update={"sheet": sample.sheet.model_copy(update={"spec": odd})}),
-                tmp_path / "samples")
-    run_id = client.post(f"/api/samples/{sample.source}/{sample.id}").json()["id"]
-    meta = client.get(f"/api/runs/{run_id}").json()
+    _, meta = opened(sample.model_copy(update={
+        "sheet": sample.sheet.model_copy(update={"spec": odd})}))
     assert [s["n"] for s in meta["steps"]] == [2, 6] and meta["tokens"] is None
 
 

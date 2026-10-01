@@ -349,11 +349,16 @@ function showStep(wanted) {
   return step.file.endsWith(".json") ? renderJsonStep(step) : renderSvgStep(step);
 }
 
+// JSON шага без чертежа: холста у такого шага нет.
+async function stepData(step) {
+  state.stage = null;
+  return (await fetch(`/files/${state.runId}/${step.file}`)).json();
+}
+
 // ——— шаг-JSON: параметры дома ———
 
 async function renderJsonStep(step) {
-  state.stage = null;
-  const data = await (await fetch(`/files/${state.runId}/${step.file}`)).json();
+  const data = await stepData(step);
   const view = el("div", { className: "input-view" }, `
     <div class="editor-pane">
       <div class="pane-head"><h2>${step.file}</h2><span class="pane-note">шаг ${step.n}: ${step.title}</span></div>
@@ -368,8 +373,7 @@ async function renderJsonStep(step) {
 // ——— шаг «Токены»: что модель шага 4 получает и что пишет, по режимам ———
 
 async function renderTokensStep(step) {
-  state.stage = null;
-  const data = await (await fetch(`/files/${state.runId}/${step.file}`)).json();
+  const data = await stepData(step);
   const view = el("div", { className: "tokens-view" });
   for (const mode of state.options.modes.filter((m) => data[m.value])) {
     const column = el("div", { className: "editor-pane" });
