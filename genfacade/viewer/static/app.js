@@ -4,12 +4,12 @@
 
 import { SvgStage, metres } from "/static/stage.js";
 
-const ROOF = { flat: "плоская", gable: "двускатная", hip: "вальмовая", shed: "односкатная" };
+const ROOF = { flat: "плоская" };  // пока только плоская (хозяин 01.10)
 const LAYERS = {
   zones: "Зоны отделки", elements: "Элементы", mullions: "Створки",
-  roof: "Крыша", annotations: "Подписи", forbidden: "Запретные зоны", violations: "Нарушения",
+  annotations: "Подписи", forbidden: "Запретные зоны", violations: "Нарушения",
 };
-const SHEET_LAYERS = ["zones", "elements", "mullions", "roof", "annotations"];
+const SHEET_LAYERS = ["zones", "elements", "mullions", "annotations"];
 // Шаги 3–5 — стены без крыши и оформления (хозяин 30.09): у них только слои элементов.
 const WALL_LAYERS = ["zones", "elements", "mullions"];
 const STEP_LAYERS = {
@@ -409,7 +409,7 @@ function renderSummary(s, colors) {
     ["Этажи", `${s.floors}: ${s.floor_heights_m.map(metres).join(", ")}`],
     ["Цоколь", metres(s.plinth_m)],
     ["Карниз", metres(s.eaves_m)],
-    ["Крыша", `${ROOF[s.roof.kind]}${s.roof.kind === "flat" ? "" : `, ${s.roof.pitch_deg}°, свес ${metres(s.roof.overhang_m)}`}`],
+    ["Крыша", ROOF[s.roof.kind] ?? s.roof.kind],
   ];
   const color = (m) => m.color ?? colors?.[m.id] ?? "transparent";
   const palette = s.materials.map((m) => `<div class="palette-row"><span class="swatch" style="background:${color(m)}"></span>${m.id}<code>${m.kind}</code></div>`);

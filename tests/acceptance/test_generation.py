@@ -10,10 +10,9 @@ import pytest
 from genfacade.schema import EPS
 
 
-@pytest.mark.parametrize("roof", ["flat", "gable", "hip"])
-def test_plan_openings_kept_in_place(lay_out, roof):
+def test_plan_openings_kept_in_place(lay_out):
     """Режим с референсами: все проёмы плана на фасаде в тех же положениях."""
-    sheet = lay_out(roof=roof)
+    sheet = lay_out()
     for f in sheet.facades:
         ground = [e for e in f.elements if e.floor == 1 and e.cls in ("window", "door")]
         for o in f.side.openings:

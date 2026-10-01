@@ -41,10 +41,8 @@ class Material(Model):
 
 
 class Roof(Model):
-    kind: Literal["flat", "gable", "hip", "shed"]
-    pitch_deg: float = Field(ge=0, lt=90)
-    ridge_axis: Literal["x", "y"] = "x"  # конёк вдоль оси плана
-    overhang_m: float = Field(ge=0)
+    # Пока только плоская (хозяин 01.10): скатные — на этапе модели, сюда же новыми видами.
+    kind: Literal["flat"]
     material: str | None = None  # покрытие из палитры
 
 
@@ -197,9 +195,8 @@ class SideFacade(Model):
     side: Side
     elements: list[Element] = []
     zones: list[MaterialZone] = []
-    # Не генерируются: считает развёртка (unfold.py) из HouseSpec и сторон.
-    silhouette: Polygon | None = None  # шаг 3 — прямоугольник стены; шаг 6 — с фронтоном
-    roof: Polygon | None = None  # видимая часть крыши на этой стороне — с шага 6
+    # Не генерируется: прямоугольник стены считает развёртка (unfold.py) из HouseSpec и стороны.
+    silhouette: Polygon | None = None
 
     @model_validator(mode="after")
     def _check_parents(self) -> "SideFacade":

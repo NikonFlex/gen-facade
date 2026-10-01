@@ -38,36 +38,21 @@ def test_simple_house_traces_all_six_steps(cfg, tmp_path, mode):
 
 
 def test_house_from_spec_stub(cfg, tmp_path):
-    """Шаг 1 — стаб модели: его спека, конвейер меняет только конёк по плану."""
+    """Шаг 1 — стаб модели: его спека без изменений."""
     out = _generate(cfg, tmp_path / "run")
     spec = HouseSpec.model_validate(json.loads((out / pipeline.SPEC).read_text())["spec"])
     sides = Plan.model_validate_json((out / pipeline.PLAN_JSON).read_text()).sides
-    assert spec == pipeline.ridge_along_longest(stub.spec_model(TEXT), sides)
-    assert spec.roof.ridge_axis == "x"  # простой дом: 10 м вдоль x, 5 м вдоль y
+    assert spec == stub.spec_model(TEXT) and len(sides) == 4
 
 
-def test_ridge_along_longest_side(cfg, tmp_path, monkeypatch):
-    """Модель дала конёк поперёк длинной стороны — конвейер разворачивает его по плану."""
-    house = stub.spec_model(TEXT)
-    roof = house.roof.model_copy(update={"kind": "gable", "pitch_deg": 30, "ridge_axis": "y"})
-    monkeypatch.setattr(stub, "spec_model", lambda text: house.model_copy(update={"roof": roof}))
-    spec = json.loads((_generate(cfg, tmp_path / "run") / pipeline.SPEC).read_text())["spec"]
-    assert spec["roof"]["ridge_axis"] == "x"
-
-
-def test_roof_and_marks_only_on_sheet(cfg, tmp_path, monkeypatch):
-    """Шаги 3–5 — стены без крыши и оформления; крыша, отметки и оси — только на листе."""
-    house = stub.spec_model(TEXT)
-    roof = house.roof.model_copy(update={"kind": "gable", "pitch_deg": 30, "overhang_m": 0.5})
-    monkeypatch.setattr(stub, "spec_model", lambda text: house.model_copy(update={"roof": roof}))
+def test_marks_only_on_sheet(cfg, tmp_path):
+    """Шаги 3–5 — стены без оформления; отметки, оси и подписи — только на листе."""
     out = _generate(cfg, tmp_path / "run")
     for step in (pipeline.UNFOLD, pipeline.LAYOUT, pipeline.SNAPPED):
         svg = (out / step).read_text()
-        assert 'class="roof"' not in svg and "±0,000" not in svg and "Фасад в осях" not in svg, step
+        assert "±0,000" not in svg and "Фасад в осях" not in svg, step
     sheet = (out / pipeline.SHEET).read_text()
-    assert sheet.count('class="roof"') == 4 and "±0,000" in sheet and "Фасад в осях" in sheet
-    facades = json.loads((out / pipeline.SHEET_JSON).read_text())["facades"]
-    assert [len(f["silhouette"]) for f in facades] == [4, 5, 4, 5]  # фронтоны на торцах
+    assert "±0,000" in sheet and "Фасад в осях" in sheet
 
 
 def test_text_does_not_change_house(cfg, tmp_path):

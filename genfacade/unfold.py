@@ -1,20 +1,14 @@
-"""Стены и крыша фасадов (facade.md, правило 3).
+"""Шаг 3: развёртка стен (facade.md, правило 3).
 
-Шаг 3 (`unfold`) — развёртка: у каждой стороны плана прямоугольник стены, длина из плана,
-высота до карниза из HouseSpec. Крыши здесь нет: шаги 3–5 работают со стенами *(хозяин 30.09)*.
-Шаг 6 (`add_roof`) — перед листом: фронтон в силуэте стены и видимая крыша. Пока только
-прямоугольный контур: непрямоугольные — открыто в plan-input.md. Высоты считаются из одного
-HouseSpec, поэтому соседние фасады сходятся на углах по построению (facade.md, правило 2).
+У каждой стороны плана — прямоугольник стены: длина из плана, высота до карниза из HouseSpec.
+Крыша пока только плоская, её на фасаде не видно *(хозяин 01.10)*. Контур — только
+прямоугольный: непрямоугольные — открыто в plan-input.md. Высоты из одного HouseSpec, поэтому
+соседние фасады сходятся на углах по построению (facade.md, правило 2).
 """
 
 import math
 
-from genfacade.schema import EPS, FacadeSheet, HouseSpec, Point, Polygon, Roof, Side
-
-
-def _slope(roof: Roof) -> float:
-    """Подъём ската на метр по горизонтали."""
-    return math.tan(math.radians(roof.pitch_deg))
+from genfacade.schema import EPS, FacadeSheet, Point, Side
 
 
 def plan_corners(sides: list[Side]) -> list[Point]:
@@ -42,84 +36,12 @@ def _check_rectangle(sides: list[Side]) -> None:
             raise ValueError(f"стороны {a.index} и {b.index}: противоположные, а длины разные")
 
 
-def along_ridge(side: Side, ridge_axis: str) -> bool:
-    """Сторона параллельна коньку (карнизная), а не торцевая."""
-    return side.runs_along_x == (ridge_axis == "x")
-
-
-def ridge_height(spec: HouseSpec, sides: list[Side]) -> float:
-    """Отметка конька; у плоской крыши — отметка карниза."""
-    roof = spec.roof
-    if roof.kind == "flat":
-        return spec.eaves_m
-    if roof.kind == "shed":
-        raise NotImplementedError("односкатная крыша: где высокий край — открыто в facade.md")
-    gable_end = next(s for s in sides if not along_ridge(s, roof.ridge_axis))
-    return spec.eaves_m + gable_end.length_m / 2 * _slope(roof)
-
-
-def wall_silhouette(spec: HouseSpec, side: Side, ridge: float) -> Polygon:
-    """Стена от земли до карниза; у торца двускатной крыши — с фронтоном."""
-    length, eaves = side.length_m, spec.eaves_m
-    wall = [(0.0, 0.0), (length, 0.0), (length, eaves)]
-    if spec.roof.kind == "gable" and not along_ridge(side, spec.roof.ridge_axis):
-        wall.append((length / 2, ridge))
-    wall.append((0.0, eaves))
-    return wall
-
-
-def roof_outline(spec: HouseSpec, side: Side, ridge: float, thickness_m: float) -> Polygon | None:
-    """Видимая со стороны часть крыши; свес опускает край ниже карниза.
-
-    thickness_m — видимая толщина ската над фронтоном (config/library.toml).
-    """
-    roof, length, eaves = spec.roof, side.length_m, spec.eaves_m
-    if roof.kind == "flat":
-        return None
-    o = roof.overhang_m
-    low = eaves - o * _slope(roof)
-    if along_ridge(side, roof.ridge_axis):
-        top = _ridge_span(spec, side, ridge)
-        return [(-o, low), (length + o, low), (top[1], ridge), (top[0], ridge)]
-    if roof.kind == "gable":
-        # Торец: фронтон виден целиком, крыша — полосой по скатам.
-        d = thickness_m / math.cos(math.radians(roof.pitch_deg))
-        return [(-o, low), (length / 2, ridge), (length + o, low),
-                (length + o, low + d), (length / 2, ridge + d), (-o, low + d)]
-    return [(-o, low), (length + o, low), (length / 2, ridge)]
-
-
-def _ridge_span(spec: HouseSpec, side: Side, ridge: float) -> Point:
-    """Концы конька на карнизной стороне: у вальмы конёк короче стены."""
-    o = spec.roof.overhang_m
-    if spec.roof.kind != "hip":
-        return (-o, side.length_m + o)
-    half_depth = (ridge - spec.eaves_m) / _slope(spec.roof)
-    x0 = min(half_depth, side.length_m / 2)
-    return (x0, side.length_m - x0)
-
-
 def unfold(sheet: FacadeSheet) -> FacadeSheet:
     """Шаг 3: прямоугольник стены у каждой стороны, без крыши; остальное не трогает."""
     eaves = sheet.spec.eaves_m
     facades = [
         f.model_copy(update={"silhouette": [
             (0.0, 0.0), (f.side.length_m, 0.0), (f.side.length_m, eaves), (0.0, eaves)]})
-        for f in sheet.facades
-    ]
-    return sheet.model_copy(update={"facades": facades})
-
-
-def add_roof(sheet: FacadeSheet, roof_thickness_m: float) -> FacadeSheet:
-    """Шаг 6: фронтон в силуэте стены и видимая крыша по HouseSpec; остальное не трогает."""
-    sides = [f.side for f in sheet.facades]
-    plan_corners(sides)  # проверка контура
-    ridge = ridge_height(sheet.spec, sides)
-    facades = [
-        f.model_copy(update={
-            "silhouette": wall_silhouette(sheet.spec, f.side, ridge),
-            "roof": roof_outline(sheet.spec, f.side, ridge, roof_thickness_m),
-        })
         for f in sheet.facades
     ]
     return sheet.model_copy(update={"facades": facades})
