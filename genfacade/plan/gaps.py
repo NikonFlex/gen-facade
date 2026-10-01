@@ -25,6 +25,15 @@ class Gap:
         return _span(self.box, self.axis)[1] - _span(self.box, self.axis)[0]
 
 
+@dataclass(frozen=True)
+class Found:
+    """Проём в пикселях: разрыв и что в нём."""
+
+    kind: str  # window | door | entrance
+    gap: Gap
+    external: bool
+
+
 def find_gaps(walls: list[Box], cfg: Gaps) -> list[Gap]:
     """Все разрывы, включая швы короче min_opening_px: они нужны, чтобы замкнуть контур."""
     gaps = []

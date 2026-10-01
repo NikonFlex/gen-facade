@@ -5,14 +5,13 @@
 вверх; в метры переводим в конце, когда известен вход.
 """
 
-from dataclasses import dataclass
 from pathlib import Path
 
 from shapely import LinearRing, box
 
 from genfacade.config import PlanConfig
 from genfacade.plan import sides
-from genfacade.plan.gaps import Gap, find_gaps
+from genfacade.plan.gaps import Found, Gap, find_gaps
 from genfacade.plan.genplan_svg import TOL_PX, Box, DoorSwing, GenPlanSvg, PlanError, parse
 from genfacade.plan.outline import outline
 from genfacade.schema import Mode, Plan, PlanOpening, Rect
@@ -20,15 +19,6 @@ from genfacade.schema import Mode, Plan, PlanOpening, Rect
 # Масштаб GenPlan: ширина входной двери — 90 см (three_dimensional/convertor.py:32,
 # DEFAULT_DOOR_WIDTH). Протокол, а не настройка: иначе фасад разойдётся с 3D-моделью.
 ENTRANCE_WIDTH_M = 0.9
-
-
-@dataclass(frozen=True)
-class Found:
-    """Проём в пикселях: разрыв и что в нём."""
-
-    kind: str  # window | door | entrance
-    gap: Gap
-    external: bool
 
 
 def preprocess(svg: Path | str, mode: Mode, cfg: PlanConfig) -> Plan:
