@@ -8,6 +8,7 @@ import pytest
 
 from genfacade.render.svg import sheet_svg
 from genfacade.snap import snap
+from genfacade.unfold import unfold
 from genfacade.validate import errors, validate, validate_svg
 
 LEAF = '<rect x="800" y="495" width="5" height="90" fill="#000000" />'
@@ -15,21 +16,25 @@ LEAF = '<rect x="800" y="495" width="5" height="90" fill="#000000" />'
 
 @pytest.fixture
 def clean(lay_out):
-    """Лист без нарушений: простой дом с двускатной крышей и окном мансарды во фронтоне
-    над окном первого этажа — чтобы было окно над окном для проверок осей и привязки."""
-    return _with_attic(lay_out(roof="gable"))
+    """Лист без нарушений: простой дом в два этажа (стены 6 м) с окном второго этажа над окном
+    первого на стороне SIDE — чтобы было окно над окном для проверок осей и привязки."""
+    return _with_upper(lay_out())
 
 
-def _with_attic(sheet):
-    """Окно мансарды (этаж 2) с подоконником на стороне SIDE — ровно над окном первого этажа."""
+def _with_upper(sheet):
+    """Тот же дом в два этажа; на стороне SIDE — окно второго этажа с подоконником."""
+    spec = sheet.spec.model_copy(update={"floors": 2, "floor_heights_m": [2.75, 2.75],
+                                          "eaves_m": 6.0})
+    sheet = unfold(sheet.model_copy(update={"spec": spec}))
     f = sheet.facades[SIDE]
     low = next(e for e in f.elements if e.cls == "window")
     sill = next(e for e in f.elements if e.parent == low.id)
-    attic = low.model_copy(update={"id": "attic", "floor": 2, "y_m": 3.4, "h_m": 0.6, "fixed": []})
-    attic_sill = sill.model_copy(update={"id": "s_attic", "parent": "attic", "floor": 2,
-                                         "y_m": 3.4 - sill.h_m})
+    up = spec.floor_heights_m[0]
+    upper = low.model_copy(update={"id": "upper", "floor": 2, "y_m": low.y_m + up, "fixed": []})
+    upper_sill = sill.model_copy(update={"id": "s_upper", "parent": "upper", "floor": 2,
+                                         "y_m": sill.y_m + up})
     facades = list(sheet.facades)
-    facades[SIDE] = f.model_copy(update={"elements": [*f.elements, attic, attic_sill]})
+    facades[SIDE] = f.model_copy(update={"elements": [*f.elements, upper, upper_sill]})
     return sheet.model_copy(update={"facades": facades})
 
 
@@ -41,7 +46,7 @@ def _edit(sheet, side, element_id, **update):
     return sheet.model_copy(update={"facades": facades})
 
 
-SIDE = 1  # левая сторона простого дома: без входа; при двускатной крыше — фронтон
+SIDE = 1  # левая сторона простого дома: без входа
 
 
 def _window(sheet, side=SIDE, floor=1):
@@ -134,7 +139,7 @@ def _sill(sheet, window_id):
 
 
 def test_snap_keeps_plan_windows(lay_out, cfg):
-    sheet = _with_attic(lay_out(roof="gable"))
+    sheet = _with_upper(lay_out())
     w = _window(sheet, side=1, floor=2)
     snapped = snap(_edit(sheet, 1, w.id, x_m=w.x_m + 0.1), cfg.checks)
     plan_w = _window(snapped, side=1, floor=1)

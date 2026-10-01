@@ -10,9 +10,10 @@ const LAYERS = {
   roof: "Крыша", annotations: "Подписи", forbidden: "Запретные зоны", violations: "Нарушения",
 };
 const SHEET_LAYERS = ["zones", "elements", "mullions", "roof", "annotations"];
+// Шаги 3–5 — стены без крыши и оформления (хозяин 30.09): у них только слои элементов.
+const WALL_LAYERS = ["zones", "elements", "mullions"];
 const STEP_LAYERS = {
-  3: ["roof", "annotations"], 4: [...SHEET_LAYERS, "forbidden"],
-  5: [...SHEET_LAYERS, "forbidden", "violations"], 6: SHEET_LAYERS,
+  4: [...WALL_LAYERS, "forbidden"], 5: [...WALL_LAYERS, "forbidden", "violations"], 6: SHEET_LAYERS,
 };
 const ICON = {
   back: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',

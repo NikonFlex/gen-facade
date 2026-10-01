@@ -13,22 +13,32 @@ def test_gable_ridge_height(lay_out):
     assert ridge == pytest.approx(3.25 + 2.5 * math.tan(math.radians(30)))
 
 
-def test_gable_only_on_ends(lay_out):
-    sheet = lay_out(roof="gable")
+@pytest.mark.parametrize("roof", ["flat", "gable", "hip"])
+def test_unfold_is_walls_only(lay_out, roof):
+    """Шаг 3: при любой крыше — прямоугольник стены до карниза, крыши нет (хозяин 30.09)."""
+    sheet = lay_out(roof=roof)
+    for f in sheet.facades:
+        length, eaves = f.side.length_m, sheet.spec.eaves_m
+        assert f.silhouette == [(0.0, 0.0), (length, 0.0), (length, eaves), (0.0, eaves)]
+        assert f.roof is None
+
+
+def test_gable_only_on_ends(lay_out, roofed):
+    sheet = roofed(lay_out(roof="gable"))
     vertices = [len(f.silhouette) for f in sheet.facades]
     assert vertices == [4, 5, 4, 5]  # конёк вдоль длинной стороны (x): фронтоны на торцах
 
 
-def test_hip_ridge_shorter_than_wall(lay_out):
-    sheet = lay_out(roof="hip")
+def test_hip_ridge_shorter_than_wall(lay_out, roofed):
+    sheet = roofed(lay_out(roof="hip"))
     long_side = sheet.facades[0]
     ridge_xs = [x for x, y in long_side.roof if y == top_y(long_side.roof)]
     # Вальма под 45° в плане: конёк короче стены на глубину дома (5 м).
     assert max(ridge_xs) - min(ridge_xs) == pytest.approx(10 - 5)
 
 
-def test_flat_roof_has_no_roof_outline(lay_out):
-    assert all(f.roof is None for f in lay_out().facades)
+def test_flat_roof_has_no_roof_outline(lay_out, roofed):
+    assert all(f.roof is None for f in roofed(lay_out()).facades)
 
 
 def test_corners_of_rectangle(lay_out):

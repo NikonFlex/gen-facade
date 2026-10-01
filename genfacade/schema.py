@@ -198,8 +198,8 @@ class SideFacade(Model):
     elements: list[Element] = []
     zones: list[MaterialZone] = []
     # Не генерируются: считает развёртка (unfold.py) из HouseSpec и сторон.
-    silhouette: Polygon | None = None  # стена вместе с фронтоном
-    roof: Polygon | None = None  # видимая часть крыши на этой стороне
+    silhouette: Polygon | None = None  # шаг 3 — прямоугольник стены; шаг 6 — с фронтоном
+    roof: Polygon | None = None  # видимая часть крыши на этой стороне — с шага 6
 
     @model_validator(mode="after")
     def _check_parents(self) -> "SideFacade":

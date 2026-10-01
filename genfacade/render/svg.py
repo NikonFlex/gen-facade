@@ -72,11 +72,13 @@ def canvas(width: float, height: float, css: str) -> ElementTree.Element:
     return root
 
 
-def sheet_svg(sheet: FacadeSheet, cfg: Config, violations: list[Violation] | None = None) -> str:
-    """Лист всех фасадов; силуэты должны быть посчитаны (unfold).
+def sheet_svg(sheet: FacadeSheet, cfg: Config, violations: list[Violation] | None = None,
+              annotations: bool = True) -> str:
+    """Лист всех фасадов; силуэты должны быть посчитаны (unfold, на листе — и add_roof).
 
     violations — для трассы шагов 4–5: поверх листа запретные зоны и нарушения валидатора.
-    Слой без data-cls, поэтому разбор листа его не видит.
+    Слой без data-cls, поэтому разбор листа его не видит. annotations — отметки, оси, земля
+    и подписи: оформление листа (шаг 6), на промежуточных шагах их нет.
     """
     cells, width, height = _layout(sheet, cfg.sheet.sheet)
     mm_per_m = 1000 / cfg.sheet.sheet.scale
@@ -89,8 +91,9 @@ def sheet_svg(sheet: FacadeSheet, cfg: Config, violations: list[Violation] | Non
         g = _facade_geometry(root, facade, origin, pen)
         if violations is not None:
             _overlay(g, facade, [v for v in violations if v.side == facade.side.index])
-        marks = Marks(levels, axes[facade.side.index], cfg.sheet)
-        _annotations(root, origin, facade.side.length_m, marks)
+        if annotations:
+            marks = Marks(levels, axes[facade.side.index], cfg.sheet)
+            _annotations(root, origin, facade.side.length_m, marks)
     ElementTree.indent(root)
     return ElementTree.tostring(root, encoding="unicode")
 
