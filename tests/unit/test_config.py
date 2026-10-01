@@ -27,15 +27,15 @@ def test_user_css_goes_after_defaults(tmp_path, cfg):
     assert css.startswith(cfg.css) and css.rstrip().endswith(".ground { stroke-width: 0.2px; }")
 
 
-def test_material_color_from_library(raw_house, cfg, unfold_sheet):
+def test_material_color_from_library(raw_house, cfg, roofed):
     # В палитре дома цвет не задан — берётся цвет вида из библиотеки.
     assert raw_house["spec"]["materials"][1] == {"id": "plinth", "kind": "concrete", "color": None}
-    sheet = unfold_sheet(FacadeSheet.model_validate(raw_house))
+    sheet = roofed(FacadeSheet.model_validate(raw_house))
     assert f'fill="{cfg.library.kinds["concrete"]}"' in sheet_svg(sheet, cfg)
 
 
-def test_unknown_kind_without_color_rejected(raw_house, cfg, unfold_sheet):
+def test_unknown_kind_without_color_rejected(raw_house, cfg, roofed):
     raw_house["spec"]["materials"][1] = {"id": "plinth", "kind": "unobtainium"}
-    sheet = unfold_sheet(FacadeSheet.model_validate(raw_house))
+    sheet = roofed(FacadeSheet.model_validate(raw_house))
     with pytest.raises(ValueError, match="unobtainium"):
         sheet_svg(sheet, cfg)

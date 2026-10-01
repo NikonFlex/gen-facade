@@ -55,6 +55,21 @@ def test_ridge_along_longest_side(cfg, tmp_path, monkeypatch):
     assert spec["roof"]["ridge_axis"] == "x"
 
 
+def test_roof_and_marks_only_on_sheet(cfg, tmp_path, monkeypatch):
+    """Шаги 3–5 — стены без крыши и оформления; крыша, отметки и оси — только на листе."""
+    house = stub.spec_model(TEXT)
+    roof = house.roof.model_copy(update={"kind": "gable", "pitch_deg": 30, "overhang_m": 0.5})
+    monkeypatch.setattr(stub, "spec_model", lambda text: house.model_copy(update={"roof": roof}))
+    out = _generate(cfg, tmp_path / "run")
+    for step in (pipeline.UNFOLD, pipeline.LAYOUT, pipeline.SNAPPED):
+        svg = (out / step).read_text()
+        assert 'class="roof"' not in svg and "±0,000" not in svg and "Фасад в осях" not in svg, step
+    sheet = (out / pipeline.SHEET).read_text()
+    assert sheet.count('class="roof"') == 4 and "±0,000" in sheet and "Фасад в осях" in sheet
+    facades = json.loads((out / pipeline.SHEET_JSON).read_text())["facades"]
+    assert [len(f["silhouette"]) for f in facades] == [4, 5, 4, 5]  # фронтоны на торцах
+
+
 def test_text_does_not_change_house(cfg, tmp_path):
     """Текст сохраняется в запросе, но до модели не читается: дом один и тот же."""
     specs = []

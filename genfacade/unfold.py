@@ -1,8 +1,10 @@
-"""Шаг 3: силуэт каждой стены и видимая крыша из HouseSpec и сторон (facade.md, правило 3).
+"""Стены и крыша фасадов (facade.md, правило 3).
 
-Пока только прямоугольный контур: непрямоугольные — открыто в plan-input.md.
-Высоты считаются из одного HouseSpec, поэтому соседние фасады сходятся на углах
-по построению (facade.md, правило 2).
+Шаг 3 (`unfold`) — развёртка: у каждой стороны плана прямоугольник стены, длина из плана,
+высота до карниза из HouseSpec. Крыши здесь нет: шаги 3–5 работают со стенами *(хозяин 30.09)*.
+Шаг 6 (`add_roof`) — перед листом: фронтон в силуэте стены и видимая крыша. Пока только
+прямоугольный контур: непрямоугольные — открыто в plan-input.md. Высоты считаются из одного
+HouseSpec, поэтому соседние фасады сходятся на углах по построению (facade.md, правило 2).
 """
 
 import math
@@ -97,8 +99,19 @@ def _ridge_span(spec: HouseSpec, side: Side, ridge: float) -> Point:
     return (x0, side.length_m - x0)
 
 
-def unfold(sheet: FacadeSheet, roof_thickness_m: float) -> FacadeSheet:
-    """Заполняет силуэт и крышу у каждой стороны; остальное не трогает."""
+def unfold(sheet: FacadeSheet) -> FacadeSheet:
+    """Шаг 3: прямоугольник стены у каждой стороны, без крыши; остальное не трогает."""
+    eaves = sheet.spec.eaves_m
+    facades = [
+        f.model_copy(update={"silhouette": [
+            (0.0, 0.0), (f.side.length_m, 0.0), (f.side.length_m, eaves), (0.0, eaves)]})
+        for f in sheet.facades
+    ]
+    return sheet.model_copy(update={"facades": facades})
+
+
+def add_roof(sheet: FacadeSheet, roof_thickness_m: float) -> FacadeSheet:
+    """Шаг 6: фронтон в силуэте стены и видимая крыша по HouseSpec; остальное не трогает."""
     sides = [f.side for f in sheet.facades]
     plan_corners(sides)  # проверка контура
     ridge = ridge_height(sheet.spec, sides)

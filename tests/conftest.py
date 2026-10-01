@@ -16,7 +16,7 @@ from genfacade.models import stub
 from genfacade.pipeline import ridge_along_longest, walls
 from genfacade.plan.preprocess import preprocess
 from genfacade.schema import FacadeSheet, Roof
-from genfacade.unfold import unfold
+from genfacade.unfold import add_roof
 
 SIMPLE = Path(__file__).parent / "fixtures" / "simple_house.svg"
 ROOFS = {
@@ -65,15 +65,15 @@ def lay_out(cfg):
         house = stub.spec_model("")
         house = ridge_along_longest(house.model_copy(update={"roof": ROOFS[roof] or house.roof}),
                                     plan.sides)
-        return stub.layout_all(walls(house, plan, cfg), stub.LayoutContext(house, mode, ""))
+        return stub.layout_all(walls(house, plan), stub.LayoutContext(house, mode, ""))
 
     return run
 
 
 @pytest.fixture(params=sorted(ROOFS))
-def house(request, lay_out) -> FacadeSheet:
-    """Простой дом с каждой крышей по очереди — для развёртки и листа."""
-    return lay_out(roof=request.param)
+def house(request, lay_out, roofed) -> FacadeSheet:
+    """Простой дом с каждой крышей по очереди, как на листе (шаг 6): с фронтоном и крышей."""
+    return roofed(lay_out(roof=request.param))
 
 
 @pytest.fixture
@@ -83,9 +83,9 @@ def raw_house(lay_out) -> dict:
 
 
 @pytest.fixture
-def unfold_sheet(cfg):
-    """Пересчитать силуэты и крышу — после правки HouseSpec в тесте."""
+def roofed(cfg):
+    """Шаг 6: фронтон и крыша по HouseSpec — и пересчёт после правки HouseSpec в тесте."""
     def run(sheet: FacadeSheet) -> FacadeSheet:
-        return unfold(sheet, cfg.library.roof.thickness_m)
+        return add_roof(sheet, cfg.library.roof.thickness_m)
 
     return run

@@ -21,7 +21,7 @@ from genfacade.render.preview import to_png
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import FacadeSheet, HouseSpec, Mode, Plan, Side, SideFacade
 from genfacade.snap import snap
-from genfacade.unfold import unfold
+from genfacade.unfold import add_roof, unfold
 from genfacade.validate import errors, validate
 
 # Семь шагов схемы (docs/assets/facade-modules.png); седьмой — позже, вместе с Егором.
@@ -70,8 +70,8 @@ def generate(req: PlanRun, svg: str, out: Path, cfg: Config) -> Path:
     raw = stub.layout_all(bare, stub.LayoutContext(bare.spec, req.mode, req.text))
     sheet = snap(raw, cfg.checks)
     violations = validate(sheet, cfg.checks)
-    (out / LAYOUT).write_text(sheet_svg(raw, cfg, violations=[]))
-    (out / SNAPPED).write_text(sheet_svg(sheet, cfg, violations=violations))
+    (out / LAYOUT).write_text(sheet_svg(raw, cfg, violations=[], annotations=False))
+    (out / SNAPPED).write_text(sheet_svg(sheet, cfg, violations=violations, annotations=False))
     (out / VIOLATIONS).write_text(json.dumps(
         [v.model_dump() for v in violations], ensure_ascii=False, indent=2))
     extra = {
@@ -89,10 +89,9 @@ def ridge_along_longest(spec: HouseSpec, sides: list[Side]) -> HouseSpec:
     return spec.model_copy(update={"roof": roof})
 
 
-def walls(spec: HouseSpec, plan: Plan, cfg: Config) -> FacadeSheet:
-    """Шаг 3: пустые стены всех сторон плана с силуэтами из HouseSpec."""
-    bare = FacadeSheet(spec=spec, facades=[SideFacade(side=s) for s in plan.sides])
-    return unfold(bare, cfg.library.roof.thickness_m)
+def walls(spec: HouseSpec, plan: Plan) -> FacadeSheet:
+    """Шаг 3: пустые прямоугольники стен всех сторон плана, без крыши."""
+    return unfold(FacadeSheet(spec=spec, facades=[SideFacade(side=s) for s in plan.sides]))
 
 
 def _prepare(req: PlanRun, svg: str, out: Path, cfg: Config) -> FacadeSheet:
@@ -108,13 +107,14 @@ def _prepare(req: PlanRun, svg: str, out: Path, cfg: Config) -> FacadeSheet:
                                        ensure_ascii=False, indent=2))
     (out / PLAN_JSON).write_text(plan.model_dump_json(indent=2))
     (out / PLAN_SVG).write_text(plan_svg(plan, cfg))
-    bare = walls(spec, plan, cfg)
-    (out / UNFOLD).write_text(sheet_svg(bare, cfg))
+    bare = walls(spec, plan)
+    (out / UNFOLD).write_text(sheet_svg(bare, cfg, annotations=False))
     return bare
 
 
 def _finish(sheet: FacadeSheet, out: Path, cfg: Config, extra: dict) -> Path:
-    """Шаг 6 и meta.json: лист, JSON, PNG; extra — поля прогона."""
+    """Шаг 6 и meta.json: крыша, лист, JSON, PNG; extra — поля прогона."""
+    sheet = add_roof(sheet, cfg.library.roof.thickness_m)
     (out / SHEET).write_text(sheet_svg(sheet, cfg))
     (out / SHEET_JSON).write_text(sheet.model_dump_json(indent=2))
     has_png = to_png(out / SHEET, out / PREVIEW, cfg.sheet.preview.width_px)
