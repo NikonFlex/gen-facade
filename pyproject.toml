@@ -32,3 +32,5 @@ include = ["genfacade*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# общие данные тестов — tests/simple_house.py
+pythonpath = ["tests"]

@@ -1,21 +1,20 @@
 """Сервер смотрелки: список планов, запуск по плану, трасса, кэш страницы."""
 
-from pathlib import Path
-
 import pytest
 from fastapi.testclient import TestClient
+from simple_house import SIMPLE
 
 from genfacade import config
+from genfacade.schema import Mode
 from genfacade.viewer.app import create_app
 
-FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
-PLAN_RUN = {"plan": "simple_house", "text": "A simple one-storey house.", "mode": "blind"}
+PLAN_RUN = {"plan": SIMPLE.stem, "text": "A simple one-storey house.", "mode": Mode.BLIND}
 
 
 @pytest.fixture
 def client(tmp_path):
     (tmp_path / "viewer.toml").write_text(
-        f'[paths]\nruns_dir = "{tmp_path / "runs"}"\nplans_dirs = ["{FIXTURES}"]\n')
+        f'[paths]\nruns_dir = "{tmp_path / "runs"}"\nplans_dirs = ["{SIMPLE.parent}"]\n')
     return TestClient(create_app(config.load(tmp_path)))
 
 
@@ -30,8 +29,8 @@ def test_page_and_static_revalidated(client):
 
 
 def test_one_plan_listed_and_served(client):
-    assert client.get("/api/plans").json() == [{"name": "simple_house"}]
-    svg = client.get("/api/plans/simple_house")
+    assert client.get("/api/plans").json() == [{"name": SIMPLE.stem}]
+    svg = client.get(f"/api/plans/{SIMPLE.stem}")
     assert svg.status_code == 200 and svg.text.startswith("<?xml")
     assert client.get("/api/plans/nope").status_code == 404
 
@@ -47,7 +46,7 @@ def test_plan_run_traces_every_step(client):
 
 
 def test_plan_run_with_sent_svg(client):
-    svg = (FIXTURES / "simple_house.svg").read_text()
+    svg = SIMPLE.read_text()
     res = client.post("/api/runs", json={"plan_run": {**PLAN_RUN, "plan": "мой план"}, "svg": svg})
     assert res.status_code == 200
 

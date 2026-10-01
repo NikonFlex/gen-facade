@@ -148,7 +148,7 @@ def _door(arc: tuple[Point, Point, float], walls: list[Box]) -> DoorSwing:
     Дуга — четверть окружности из петли, концы на осях петли; петля — один из двух углов
     (p.x, q.y) или (q.x, p.y). Створка — прямоугольник радиус × LEAF_PX от петли до одного
     конца дуги, второй конец — край разрыва. Так во всех четырёх положениях створки
-    (tests/fixtures/genplan).
+    (tests/unit/test_genplan_svg.py).
     """
     p, q, r = arc
     for hinge in ((p[0], q[1]), (q[0], p[1])):

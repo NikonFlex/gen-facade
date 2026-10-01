@@ -1,11 +1,10 @@
 """Разбор SVG GenPlan на простом доме (tests/fixtures/simple_house.svg, нарисован кодом GenPlan)."""
 
 import pytest
+from simple_house import LEAF
 
 from genfacade.plan import genplan_svg
 from genfacade.plan.genplan_svg import Box, PlanError, parse
-
-LEAF = '<rect x="800" y="495" width="5" height="90" fill="#000000" />'  # створка входа
 
 
 def _swings(plan):

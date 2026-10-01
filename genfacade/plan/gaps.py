@@ -8,17 +8,28 @@
 """
 
 from dataclasses import dataclass
+from enum import Enum
 
 from genfacade.config import Gaps
 from genfacade.plan.genplan_svg import TOL_PX, Box
+from genfacade.schema import OpeningKind
 
-X, Y = 0, 1  # ось, вдоль которой идут стены и лежит разрыв
+
+class Axis(Enum):
+    """Ось, вдоль которой идут стены и лежит разрыв."""
+
+    X = "x"
+    Y = "y"
+
+    @property
+    def other(self) -> "Axis":
+        return Axis.Y if self is Axis.X else Axis.X
 
 
 @dataclass(frozen=True)
 class Gap:
     box: Box
-    axis: int
+    axis: Axis
 
     @property
     def length_px(self) -> float:
@@ -29,7 +40,7 @@ class Gap:
 class Found:
     """Проём в пикселях: разрыв и что в нём."""
 
-    kind: str  # window | door | entrance
+    kind: OpeningKind
     gap: Gap
     external: bool
 
@@ -37,7 +48,7 @@ class Found:
 def find_gaps(walls: list[Box], cfg: Gaps) -> list[Gap]:
     """Все разрывы, включая швы короче min_opening_px: они нужны, чтобы замкнуть контур."""
     gaps = []
-    for axis in (X, Y):
+    for axis in Axis:
         for a in walls:
             b = _nearest_collinear(a, walls, axis, cfg.min_band_overlap)
             if b is None:
@@ -48,23 +59,23 @@ def find_gaps(walls: list[Box], cfg: Gaps) -> list[Gap]:
     return gaps
 
 
-def _span(box: Box, axis: int) -> tuple[float, float]:
-    return (box.x0, box.x1) if axis == X else (box.y0, box.y1)
+def _span(box: Box, axis: Axis) -> tuple[float, float]:
+    return (box.x0, box.x1) if axis is Axis.X else (box.y0, box.y1)
 
 
-def _runs_along(box: Box, axis: int) -> bool:
+def _runs_along(box: Box, axis: Axis) -> bool:
     a0, a1 = _span(box, axis)
-    b0, b1 = _span(box, 1 - axis)
+    b0, b1 = _span(box, axis.other)
     return a1 - a0 >= b1 - b0
 
 
-def _band_overlap(a: Box, b: Box, axis: int) -> float:
+def _band_overlap(a: Box, b: Box, axis: Axis) -> float:
     """Перекрытие полос толщины, в долях более тонкой стены."""
-    (a0, a1), (b0, b1) = _span(a, 1 - axis), _span(b, 1 - axis)
+    (a0, a1), (b0, b1) = _span(a, axis.other), _span(b, axis.other)
     return (min(a1, b1) - max(a0, b0)) / min(a1 - a0, b1 - b0)
 
 
-def _nearest_collinear(a: Box, walls: list[Box], axis: int, min_overlap: float) -> Box | None:
+def _nearest_collinear(a: Box, walls: list[Box], axis: Axis, min_overlap: float) -> Box | None:
     """Ближайшая стена той же линии, начинающаяся дальше конца `a` по оси."""
     if not _runs_along(a, axis):
         return None
@@ -77,12 +88,12 @@ def _nearest_collinear(a: Box, walls: list[Box], axis: int, min_overlap: float) 
     return min(after, key=lambda b: _span(b, axis)[0], default=None)
 
 
-def _bridge(a: Box, b: Box, axis: int) -> Box:
+def _bridge(a: Box, b: Box, axis: Axis) -> Box:
     """Промежуток от конца `a` до начала `b` в общей полосе толщины."""
     lo, hi = _span(a, axis)[1], _span(b, axis)[0]
-    (a0, a1), (b0, b1) = _span(a, 1 - axis), _span(b, 1 - axis)
+    (a0, a1), (b0, b1) = _span(a, axis.other), _span(b, axis.other)
     t0, t1 = max(a0, b0), min(a1, b1)
-    return Box(lo, t0, hi, t1) if axis == X else Box(t0, lo, t1, hi)
+    return Box(lo, t0, hi, t1) if axis is Axis.X else Box(t0, lo, t1, hi)
 
 
 def _is_free(gap: Gap, walls: list[Box]) -> bool:
@@ -91,9 +102,9 @@ def _is_free(gap: Gap, walls: list[Box]) -> bool:
     Стена, которая только заходит в полосу толщины (внутренняя стена упирается в окно, —
     дефект GenPlan, plan-input.md «Открыто»), разрыв не закрывает.
     """
-    along, across = _span(gap.box, gap.axis), _span(gap.box, 1 - gap.axis)
+    along, across = _span(gap.box, gap.axis), _span(gap.box, gap.axis.other)
     for w in walls:
-        (w0, w1), (c0, c1) = _span(w, gap.axis), _span(w, 1 - gap.axis)
+        (w0, w1), (c0, c1) = _span(w, gap.axis), _span(w, gap.axis.other)
         inside = min(along[1], w1) - max(along[0], w0) > TOL_PX
         if inside and c0 <= across[0] + TOL_PX and c1 >= across[1] - TOL_PX:
             return False

@@ -17,13 +17,13 @@ from genfacade.render.sheet_format import num
 from genfacade.schema import (
     EPS,
     Element,
+    ElementClass,
     FacadeSheet,
     MaterialZone,
     Point,
     Polygon,
     SideFacade,
     Violation,
-    top_y,
 )
 from genfacade.unfold import plan_corners
 
@@ -108,7 +108,7 @@ def _pen(sheet: FacadeSheet, cfg: Config) -> Pen:
 
 
 def _top(facade: SideFacade) -> float:
-    return top_y(facade.silhouette or [])
+    return max(y for _, y in facade.silhouette or [])
 
 
 def _layout(sheet: FacadeSheet, lay: SheetLayout) -> tuple[list[tuple[float, float]], float, float]:
@@ -186,25 +186,22 @@ def _element(g: ElementTree.Element, e: Element, pen: Pen) -> None:
         attrs[sheet_format.VARIANT] = sheet_format.encode_variant(e.variant)
     if e.fixed:
         attrs[sheet_format.FIXED] = ",".join(e.fixed)
-    if e.cls == "window":
+    if e.cls is ElementClass.WINDOW:
         attrs["fill"] = lib.fill.glass  # материал окна красит раму
         if e.material:
             attrs["stroke"] = pen.colors[e.material]
     ElementTree.SubElement(g, "rect", attrs)
-    if e.cls == "window" and e.variant is not None:
+    if e.cls is ElementClass.WINDOW and e.variant is not None:
         _mullions(g, e)
 
 
 def _mullions(g: ElementTree.Element, e: Element) -> None:
     """Деление рамы на створки — линии поверх стекла, в разбор не входят."""
     v = e.variant
-    cuts = [("x", e.x_m + e.w_m * i / v.cols) for i in range(1, v.cols)]
-    cuts += [("y", e.y_m + e.h_m * j / v.rows) for j in range(1, v.rows)]
-    for axis, c in cuts:
-        if axis == "x":
-            add_line(g, "mullion", (c, e.y_m), (c, e.y_m + e.h_m))
-        else:
-            add_line(g, "mullion", (e.x_m, c), (e.x_m + e.w_m, c))
+    for x in (e.x_m + e.w_m * i / v.cols for i in range(1, v.cols)):
+        add_line(g, "mullion", (x, e.y_m), (x, e.y_m + e.h_m))
+    for y in (e.y_m + e.h_m * j / v.rows for j in range(1, v.rows)):
+        add_line(g, "mullion", (e.x_m, y), (e.x_m + e.w_m, y))
 
 
 def _axis_labels(sheet: FacadeSheet, letters: str) -> dict[int, tuple[str, str]]:

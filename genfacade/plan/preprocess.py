@@ -14,7 +14,7 @@ from genfacade.plan import sides
 from genfacade.plan.gaps import Found, Gap, find_gaps
 from genfacade.plan.genplan_svg import TOL_PX, Box, DoorSwing, GenPlanSvg, PlanError, parse
 from genfacade.plan.outline import outline
-from genfacade.schema import Mode, Plan, PlanOpening, Rect
+from genfacade.schema import Mode, OpeningKind, Plan, PlanOpening, PlanSource, Rect
 
 # Масштаб GenPlan: ширина входной двери — 90 см (three_dimensional/convertor.py:32,
 # DEFAULT_DOOR_WIDTH). Протокол, а не настройка: иначе фасад разойдётся с 3D-моделью.
@@ -27,10 +27,11 @@ def preprocess(svg: Path | str, mode: Mode, cfg: PlanConfig) -> Plan:
     gaps = find_gaps(raw.walls, cfg.gaps)
     ring = outline(raw.walls + raw.windows + [g.box for g in gaps], cfg.outline)
     found = _mark_entrance(_classify(raw, gaps, ring, cfg.gaps.min_opening_px))
-    entrance = next(f for f in found if f.kind == "entrance")
+    entrance = next(f for f in found if f.kind is OpeningKind.ENTRANCE)
     contour = sides.start_at(sides.Contour(ring, cfg.outline.jog_px), entrance.gap.box)
     scale = ENTRANCE_WIDTH_M / entrance.gap.length_px
-    sealed = [f for f in found if mode == "blind" and f.external and f.kind != "entrance"]
+    blind = mode is Mode.BLIND
+    sealed = [f for f in found if blind and f.external and f.kind is not OpeningKind.ENTRANCE]
     walls = raw.walls + [f.gap.box for f in sealed]
     open_ = [f for f in found if f.external and f not in sealed]
     return Plan(
@@ -39,7 +40,7 @@ def preprocess(svg: Path | str, mode: Mode, cfg: PlanConfig) -> Plan:
         openings=[_opening(f, scale, f in sealed) for f in found],
         sides=sides.build(contour, open_, walls, scale),
         scale_m_per_px=scale,
-        source="genplan",
+        source=PlanSource.GENPLAN,
     )
 
 
@@ -64,18 +65,19 @@ def _classify(raw: GenPlanSvg, gaps: list[Gap], ring: list, min_px: float) -> li
         external = box(g.box.x0, g.box.y0, g.box.x1, g.box.y1).distance(boundary) <= TOL_PX
         is_door = any(g.box.contains(d.hinge) and g.box.contains(d.jamb) for d in raw.doors)
         if is_door or external:
-            found.append(Found("door" if is_door else "window", g, external))
+            kind = OpeningKind.DOOR if is_door else OpeningKind.WINDOW
+            found.append(Found(kind, g, external))
     return found
 
 
 def _mark_entrance(found: list[Found]) -> list[Found]:
     """Вход — самая узкая наружная дверь, а без дверей — самый узкий наружный разрыв (правило 5)."""
     outer = [f for f in found if f.external]
-    doors = [f for f in outer if f.kind == "door"]
+    doors = [f for f in outer if f.kind is OpeningKind.DOOR]
     if not outer:
         raise PlanError("нет входа: на наружном контуре ни одного разрыва")
     entrance = min(doors or outer, key=lambda f: f.gap.length_px)
-    return [Found("entrance", f.gap, True) if f is entrance else f for f in found]
+    return [Found(OpeningKind.ENTRANCE, f.gap, True) if f is entrance else f for f in found]
 
 
 def _rect(b: Box, scale: float) -> Rect:

@@ -2,14 +2,14 @@
 
 Окна, чьи оси ближе snap_m, встают на одну ось и одну ширину; окна одного этажа — на одну
 линию низа и одну высоту. Заданное планом (`fixed`) не двигается — к нему тянутся остальные.
-Подоконник и наличник едут вместе со своим окном. Правило шага 4 и так выравнивает —
+Подоконник и наличник едут вместе со своим окном. Заготовки стаба шага 4 уже ровные —
 привязка нужна модели, её выход неточный.
 """
 
 from statistics import median
 
 from genfacade.config import Checks
-from genfacade.schema import EPS, Element, FacadeSheet, SideFacade
+from genfacade.schema import EPS, Element, ElementClass, FacadeSheet, FixedField, SideFacade
 
 
 def snap(sheet: FacadeSheet, cfg: Checks) -> FacadeSheet:
@@ -17,7 +17,7 @@ def snap(sheet: FacadeSheet, cfg: Checks) -> FacadeSheet:
 
 
 def snap_side(f: SideFacade, cfg: Checks) -> SideFacade:
-    windows = [e for e in f.elements if e.cls == "window"]
+    windows = [e for e in f.elements if e.cls is ElementClass.WINDOW]
     moved = {w.id: w for w in windows}
     for group in _clusters(windows, cfg.snap_m):
         x, w = _target(group)
@@ -60,7 +60,7 @@ def _target(group: list[Element]) -> tuple[float, float]:
 
     Двух заданных планом окон в группе не бывает: оси ближе snap_m — окна пересекались бы.
     """
-    fixed = [e for e in group if "x_m" in e.fixed]
+    fixed = [e for e in group if FixedField.X in e.fixed]
     if fixed:
         return fixed[0].x_m, fixed[0].w_m
     w = median(e.w_m for e in group)

@@ -1,22 +1,19 @@
-"""Общие фикстуры: всё — на одном простом доме (tests/fixtures/simple_house.svg, gf#58).
+"""Общие фикстуры: всё — на одном простом доме (tests/simple_house.py, gf#58).
 
-План 10 × 5 м в формате GenPlan: вход 0.9 м и окна 1.2 м снизу, 1.0 м слева, 2.0 м сверху,
-1.5 м справа; дом и фасады — стабы моделей (genfacade/models/): один этаж, плоская крыша
-(других крыш пока нет — хозяин 01.10).
+Дом и фасады — стабы моделей (genfacade/models/): один этаж, плоская крыша (других крыш
+пока нет — хозяин 01.10).
 """
 
 import json
-from pathlib import Path
 
 import pytest
+from simple_house import SIMPLE
 
 from genfacade import config
 from genfacade.models import stub
 from genfacade.pipeline import walls
 from genfacade.plan.preprocess import preprocess
-from genfacade.schema import FacadeSheet
-
-SIMPLE = Path(__file__).parent / "fixtures" / "simple_house.svg"
+from genfacade.schema import FacadeSheet, Mode
 
 
 @pytest.fixture(scope="session")
@@ -28,7 +25,7 @@ def cfg() -> config.Config:
 @pytest.fixture
 def preprocess_svg(cfg):
     """Препроцессор с настройками по умолчанию: текст SVG или путь → Plan."""
-    def run(svg=SIMPLE, mode="with_openings"):
+    def run(svg=SIMPLE, mode=Mode.WITH_OPENINGS):
         return preprocess(svg, mode, cfg.plan)
 
     return run
@@ -53,7 +50,7 @@ def lay_out(cfg):
 
     svg — план вместо простого.
     """
-    def run(mode: str = "with_openings", svg=SIMPLE) -> FacadeSheet:
+    def run(mode: Mode = Mode.WITH_OPENINGS, svg=SIMPLE) -> FacadeSheet:
         plan = preprocess(svg, mode, cfg.plan)
         house = stub.spec_model("")
         return stub.layout_all(walls(house, plan), stub.LayoutContext(house, mode, ""))

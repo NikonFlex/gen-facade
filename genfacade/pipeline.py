@@ -44,7 +44,7 @@ class PlanRun(BaseModel):
 
     plan: str
     text: str
-    mode: Mode = "with_openings"
+    mode: Mode = Mode.WITH_OPENINGS
 
 
 def new_run_dir(runs_dir: Path, name: str) -> Path:

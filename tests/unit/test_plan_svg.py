@@ -4,11 +4,12 @@ import re
 from xml.etree import ElementTree
 
 import pytest
+from simple_house import before_leaf
 
 from genfacade import config
-from genfacade.render.plan_svg import plan_svg
+from genfacade.render.plan_svg import PREFIX, Mark, plan_svg
+from genfacade.schema import Mode, OpeningKind
 
-LEAF = '<rect x="800" y="495" width="5" height="90" fill="#000000" />'
 INNER = '<rect x="500" y="115" width="10" height="285" fill="#000000" />'  # даёт запретную зону
 COLOR_WORDS = re.compile(r"зел[её]н|голуб|красн|оранж|коричн|сер(ый|ая)|син", re.IGNORECASE)
 
@@ -16,22 +17,22 @@ COLOR_WORDS = re.compile(r"зел[её]н|голуб|красн|оранж|ко�
 @pytest.fixture
 def plan_tree(preprocess_svg, simple_svg, cfg):
     """План простого дома в глухом режиме с внутренней стеной: на нём есть все классы."""
-    plan = preprocess_svg(simple_svg((LEAF, INNER + LEAF)), mode="blind")
+    plan = preprocess_svg(simple_svg(before_leaf(INNER)), mode=Mode.BLIND)
     return ElementTree.fromstring(plan_svg(plan, cfg))
 
 
 def _classes(nodes) -> set[str]:
-    return {n.get("class") for n in nodes if n.get("class", "").startswith("plan-")}
+    return {n.get("class") for n in nodes if n.get("class", "").startswith(PREFIX)}
 
 
 def _legend(tree):
-    return next(g for g in tree.findall(".//{*}g") if g.get("class") == "plan-legend-box")
+    return next(g for g in tree.findall(".//{*}g") if g.get("class") == Mark.LEGEND_BOX)
 
 
 def test_every_drawn_class_has_legend_entry(plan_tree):
     drawing = next(g for g in plan_tree.findall(".//{*}g") if g.get("transform"))
-    drawn = _classes(drawing.iter()) - {"plan-outline"}
-    assert drawn == {"plan-wall", "plan-entrance", "plan-sealed", "plan-forbidden"}
+    drawn = _classes(drawing.iter()) - {Mark.OUTLINE}
+    assert drawn == {Mark.WALL, PREFIX + OpeningKind.ENTRANCE, Mark.SEALED, Mark.FORBIDDEN}
     assert drawn <= _classes(_legend(plan_tree).iter())
     # и тот же вид фигуры: запретная зона — линия, у её класса в CSS нет заливки
     shape = {n.get("class"): _tag(n) for n in drawing.iter() if n.get("class") in drawn}
@@ -46,7 +47,7 @@ def _tag(node) -> str:
 def test_legend_swatches_take_color_only_from_css(plan_tree, cfg):
     """Образец — тот же класс, что на чертеже, без своего fill/stroke: цвет живёт в одном месте."""
     swatches = [n for n in _legend(plan_tree) if n.tag.endswith(("rect", "line"))]
-    assert [n.get("class") for n in swatches] == [f"plan-{k}" for k in cfg.sheet.plan.legend]
+    assert [n.get("class") for n in swatches] == [PREFIX + k for k in cfg.sheet.plan.legend]
     assert all(n.get("fill") is None and n.get("stroke") is None for n in swatches)
 
 

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from genfacade.schema import FacadeSheet, Plan
+from genfacade.schema import ElementClass, FacadeSheet, Plan
 
 
 def test_fixtures_load(house):
@@ -24,7 +24,7 @@ def test_unknown_material_rejected(raw_house):
 
 def test_unknown_parent_rejected(raw_house):
     raw = raw_house
-    sill = next(e for e in raw["facades"][0]["elements"] if e["cls"] == "sill")
+    sill = next(e for e in raw["facades"][0]["elements"] if e["cls"] == ElementClass.SILL)
     sill["parent"] = "w99"
     with pytest.raises(ValidationError, match="w99"):
         FacadeSheet.model_validate(raw)
