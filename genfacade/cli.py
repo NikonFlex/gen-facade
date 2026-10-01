@@ -1,13 +1,14 @@
-"""Командная строка: genfacade run <план.svg> --text …, genfacade serve."""
+"""Командная строка: genfacade run <план.svg> --text …, genfacade serve, genfacade synth."""
 
 import argparse
 import sys
 from pathlib import Path
 
 from genfacade import config, pipeline
+from genfacade.datasets import store, synthetic
 from genfacade.models.stub import ModelError
 from genfacade.plan.genplan_svg import PlanError
-from genfacade.schema import Mode
+from genfacade.schema import Mode, Source
 
 
 def run(args: argparse.Namespace) -> Path:
@@ -16,6 +17,15 @@ def run(args: argparse.Namespace) -> Path:
     req = pipeline.PlanRun(plan=str(args.plan), text=args.text, mode=args.mode)
     out = args.out or pipeline.new_run_dir(cfg.viewer.paths.runs_dir, args.plan.stem)
     return pipeline.generate(req, args.plan.read_text(), out, cfg)
+
+
+def synth(args: argparse.Namespace) -> Path:
+    """Синтетические дома по seed подряд → примеры и опись источника (data.md, правило 10)."""
+    cfg = config.load(args.config)
+    root = cfg.data.paths.samples_dir
+    for seed in range(args.first_seed, args.first_seed + args.count):
+        store.write(synthetic.sample(seed, cfg), root)
+    return store.write_manifest(root, Source.SYNTHETIC)
 
 
 def serve(config_dir: Path | None) -> None:
@@ -42,8 +52,13 @@ def main(argv: list[str] | None = None) -> None:
     g.add_argument("-o", "--out", type=Path,
                    help="папка прогона; по умолчанию runs_dir/<время>-<имя>")
     sub.add_parser("serve", help="смотрелка прогонов в браузере")
+    s = sub.add_parser("synth", help="синтетические дома → примеры датасета и опись")
+    s.add_argument("-n", "--count", type=int, required=True, help="сколько домов")
+    s.add_argument("--first-seed", type=int, default=0, help="seed первого дома; дальше подряд")
     args = parser.parse_args(argv)
-    if args.command == "run":
+    if args.command == "synth":
+        print(synth(args))
+    elif args.command == "run":
         try:
             print(run(args))
         except PlanError as e:

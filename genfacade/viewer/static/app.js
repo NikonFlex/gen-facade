@@ -290,13 +290,15 @@ async function openRun(id, step = null) {
 function renderHead() {
   const m = state.meta, id = state.runId, file = (f) => `/files/${id}/${f}`;
   $("back-btn").innerHTML = `${ICON.back}<span>${$("tabs").querySelector(`[data-tab=${tabOfRun()}]`).textContent}</span>`;
-  $("run-title").textContent = runName(id);
-  document.title = `${runName(id)} · GenFacade`;
+  // У примера датасета имя — его id: в нём номер, который runName принял бы за суффикс прогона.
+  const title = m.sample ? m.sample.id : runName(id);
+  $("run-title").textContent = title;
+  document.title = `${title} · GenFacade`;
   $("run-chips").innerHTML = [
     `<span class="chip">${fmtDate(m.date)}</span>`,
     m.git_sha ? `<span class="chip">коммит <code>${m.git_sha.slice(0, 7)}</code></span>` : "",
-    `<span class="chip" title="${m.source}">${m.source.split("/").at(-1)}</span>`,
-    m.sample ? `<span class="chip">${m.sample.source} · ${m.sample.split}</span>` : "",
+    m.sample ? `<span class="chip">${m.sample.source} · ${m.sample.split}</span>`
+      : `<span class="chip" title="${m.source}">${m.source.split("/").at(-1)}</span>`,
   ].join("");
   const sheet = m.steps.find((s) => s.n === 6)?.file;
   const links = [[sheet, "SVG"], [m.sheet_json, "JSON"], [m.preview, "PNG"]].filter(([f]) => f)

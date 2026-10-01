@@ -1,4 +1,5 @@
-"""Настройки, вынесенные из кода: материалы, лист, смотрелка, план, проверка, данные.
+"""Настройки, вынесенные из кода: материалы, лист, смотрелка, план, проверка, данные,
+синтетика.
 
 По умолчанию — файлы этой папки. Свой конфиг — папка с любыми из тех же файлов:
 TOML сливается с умолчаниями поключно, sheet.css дописывается после умолчаний
@@ -164,6 +165,48 @@ class Data(Section):
     paths: DataPaths
 
 
+Range = tuple[float, float]
+
+
+class Canvas(Section):
+    px_per_m: int
+    margin_m: float
+
+
+class HouseSize(Section):
+    width_m: Range
+    depth_m: Range
+    grid_m: float
+    wall_m: float
+
+
+class OpeningRules(Section):
+    grid_m: float
+    corner_clear_m: float
+    between_m: float
+    window_widths_m: list[float]
+    widths_per_house: int
+    per_bay_weights: list[float]
+    entrance_long_p: float
+    blind_long_p: float
+    blind_short_p: float
+
+
+class Partitions(Section):
+    max_count: int
+    min_room_m: float
+    passage_m: float
+
+
+class Synthetic(Section):
+    """Генератор синтетических домов (config/synthetic.toml, specs/data.md, правило 1)."""
+
+    canvas: Canvas
+    house: HouseSize
+    openings: OpeningRules
+    partitions: Partitions
+
+
 class Config(Section):
     library: Library
     sheet: Sheet
@@ -171,6 +214,7 @@ class Config(Section):
     plan: PlanConfig
     checks: Checks
     data: Data
+    synthetic: Synthetic
     css: str
 
 
@@ -186,6 +230,7 @@ def load(user_dir: Path | None = None) -> Config:
         plan=PlanConfig(**_toml("plan.toml", user_dir)),
         checks=Checks(**_toml("checks.toml", user_dir)),
         data=Data(**_toml("data.toml", user_dir)),
+        synthetic=Synthetic(**_toml("synthetic.toml", user_dir)),
         css=css,
     )
 
