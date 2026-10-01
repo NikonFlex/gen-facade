@@ -15,17 +15,21 @@ from pydantic import BaseModel
 
 from genfacade import pipeline
 from genfacade.config import Config
+from genfacade.plan.genplan_svg import PlanError
 from genfacade.schema import FacadeSheet
 
 STATIC = files(__package__).joinpath("static")
 
 
 class RunRequest(BaseModel):
-    """Запустить дом из списка (house) или присланный JSON (sheet) под именем name."""
+    """Запустить дом из списка (house), присланный JSON (sheet) под именем name или
+    план с описанием (plan_run): план — из списка по имени или присланный SVG (svg)."""
 
     house: str | None = None
     sheet: FacadeSheet | None = None
     name: str = "house"
+    plan_run: pipeline.PlanRun | None = None
+    svg: str | None = None
 
 
 def create_app(cfg: Config) -> FastAPI:
@@ -67,12 +71,46 @@ def _api(app: FastAPI, cfg: Config, runs_dir: Path) -> None:
     def run_meta(run_id: str) -> dict:
         return json.loads((_run_dir(runs_dir, run_id) / pipeline.META).read_text())
 
+    @app.get("/api/plans")
+    def plans() -> list[dict]:
+        return [{"name": name} for name in _plans(cfg)]
+
+    @app.get("/api/plans/{name}")
+    def plan_file(name: str) -> FileResponse:
+        found = _plans(cfg)
+        if name not in found:
+            raise HTTPException(404, f"нет плана {name!r}")
+        return FileResponse(str(found[name]), media_type="image/svg+xml")
+
     @app.post("/api/runs")
     def start(req: RunRequest) -> dict:
+        if req.plan_run is not None:
+            return {"id": _start_plan(req.plan_run, req.svg, cfg).name}
         house, name, source = _resolve(req, cfg)
         out = pipeline.new_run_dir(runs_dir, name)
         pipeline.run(house, out, cfg, source=source)
         return {"id": out.name}
+
+
+def _plans(cfg: Config) -> dict[str, Path]:
+    found = {}
+    for folder in cfg.viewer.paths.plans_dirs:
+        for path in sorted(folder.glob("*.svg")):
+            found.setdefault(path.stem, path)
+    return found
+
+
+def _start_plan(run: pipeline.PlanRun, svg: str | None, cfg: Config) -> Path:
+    """План из списка по имени или присланный SVG; дефектный план — 400 с причиной."""
+    plans = _plans(cfg)
+    if svg is None and run.plan not in plans:
+        raise HTTPException(404, f"нет плана {run.plan!r}")
+    text = svg if svg is not None else plans[run.plan].read_text()
+    out = pipeline.new_run_dir(cfg.viewer.paths.runs_dir, Path(run.plan).stem)
+    try:
+        return pipeline.generate(run, text, out, cfg)
+    except PlanError as e:
+        raise HTTPException(400, f"план отклонён: {e}") from e
 
 
 def _houses(cfg: Config) -> dict[str, Path]:

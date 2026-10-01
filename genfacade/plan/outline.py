@@ -17,6 +17,8 @@ STRAY_AREA = 0.05  # доля площади: отдельный кусок бо
 
 def outline(pieces: list[Box], jog_px: float) -> Polygon:
     """Контур по часовой стрелке (оси с y вверх) без ступенек короче jog_px."""
+    if not pieces:
+        raise PlanError("в плане нет ни одной стены")
     shape = unary_union([box(b.x0, b.y0, b.x1, b.y1) for b in pieces])
     if isinstance(shape, MultiPolygon):
         parts = sorted(shape.geoms, key=lambda g: g.area, reverse=True)

@@ -4,9 +4,10 @@ from pathlib import Path
 import pytest
 
 from genfacade import config
-from genfacade.layout.rule import LayoutContext, place
+from genfacade.layout.rule import LayoutContext, place_all
+from genfacade.pipeline import walls
 from genfacade.plan.preprocess import preprocess
-from genfacade.schema import FacadeSheet, HouseSpec, SideFacade
+from genfacade.schema import FacadeSheet, HouseSpec
 from genfacade.unfold import unfold
 
 FIXTURES = {p.stem: p for p in sorted((Path(__file__).parent / "fixtures").glob("house_*.json"))}
@@ -119,10 +120,7 @@ def lay_out(cfg):
     def run(svg, variant: str = "house", mode: str = "with_openings") -> FacadeSheet:
         house, rule = _variant(cfg, variant)
         plan = preprocess(svg, mode, cfg.plan)
-        bare = FacadeSheet(spec=house, facades=[SideFacade(side=s) for s in plan.sides])
-        sheet = unfold(bare, cfg.library.roof.thickness_m)
-        ctx = LayoutContext(house, mode, "")
-        return sheet.model_copy(update={"facades": [place(f, ctx, rule) for f in sheet.facades]})
+        return place_all(walls(house, plan, cfg), LayoutContext(house, mode, ""), rule)
 
     return run
 

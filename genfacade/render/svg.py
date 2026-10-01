@@ -22,6 +22,7 @@ from genfacade.schema import (
     Point,
     Polygon,
     SideFacade,
+    Violation,
     top_y,
 )
 from genfacade.unfold import plan_corners, ridge_height
@@ -71,8 +72,12 @@ def canvas(width: float, height: float, css: str) -> ElementTree.Element:
     return root
 
 
-def sheet_svg(sheet: FacadeSheet, cfg: Config) -> str:
-    """Лист всех фасадов; силуэты должны быть посчитаны (unfold)."""
+def sheet_svg(sheet: FacadeSheet, cfg: Config, violations: list[Violation] | None = None) -> str:
+    """Лист всех фасадов; силуэты должны быть посчитаны (unfold).
+
+    violations — для трассы шагов 4–5: поверх листа запретные зоны и нарушения валидатора.
+    Слой без data-cls, поэтому разбор листа его не видит.
+    """
     cells, width, height = _layout(sheet, cfg.sheet.sheet)
     mm_per_m = 1000 / cfg.sheet.sheet.scale
     root = canvas(width, height, cfg.css)
@@ -81,7 +86,9 @@ def sheet_svg(sheet: FacadeSheet, cfg: Config) -> str:
     pen = _pen(sheet, cfg)
     axes, levels = _axis_labels(sheet, cfg.sheet.axes.letters), _levels(sheet, cfg.sheet.levels)
     for facade, origin in zip(sheet.facades, cells, strict=True):
-        _facade_geometry(root, facade, origin, pen)
+        g = _facade_geometry(root, facade, origin, pen)
+        if violations is not None:
+            _overlay(g, facade, [v for v in violations if v.side == facade.side.index])
         marks = Marks(levels, axes[facade.side.index], cfg.sheet)
         _annotations(root, origin, facade.side.length_m, marks)
     ElementTree.indent(root)
@@ -116,7 +123,8 @@ def _layout(sheet: FacadeSheet, lay: SheetLayout) -> tuple[list[tuple[float, flo
     return cells, lay.margin_left_m + lay.columns * col_w, lay.margin_top_m + rows * row_h
 
 
-def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin, pen: Pen) -> None:
+def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
+                     pen: Pen) -> ElementTree.Element:
     ox, oy = origin
     g = ElementTree.SubElement(root, "g", {
         "class": sheet_format.FACADE_CLASS, sheet_format.SIDE: str(facade.side.index),
@@ -134,6 +142,26 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin, pen:
                                      "fill": pen.roof})
     for e in facade.elements:
         _element(g, e, pen)
+    return g
+
+
+def _overlay(g: ElementTree.Element, facade: SideFacade, violations: list[Violation]) -> None:
+    """Запретные зоны — полосой во всю высоту стены; нарушение — рамкой вокруг элемента,
+    а без элемента (углы, проём плана) — рамкой по стене."""
+    top = _top(facade)
+    for z in facade.side.forbidden:
+        _box(g, "forbidden-zone", (z.x0_m, 0.0, z.x1_m - z.x0_m, top))
+    boxes = {e.id: (e.x_m, e.y_m, e.w_m, e.h_m) for e in facade.elements}
+    for v in violations:
+        box = boxes.get(v.element or "", (0.0, 0.0, facade.side.length_m, top))
+        node = _box(g, f"violation {v.severity}", box)
+        ElementTree.SubElement(node, "title").text = f"{v.rule}: {v.message}"
+
+
+def _box(g: ElementTree.Element, css_class: str, box: tuple[float, ...]) -> ElementTree.Element:
+    x, y, w, h = box
+    return ElementTree.SubElement(g, "rect", {"class": css_class, "x": num(x), "y": num(y),
+                                              "width": num(w), "height": num(h)})
 
 
 def _zone(g: ElementTree.Element, z: MaterialZone, pen: Pen) -> None:

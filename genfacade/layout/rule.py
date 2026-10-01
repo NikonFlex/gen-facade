@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from genfacade.config import LayoutRule
 from genfacade.layout import decor, openings
 from genfacade.layout.zones import palette_roles, zones
-from genfacade.schema import HouseSpec, Mode, SideFacade
+from genfacade.schema import FacadeSheet, HouseSpec, Mode, SideFacade
 
 
 @dataclass(frozen=True)
@@ -33,3 +33,8 @@ def place(wall: SideFacade, ctx: LayoutContext, rule: LayoutRule) -> SideFacade:
     ]
     return wall.model_copy(update={"elements": elements,
                                    "zones": zones(wall, spec, doors, rule)})
+
+
+def place_all(sheet: FacadeSheet, ctx: LayoutContext, rule: LayoutRule) -> FacadeSheet:
+    """Все стены дома при одном контексте (generation.md, п. 8)."""
+    return sheet.model_copy(update={"facades": [place(f, ctx, rule) for f in sheet.facades]})

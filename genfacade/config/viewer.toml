@@ -8,3 +8,5 @@ port = 8000
 runs_dir = "outputs/runs"
 # Откуда брать дома для запуска. Пока — тестовые дома этапа 0; позже — примеры из данных.
 houses_dirs = ["tests/fixtures"]
+# SVG-планы GenPlan для запуска «план + описание»: пример и тестовые коробки
+plans_dirs = ["materials", "tests/fixtures/genplan"]

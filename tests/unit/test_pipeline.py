@@ -1,7 +1,11 @@
 import json
+from pathlib import Path
 
-from genfacade import pipeline
+import pytest
+
+from genfacade import cli, pipeline
 from genfacade.render.parse import parse_sheet_svg
+from genfacade.schema import HouseSpec, Plan
 
 
 def test_trace_has_every_step_file(load_house, cfg, tmp_path):
@@ -26,3 +30,72 @@ def test_run_dirs_do_not_collide(tmp_path):
     first.mkdir()
     second = pipeline.new_run_dir(tmp_path, "дом 1")
     assert second != first and pipeline.RUN_ID.match(second.name)
+
+
+HOUSE = Path(__file__).parents[2] / "tests" / "fixtures" / "genplan" / "house.svg"
+TEXT = "Two-storey classic house with a gable roof."
+
+
+def _generate(cfg, out, mode="with_openings"):
+    req = pipeline.PlanRun(plan=str(HOUSE), text=TEXT, mode=mode)
+    return pipeline.generate(req, HOUSE.read_text(), out, cfg)
+
+
+def test_plan_run_traces_all_six_steps(cfg, tmp_path):
+    out = _generate(cfg, tmp_path / "run", mode="blind")
+    meta = json.loads((out / pipeline.META).read_text())
+    assert meta["kind"] == "plan" and meta["request"]["mode"] == "blind"
+    assert all(s["file"] and (out / s["file"]).stat().st_size > 0 for s in meta["steps"])
+    # шаг 1 до модели: дом из config/house.json, текст не читается — меняется только конёк по плану
+    spec = HouseSpec.model_validate(json.loads((out / pipeline.SPEC).read_text())["spec"])
+    assert spec == pipeline.ridge_along_longest(cfg.house, spec_sides(out))
+    assert json.loads((out / pipeline.VIOLATIONS).read_text()) == []
+    assert (out / pipeline.INPUT_PLAN).read_text() == HOUSE.read_text()
+
+
+def spec_sides(out):
+    return Plan.model_validate_json((out / pipeline.PLAN_JSON).read_text()).sides
+
+
+def test_text_does_not_change_house(cfg, tmp_path):
+    """Текст сохраняется в запросе, но до модели не читается: дом один и тот же."""
+    specs = []
+    for i, text in enumerate(["A one-storey flat-roofed cabin.", "Five-storey apartment block."]):
+        req = pipeline.PlanRun(plan=str(HOUSE), text=text)
+        out = pipeline.generate(req, HOUSE.read_text(), tmp_path / f"run{i}", cfg)
+        assert json.loads((out / pipeline.REQUEST).read_text())["text"] == text
+        specs.append((out / pipeline.SPEC).read_text())
+    assert specs[0] == specs[1]
+
+
+def test_violations_marked_on_step_5_only(cfg, tmp_path):
+    # режим 2: окно плана в запретной зоне — дефект GenPlan, как в примере
+    out = _generate(cfg, tmp_path / "run")
+    violations = json.loads((out / pipeline.VIOLATIONS).read_text())
+    assert {v["rule"] for v in violations} == {"forbidden"}
+    snapped = (out / pipeline.SNAPPED).read_text()
+    assert snapped.count('class="violation error"') == len(violations)
+    assert 'class="violation' not in (out / pipeline.SHEET).read_text()
+    assert 'class="forbidden-zone"' in (out / pipeline.LAYOUT).read_text()
+
+
+def test_errors_counted_in_meta(cfg, tmp_path):
+    """Брак не перегенерируется — правило детерминировано; число нарушений — в meta.json."""
+    out = _generate(cfg, tmp_path / "run")
+    meta = json.loads((out / pipeline.META).read_text())
+    assert (meta["errors"], meta["warnings"]) == (2, 0)  # окно плана в запретной зоне, 2 этажа
+    assert "seed" not in meta["request"]
+
+
+def test_ridge_along_longest_side(cfg, tmp_path):
+    spec = json.loads((_generate(cfg, tmp_path / "run") / pipeline.SPEC).read_text())["spec"]
+    # дом: 4 м вдоль x, 3 м вдоль y
+    assert spec["roof"]["ridge_axis"] == "x"
+
+
+def test_cli_rejects_defective_plan(tmp_path):
+    bad = tmp_path / "bad.svg"
+    bad.write_text('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">'
+                   '<rect x="1" y="1" width="5" height="1" fill="#000000"/></svg>')
+    with pytest.raises(SystemExit, match="план отклонён: контур не замкнулся"):
+        cli.main(["run", str(bad), "-t", "house", "-o", str(tmp_path / "run")])

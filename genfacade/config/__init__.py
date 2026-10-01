@@ -166,7 +166,6 @@ class Checks(Section):
     eps_m: float
     align_m: float
     snap_m: float
-    max_attempts: int
 
 
 class Server(Section):
@@ -177,6 +176,7 @@ class Server(Section):
 class ViewerPaths(Section):
     runs_dir: Path
     houses_dirs: list[Path]
+    plans_dirs: list[Path]
 
 
 class Viewer(Section):
