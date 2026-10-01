@@ -49,7 +49,7 @@
 
 | Поле | Значение |
 |---|---|
-| `cls` | класс: 11 классов объектов CMP (`window`, `pillar`, `sill`, `blind`, `deco`, `cornice`, `balcony`, `molding`, `shop`, `facade`, `door`; двенадцатый класс CMP — фон масок) + для коттеджей `garage_door`, `porch`, `chimney` `DECISION 2026-09-28` |
+| `cls` | класс: 11 классов объектов CMP (`window`, `pillar`, `sill`, `blind`, `deco`, `cornice`, `balcony`, `molding`, `shop`, `facade`, `door`; двенадцатый класс CMP — фон масок) + для коттеджей `garage_door`, `porch`, `chimney` `DECISION 2026-09-28`, `canopy` — козырёк над входом *(дельта 01.10, хозяин 01.10: крыльцо и козырёк — на простом одноэтажном доме)* |
 | `id` | уникален на стороне; на него ссылается `parent` *(дельта 29.09, gf#11)* |
 | `x_m`, `y_m`, `w_m`, `h_m` | осевой прямоугольник в метрах; `y` от отметки нуля вверх; нуль — уровень земли, цоколь от 0 до `plinth_m` `DECISION 2026-09-29` |
 | `floor` | номер этажа |

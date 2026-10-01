@@ -35,8 +35,10 @@ def _wall(wall: SideFacade, spec: HouseSpec, look: Look, rules: Synthetic) -> Si
     # порядок — порядок отрисовки: наличник под окном, подоконник и карниз поверх стены
     elements = [
         *(decor.casings(windows, cfg) if look.casing else []), *windows, *doors,
-        *decor.sills(windows, cfg), decor.cornice(side.length_m, spec, cfg),
+        *decor.sills(windows, cfg),
+        *([decor.porch(d, spec, cfg) for d in doors] if look.porch else []),
+        *([decor.canopy(d, cfg) for d in doors] if look.canopy else []),
+        decor.cornice(side.length_m, spec, cfg),
     ]
-    marked = doors if look.accent else []
-    return wall.model_copy(update={
-        "elements": elements, "zones": zones.zones(side.length_m, spec, marked, cfg.accent)})
+    laid = wall.model_copy(update={"elements": elements})
+    return laid.model_copy(update={"zones": zones.zones(laid, spec, look, cfg.finish)})

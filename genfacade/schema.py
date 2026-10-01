@@ -37,6 +37,7 @@ class ElementClass(StrEnum):
     GARAGE_DOOR = "garage_door"
     PORCH = "porch"
     CHIMNEY = "chimney"
+    CANOPY = "canopy"
 
 
 class BuildingType(StrEnum):

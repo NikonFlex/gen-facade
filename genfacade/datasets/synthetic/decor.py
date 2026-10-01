@@ -1,4 +1,4 @@
-"""Декор уровня 2 (facade.md, правило 9): подоконники, наличники, карниз.
+"""Декор (facade.md, правило 9): подоконники, наличники, карниз; у входа — крыльцо и козырёк.
 
 Материал декора — роль `trim` палитры. Наличник рисуется под окном: в списке элементов
 он раньше окна, и окно ложится поверх.
@@ -21,6 +21,21 @@ def casings(windows: list[Element], rules: FacadeRules) -> list[Element]:
     c = rules.casing.width_m
     return [_trim(w, ElementClass.MOLDING, "m", (w.x_m - c, w.y_m, w.w_m + 2 * c, w.h_m + c))
             for w in windows if not _panoramic(w)]
+
+
+def porch(door: Element, spec: HouseSpec, rules: FacadeRules) -> Element:
+    """Крыльцо — площадка перед дверью на высоту цоколя."""
+    pad = rules.entry.porch_pad_m
+    return Element(id=f"p_{door.id}", cls=ElementClass.PORCH, x_m=door.x_m - pad, y_m=0.0,
+                   w_m=door.w_m + 2 * pad, h_m=spec.plinth_m, floor=1, parent=door.id,
+                   material=PaletteRole.PLINTH)
+
+
+def canopy(door: Element, rules: FacadeRules) -> Element:
+    e = rules.entry
+    return _trim(door, ElementClass.CANOPY, "k", (
+        door.x_m - e.canopy_pad_m, door.y_m + door.h_m + e.canopy_gap_m,
+        door.w_m + 2 * e.canopy_pad_m, e.canopy_m))
 
 
 def _trim(w: Element, cls: ElementClass, tag: str, box: tuple[float, ...]) -> Element:

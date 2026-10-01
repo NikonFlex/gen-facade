@@ -212,6 +212,10 @@ class Windows(Section):
     sash_max_w_m: float
     transom_min_h_m: float
     lintel_m: float
+    narrow_max_w_m: float
+    narrow_low: float
+    wide_min_w_m: float
+    wide_floor_p: float
 
 
 class Height(Section):
@@ -228,9 +232,21 @@ class Casing(Section):
     width_m: float
 
 
-class Accent(Section):
-    p: float
-    pad_m: float
+class Finish(Section):
+    weights: dict[str, float]  # ключи — схемы отделки (datasets/synthetic/zones.py, Scheme)
+    entrance_pad_m: float
+    wainscot_m: Range
+    corner_m: float
+    pier_max_m: float
+
+
+class Entry(Section):
+    porch_p: float
+    porch_pad_m: float
+    canopy_p: float
+    canopy_pad_m: float
+    canopy_gap_m: float
+    canopy_m: float
 
 
 class FacadeRules(Section):
@@ -239,7 +255,8 @@ class FacadeRules(Section):
     sill: Sill
     casing: Casing
     cornice: Height
-    accent: Accent
+    finish: Finish
+    entry: Entry
 
 
 class Synthetic(Section):

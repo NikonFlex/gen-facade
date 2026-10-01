@@ -38,6 +38,7 @@ shop = "Витрина"
 facade = "Фасад"
 porch = "Крыльцо"
 chimney = "Труба"
+canopy = "Козырёк"
 
 [labels.role]
 plinth = "Цоколь"
