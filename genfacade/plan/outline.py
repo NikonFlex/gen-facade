@@ -9,25 +9,24 @@ import math
 
 from shapely import MultiPolygon, box, unary_union
 
+from genfacade.config import Outline
 from genfacade.plan.genplan_svg import Box, PlanError
 from genfacade.schema import EPS, Point, Polygon, signed_area
 
-STRAY_AREA = 0.05  # доля площади: отдельный кусок больше — план из нескольких частей
 
-
-def outline(pieces: list[Box], jog_px: float) -> Polygon:
-    """Контур по часовой стрелке (оси с y вверх) без ступенек короче jog_px."""
+def outline(pieces: list[Box], cfg: Outline) -> Polygon:
+    """Контур по часовой стрелке (оси с y вверх) без ступенек короче cfg.jog_px."""
     if not pieces:
         raise PlanError("в плане нет ни одной стены")
     shape = unary_union([box(b.x0, b.y0, b.x1, b.y1) for b in pieces])
     if isinstance(shape, MultiPolygon):
         parts = sorted(shape.geoms, key=lambda g: g.area, reverse=True)
-        if parts[1].area > STRAY_AREA * parts[0].area:
+        if parts[1].area > cfg.stray_area * parts[0].area:
             raise PlanError(f"стены не связаны: {len(parts)} отдельных частей")
         shape = parts[0]
     if not shape.interiors:
         raise PlanError("контур не замкнулся: стены не окружают ни одного помещения")
-    ring = straighten(list(shape.exterior.coords)[:-1], jog_px)
+    ring = straighten(list(shape.exterior.coords)[:-1], cfg.jog_px)
     return ring if signed_area(ring) < 0 else ring[::-1]
 
 

@@ -35,7 +35,7 @@ def preprocess(svg: Path | str, mode: Mode, cfg: PlanConfig) -> Plan:
     """План GenPlan → Plan; дефектный план — PlanError с причиной (правило 7)."""
     raw = flip(parse(svg))
     gaps = find_gaps(raw.walls, cfg.gaps)
-    ring = outline(raw.walls + raw.windows + [g.box for g in gaps], cfg.outline.jog_px)
+    ring = outline(raw.walls + raw.windows + [g.box for g in gaps], cfg.outline)
     found = _mark_entrance(_classify(raw, gaps, ring, cfg.gaps.min_opening_px))
     entrance = next(f for f in found if f.kind == "entrance")
     contour = sides.start_at(sides.Contour(ring, cfg.outline.jog_px), entrance.gap.box)

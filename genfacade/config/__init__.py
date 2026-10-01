@@ -98,6 +98,7 @@ class Gaps(Section):
 
 class Outline(Section):
     jog_px: float
+    stray_area: float
 
 
 class PlanConfig(Section):
