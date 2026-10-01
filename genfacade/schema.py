@@ -227,3 +227,13 @@ class FacadeSheet(Model):
             if missing:
                 raise ValueError(f"сторона {f.side.index}: материалов нет в палитре — {missing}")
         return self
+
+
+class Violation(Model):
+    """Нарушение, найденное валидатором (evaluation.md, Violation)."""
+
+    rule: str
+    severity: Literal["error", "warning"]
+    side: int | None = None
+    element: str | None = None
+    message: str

@@ -160,6 +160,15 @@ class LayoutRule(Section):
     accent: Accent
 
 
+class Checks(Section):
+    """Шаг 5: допуски привязки и валидатора (config/checks.toml)."""
+
+    eps_m: float
+    align_m: float
+    snap_m: float
+    max_attempts: int
+
+
 class Server(Section):
     host: str
     port: int
@@ -182,6 +191,7 @@ class Config(Section):
     plan: PlanConfig
     house: HouseSpec  # шаг 1 до модели: параметры дома — отсюда, текст не читается
     layout: LayoutRule
+    checks: Checks
     css: str
 
 
@@ -197,6 +207,7 @@ def load(user_dir: Path | None = None) -> Config:
         plan=PlanConfig(**_toml("plan.toml", user_dir)),
         house=HouseSpec.model_validate_json(_file("house.json", user_dir)),
         layout=LayoutRule(**_toml("layout.toml", user_dir)),
+        checks=Checks(**_toml("checks.toml", user_dir)),
         css=css,
     )
 
