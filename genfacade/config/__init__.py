@@ -113,6 +113,53 @@ class PlanConfig(Section):
     outline: Outline
 
 
+class Windows(Section):
+    size: dict[str, tuple[float, float]]
+    level: str  # уровень высоты окон — один на все дома, пока нет модели
+    sash_max_w_m: float
+    transom_min_h_m: float
+    lintel_m: float
+
+
+class Blind(Section):
+    widths_m: list[float]
+    pitch_m: float
+    edge_m: float
+    clearance_m: float
+    min_gap_m: float
+
+
+class Casing(Section):
+    styles: list[str]
+    width_m: float
+
+
+class Height(Section):
+    height_m: float
+
+
+class Sill(Section):
+    overhang_m: float
+    height_m: float
+
+
+class Accent(Section):
+    entrance_pad_m: float
+
+
+class LayoutRule(Section):
+    """Правило шага 4: раскладка стены (config/layout.toml)."""
+
+    windows: Windows
+    blind: Blind
+    door: Height
+    sill: Sill
+    casing: Casing
+    cornice: Height
+    band: Height
+    accent: Accent
+
+
 class Server(Section):
     host: str
     port: int
@@ -134,6 +181,7 @@ class Config(Section):
     viewer: Viewer
     plan: PlanConfig
     house: HouseSpec  # шаг 1 до модели: параметры дома — отсюда, текст не читается
+    layout: LayoutRule
     css: str
 
 
@@ -148,6 +196,7 @@ def load(user_dir: Path | None = None) -> Config:
         viewer=Viewer(**_toml("viewer.toml", user_dir)),
         plan=PlanConfig(**_toml("plan.toml", user_dir)),
         house=HouseSpec.model_validate_json(_file("house.json", user_dir)),
+        layout=LayoutRule(**_toml("layout.toml", user_dir)),
         css=css,
     )
 
