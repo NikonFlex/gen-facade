@@ -21,20 +21,14 @@ class Section(BaseModel):
 
 class Fill(Section):
     wall: str
-    roof: str
     glass: str
     other: str
-
-
-class RoofLook(Section):
-    thickness_m: float
 
 
 class Library(Section):
     kinds: dict[str, str]
     fill: Fill
     class_fill: dict[str, str]
-    roof: RoofLook
 
 
 class SheetLayout(Section):
@@ -104,6 +98,7 @@ class Gaps(Section):
 
 class Outline(Section):
     jog_px: float
+    stray_area: float
 
 
 class PlanConfig(Section):

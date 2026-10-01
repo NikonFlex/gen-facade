@@ -6,13 +6,11 @@
 """
 
 import math
-from typing import TYPE_CHECKING, NamedTuple
+from typing import NamedTuple
 
+from genfacade.plan.gaps import Found
 from genfacade.plan.genplan_svg import TOL_PX, Box
 from genfacade.schema import ForbiddenZone, Opening, Point, Polygon, Side
-
-if TYPE_CHECKING:
-    from genfacade.plan.preprocess import Found
 
 
 class Contour(NamedTuple):
@@ -53,7 +51,7 @@ def start_at(c: Contour, entrance: Box) -> Contour:
     return Contour(c.ring[i:] + c.ring[:i], c.tol_px)
 
 
-def build(c: Contour, openings: list["Found"], walls: list[Box], scale: float) -> list[Side]:
+def build(c: Contour, openings: list[Found], walls: list[Box], scale: float) -> list[Side]:
     """Стороны в метрах: проёмы (наружные, не заделанные) и запретные зоны."""
     edges = [Edge(c.ring, i) for i in range(len(c.ring))]
     inner = [w for w in walls if not any(_on_line(e, w, c.tol_px) for e in edges)]
@@ -102,7 +100,7 @@ def _edge_of(c: Contour, b: Box) -> int:
     raise ValueError(f"проём {b} не лежит ни на одной стороне контура")
 
 
-def _opening(e: Edge, f: "Found", scale: float) -> Opening:
+def _opening(e: Edge, f: Found, scale: float) -> Opening:
     t0, t1 = e.span(f.gap.box)
     return Opening(kind=f.kind, x_m=(e.length - t1) * scale, width_m=(t1 - t0) * scale)
 

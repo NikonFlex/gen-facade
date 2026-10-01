@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1360" width="2800" height="2720" role="img"
-           aria-label="Фасадный модуль по шагам, модель на шагах 1 и 4, остальное код; модель раскладывает проёмы, зоны отделки и декор: 1 параметры дома из текста, 2 препроцессор плана GenPlan, 3 развёртка — прямоугольники стен без крыши, 4 модель ставит окна на каждую стену, 5 привязка к сетке и валидатор, 6 лист раскрашенных фасадов с крышей и отметками, 7 позже окна уходят в 3D-модель, которую делаем вместе с Егором">
+           aria-label="Фасадный модуль по шагам, модель на шагах 1 и 4, остальное код; модель раскладывает проёмы, зоны отделки и декор: 1 параметры дома из текста, 2 препроцессор плана GenPlan, 3 развёртка — прямоугольники стен без крыши, 4 модель ставит окна на каждую стену, 5 привязка к сетке и валидатор, 6 лист раскрашенных фасадов с отметками, 7 позже окна уходят в 3D-модель, которую делаем вместе с Егором">
         <rect width="1400" height="1360" fill="#FFFFFF"/><defs><style>
   .lane-egor { fill: #E1F1ED; }
   .lane-mine { fill: #EAEFFB; }
@@ -92,7 +92,7 @@
         <rect class="box" x="40" y="52" width="250" height="90" rx="6"/>
         <text class="t" x="56" y="74">Текст</text>
         <text class="m" x="56" y="96">«одноэтажный коттедж,</text>
-        <text class="m" x="56" y="113">современный, вальмовая</text>
+        <text class="m" x="56" y="113">современный, плоская</text>
         <text class="m" x="56" y="130">крыша, штукатурка, дерево»</text>
 
         <rect class="box-egor" x="330" y="58" width="320" height="76" rx="6"/>
@@ -152,7 +152,7 @@
         <text class="pill-tm" x="67" y="276">модель</text>
         <text class="lbl" x="58" y="304">тип</text><text class="m" x="150" y="304">коттедж</text>
         <text class="lbl" x="58" y="322">этажей</text><text class="m" x="150" y="322">1 · 2.7 м</text>
-        <text class="lbl" x="58" y="340">крыша</text><text class="m" x="150" y="340">вальмовая 30°</text>
+        <text class="lbl" x="58" y="340">крыша</text><text class="m" x="150" y="340">плоская</text>
         <text class="lbl" x="58" y="358">стиль</text><text class="m" x="150" y="358">современный</text>
         <text class="lbl lbl-ink" x="58" y="384">палитра</text>
         <rect class="zp" x="58" y="394" width="11" height="11"/><text class="lbl" x="75" y="403">штукатурка</text>
@@ -321,7 +321,6 @@
         <rect class="pill" x="1136" y="291" width="44" height="22" rx="11"/>
         <text class="pill-t" x="1147" y="306">код</text>
         <!-- фасад А -->
-        <polygon class="cr" points="1174,348 1346,348 1320,322 1200,322"/>
         <rect class="zp" x="1180" y="348" width="160" height="80"/>
         <rect class="zl" x="1180" y="348" width="44" height="71"/>
         <line class="lam" x1="1186" y1="348" x2="1186" y2="419"/><line class="lam" x1="1192" y1="348" x2="1192" y2="419"/><line class="lam" x1="1198" y1="348" x2="1198" y2="419"/><line class="lam" x1="1204" y1="348" x2="1204" y2="419"/><line class="lam" x1="1210" y1="348" x2="1210" y2="419"/><line class="lam" x1="1216" y1="348" x2="1216" y2="419"/>
@@ -337,7 +336,6 @@
         <text class="lv" x="1130" y="432">±0.000</text>
         <text class="side" x="1348" y="422">А</text>
         <!-- фасад Б -->
-        <polygon class="cr" points="1199,490 1321,490 1260,464"/>
         <rect class="zp" x="1205" y="490" width="110" height="80"/>
         <rect class="zs" x="1205" y="561" width="110" height="9"/>
         <rect class="fg" x="1220" y="504" width="26" height="34"/><line class="mul" x1="1233" y1="504" x2="1233" y2="538"/><line class="sill" x1="1218" y1="540" x2="1248" y2="540"/>
@@ -353,8 +351,8 @@
         <text class="s" x="1138" y="670">«ламели — дерево»</text>
         <text class="m" x="1138" y="704">SVG + JSON</text>
         <text class="s" x="1138" y="736">В и Г — так же</text>
-        <text class="s" x="1138" y="770">крыша, фронтон, отметки</text>
-        <text class="s" x="1138" y="788">и оси — только здесь</text>
+        <text class="s" x="1138" y="770">отметки уровней и оси —</text>
+        <text class="s" x="1138" y="788">только здесь</text>
 
         <!-- переходы между шагами -->
         <line class="flow" x1="300" y1="672" x2="336" y2="672" marker-end="url(#ah)"/>

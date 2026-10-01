@@ -25,7 +25,7 @@ from genfacade.schema import (
     Violation,
     top_y,
 )
-from genfacade.unfold import plan_corners, ridge_height
+from genfacade.unfold import plan_corners
 
 
 class Pen(NamedTuple):
@@ -33,7 +33,6 @@ class Pen(NamedTuple):
 
     cfg: Config
     colors: dict[str, str]  # id материала палитры → цвет
-    roof: str
 
 
 class Marks(NamedTuple):
@@ -74,7 +73,7 @@ def canvas(width: float, height: float, css: str) -> ElementTree.Element:
 
 def sheet_svg(sheet: FacadeSheet, cfg: Config, violations: list[Violation] | None = None,
               annotations: bool = True) -> str:
-    """Лист всех фасадов; силуэты должны быть посчитаны (unfold, на листе — и add_roof).
+    """Лист всех фасадов; силуэты стен должны быть посчитаны (unfold).
 
     violations — для трассы шагов 4–5: поверх листа запретные зоны и нарушения валидатора.
     Слой без data-cls, поэтому разбор листа его не видит. annotations — отметки, оси, земля
@@ -105,12 +104,11 @@ def _pen(sheet: FacadeSheet, cfg: Config) -> Pen:
         if m.color is None and m.kind not in kinds:
             raise ValueError(f"материал {m.id}: нет цвета, и вида {m.kind} нет в библиотеке")
         colors[m.id] = m.color or kinds[m.kind]
-    roof = colors.get(sheet.spec.roof.material or "", cfg.library.fill.roof)
-    return Pen(cfg, colors, roof)
+    return Pen(cfg, colors)
 
 
 def _top(facade: SideFacade) -> float:
-    return top_y(facade.silhouette or [], facade.roof or [])
+    return top_y(facade.silhouette or [])
 
 
 def _layout(sheet: FacadeSheet, lay: SheetLayout) -> tuple[list[tuple[float, float]], float, float]:
@@ -138,11 +136,8 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
                                  "fill": pen.cfg.library.fill.wall})
     for z in facade.zones:
         _zone(g, z, pen)
-    # Контур до крыши: свес закрывает верх стены, линия карниза не должна просвечивать.
+    # Контур — до элементов: карниз у края стены ложится поверх линии, а не под неё.
     ElementTree.SubElement(g, "polygon", {"class": "outline", "points": silhouette})
-    if facade.roof:
-        ElementTree.SubElement(g, "polygon", {"class": "roof", "points": points(facade.roof),
-                                     "fill": pen.roof})
     for e in facade.elements:
         _element(g, e, pen)
     return g
@@ -238,10 +233,9 @@ def _axis_labels(sheet: FacadeSheet, letters: str) -> dict[int, tuple[str, str]]
 
 
 def _levels(sheet: FacadeSheet, cfg: Levels) -> list[float]:
-    """Земля, цоколь, этажи, карниз, конёк — одни на все фасады дома."""
+    """Земля, цоколь, этажи, карниз — одни на все фасады дома."""
     spec = sheet.spec
     levels = [0.0, *spec.floor_levels(), spec.eaves_m]
-    levels.append(ridge_height(spec, [f.side for f in sheet.facades]))
     uniq: list[float] = []
     for v in sorted(levels):
         if not uniq or v - uniq[-1] > cfg.merge_below_m:

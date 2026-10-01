@@ -5,14 +5,13 @@
 вверх; в метры переводим в конце, когда известен вход.
 """
 
-from dataclasses import dataclass
 from pathlib import Path
 
 from shapely import LinearRing, box
 
 from genfacade.config import PlanConfig
 from genfacade.plan import sides
-from genfacade.plan.gaps import Gap, find_gaps
+from genfacade.plan.gaps import Found, Gap, find_gaps
 from genfacade.plan.genplan_svg import TOL_PX, Box, DoorSwing, GenPlanSvg, PlanError, parse
 from genfacade.plan.outline import outline
 from genfacade.schema import Mode, Plan, PlanOpening, Rect
@@ -22,20 +21,11 @@ from genfacade.schema import Mode, Plan, PlanOpening, Rect
 ENTRANCE_WIDTH_M = 0.9
 
 
-@dataclass(frozen=True)
-class Found:
-    """Проём в пикселях: разрыв и что в нём."""
-
-    kind: str  # window | door | entrance
-    gap: Gap
-    external: bool
-
-
 def preprocess(svg: Path | str, mode: Mode, cfg: PlanConfig) -> Plan:
     """План GenPlan → Plan; дефектный план — PlanError с причиной (правило 7)."""
     raw = flip(parse(svg))
     gaps = find_gaps(raw.walls, cfg.gaps)
-    ring = outline(raw.walls + raw.windows + [g.box for g in gaps], cfg.outline.jog_px)
+    ring = outline(raw.walls + raw.windows + [g.box for g in gaps], cfg.outline)
     found = _mark_entrance(_classify(raw, gaps, ring, cfg.gaps.min_opening_px))
     entrance = next(f for f in found if f.kind == "entrance")
     contour = sides.start_at(sides.Contour(ring, cfg.outline.jog_px), entrance.gap.box)

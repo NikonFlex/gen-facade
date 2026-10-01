@@ -19,9 +19,9 @@ from genfacade.plan.preprocess import preprocess
 from genfacade.render.plan_svg import plan_svg
 from genfacade.render.preview import to_png
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import FacadeSheet, HouseSpec, Mode, Plan, Side, SideFacade
+from genfacade.schema import FacadeSheet, HouseSpec, Mode, Plan, SideFacade
 from genfacade.snap import snap
-from genfacade.unfold import add_roof, unfold
+from genfacade.unfold import unfold
 from genfacade.validate import errors, validate
 
 # Семь шагов схемы (docs/assets/facade-modules.png); седьмой — позже, вместе с Егором.
@@ -82,13 +82,6 @@ def generate(req: PlanRun, svg: str, out: Path, cfg: Config) -> Path:
     return _finish(sheet, out, cfg, extra)
 
 
-def ridge_along_longest(spec: HouseSpec, sides: list[Side]) -> HouseSpec:
-    """Конёк — вдоль длинной стороны плана: ось зависит от плана, текст её не знает."""
-    longest = max(sides, key=lambda s: s.length_m)
-    roof = spec.roof.model_copy(update={"ridge_axis": "x" if longest.runs_along_x else "y"})
-    return spec.model_copy(update={"roof": roof})
-
-
 def walls(spec: HouseSpec, plan: Plan) -> FacadeSheet:
     """Шаг 3: пустые прямоугольники стен всех сторон плана, без крыши."""
     return unfold(FacadeSheet(spec=spec, facades=[SideFacade(side=s) for s in plan.sides]))
@@ -97,10 +90,10 @@ def walls(spec: HouseSpec, plan: Plan) -> FacadeSheet:
 def _prepare(req: PlanRun, svg: str, out: Path, cfg: Config) -> FacadeSheet:
     """Шаги 1–3: параметры дома, план, развёртка — с трассой.
 
-    Шаг 1 — модель (пока стаб): текст → HouseSpec; ось конька зависит от плана — её ставим тут.
+    Шаг 1 — модель (пока стаб): текст → HouseSpec.
     """
     plan = preprocess(svg, req.mode, cfg.plan)
-    spec = ridge_along_longest(stub.spec_model(req.text), plan.sides)
+    spec = stub.spec_model(req.text)
     # цвета — для смотрелки: у палитры без цвета берётся цвет вида из библиотеки
     colors = {m.id: m.color or cfg.library.kinds.get(m.kind) for m in spec.materials}
     (out / SPEC).write_text(json.dumps({"spec": spec.model_dump(), "colors": colors},
@@ -113,8 +106,7 @@ def _prepare(req: PlanRun, svg: str, out: Path, cfg: Config) -> FacadeSheet:
 
 
 def _finish(sheet: FacadeSheet, out: Path, cfg: Config, extra: dict) -> Path:
-    """Шаг 6 и meta.json: крыша, лист, JSON, PNG; extra — поля прогона."""
-    sheet = add_roof(sheet, cfg.library.roof.thickness_m)
+    """Шаг 6 и meta.json: лист, JSON, PNG; extra — поля прогона."""
     (out / SHEET).write_text(sheet_svg(sheet, cfg))
     (out / SHEET_JSON).write_text(sheet.model_dump_json(indent=2))
     has_png = to_png(out / SHEET, out / PREVIEW, cfg.sheet.preview.width_px)
