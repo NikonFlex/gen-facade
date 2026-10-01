@@ -154,32 +154,40 @@ function runCard(r) {
   return listItem(btn);
 }
 
-// ——— примеры датасета ———
+// ——— датасеты ———
 
 async function loadSamples() {
   const sources = await api("/api/samples");
-  $("samples-count").textContent = sources.reduce((n, s) => n + s.count, 0) || "";
-  const blocks = sources.map(sampleBlock);
-  $("samples").replaceChildren(...(blocks.length ? blocks : [el("p", { className: "empty-note", textContent: "Примеров пока нет." })]));
+  const blocks = sources.flatMap(sourceBlock);
+  $("samples").replaceChildren(...(blocks.length ? blocks : [el("p", { className: "empty-note", textContent: "Примеров пока нет — появятся после сборки датасета." })]));
 }
 
-function sampleBlock(s) {
-  const block = el("div", { className: "sample-block" }, `<h3>${s.source}<span class="count">${s.count}</span></h3>`);
-  const list = el("ul", { className: "sample-list" });
-  for (const id of s.ids) {
-    const btn = el("button", { className: "btn", textContent: id });
-    btn.addEventListener("click", () => openSample(s.source, id, btn).catch((err) => toast(err.message, "error")));
-    list.append(listItem(btn));
-  }
-  block.append(list);
-  if (s.count > s.ids.length) block.append(el("p", { className: "empty-note", textContent: `показаны первые ${s.ids.length}` }));
-  return block;
+// Источник: заголовок, опись числами и дома карточками; всё — из ответа сервера.
+function sourceBlock(s) {
+  const counts = (obj, label) => Object.entries(obj).map(([k, n]) => `<span class="chip">${label(k)} <b>${n}</b></span>`).join("");
+  const head = el("div", { className: "section-head" },
+    `<h2>${s.source}</h2>
+     <span class="section-note">опись на ${fmtDate(s.date)}${s.samples > s.ids.length ? ` · показаны первые ${s.ids.length}` : ""}</span>`);
+  const stats = el("div", { className: "dataset-stats" },
+    `<span class="chip">домов <b>${s.samples}</b></span><span class="chip">стен <b>${s.walls}</b></span>
+     ${counts(s.splits, (k) => k)}${counts(s.elements, (k) => state.options.cls[k].toLowerCase())}`);
+  const grid = el("ul", { className: "run-grid" });
+  grid.append(...s.ids.map((id) => sampleCard(s.source, id)));
+  return [head, stats, grid];
 }
 
-async function openSample(source, id, busyEl) {
+function sampleCard(source, id) {
+  const url = `/api/samples/${source}/${encodeURIComponent(id)}`;
+  const btn = el("button", { className: "run-card", title: `${source}/${id}` },
+    `<img class="run-thumb" src="${url}/sheet.svg" alt="" loading="lazy"><span class="run-info"><span class="run-name">${id}</span></span>`);
+  btn.addEventListener("click", () => openSample(url, btn).catch((err) => toast(err.message, "error")));
+  return listItem(btn);
+}
+
+async function openSample(url, busyEl) {
   busyEl.classList.add("busy");
   try {
-    const run = await api(`/api/samples/${source}/${encodeURIComponent(id)}`, {});
+    const run = await api(url, {});
     await goToRun(run.id);
   } finally {
     busyEl.classList.remove("busy");
@@ -218,31 +226,47 @@ async function goToRun(id, step = null) {
   await openRun(id, step);
 }
 
+// Вкладки главной: что показать, чем заполнить и какой у вкладки адрес.
+const TABS = {
+  home: { load: loadRuns, url: () => location.pathname },
+  datasets: { load: loadSamples, url: () => "#datasets" },
+};
+// Пример датасета открыт со вкладки «Датасеты» — туда же и возвращаемся.
+const tabOfRun = () => (state.meta?.sample ? "datasets" : "home");
+
 function goHome() {
   if (history.state?.fromHome) return history.back();
-  history.replaceState(null, "", location.pathname);
-  return showHome();
+  const tab = tabOfRun();
+  history.replaceState(null, "", TABS[tab].url());
+  return showTab(tab);
 }
 
-function showHome() {
-  state.nav += 1; // загрузка прогона, начатая до ухода на главную, не откроет его поверх
+function goToTab(tab) {
+  history.pushState(null, "", TABS[tab].url());
+  return showTab(tab);
+}
+
+function showTab(tab) {
+  state.nav += 1; // загрузка прогона, начатая до ухода на вкладку, не откроет его поверх
   Object.assign(state, { meta: null, runId: null, step: null, stage: null });
   $("run").hidden = true;
   $("run-bar").hidden = true;
-  $("home").hidden = false;
-  $("brand-sub").hidden = false;
+  $("tabs").hidden = false;
+  for (const name of Object.keys(TABS)) $(name).hidden = name !== tab;
+  for (const link of $("tabs").children) link.classList.toggle("active", link.dataset.tab === tab);
   $("run-actions").replaceChildren();
   $("tooltip").hidden = true;
   document.title = "GenFacade · смотрелка";
-  return Promise.all([loadRuns(), loadSamples()]);
+  return TABS[tab].load();
 }
 
 async function route() {
   const hash = new URLSearchParams(location.hash.slice(1));
-  if (!hash.get("run")) return showHome();
+  const tab = Object.keys(TABS).find((name) => hash.has(name)) ?? "home";
+  if (!hash.get("run")) return showTab(tab);
   return openRun(hash.get("run"), hash.get("step")).catch(() => {
     toast("Прогон из ссылки не найден", "error");
-    return showHome();
+    return showTab("home");
   });
 }
 
@@ -254,8 +278,8 @@ async function openRun(id, step = null) {
   if (nav !== state.nav) return; // пока грузили, пользователь ушёл — не перехватываем экран
   state.meta = meta;
   state.runId = id;
-  $("home").hidden = true;
-  $("brand-sub").hidden = true;
+  for (const name of Object.keys(TABS)) $(name).hidden = true;
+  $("tabs").hidden = true;
   $("run").hidden = false;
   $("run-bar").hidden = false;
   renderHead();
@@ -265,6 +289,7 @@ async function openRun(id, step = null) {
 
 function renderHead() {
   const m = state.meta, id = state.runId, file = (f) => `/files/${id}/${f}`;
+  $("back-btn").innerHTML = `${ICON.back}<span>${$("tabs").querySelector(`[data-tab=${tabOfRun()}]`).textContent}</span>`;
   $("run-title").textContent = runName(id);
   document.title = `${runName(id)} · GenFacade`;
   $("run-chips").innerHTML = [
@@ -474,9 +499,9 @@ function onKey(e) {
 }
 
 async function init() {
-  $("back-btn").innerHTML = `${ICON.back}<span>Все прогоны</span>`;
   $("back-btn").addEventListener("click", goHome);
   $("home-link").addEventListener("click", (e) => { e.preventDefault(); goHome(); });
+  for (const link of $("tabs").children) link.addEventListener("click", (e) => { e.preventDefault(); goToTab(link.dataset.tab); });
   window.addEventListener("popstate", route);
   document.addEventListener("keydown", onKey);
   state.options = await api("/api/options");

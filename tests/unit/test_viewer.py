@@ -8,6 +8,7 @@ from simple_house import SIMPLE
 
 from genfacade import config
 from genfacade.datasets import store
+from genfacade.render.svg import sheet_svg
 from genfacade.schema import ElementClass, Mode, VariantKind, ZoneRole
 from genfacade.viewer.app import STATIC, create_app
 
@@ -96,11 +97,21 @@ def test_no_samples_no_sources(client):
 
 
 def test_samples_listed_by_source(client, sample, tmp_path):
-    """Главная показывает первые `shown` примеров источника, счёт — по всем."""
+    """Вкладка «Датасеты»: первые `shown` примеров источника и опись по всем."""
     for name in ("c", "a", "b"):
         store.write(sample.model_copy(update={"id": name}), tmp_path / "samples")
-    assert client.get("/api/samples").json() == [
-        {"source": sample.source, "count": 3, "ids": ["a", "b"]}]
+    [found] = client.get("/api/samples").json()
+    assert (found["source"], found["ids"]) == (sample.source, ["a", "b"])
+    assert (found["samples"], found["walls"], found["splits"]) == (3, 12, {sample.split: 3})
+    assert set(found["elements"]) <= set(client.get("/api/options").json()["cls"])
+
+
+def test_sample_thumbnail_is_its_sheet(client, sample, tmp_path, cfg):
+    store.write(sample, tmp_path / "samples")
+    res = client.get(f"/api/samples/{sample.source}/{sample.id}/sheet.svg")
+    assert res.headers["content-type"].startswith("image/svg+xml")
+    assert res.text.count("data-cls") == sheet_svg(sample.sheet, cfg).count("data-cls") > 0
+    assert client.get(f"/api/samples/{sample.source}/nope/sheet.svg").status_code == 404
 
 
 def test_sample_opens_as_plan_and_sheet(client, sample, tmp_path):

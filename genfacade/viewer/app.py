@@ -9,7 +9,7 @@ from importlib.resources import files
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -18,7 +18,8 @@ from genfacade.config import Config
 from genfacade.datasets import preview, store
 from genfacade.models.stub import ModelError
 from genfacade.plan.genplan_svg import PlanError
-from genfacade.schema import Mode, Source
+from genfacade.render.svg import sheet_svg
+from genfacade.schema import Mode, Sample, Source
 
 STATIC = files(__package__).joinpath("static")
 
@@ -93,22 +94,31 @@ def _samples_api(app: FastAPI, cfg: Config) -> None:
 
     @app.post("/api/samples/{source}/{sample_id}")
     def open_sample(source: Source, sample_id: str) -> dict:
-        return {"id": _open_sample(source, sample_id, cfg).name}
+        # Папка просмотра рисуется заново при каждом открытии — тем же render/.
+        return {"id": preview.render(_sample(source, sample_id, cfg), cfg).name}
+
+    @app.get("/api/samples/{source}/{sample_id}/sheet.svg")
+    def sample_sheet(source: Source, sample_id: str) -> Response:
+        svg = sheet_svg(_sample(source, sample_id, cfg).sheet, cfg)
+        return Response(svg, media_type="image/svg+xml")
 
 
 def _samples(cfg: Config) -> list[dict]:
-    """Источники, в которых есть примеры: сколько их и первые имена для главной."""
+    """Источники, в которых есть примеры: опись и первые имена для вкладки «Датасеты».
+
+    Опись считается по файлам при каждом запросе — на малых выборках это быстро; для
+    полного датасета на машине сборки читать сохранённую опись (gf#28, «Что осталось»).
+    """
     root, shown = cfg.data.paths.samples_dir, cfg.viewer.samples.shown
-    found = [(source, store.ids(root, source)) for source in Source]
-    return [{"source": s, "count": len(names), "ids": names[:shown]} for s, names in found if names]
+    return [{"ids": store.ids(root, source)[:shown], **store.manifest(root, source)}
+            for source in Source if store.ids(root, source)]
 
 
-def _open_sample(source: Source, sample_id: str, cfg: Config) -> Path:
-    """Пример → папка просмотра; рисуется заново при каждом открытии — тем же render/."""
+def _sample(source: Source, sample_id: str, cfg: Config) -> Sample:
     root = cfg.data.paths.samples_dir
     if sample_id not in store.ids(root, source):
         raise HTTPException(404, f"нет примера {source}/{sample_id}")
-    return preview.render(store.read(root, source, sample_id), cfg)
+    return store.read(root, source, sample_id)
 
 
 def _options(cfg: Config) -> dict:
