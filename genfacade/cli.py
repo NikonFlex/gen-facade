@@ -1,4 +1,4 @@
-"""Командная строка: genfacade run <план.svg> --text …, render <дом.json>, serve."""
+"""Командная строка: genfacade run <план.svg> --text …, genfacade serve."""
 
 import argparse
 import sys
@@ -6,15 +6,6 @@ from pathlib import Path
 
 from genfacade import config, pipeline
 from genfacade.plan.genplan_svg import PlanError
-from genfacade.schema import FacadeSheet
-
-
-def render(src: Path, out: Path | None, config_dir: Path | None) -> Path:
-    """Дом из JSON → трасса прогона: шаги, лист, PNG, meta.json."""
-    cfg = config.load(config_dir)
-    house = FacadeSheet.model_validate_json(src.read_text())
-    out = out or pipeline.new_run_dir(cfg.viewer.paths.runs_dir, src.stem)
-    return pipeline.run(house, out, cfg, source=str(src))
 
 
 def run(args: argparse.Namespace) -> Path:
@@ -47,10 +38,6 @@ def main(argv: list[str] | None = None) -> None:
                    help="with_openings — окна из плана (режим 2), blind — глухой куб (режим 1)")
     g.add_argument("-o", "--out", type=Path,
                    help="папка прогона; по умолчанию runs_dir/<время>-<имя>")
-    r = sub.add_parser("render", help="лист фасадов из JSON дома")
-    r.add_argument("src", type=Path)
-    r.add_argument("-o", "--out", type=Path,
-                   help="папка прогона; по умолчанию runs_dir/<время>-<имя>")
     sub.add_parser("serve", help="смотрелка прогонов в браузере")
     args = parser.parse_args(argv)
     if args.command == "run":
@@ -58,7 +45,5 @@ def main(argv: list[str] | None = None) -> None:
             print(run(args))
         except PlanError as e:
             sys.exit(f"план отклонён: {e}")
-    elif args.command == "render":
-        print(render(args.src, args.out, args.config))
     else:
         serve(args.config)

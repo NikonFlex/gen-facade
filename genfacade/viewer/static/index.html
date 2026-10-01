@@ -45,7 +45,7 @@
               </label>
             </div>
             <textarea id="plan-text" rows="3" spellcheck="false" aria-label="Описание дома"
-              placeholder="Two-storey classic house with a gable roof and a stone plinth."></textarea>
+              placeholder="A simple one-storey house with a flat roof."></textarea>
             <div class="plan-row">
               <div class="segmented" role="radiogroup" aria-label="Режим">
                 <label title="Режим 2: окна стоят там, где их задал план"><input type="radio" name="mode" value="with_openings" checked><span>Окна из плана</span></label>
@@ -55,19 +55,6 @@
             </div>
           </div>
         </form>
-
-        <div class="section-head">
-          <h2>Дома</h2><span class="count" id="houses-count"></span>
-          <span class="section-note">готовые дома в JSON — только развёртка и лист (этап 0)</span>
-        </div>
-        <div class="house-grid">
-          <ul class="contents" id="houses"></ul>
-          <label class="dropzone" id="dropzone">
-            <input type="file" accept=".json,application/json" id="file-input" hidden>
-            <span class="dropzone-icon" aria-hidden="true"></span>
-            <span class="dropzone-text"><b>Свой дом</b><span>перетащите JSON или нажмите</span></span>
-          </label>
-        </div>
 
         <div class="section-head">
           <h2>Прогоны</h2><span class="count" id="runs-count"></span>

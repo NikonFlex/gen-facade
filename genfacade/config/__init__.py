@@ -143,10 +143,6 @@ class Sill(Section):
     height_m: float
 
 
-class Accent(Section):
-    entrance_pad_m: float
-
-
 class LayoutRule(Section):
     """Правило шага 4: раскладка стены (config/layout.toml)."""
 
@@ -157,7 +153,6 @@ class LayoutRule(Section):
     casing: Casing
     cornice: Height
     band: Height
-    accent: Accent
 
 
 class Checks(Section):
@@ -175,7 +170,6 @@ class Server(Section):
 
 class ViewerPaths(Section):
     runs_dir: Path
-    houses_dirs: list[Path]
     plans_dirs: list[Path]
 
 

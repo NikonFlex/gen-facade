@@ -6,36 +6,35 @@ from genfacade.schema import Side, top_y
 from genfacade.unfold import plan_corners, ridge_height
 
 
-def test_gable_ridge_height(load_house):
-    # Торец 8 м, уклон 35°, карниз 3.3 м: подъём = 4 · tg 35°.
-    sheet = load_house("house_gable")
+def test_gable_ridge_height(lay_out):
+    # Простой дом: торец 5 м, уклон 30°, карниз 3.25 м — подъём 2.5 · tg 30°.
+    sheet = lay_out(roof="gable")
     ridge = ridge_height(sheet.spec, [f.side for f in sheet.facades])
-    assert ridge == pytest.approx(3.3 + 4 * math.tan(math.radians(35)))
+    assert ridge == pytest.approx(3.25 + 2.5 * math.tan(math.radians(30)))
 
 
-def test_gable_only_on_ends(unfold_sheet):
-    sheet = unfold_sheet("house_gable")
+def test_gable_only_on_ends(lay_out):
+    sheet = lay_out(roof="gable")
     vertices = [len(f.silhouette) for f in sheet.facades]
-    assert vertices == [4, 5, 4, 5]  # конёк вдоль x: фронтоны на западе и востоке
+    assert vertices == [4, 5, 4, 5]  # конёк вдоль длинной стороны (x): фронтоны на торцах
 
 
-def test_hip_ridge_shorter_than_wall(unfold_sheet):
-    sheet = unfold_sheet("house_hip")
-    south = sheet.facades[0]
-    ridge_xs = [x for x, y in south.roof if y == top_y(south.roof)]
-    # Вальма под 45° в плане: конёк короче стены на глубину дома (9 м).
-    assert max(ridge_xs) - min(ridge_xs) == pytest.approx(12 - 9)
+def test_hip_ridge_shorter_than_wall(lay_out):
+    sheet = lay_out(roof="hip")
+    long_side = sheet.facades[0]
+    ridge_xs = [x for x, y in long_side.roof if y == top_y(long_side.roof)]
+    # Вальма под 45° в плане: конёк короче стены на глубину дома (5 м).
+    assert max(ridge_xs) - min(ridge_xs) == pytest.approx(10 - 5)
 
 
-def test_flat_roof_has_no_roof_outline(unfold_sheet):
-    sheet = unfold_sheet("house_flat")
-    assert all(f.roof is None for f in sheet.facades)
+def test_flat_roof_has_no_roof_outline(lay_out):
+    assert all(f.roof is None for f in lay_out().facades)
 
 
-def test_corners_of_rectangle(load_house):
-    sheet = load_house("house_gable")
+def test_corners_of_rectangle(lay_out):
+    sheet = lay_out()
     corners = plan_corners([f.side for f in sheet.facades])
-    assert corners == [(0.0, 0.0), (-10.0, 0.0), (-10.0, 8.0), (0.0, 8.0)]
+    assert corners == pytest.approx([(0.0, 0.0), (-10.0, 0.0), (-10.0, 5.0), (0.0, 5.0)])
 
 
 def test_counterclockwise_sides_rejected():

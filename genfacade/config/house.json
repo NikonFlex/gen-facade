@@ -1,16 +1,16 @@
 {
   "building_type": "cottage",
-  "floors": 2,
-  "floor_heights_m": [2.75, 2.75],
+  "floors": 1,
+  "floor_heights_m": [2.75],
   "plinth_m": 0.5,
-  "eaves_m": 6.0,
-  "roof": {"kind": "gable", "pitch_deg": 30, "ridge_axis": "x", "overhang_m": 0.5, "material": "roof"},
-  "style": "classic",
+  "eaves_m": 3.25,
+  "roof": {"kind": "flat", "pitch_deg": 0, "ridge_axis": "x", "overhang_m": 0.0, "material": "roof"},
+  "style": "modern",
   "materials": [
     {"id": "main", "kind": "plaster"},
-    {"id": "plinth", "kind": "stone"},
-    {"id": "accent", "kind": "brick"},
-    {"id": "trim", "kind": "wood"},
-    {"id": "roof", "kind": "tile_roof"}
+    {"id": "plinth", "kind": "concrete"},
+    {"id": "accent", "kind": "wood"},
+    {"id": "trim", "kind": "metal"},
+    {"id": "roof", "kind": "metal_roof"}
   ]
 }

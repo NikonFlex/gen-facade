@@ -4,23 +4,19 @@
 Критерий «молчит на эталонной разметке CMP» — этап 2 (gf#12).
 """
 
-from pathlib import Path
-
 import pytest
 
 from genfacade.render.svg import sheet_svg
 from genfacade.snap import snap
 from genfacade.validate import errors, validate, validate_svg
 
-ROOT = Path(__file__).parents[2]
-HOUSE = ROOT / "tests" / "fixtures" / "genplan" / "house.svg"
-BOX = ROOT / "tests" / "fixtures" / "genplan" / "door_top.svg"
+LEAF = '<rect x="800" y="495" width="5" height="90" fill="#000000" />'
 
 
 @pytest.fixture
-def clean(lay_out):
-    """Лист без нарушений: коробка, режим 1."""
-    return lay_out(BOX, mode="blind")
+def clean(lay_out, relayout, two_floors):
+    """Лист без нарушений: простой дом в режиме 1, два этажа — чтобы были окна над окнами."""
+    return relayout(lay_out("blind"), "blind", **two_floors)
 
 
 def _edit(sheet, side, element_id, **update):
@@ -31,7 +27,7 @@ def _edit(sheet, side, element_id, **update):
     return sheet.model_copy(update={"facades": facades})
 
 
-SIDE = 1  # у коробки door_top окна есть на сторонах 1–3; на стороне 0 — вход
+SIDE = 1  # левая сторона простого дома: без входа, окна на обоих этажах
 
 
 def _window(sheet, side=SIDE, floor=1):
@@ -42,10 +38,9 @@ def _rules(sheet, cfg):
     return {v.rule for v in validate(sheet, cfg.checks)}
 
 
-def test_clean_sheet_has_no_violations(clean, cfg, house, unfold_sheet):
+def test_clean_sheet_has_no_violations(clean, cfg, house):
     assert validate(clean, cfg.checks) == []
-    # тестовые дома этапа 0 нарисованы руками: окна этажа разные — предупреждения, не ошибки
-    assert errors(validate(unfold_sheet(house), cfg.checks)) == []
+    assert validate(house, cfg.checks) == []  # простой дом с каждой крышей, режим 2
 
 
 def test_outside_silhouette(clean, cfg):
@@ -58,14 +53,15 @@ def test_openings_overlap(clean, cfg):
     assert "overlap" in _rules(_edit(clean, SIDE, b.id, y_m=a.y_m + 0.1), cfg)
 
 
-def test_window_in_forbidden_zone(lay_out, cfg):
-    # режим 2: окно плана, в которое упирается внутренняя стена (дефект GenPlan, как в примере)
-    found = validate(lay_out(HOUSE), cfg.checks)
-    assert {(v.rule, v.side) for v in found} == {("forbidden", 1)}
+def test_window_in_forbidden_zone(lay_out, simple_svg, cfg):
+    # режим 2: внутренняя стена заходит в полосу верхнего окна плана (дефект GenPlan)
+    wall = '<rect x="700" y="108" width="9" height="200" fill="#000000" />'
+    found = validate(lay_out(svg=simple_svg((LEAF, wall + LEAF))), cfg.checks)
+    assert {(v.rule, v.side) for v in found} == {("forbidden", 2)}
 
 
 def test_plan_opening_moved(lay_out, cfg):
-    sheet = lay_out(HOUSE)
+    sheet = lay_out()
     door = next(e for e in sheet.facades[0].elements if e.cls == "door")
     assert "plan_opening" in _rules(_edit(sheet, 0, door.id, x_m=door.x_m + 0.3), cfg)
 
@@ -123,8 +119,8 @@ def _sill(sheet, window_id):
                 if e.parent == window_id and e.cls == "sill")
 
 
-def test_snap_keeps_plan_windows(lay_out, cfg):
-    sheet = lay_out(HOUSE)
+def test_snap_keeps_plan_windows(lay_out, relayout, two_floors, cfg):
+    sheet = relayout(lay_out(), **two_floors)
     w = _window(sheet, side=1, floor=2)
     snapped = snap(_edit(sheet, 1, w.id, x_m=w.x_m + 0.1), cfg.checks)
     plan_w = _window(snapped, side=1, floor=1)
