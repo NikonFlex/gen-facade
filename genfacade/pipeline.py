@@ -93,7 +93,7 @@ def generate(req: PlanRun, svg: str, out: Path, cfg: Config) -> Path:
         "request": req.model_dump(),
         "errors": len(errors(violations)), "warnings": len(violations) - len(errors(violations)),
     }
-    return _finish(sheet, out, cfg, extra)
+    return finish(sheet, out, cfg, extra)
 
 
 def walls(spec: HouseSpec, plan: Plan) -> FacadeSheet:
@@ -119,14 +119,15 @@ def _prepare(req: PlanRun, svg: str, out: Path, cfg: Config) -> FacadeSheet:
     return bare
 
 
-def _finish(sheet: FacadeSheet, out: Path, cfg: Config, extra: dict) -> Path:
-    """Шаг 6 и meta.json: лист, JSON, PNG; extra — поля прогона."""
+def finish(sheet: FacadeSheet, out: Path, cfg: Config, extra: dict) -> Path:
+    """Шаг 6 и meta.json: лист, JSON, PNG; extra — поля прогона, они же заменяют общие
+    (у просмотра примера датасета шагов меньше — datasets/preview.py)."""
     (out / SHEET).write_text(sheet_svg(sheet, cfg))
     (out / SHEET_JSON).write_text(sheet.model_dump_json(indent=2))
     has_png = to_png(out / SHEET, out / PREVIEW, cfg.sheet.preview.width_px)
     meta = {
         "date": datetime.now().isoformat(timespec="seconds"),
-        "git_sha": _git_sha(), "genfacade": version("genfacade"),
+        "git_sha": git_sha(), "genfacade": version("genfacade"),
         "sheet_json": SHEET_JSON, "preview": PREVIEW if has_png else None,
         "steps": [s._asdict() for s in STEPS],
         **extra,
@@ -137,7 +138,7 @@ def _finish(sheet: FacadeSheet, out: Path, cfg: Config, extra: dict) -> Path:
     return out
 
 
-def _git_sha() -> str | None:
+def git_sha() -> str | None:
     try:
         res = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,  # noqa: S603, S607
                              text=True, check=True)

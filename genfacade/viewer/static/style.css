@@ -96,6 +96,8 @@ ul { list-style: none; margin: 0; padding: 0; }
 .run-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .run-when { color: var(--muted); font-size: 12px; }
 .empty-note { color: var(--faint); font-size: 13px; padding: 4px 2px; }
+.sample-block h3 { font-size: 14px; margin: 0 2px 8px; display: flex; gap: 8px; align-items: baseline; }
+.sample-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
 
 /* ——— план и описание ——— */
 .plan-form {

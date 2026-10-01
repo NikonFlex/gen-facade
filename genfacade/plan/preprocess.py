@@ -14,7 +14,7 @@ from genfacade.plan import sides
 from genfacade.plan.gaps import Found, Gap, find_gaps
 from genfacade.plan.genplan_svg import TOL_PX, Box, DoorSwing, GenPlanSvg, PlanError, parse
 from genfacade.plan.outline import outline
-from genfacade.schema import Mode, OpeningKind, Plan, PlanOpening, PlanSource, Rect
+from genfacade.schema import Mode, OpeningKind, Plan, PlanOpening, Rect, Source
 
 # Масштаб GenPlan: ширина входной двери — 90 см (three_dimensional/convertor.py:32,
 # DEFAULT_DOOR_WIDTH). Протокол, а не настройка: иначе фасад разойдётся с 3D-моделью.
@@ -40,7 +40,7 @@ def preprocess(svg: Path | str, mode: Mode, cfg: PlanConfig) -> Plan:
         openings=[_opening(f, scale, f in sealed) for f in found],
         sides=sides.build(contour, open_, walls, scale),
         scale_m_per_px=scale,
-        source=PlanSource.GENPLAN,
+        source=Source.GENPLAN,
     )
 
 

@@ -1,4 +1,4 @@
-"""Типы модуля — поля 1:1 из specs/facade.md и specs/plan-input.md.
+"""Типы модуля — поля 1:1 из specs/facade.md, specs/plan-input.md и specs/data.md.
 
 Модули обмениваются только этими объектами; каждый сохраняется в JSON.
 Координаты — метры; на стене x вдоль стороны от её левого края (если смотреть
@@ -57,12 +57,32 @@ class OpeningKind(StrEnum):
     ENTRANCE = "entrance"
 
 
-class PlanSource(StrEnum):
+class Source(StrEnum):
+    """Откуда данные: система, выдавшая план (Plan.source), и датасет примера (Sample.source)."""
+
     GENPLAN = "genplan"
     MKD = "mkd"
     SYNTHETIC = "synthetic"
     BUILDINGNET = "buildingnet"
     BIO = "bio"
+    MANUAL = "manual"
+    CMP = "cmp"
+    HZNU = "hznu"
+    LOD3 = "lod3"
+    LSAA = "lsaa"
+
+
+class Split(StrEnum):
+    TRAIN = "train"
+    VAL = "val"
+    TEST = "test"
+
+
+class TextKind(StrEnum):
+    """Как получено описание дома (data.md, правило 6)."""
+
+    TEMPLATE = "template"
+    PARAPHRASE = "paraphrase"
     MANUAL = "manual"
 
 
@@ -229,7 +249,7 @@ class Plan(Model):
     openings: list[PlanOpening] = []
     sides: list[Side] = []  # заполняет препроцессор
     scale_m_per_px: float = Field(gt=0)
-    source: PlanSource
+    source: Source
 
     @model_validator(mode="after")
     def _check_outline(self) -> "Plan":
@@ -300,6 +320,30 @@ class FacadeSheet(Model):
             missing = sorted(set(used) - palette)
             if missing:
                 raise ValueError(f"сторона {f.side.index}: материалов нет в палитре — {missing}")
+        return self
+
+
+class Description(Model):
+    kind: TextKind
+    text: str
+
+
+class Sample(Model):
+    """Обучающий или тестовый пример: дом с эталонными фасадами (data.md, Sample)."""
+
+    # id — имя файла примера: без «/» и «..», не с «_» (так начинается опись источника).
+    id: str = Field(pattern=r"^[A-Za-z0-9][\w.-]*$")
+    source: Source
+    split: Split
+    plan: Plan | None = None  # нет у источников без плана (CMP)
+    sheet: FacadeSheet
+    texts: list[Description] = []
+
+    @model_validator(mode="after")
+    def _check_sides(self) -> "Sample":
+        if self.plan is not None and len(self.plan.sides) != len(self.sheet.facades):
+            raise ValueError(f"сторон плана {len(self.plan.sides)}, "
+                             f"а фасадов {len(self.sheet.facades)}")
         return self
 
 

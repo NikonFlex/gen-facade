@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from simple_house import SIMPLE
 
 from genfacade import config
+from genfacade.datasets import store
 from genfacade.schema import ElementClass, Mode, VariantKind, ZoneRole
 from genfacade.viewer.app import STATIC, create_app
 
@@ -16,7 +17,9 @@ PLAN_RUN = {"plan": SIMPLE.stem, "text": "A simple one-storey house.", "mode": M
 @pytest.fixture
 def client(tmp_path):
     (tmp_path / "viewer.toml").write_text(
-        f'[paths]\nruns_dir = "{tmp_path / "runs"}"\nplans_dirs = ["{SIMPLE.parent}"]\n')
+        f'[paths]\nruns_dir = "{tmp_path / "runs"}"\nplans_dirs = ["{SIMPLE.parent}"]\n'
+        "[samples]\nshown = 2\n")
+    (tmp_path / "data.toml").write_text(f'[paths]\nsamples_dir = "{tmp_path / "samples"}"\n')
     return TestClient(create_app(config.load(tmp_path)))
 
 
@@ -86,3 +89,32 @@ def test_defective_plan_explained(client):
     bad = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>'
     res = client.post("/api/runs", json={"plan_run": PLAN_RUN, "svg": bad})
     assert res.status_code == 400 and "план отклонён" in res.json()["detail"]
+
+
+def test_no_samples_no_sources(client):
+    assert client.get("/api/samples").json() == []
+
+
+def test_samples_listed_by_source(client, sample, tmp_path):
+    """Главная показывает первые `shown` примеров источника, счёт — по всем."""
+    for name in ("c", "a", "b"):
+        store.write(sample.model_copy(update={"id": name}), tmp_path / "samples")
+    assert client.get("/api/samples").json() == [
+        {"source": sample.source, "count": 3, "ids": ["a", "b"]}]
+
+
+def test_sample_opens_as_plan_and_sheet(client, sample, tmp_path):
+    """Пример открывается тем же экраном, что прогон: план и лист; в прогоны не попадает."""
+    store.write(sample, tmp_path / "samples")
+    run_id = client.post(f"/api/samples/{sample.source}/{sample.id}").json()["id"]
+    meta = client.get(f"/api/runs/{run_id}").json()
+    assert [s["n"] for s in meta["steps"]] == [2, 6] and "input" not in meta
+    assert meta["sample"]["split"] == sample.split
+    for step in meta["steps"]:
+        assert "<svg" in client.get(f"/files/{run_id}/{step['file']}").text, step
+    assert client.get("/api/runs").json() == []
+
+
+def test_unknown_sample_and_source(client):
+    assert client.post("/api/samples/synthetic/nope").status_code == 404
+    assert client.post("/api/samples/nope/simple_house").status_code == 422

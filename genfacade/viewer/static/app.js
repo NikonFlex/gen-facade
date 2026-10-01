@@ -154,6 +154,38 @@ function runCard(r) {
   return listItem(btn);
 }
 
+// ——— примеры датасета ———
+
+async function loadSamples() {
+  const sources = await api("/api/samples");
+  $("samples-count").textContent = sources.reduce((n, s) => n + s.count, 0) || "";
+  const blocks = sources.map(sampleBlock);
+  $("samples").replaceChildren(...(blocks.length ? blocks : [el("p", { className: "empty-note", textContent: "Примеров пока нет." })]));
+}
+
+function sampleBlock(s) {
+  const block = el("div", { className: "sample-block" }, `<h3>${s.source}<span class="count">${s.count}</span></h3>`);
+  const list = el("ul", { className: "sample-list" });
+  for (const id of s.ids) {
+    const btn = el("button", { className: "btn", textContent: id });
+    btn.addEventListener("click", () => openSample(s.source, id, btn).catch((err) => toast(err.message, "error")));
+    list.append(listItem(btn));
+  }
+  block.append(list);
+  if (s.count > s.ids.length) block.append(el("p", { className: "empty-note", textContent: `показаны первые ${s.ids.length}` }));
+  return block;
+}
+
+async function openSample(source, id, busyEl) {
+  busyEl.classList.add("busy");
+  try {
+    const run = await api(`/api/samples/${source}/${encodeURIComponent(id)}`, {});
+    await goToRun(run.id);
+  } finally {
+    busyEl.classList.remove("busy");
+  }
+}
+
 async function startRun(body, busyEl, { quiet = false } = {}) {
   busyEl?.classList.add("busy");
   const t0 = performance.now(), nav = state.nav;
@@ -202,7 +234,7 @@ function showHome() {
   $("run-actions").replaceChildren();
   $("tooltip").hidden = true;
   document.title = "GenFacade · смотрелка";
-  return loadRuns();
+  return Promise.all([loadRuns(), loadSamples()]);
 }
 
 async function route() {
@@ -239,12 +271,15 @@ function renderHead() {
     `<span class="chip">${fmtDate(m.date)}</span>`,
     m.git_sha ? `<span class="chip">коммит <code>${m.git_sha.slice(0, 7)}</code></span>` : "",
     `<span class="chip" title="${m.source}">${m.source.split("/").at(-1)}</span>`,
+    m.sample ? `<span class="chip">${m.sample.source} · ${m.sample.split}</span>` : "",
   ].join("");
   const sheet = m.steps.find((s) => s.n === 6)?.file;
   const links = [[sheet, "SVG"], [m.sheet_json, "JSON"], [m.preview, "PNG"]].filter(([f]) => f)
     .map(([f, label]) => `<a class="btn" href="${file(f)}" target="_blank" rel="noopener" title="Открыть ${label}">${ICON.file}<span>${label}</span></a>`);
-  $("run-actions").innerHTML = `${links.join("")}<button class="btn" id="rerun" title="Прогнать тот же вход ещё раз">${ICON.redo}<span>Прогнать заново</span></button>`;
-  $("rerun").addEventListener("click", rerun);
+  // У примера датасета входа нет: перезапускать нечего.
+  const redo = m.input ? `<button class="btn" id="rerun" title="Прогнать тот же вход ещё раз">${ICON.redo}<span>Прогнать заново</span></button>` : "";
+  $("run-actions").innerHTML = links.join("") + redo;
+  $("rerun")?.addEventListener("click", rerun);
 }
 
 async function rerun() {
@@ -259,8 +294,8 @@ async function runBody(input) {
 }
 
 function renderStepper() {
-  const steps = [{ key: "input", n: "", title: "Вход", file: state.meta.input }]
-    .concat(state.meta.steps.map((s) => ({ ...s, key: String(s.n) })));
+  const input = state.meta.input ? [{ key: "input", n: "", title: "Вход", file: state.meta.input }] : [];
+  const steps = input.concat(state.meta.steps.map((s) => ({ ...s, key: String(s.n) })));
   const nodes = steps.flatMap((s, i) => {
     const btn = el("button", {
       className: `step${s.key === state.step ? " active" : ""}`, disabled: !s.file,
@@ -273,13 +308,15 @@ function renderStepper() {
   $("stepper").replaceChildren(...nodes);
 }
 
-function showStep(key) {
+function showStep(wanted) {
+  const done = state.meta.steps.filter((s) => s.file);
+  // Нет такого шага — «Вход»; у примера датасета входа нет — его последний шаг.
+  const step = done.find((s) => String(s.n) === wanted) ?? (state.meta.input ? null : done.at(-1));
+  const key = step ? String(step.n) : "input";
   state.step = key;
   history.replaceState(history.state, "", `#run=${encodeURIComponent(state.runId)}&step=${key}`);
   renderStepper();
-  if (key === "input") return renderInput();
-  const step = state.meta.steps.find((s) => String(s.n) === key);
-  if (!step?.file) return renderInput();
+  if (!step) return renderInput();
   return step.file.endsWith(".json") ? renderJsonStep(step) : renderSvgStep(step);
 }
 

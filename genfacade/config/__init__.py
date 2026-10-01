@@ -1,4 +1,4 @@
-"""Настройки, вынесенные из кода: материалы, лист, смотрелка, план, проверка.
+"""Настройки, вынесенные из кода: материалы, лист, смотрелка, план, проверка, данные.
 
 По умолчанию — файлы этой папки. Свой конфиг — папка с любыми из тех же файлов:
 TOML сливается с умолчаниями поключно, sheet.css дописывается после умолчаний
@@ -143,10 +143,25 @@ class Labels(Section):
     variant: dict[VariantKind, str]
 
 
+class SamplesView(Section):
+    shown: int
+
+
 class Viewer(Section):
     server: Server
     paths: ViewerPaths
+    samples: SamplesView
     labels: Labels
+
+
+class DataPaths(Section):
+    samples_dir: Path
+
+
+class Data(Section):
+    """Данные для обучения и теста (config/data.toml, specs/data.md)."""
+
+    paths: DataPaths
 
 
 class Config(Section):
@@ -155,6 +170,7 @@ class Config(Section):
     viewer: Viewer
     plan: PlanConfig
     checks: Checks
+    data: Data
     css: str
 
 
@@ -169,6 +185,7 @@ def load(user_dir: Path | None = None) -> Config:
         viewer=Viewer(**_toml("viewer.toml", user_dir)),
         plan=PlanConfig(**_toml("plan.toml", user_dir)),
         checks=Checks(**_toml("checks.toml", user_dir)),
+        data=Data(**_toml("data.toml", user_dir)),
         css=css,
     )
 
