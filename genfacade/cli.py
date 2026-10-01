@@ -5,7 +5,8 @@ import sys
 from pathlib import Path
 
 from genfacade import config, pipeline
-from genfacade.datasets import store, synthetic
+from genfacade.datasets import store
+from genfacade.datasets.synthetic import build
 from genfacade.models.stub import ModelError
 from genfacade.plan.genplan_svg import PlanError
 from genfacade.schema import Mode, Source
@@ -24,7 +25,7 @@ def synth(args: argparse.Namespace) -> Path:
     cfg = config.load(args.config)
     root = cfg.data.paths.samples_dir
     for seed in range(args.first_seed, args.first_seed + args.count):
-        store.write(synthetic.sample(seed, cfg), root)
+        store.write(build.sample(seed, cfg), root)
     return store.write_manifest(root, Source.SYNTHETIC)
 
 

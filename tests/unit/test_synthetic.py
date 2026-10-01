@@ -7,8 +7,10 @@ import pytest
 from simple_house import SIMPLE
 
 from genfacade import cli, config
-from genfacade.datasets import genplan_writer, store, synthetic
+from genfacade.datasets import genplan_writer, store
 from genfacade.datasets.genplan_writer import Hole, Opening, PlanDraft, Run
+from genfacade.datasets.synthetic import build
+from genfacade.datasets.synthetic.plan import draft
 from genfacade.plan import genplan_svg
 from genfacade.plan.gaps import Axis
 from genfacade.plan.preprocess import ENTRANCE_WIDTH_M
@@ -28,11 +30,11 @@ SIMPLE_DRAFT = PlanDraft(10.0, 5.0, 0.15, (
 @pytest.fixture(scope="module")
 def houses(cfg):
     """Черновик и готовый пример для каждого seed."""
-    return [(synthetic.draft(s, cfg.synthetic), synthetic.sample(s, cfg)) for s in SEEDS]
+    return [(draft(s, cfg.synthetic), build.sample(s, cfg)) for s in SEEDS]
 
 
-def _holes(draft: PlanDraft, hole: Hole) -> list[Opening]:
-    return [o for run in draft.runs for o in run.openings if o.hole is hole]
+def _holes(sketch: PlanDraft, hole: Hole) -> list[Opening]:
+    return [o for run in sketch.runs for o in run.openings if o.hole is hole]
 
 
 def test_writer_draws_what_genplan_draws(cfg, preprocess_svg):
@@ -72,16 +74,16 @@ def test_entrance_read_on_every_wall(cfg, preprocess_svg, wall):
 def test_plan_keeps_every_decision_of_draft(houses, cfg):
     """Что решил генератор, то и прочитал препроцессор: размеры, окна, вход, перегородки."""
     size = cfg.synthetic.house
-    for draft, house in houses:
+    for sketch, house in houses:
         sides = house.plan.sides
         windows = [o for s in sides for o in s.openings if o.kind is OpeningKind.WINDOW]
         assert sorted(round(s.length_m, 3) for s in sides) == sorted(
-            [draft.width_m, draft.depth_m] * 2), house.id
-        assert size.depth_m[0] <= draft.depth_m <= draft.width_m <= size.width_m[1], house.id
+            [sketch.width_m, sketch.depth_m] * 2), house.id
+        assert size.depth_m[0] <= sketch.depth_m <= sketch.width_m <= size.width_m[1], house.id
         assert sorted(round(o.width_m, 3) for o in windows) == sorted(
-            o.width_m for o in _holes(draft, Hole.WINDOW)), house.id
+            o.width_m for o in _holes(sketch, Hole.WINDOW)), house.id
         assert sides[0].has_entrance and house.plan.scale_m_per_px == pytest.approx(0.01)
-        assert sum(len(s.forbidden) for s in sides) == 2 * len(_holes(draft, Hole.PASSAGE))
+        assert sum(len(s.forbidden) for s in sides) == 2 * len(_holes(sketch, Hole.PASSAGE))
         assert house.plan.source is Source.SYNTHETIC and len(house.sheet.facades) == 4
 
 
@@ -104,7 +106,7 @@ def test_blind_walls_are_made_on_purpose(houses):
     walls = [s for _, house in houses for s in house.plan.sides]
     blind = sum(not s.openings for s in walls) / len(walls)
     assert 0.1 < blind < 0.5
-    assert all(_holes(draft, Hole.WINDOW) for draft, _ in houses)
+    assert all(_holes(sketch, Hole.WINDOW) for sketch, _ in houses)
 
 
 def test_house_without_windows_is_redrawn(tmp_path):
@@ -112,13 +114,13 @@ def test_house_without_windows_is_redrawn(tmp_path):
     (tmp_path / "synthetic.toml").write_text(
         "[openings]\nblind_long_p = 0.9\nblind_short_p = 0.9\n")
     rules = config.load(tmp_path).synthetic
-    assert all(_holes(synthetic.draft(s, rules), Hole.WINDOW) for s in range(40))
+    assert all(_holes(draft(s, rules), Hole.WINDOW) for s in range(40))
 
 
 def test_seed_makes_the_house(cfg):
-    one = [synthetic.sample(7, cfg) for _ in range(2)]
+    one = [build.sample(7, cfg) for _ in range(2)]
     assert one[0] == one[1]
-    assert len({synthetic.sample(s, cfg).plan.model_dump_json() for s in range(20)}) == 20
+    assert len({build.sample(s, cfg).plan.model_dump_json() for s in range(20)}) == 20
 
 
 def test_synth_command_writes_samples_and_manifest(tmp_path, capsys):

@@ -1,21 +1,16 @@
-"""Синтетические дома, ступень 1: прямоугольный дом (specs/data.md, правила 1 и 9).
+"""План синтетического дома, ступень 1 — прямоугольный (specs/data.md, правила 1 и 9).
 
-Один seed — один дом. Сначала решения (`draft`): размеры, перегородки, вход, окна по участкам
-стен между перегородками, намеренно глухие стены. Потом план рисуется в формате GenPlan
-и идёт через настоящий препроцессор — как запрос к модулю. Числа — config/synthetic.toml.
+Решения по seed: размеры, перегородки, вход, окна по участкам стен между перегородками,
+намеренно глухие стены. Рисует план genplan_writer. Числа — config/synthetic.toml.
 """
 
 import random
 from dataclasses import dataclass, replace
 
-from genfacade import pipeline
-from genfacade.config import Config, OpeningRules, Synthetic
-from genfacade.datasets import genplan_writer
+from genfacade.config import OpeningRules, Synthetic
 from genfacade.datasets.genplan_writer import Hole, Opening, PlanDraft, Run
-from genfacade.models import stub
 from genfacade.plan.gaps import Axis
-from genfacade.plan.preprocess import ENTRANCE_WIDTH_M, preprocess
-from genfacade.schema import Mode, Sample, Source, Split
+from genfacade.plan.preprocess import ENTRANCE_WIDTH_M
 
 Span = tuple[float, float]
 
@@ -29,19 +24,10 @@ class _Wall:
     long: bool
 
 
-def sample(seed: int, cfg: Config) -> Sample:
-    """Дом по seed: план через препроцессор и стены без раскладки (раскладка — шаг 4 задачи)."""
-    svg = genplan_writer.svg(draft(seed, cfg.synthetic), cfg.synthetic.canvas)
-    plan = preprocess(svg, Mode.WITH_OPENINGS, cfg.plan).model_copy(
-        update={"source": Source.SYNTHETIC})
-    return Sample(id=f"rect-{seed:06d}", source=Source.SYNTHETIC, split=Split.TRAIN, plan=plan,
-                  sheet=pipeline.walls(stub.spec_model(""), plan))
-
-
 def draft(seed: int, cfg: Synthetic) -> PlanDraft:
     rng = random.Random(seed)  # noqa: S311 — воспроизводимость по seed, не криптография
-    width = _on_grid(rng, cfg.house.width_m, cfg.house.grid_m)
-    depth = min(width, _on_grid(rng, cfg.house.depth_m, cfg.house.grid_m))
+    width = on_grid(rng, cfg.house.width_m, cfg.house.grid_m)
+    depth = min(width, on_grid(rng, cfg.house.depth_m, cfg.house.grid_m))
     cuts = _cuts(rng, width, cfg)
     walls = _walls(width, depth, cuts, cfg)
     while True:  # дом совсем без окон не нужен — тянем раскладку ещё раз тем же генератором
@@ -52,7 +38,7 @@ def draft(seed: int, cfg: Synthetic) -> PlanDraft:
     return PlanDraft(width, depth, cfg.house.wall_m, (*runs, *inner))
 
 
-def _on_grid(rng: random.Random, span: Span, step: float) -> float:
+def on_grid(rng: random.Random, span: Span, step: float) -> float:
     return round(rng.randint(round(span[0] / step), round(span[1] / step)) * step, 3)
 
 
@@ -65,7 +51,7 @@ def _cuts(rng: random.Random, width: float, cfg: Synthetic) -> list[float]:
         free = [(a + room, b - room) for a, b in zip(edges, edges[1:], strict=False)
                 if b - a >= 2 * room]
         if free:
-            cuts.append(_on_grid(rng, rng.choice(free), step))
+            cuts.append(on_grid(rng, rng.choice(free), step))
     return sorted(cuts)
 
 
@@ -104,7 +90,7 @@ def _entrance(rng: random.Random, bays: list[Span], cfg: OpeningRules):
     """Вход в случайном участке → (вход, участки): участок входа делится на два по бокам."""
     fits = [b for b in bays if b[1] - b[0] >= ENTRANCE_WIDTH_M]
     lo, hi = rng.choice(fits)
-    at = _on_grid(rng, (lo, hi - ENTRANCE_WIDTH_M), cfg.grid_m)
+    at = on_grid(rng, (lo, hi - ENTRANCE_WIDTH_M), cfg.grid_m)
     rest = [(lo, at - cfg.between_m), (at + ENTRANCE_WIDTH_M + cfg.between_m, hi)]
     others = [b for b in bays if b != (lo, hi)]
     return Opening(at, ENTRANCE_WIDTH_M, Hole.ENTRANCE), others + rest
@@ -129,5 +115,5 @@ def _windows(rng: random.Random, bay: Span, width: float, cfg: OpeningRules) -> 
 def _partition(rng: random.Random, x: float, depth: float, cfg: Synthetic) -> Run:
     """Перегородка от стены до стены с проходом; к наружным стенам примыкает торцами."""
     t, clear, passage = cfg.house.wall_m, cfg.openings.corner_clear_m, cfg.partitions.passage_m
-    at = _on_grid(rng, (t + clear, depth - t - clear - passage), cfg.openings.grid_m)
+    at = on_grid(rng, (t + clear, depth - t - clear - passage), cfg.openings.grid_m)
     return Run(Axis.Y, x, t, depth - t, (Opening(at, passage, Hole.PASSAGE),))

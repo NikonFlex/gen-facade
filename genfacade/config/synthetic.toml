@@ -28,3 +28,50 @@ blind_short_p = 0.4
 max_count = 2             # поперечных перегородок: от нуля до стольких
 min_room_m = 2.5          # комната не уже
 passage_m = 0.8           # проход в перегородке
+
+# ——— Параметры дома (HouseSpec): одни на все стены ———
+[spec]
+floor_heights_m = [2.5, 2.75, 3.0]   # как WallSizeType GenPlan (dto/enum/wall_size_type.py)
+plinth_m = [0.3, 0.6]                # цоколь, от и до
+grid_m = 0.05
+styles = ["modern", "scandinavian", "chalet", "classic"]
+
+[spec.palette]
+# роль материала в палитре дома → виды из library.toml, из которых дому достаётся один
+main = ["plaster", "brick", "siding", "wood"]
+plinth = ["concrete", "stone", "brick"]
+accent = ["wood", "stone", "brick", "siding"]
+trim = ["metal", "wood", "plaster"]
+roof = ["metal_roof"]                # плоскую крышу на фасаде не видно
+
+# ——— Раскладка стены: проёмы плана, декор, зоны отделки (facade.md, правило 9) ———
+[facade.windows]
+# Низ и верх окна — доли высоты этажа от его пола, как WindowSizeType GenPlan
+# (dto/enum/window_size_type.py): окна фасада сходятся с окнами его 3D-модели.
+# Уровень — один на дом; вес — как часто он выпадает. Низ 0.0 — окно в пол (панорамное).
+size.small = [0.4, 0.9]
+size.standard = [0.2, 0.9]
+size.high = [0.0, 1.0]
+weights = { small = 2, standard = 5, high = 1 }
+sash_max_w_m = 0.8        # шире — рама делится на столбцы створок
+transom_min_h_m = 1.8     # выше — два ряда (фрамуга)
+lintel_m = 0.25           # перемычка: от верха окна до карниза не меньше
+
+[facade.door]
+height_m = 2.1
+
+[facade.sill]
+overhang_m = 0.05         # подоконник шире окна с каждой стороны
+height_m = 0.06
+
+[facade.casing]
+# наличник вокруг окна (класс molding) — у этих стилей
+styles = ["classic", "chalet"]
+width_m = 0.1
+
+[facade.cornice]
+height_m = 0.25
+
+[facade.accent]
+p = 0.6                   # у дома есть акцентная полоса отделки у входа
+pad_m = 0.3               # насколько полоса шире двери с каждой стороны

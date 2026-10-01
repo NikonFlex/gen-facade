@@ -11,6 +11,7 @@ from pathlib import Path
 
 from genfacade.pipeline import git_sha
 from genfacade.schema import Sample, Source
+from genfacade.validate import OPENINGS
 
 MANIFEST = "_manifest.json"
 
@@ -44,6 +45,8 @@ def manifest(root: Path, source: Source) -> dict:
         "samples": len(samples),
         "splits": dict(Counter(s.split for s in samples)),
         "walls": len(facades),
+        # глухие стены синтетика делает намеренно — их доля видна здесь (data.md, правило 1)
+        "blind_walls": sum(not any(e.cls in OPENINGS for e in f.elements) for f in facades),
         "elements": dict(Counter(e.cls for f in facades for e in f.elements)),
         "date": datetime.now().isoformat(timespec="seconds"),
         "git_sha": git_sha(),

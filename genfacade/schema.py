@@ -107,6 +107,17 @@ class ZoneRole(StrEnum):
     BAND = "band"
 
 
+class PaletteRole(StrEnum):
+    """Роль материала в палитре дома: так же названы материалы (`Material.id`) у стаба шага 1
+    и у синтетики (generation.md, п. 2)."""
+
+    MAIN = "main"
+    PLINTH = "plinth"
+    ACCENT = "accent"
+    TRIM = "trim"
+    ROOF = "roof"
+
+
 class Severity(StrEnum):
     ERROR = "error"
     WARNING = "warning"

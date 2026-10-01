@@ -169,7 +169,7 @@ function sourceBlock(s) {
     `<h2>${s.source}</h2>
      <span class="section-note">опись на ${fmtDate(s.date)}${s.samples > s.ids.length ? ` · показаны первые ${s.ids.length}` : ""}</span>`);
   const stats = el("div", { className: "dataset-stats" },
-    `<span class="chip">домов <b>${s.samples}</b></span><span class="chip">стен <b>${s.walls}</b></span>
+    `<span class="chip">домов <b>${s.samples}</b></span><span class="chip">стен <b>${s.walls}</b></span><span class="chip">из них глухих <b>${s.blind_walls}</b></span>
      ${counts(s.splits, (k) => k)}${counts(s.elements, (k) => state.options.cls[k].toLowerCase())}`);
   const grid = el("ul", { className: "run-grid" });
   grid.append(...s.ids.map((id) => sampleCard(s.source, id)));

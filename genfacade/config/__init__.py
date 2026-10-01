@@ -13,7 +13,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from genfacade.schema import ElementClass, Mode, VariantKind, ZoneRole
+from genfacade.schema import ElementClass, Mode, PaletteRole, VariantKind, ZoneRole
 
 DEFAULTS = files(__package__)
 
@@ -198,6 +198,50 @@ class Partitions(Section):
     passage_m: float
 
 
+class SpecRules(Section):
+    floor_heights_m: list[float]
+    plinth_m: Range
+    grid_m: float
+    styles: list[str]
+    palette: dict[PaletteRole, list[str]]  # виды — из library.toml
+
+
+class Windows(Section):
+    size: dict[str, Range]
+    weights: dict[str, float]
+    sash_max_w_m: float
+    transom_min_h_m: float
+    lintel_m: float
+
+
+class Height(Section):
+    height_m: float
+
+
+class Sill(Section):
+    overhang_m: float
+    height_m: float
+
+
+class Casing(Section):
+    styles: list[str]
+    width_m: float
+
+
+class Accent(Section):
+    p: float
+    pad_m: float
+
+
+class FacadeRules(Section):
+    windows: Windows
+    door: Height
+    sill: Sill
+    casing: Casing
+    cornice: Height
+    accent: Accent
+
+
 class Synthetic(Section):
     """Генератор синтетических домов (config/synthetic.toml, specs/data.md, правило 1)."""
 
@@ -205,6 +249,8 @@ class Synthetic(Section):
     house: HouseSize
     openings: OpeningRules
     partitions: Partitions
+    spec: SpecRules
+    facade: FacadeRules
 
 
 class Config(Section):
