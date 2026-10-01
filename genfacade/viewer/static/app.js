@@ -26,7 +26,7 @@ const ICON = {
 };
 
 const $ = (id) => document.getElementById(id);
-const state = { runs: [], meta: null, runId: null, step: null, stage: null, nav: 0 };
+const state = { runs: [], meta: null, runId: null, step: null, stage: null, nav: 0, options: null };
 
 // ——— мелочи ———
 
@@ -103,7 +103,11 @@ function bindPlanForm() {
   const form = $("plan-form");
   $("plan-go").innerHTML = `${ICON.play}<span>Построить фасады</span>`;
   $("plan-text").value = store.get("plan.text", "A simple one-storey house with a flat roof.");
-  const mode = store.get("plan.mode", "with_openings");
+  const { modes, default_mode: fallback } = state.options;
+  $("mode-group").replaceChildren(...modes.map((m) => el("label", { title: m.hint },
+    `<input type="radio" name="mode" value="${m.value}"><span>${m.title}</span>`)));
+  const saved = store.get("plan.mode", fallback);
+  const mode = modes.some((m) => m.value === saved) ? saved : fallback;
   form.querySelector(`input[name=mode][value=${mode}]`).checked = true;
   $("plan-select").addEventListener("change", () => {
     Object.assign(planState, { svg: null, name: null });
@@ -301,7 +305,7 @@ async function renderSvgStep(step) {
   const zoomVal = el("span", { className: "zoom-val" });
   const wrap = el("div", { className: "canvas-wrap" });
   $("stage").replaceChildren(toolbar(step.n, zoomVal), wrap);
-  state.stage = new SvgStage(wrap, { tooltip: $("tooltip"), onZoom: (p) => { zoomVal.textContent = `${p}%`; } });
+  state.stage = new SvgStage(wrap, { tooltip: $("tooltip"), labels: state.options, onZoom: (p) => { zoomVal.textContent = `${p}%`; } });
   await state.stage.load(`/files/${state.runId}/${step.file}`);
   applyLayers(step.n);
   if (step.n === 5 && state.meta.violations) await violationsChip($("stage").querySelector(".toolbar"));
@@ -309,7 +313,7 @@ async function renderSvgStep(step) {
 
 async function violationsChip(bar) {
   const list = await (await fetch(`/files/${state.runId}/${state.meta.violations}`)).json();
-  const bad = list.filter((v) => v.severity === "error").length;
+  const bad = state.meta.errors;
   const chip = el("span", {
     className: `chip violations-chip${bad ? " bad" : ""}`,
     title: list.map((v) => `сторона ${v.side ?? "—"}: ${v.message}`).join("\n") || "валидатор ничего не нашёл",
@@ -438,6 +442,7 @@ async function init() {
   $("home-link").addEventListener("click", (e) => { e.preventDefault(); goHome(); });
   window.addEventListener("popstate", route);
   document.addEventListener("keydown", onKey);
+  state.options = await api("/api/options");
   bindPlanForm();
   await loadPlans();
   await route();
