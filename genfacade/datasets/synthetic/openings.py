@@ -22,14 +22,30 @@ from genfacade.schema import (
 FROM_PLAN = [FixedField.X, FixedField.W]
 
 
-def doors(side: Side, spec: HouseSpec, rules: FacadeRules) -> list[Element]:
-    """Вход — из плана, от пола первого этажа."""
+def doors(side: Side, spec: HouseSpec, look: Look, rules: FacadeRules) -> list[Element]:
+    """Вход — из плана, от пола первого этажа; вид двери — один на дом."""
     found = [o for o in side.openings if o.kind is not OpeningKind.WINDOW]
+    variant, height = _door(spec, look, rules)
     return [
         Element(id=f"d{i}", cls=ElementClass.DOOR, x_m=o.x_m, y_m=spec.plinth_m, w_m=o.width_m,
-                h_m=rules.door.height_m, floor=1, fixed=FROM_PLAN)
+                h_m=height, floor=1, fixed=FROM_PLAN, variant=variant)
         for i, o in enumerate(found, start=1)
     ]
+
+
+def _door(spec: HouseSpec, look: Look, rules: FacadeRules) -> tuple[OpeningVariant | None, float]:
+    """Вид и высота двери. Фрамуга (с козырьком, если он есть) не влезает под карниз —
+    дверь со стеклом."""
+    door, entry = rules.door, rules.entry
+    if look.door is None:
+        return None, door.height_m
+    tall = door.height_m + door.transom_m
+    above = entry.canopy_gap_m + entry.canopy_m if look.canopy else 0.0
+    room = spec.floor_heights_m[0] - rules.cornice.height_m
+    if look.door is VariantKind.TRANSOM and tall + above <= room + EPS:
+        return OpeningVariant(kind=VariantKind.TRANSOM), tall
+    cols, rows = door.glazed_panes
+    return OpeningVariant(kind=VariantKind.GLAZED, cols=cols, rows=rows), door.height_m
 
 
 def windows(side: Side, spec: HouseSpec, look: Look, cfg: Windows) -> list[Element]:

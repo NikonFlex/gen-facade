@@ -30,7 +30,7 @@ def lay_out(sheet: FacadeSheet, look: Look, rules: Synthetic) -> FacadeSheet:
 
 def _wall(wall: SideFacade, spec: HouseSpec, look: Look, rules: Synthetic) -> SideFacade:
     cfg, side = rules.facade, wall.side
-    doors = openings.doors(side, spec, cfg)
+    doors = openings.doors(side, spec, look, cfg)
     windows = openings.windows(side, spec, look, cfg.windows)
     # порядок — порядок отрисовки: наличник под окном, подоконник и карниз поверх стены
     elements = [

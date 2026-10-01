@@ -107,6 +107,14 @@ def test_floor_align_warning(clean, cfg):
     assert Rule.FLOOR_ALIGN in {v.rule for v in found} and errors(found) == []
 
 
+def test_lower_sill_with_same_top_is_not_misaligned(clean, cfg):
+    """Окно в пол рядом с обычным: верх общий, низ разный — так задумано, предупреждения нет."""
+    w = _window(clean)
+    sheet = _with_neighbour(clean, w, dy=0.0)
+    lower = _edit(sheet, SIDE, "twin", y_m=w.y_m - 0.4, h_m=w.h_m + 0.4)
+    assert Rule.FLOOR_ALIGN not in _rules(lower, cfg)
+
+
 def test_axis_align_warning(clean, cfg):
     w = _window(clean, floor=2)
     found = validate(_edit(clean, SIDE, w.id, x_m=w.x_m + 0.03), cfg.checks)

@@ -6,7 +6,16 @@ from enum import Enum
 
 from genfacade.config import Range, Synthetic
 from genfacade.datasets.synthetic.plan import on_grid
-from genfacade.schema import BuildingType, HouseSpec, Material, PaletteRole, Roof, RoofKind
+from genfacade.schema import (
+    DOOR_KINDS,
+    BuildingType,
+    HouseSpec,
+    Material,
+    PaletteRole,
+    Roof,
+    RoofKind,
+    VariantKind,
+)
 
 
 class Scheme(Enum):
@@ -30,6 +39,7 @@ class Look:
     wainscot_m: float    # высота нижнего пояса отделки над цоколем (для схемы WAINSCOT)
     porch: bool
     canopy: bool
+    door: VariantKind | None  # вид входной двери; None — глухая
 
 
 def house(rng: random.Random, cfg: Synthetic) -> tuple[HouseSpec, Look]:
@@ -67,7 +77,13 @@ def _look(rng: random.Random, style: str, cfg: Synthetic) -> Look:
         wainscot_m=on_grid(rng, finish.wainscot_m, cfg.spec.grid_m),
         porch=rng.random() < entry.porch_p,
         canopy=rng.random() < entry.canopy_p,
+        door=_door_kind(_weighted(rng, cfg.facade.door.weights)),
     )
+
+
+def _door_kind(key: str) -> VariantKind | None:
+    """Ключ весов двери → вид; ключ не из видов двери (solid) — глухая."""
+    return next((k for k in DOOR_KINDS if k == key), None)
 
 
 def _weighted(rng: random.Random, weights: dict[str, float]) -> str:

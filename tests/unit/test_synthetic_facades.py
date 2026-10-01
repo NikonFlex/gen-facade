@@ -10,13 +10,12 @@ from genfacade.datasets.synthetic.house import Scheme, house
 from genfacade.render.parse import parse_sheet_svg
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import (
+    DOOR_KINDS,
     EPS,
     ElementClass,
     FixedField,
     OpeningKind,
     PaletteRole,
-    Rule,
-    Severity,
     Source,
     VariantKind,
     ZoneRole,
@@ -46,10 +45,8 @@ def _walls(houses):
 
 
 def test_every_house_passes_validator(houses, cfg):
-    """Ошибок нет. Предупреждение одно и намеренное: окна этажа разной высоты."""
-    found = [(h.id, v) for h in houses for v in validate(h.sheet, cfg.checks)]
-    assert [(i, v.message) for i, v in found if v.severity is Severity.ERROR] == []
-    assert {v.rule for _, v in found} == {Rule.FLOOR_ALIGN}
+    """Ни ошибок, ни предупреждений: окна разной высоты стоят верхом на одной линии."""
+    assert [(h.id, v.message) for h in houses for v in validate(h.sheet, cfg.checks)] == []
 
 
 def test_plan_openings_stand_where_plan_put_them(houses):
@@ -74,8 +71,23 @@ def test_windows_between_floor_and_cornice(houses, cfg):
         for w in _of(f, ElementClass.WINDOW):
             assert w.y_m >= spec.plinth_m - EPS, h.id
             assert w.y_m + w.h_m <= spec.eaves_m - rules.windows.lintel_m + EPS, h.id
-        for d in _of(f, ElementClass.DOOR):
-            assert (d.y_m, d.h_m) == (spec.plinth_m, rules.door.height_m)
+
+
+def test_door_kind_one_per_house_and_fits_under_cornice(houses, looks, cfg):
+    """Вид двери — по характеру дома; фрамуга — только там, где с козырьком влезает."""
+    rules, kinds = cfg.synthetic.facade, set()
+    for h, (spec, look) in zip(houses, looks, strict=True):
+        [door] = [d for f in h.sheet.facades for d in _of(f, ElementClass.DOOR)]
+        kind = door.variant.kind if door.variant else None
+        kinds.add(kind)
+        tall = kind is VariantKind.TRANSOM
+        assert door.y_m == spec.plinth_m
+        assert door.h_m == rules.door.height_m + (rules.door.transom_m if tall else 0.0)
+        above = rules.entry.canopy_gap_m + rules.entry.canopy_m if look.canopy else 0.0
+        assert door.y_m + door.h_m + above <= spec.eaves_m - rules.cornice.height_m + EPS, h.id
+        if kind is not look.door:  # фрамуга не влезла — дверь со стеклом
+            assert (look.door, kind) == (VariantKind.TRANSOM, VariantKind.GLAZED)
+    assert kinds == {None, *DOOR_KINDS} and set(rules.door.weights) >= set(DOOR_KINDS)
 
 
 def test_window_tops_align_and_sills_follow_width(houses, looks, cfg):
@@ -199,12 +211,13 @@ def test_houses_differ_in_character(looks, cfg):
         assert {getattr(look, flag) for _, look in looks} == {True, False}, flag
 
 
-def test_sheet_survives_svg(houses, cfg):
-    """JSON → SVG → разбор SVG даёт те же элементы и зоны (facade.md, критерии приёмки)."""
-    sheet = houses[0].sheet
-    parsed = parse_sheet_svg(sheet_svg(sheet, cfg))
-    assert [parsed[f.side.index] for f in sheet.facades] == [
-        (f.elements, f.zones) for f in sheet.facades]
+def test_sheets_survive_svg(houses, cfg):
+    """JSON → SVG → разбор SVG даёт те же элементы и зоны (facade.md, критерии приёмки) —
+    на домах со всеми видами дверей, крыльцом и козырьком."""
+    for h in houses[:20]:
+        parsed = parse_sheet_svg(sheet_svg(h.sheet, cfg))
+        assert [parsed[f.side.index] for f in h.sheet.facades] == [
+            (f.elements, f.zones) for f in h.sheet.facades], h.id
 
 
 def test_manifest_counts_blind_walls(houses, tmp_path):

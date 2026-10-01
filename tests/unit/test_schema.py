@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from genfacade.schema import ElementClass, FacadeSheet, Plan
+from genfacade.schema import ElementClass, FacadeSheet, Plan, VariantKind
 
 
 def test_fixtures_load(house):
@@ -94,3 +94,14 @@ def test_only_external_non_entrance_can_be_sealed(raw_plan, index, external):
 def test_external_window_can_be_sealed(raw_plan):
     raw_plan["openings"][0]["sealed"] = True
     assert Plan.model_validate(raw_plan).openings[0].sealed
+
+
+@pytest.mark.parametrize("cls, kind", [(ElementClass.WINDOW, VariantKind.GLAZED),
+                                       (ElementClass.DOOR, VariantKind.REGULAR)])
+def test_variant_kind_must_fit_element_class(raw_house, cls, kind):
+    """Виды окна — окну, виды двери — двери (facade.md, Element.variant)."""
+    raw = raw_house
+    target = next(e for e in raw["facades"][0]["elements"] if e["cls"] == cls)
+    target["variant"] = {"kind": kind, "cols": 1, "rows": 1}
+    with pytest.raises(ValidationError, match=f"вид {kind} не для {cls}"):
+        FacadeSheet.model_validate(raw)

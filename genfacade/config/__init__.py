@@ -87,11 +87,18 @@ class PlanLook(Section):
     legend: dict[str, str]  # ключ — класс .plan-<ключ> в sheet.css, значение — подпись
 
 
+class DoorLook(Section):
+    glass_inset: float
+    glazed_span: tuple[float, float]
+    transom_share: float
+
+
 class Sheet(Section):
     sheet: SheetLayout
     ground: Ground
     levels: Levels
     axes: Axes
+    door: DoorLook
     title: Title
     preview: Preview
     plan: PlanLook
@@ -222,6 +229,13 @@ class Height(Section):
     height_m: float
 
 
+class Door(Section):
+    height_m: float
+    transom_m: float
+    weights: dict[str, float]
+    glazed_panes: tuple[int, int]
+
+
 class Sill(Section):
     overhang_m: float
     height_m: float
@@ -251,7 +265,7 @@ class Entry(Section):
 
 class FacadeRules(Section):
     windows: Windows
-    door: Height
+    door: Door
     sill: Sill
     casing: Casing
     cornice: Height

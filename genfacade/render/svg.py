@@ -11,7 +11,7 @@ import math
 from typing import NamedTuple
 from xml.etree import ElementTree
 
-from genfacade.config import Axes, Config, Levels, Sheet, SheetLayout
+from genfacade.config import Axes, Config, DoorLook, Levels, Sheet, SheetLayout
 from genfacade.render import sheet_format
 from genfacade.render.sheet_format import num
 from genfacade.schema import (
@@ -23,6 +23,7 @@ from genfacade.schema import (
     Point,
     Polygon,
     SideFacade,
+    VariantKind,
     Violation,
 )
 from genfacade.unfold import plan_corners
@@ -192,16 +193,30 @@ def _element(g: ElementTree.Element, e: Element, pen: Pen) -> None:
             attrs["stroke"] = pen.colors[e.material]
     ElementTree.SubElement(g, "rect", attrs)
     if e.cls is ElementClass.WINDOW and e.variant is not None:
-        _mullions(g, e)
+        _mullions(g, e, (e.x_m, e.y_m, e.w_m, e.h_m))
+    elif e.cls is ElementClass.DOOR and e.variant is not None:
+        glass = _door_glass(e, pen.cfg.sheet.door)
+        _box(g, "door-glass", glass).set("fill", lib.fill.glass)
+        _mullions(g, e, glass)
 
 
-def _mullions(g: ElementTree.Element, e: Element) -> None:
-    """Деление рамы на створки — линии поверх стекла, в разбор не входят."""
-    v = e.variant
-    for x in (e.x_m + e.w_m * i / v.cols for i in range(1, v.cols)):
-        add_line(g, "mullion", (x, e.y_m), (x, e.y_m + e.h_m))
-    for y in (e.y_m + e.h_m * j / v.rows for j in range(1, v.rows)):
-        add_line(g, "mullion", (e.x_m, y), (e.x_m + e.w_m, y))
+def _mullions(g: ElementTree.Element, e: Element, glass: tuple[float, ...]) -> None:
+    """Деление стекла на створки — линии поверх него, в разбор не входят."""
+    v, (x0, y0, w, h) = e.variant, glass
+    for x in (x0 + w * i / v.cols for i in range(1, v.cols)):
+        add_line(g, "mullion", (x, y0), (x, y0 + h))
+    for y in (y0 + h * j / v.rows for j in range(1, v.rows)):
+        add_line(g, "mullion", (x0, y), (x0 + w, y))
+
+
+def _door_glass(e: Element, look: DoorLook) -> tuple[float, float, float, float]:
+    """Где у двери стекло: в полотне или фрамугой сверху (facade.md, Element.variant)."""
+    if e.variant.kind is VariantKind.TRANSOM:
+        h = e.h_m * look.transom_share
+        return (e.x_m, e.y_m + e.h_m - h, e.w_m, h)
+    low, high = look.glazed_span
+    inset = e.w_m * look.glass_inset
+    return (e.x_m + inset, e.y_m + e.h_m * low, e.w_m - 2 * inset, e.h_m * (high - low))
 
 
 def _axis_labels(sheet: FacadeSheet, letters: str) -> dict[int, tuple[str, str]]:

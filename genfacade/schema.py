@@ -88,10 +88,18 @@ class TextKind(StrEnum):
 
 
 class VariantKind(StrEnum):
+    """Вид проёма (facade.md, Element.variant). У окна — первые четыре; у двери — последние
+    два, а дверь без варианта — глухая."""
+
     REGULAR = "regular"
     PANORAMIC = "panoramic"
     CORNER = "corner"
     STRIP = "strip"
+    GLAZED = "glazed"    # дверь со стеклом в полотне
+    TRANSOM = "transom"  # дверь с остеклённой фрамугой над полотном, в высоте элемента
+
+
+DOOR_KINDS = (VariantKind.GLAZED, VariantKind.TRANSOM)
 
 
 class FixedField(StrEnum):
@@ -292,6 +300,14 @@ class Element(Model):
     # Поля, заданные условием, а не моделью: в режиме 2 у проёма из плана — x и ширина
     # (generation.md, п. 4). Один формат на оба режима.
     fixed: list[FixedField] = []
+
+    @model_validator(mode="after")
+    def _check_variant(self) -> "Element":
+        if self.variant is not None:
+            for_door = self.variant.kind in DOOR_KINDS
+            if for_door != (self.cls is ElementClass.DOOR):
+                raise ValueError(f"элемент {self.id}: вид {self.variant.kind} не для {self.cls}")
+        return self
 
 
 class MaterialZone(Model):
