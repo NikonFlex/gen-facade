@@ -94,6 +94,18 @@ def metres(n: int, cfg: Tokens) -> float:
     return round(n * cfg.grid_m, 6)
 
 
+def lines(tokens: list[str]) -> list[str]:
+    """Последовательность строками для чтения глазами: часть, стена, элемент, зона — с новой."""
+    starts = tuple(f"{PREFIX[enum]}:" for enum in (ElementClass, ZoneRole))
+    out: list[list[str]] = []
+    for t in tokens:
+        if not out or t in (Mark.HOUSE, Mark.SIDE, Mark.ANSWER, Mark.WALL, Mark.END) \
+                or t.startswith(starts):
+            out.append([])
+        out[-1].append(t)
+    return [" ".join(row) for row in out]
+
+
 # ——— запись ———
 
 def encode(sheet: FacadeSheet, mode: Mode, cfg: Config) -> list[str]:
