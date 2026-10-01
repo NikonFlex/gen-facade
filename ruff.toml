@@ -12,5 +12,5 @@ select = ["E", "W", "F", "I", "B", "UP", "S", "C90"]
 max-complexity = 10
 
 [lint.per-file-ignores]
-# assert в тестах — норма
-"tests/**" = ["S101"]
+# assert в тестах — норма; XML тесты разбирают только наш же SVG, не чужой
+"tests/**" = ["S101", "S314"]

@@ -13,16 +13,14 @@ from genfacade.render.sheet_format import num
 from genfacade.render.svg import add_line, canvas, points
 from genfacade.schema import Plan, Point, Rect, Side
 
-LEGEND = ("вход — зелёный, окно — голубой, дверь — коричневый,",
-          "заделан — оранжевый, запретная зона — красный")
-
 
 def plan_svg(plan: Plan, cfg: Config) -> str:
     look = cfg.sheet.plan
     xs, ys = [p[0] for p in plan.outline], [p[1] for p in plan.outline]
     x0, top = min(xs) - look.margin_m, max(ys) + look.margin_m
     width, height = max(xs) + look.margin_m - x0, top - (min(ys) - look.margin_m)
-    root = canvas(width, height, cfg.css)
+    legend_h = len(look.legend) * look.legend_line_m + look.legend_margin_m
+    root = canvas(width, height + legend_h, cfg.css)
     g = ElementTree.SubElement(root, "g", {
         "transform": f"translate({num(-x0)},{num(top)}) scale(1,-1)"})
     for w in plan.walls:
@@ -37,12 +35,24 @@ def plan_svg(plan: Plan, cfg: Config) -> str:
     return ElementTree.tostring(root, encoding="unicode")
 
 
-def _legend(root: ElementTree.Element, height: float, look: PlanLook) -> None:
-    for i, line in enumerate(reversed(LEGEND)):
-        y = height - look.legend_margin_m - look.legend_line_m * i
-        node = ElementTree.SubElement(root, "text", {"class": "plan-legend",
-                                                     "x": num(look.legend_margin_m), "y": num(y)})
-        node.text = line
+def _legend(root: ElementTree.Element, top: float, look: PlanLook) -> None:
+    """Под планом: образец тем же классом .plan-<ключ>, что и на чертеже, и подпись из config.
+
+    Своего цвета у образца нет — перекрасили класс в sheet.css, перекрасилась и легенда.
+    """
+    g = ElementTree.SubElement(root, "g", {"class": "plan-legend-box"})
+    s, x = look.legend_swatch_m, look.legend_margin_m
+    for i, (key, label) in enumerate(look.legend.items()):
+        y = top + look.legend_line_m * i
+        if key == "forbidden":  # на плане запретная зона — линия у стороны, а не заливка
+            add_line(g, "plan-forbidden", (x, y + s / 2), (x + s, y + s / 2))
+        else:
+            ElementTree.SubElement(g, "rect", {"class": f"plan-{key}", "x": num(x), "y": num(y),
+                                               "width": num(s), "height": num(s)})
+        node = ElementTree.SubElement(g, "text", {"class": "plan-legend",
+                                                  "x": num(x + s + look.legend_gap_m),
+                                                  "y": num(y + s)})
+        node.text = label
 
 
 def _rect(g: ElementTree.Element, r: Rect, css_class: str) -> None:

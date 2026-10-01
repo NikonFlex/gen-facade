@@ -79,6 +79,9 @@ class PlanLook(Section):
     forbidden_inset_m: float
     legend_margin_m: float
     legend_line_m: float
+    legend_swatch_m: float
+    legend_gap_m: float
+    legend: dict[str, str]  # ключ — класс .plan-<ключ> в sheet.css, значение — подпись
 
 
 class Sheet(Section):
