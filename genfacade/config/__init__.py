@@ -1,5 +1,5 @@
 """Настройки, вынесенные из кода: материалы, лист, смотрелка, план, проверка, данные,
-синтетика.
+синтетика, токены.
 
 По умолчанию — файлы этой папки. Свой конфиг — папка с любыми из тех же файлов:
 TOML сливается с умолчаниями поключно, sheet.css дописывается после умолчаний
@@ -289,6 +289,13 @@ class Synthetic(Section):
     facade: FacadeRules
 
 
+class Tokens(Section):
+    """Запись дома токенами (config/tokens.toml)."""
+
+    grid_m: float
+    max_m: float
+
+
 class Config(Section):
     library: Library
     sheet: Sheet
@@ -297,6 +304,7 @@ class Config(Section):
     checks: Checks
     data: Data
     synthetic: Synthetic
+    tokens: Tokens
     css: str
 
 
@@ -313,6 +321,7 @@ def load(user_dir: Path | None = None) -> Config:
         checks=Checks(**_toml("checks.toml", user_dir)),
         data=Data(**_toml("data.toml", user_dir)),
         synthetic=Synthetic(**_toml("synthetic.toml", user_dir)),
+        tokens=Tokens(**_toml("tokens.toml", user_dir)),
         css=css,
     )
 
