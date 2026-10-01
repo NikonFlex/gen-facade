@@ -8,3 +8,42 @@ port = 8000
 runs_dir = "outputs/runs"
 # SVG-планы GenPlan для запуска «план + описание». Пока — один простой дом (gf#58).
 plans_dirs = ["tests/fixtures"]
+
+# Подписи к значениям из schema.py. Страница получает их через /api/options и сама
+# значений не знает: новый режим или класс элемента — строка здесь, а не правка JS.
+
+[labels.mode.with_openings]
+title = "Окна из плана"
+hint = "Режим 2: окна стоят там, где их задал план"
+
+[labels.mode.blind]
+title = "Глухой куб"
+hint = "Режим 1: разрывы плана заделаны, кроме входа; окна ставит модель (пока стаб)"
+
+[labels.cls]
+window = "Окно"
+door = "Дверь"
+garage_door = "Гаражные ворота"
+sill = "Подоконник"
+blind = "Ставни"
+pillar = "Колонна"
+deco = "Декор"
+cornice = "Карниз"
+balcony = "Балкон"
+molding = "Наличник"
+shop = "Витрина"
+facade = "Фасад"
+porch = "Крыльцо"
+chimney = "Труба"
+
+[labels.role]
+plinth = "Цоколь"
+main = "Основная отделка"
+accent = "Акцентная зона"
+band = "Пояс"
+
+[labels.variant]
+regular = "обычное"
+panoramic = "панорамное"
+corner = "угловое"
+strip = "ленточное"

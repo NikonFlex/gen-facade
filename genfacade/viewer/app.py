@@ -1,4 +1,4 @@
-"""Сервер смотрелки: список домов и прогонов, запуск конвейера, файлы трассы.
+"""Сервер смотрелки: планы и прогоны, режимы и подписи, запуск конвейера, файлы трассы.
 
 Страница ничего не считает сама: SVG рисует тот же render/, что и на выходе
 (docs/decisions.md, 29.09 «трасса каждого шага и веб-смотрелка»).
@@ -17,6 +17,7 @@ from genfacade import pipeline
 from genfacade.config import Config
 from genfacade.models.stub import ModelError
 from genfacade.plan.genplan_svg import PlanError
+from genfacade.schema import Mode
 
 STATIC = files(__package__).joinpath("static")
 
@@ -63,6 +64,10 @@ def _api(app: FastAPI, cfg: Config, runs_dir: Path) -> None:
     def run_meta(run_id: str) -> dict:
         return json.loads((_run_dir(runs_dir, run_id) / pipeline.META).read_text())
 
+    @app.get("/api/options")
+    def options() -> dict:
+        return _options(cfg)
+
     @app.get("/api/plans")
     def plans() -> list[dict]:
         return [{"name": name} for name in _plans(cfg)]
@@ -77,6 +82,14 @@ def _api(app: FastAPI, cfg: Config, runs_dir: Path) -> None:
     @app.post("/api/runs")
     def start(req: RunRequest) -> dict:
         return {"id": _start_plan(req.plan_run, req.svg, cfg).name}
+
+
+def _options(cfg: Config) -> dict:
+    """Режимы и подписи к классам, ролям и типам окон: страница своих списков не держит."""
+    labels = cfg.viewer.labels
+    modes = [{"value": m, **labels.mode[m].model_dump()} for m in Mode]
+    return {"modes": modes, "default_mode": pipeline.PlanRun.model_fields["mode"].default,
+            **labels.model_dump(mode="json", exclude={"mode"})}
 
 
 def _plans(cfg: Config) -> dict[str, Path]:

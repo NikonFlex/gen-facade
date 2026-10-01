@@ -47,10 +47,7 @@
             <textarea id="plan-text" rows="3" spellcheck="false" aria-label="Описание дома"
               placeholder="A simple one-storey house with a flat roof."></textarea>
             <div class="plan-row">
-              <div class="segmented" role="radiogroup" aria-label="Режим">
-                <label title="Режим 2: окна стоят там, где их задал план"><input type="radio" name="mode" value="with_openings" checked><span>Окна из плана</span></label>
-                <label title="Режим 1: разрывы плана заделаны, кроме входа; окна ставит модель (пока стаб)"><input type="radio" name="mode" value="blind"><span>Глухой куб</span></label>
-              </div>
+              <div class="segmented" id="mode-group" role="radiogroup" aria-label="Режим"></div>
               <button class="btn primary" id="plan-go" type="submit"></button>
             </div>
           </div>

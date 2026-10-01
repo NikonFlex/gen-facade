@@ -1,13 +1,6 @@
 // Сцена с чертежом: SVG в shadow DOM (стили листа не смешиваются со страницей),
 // масштаб колесом к курсору, сдвиг перетаскиванием, слои, карточка элемента.
 
-const CLS = {
-  window: "Окно", door: "Дверь", garage_door: "Гаражные ворота", sill: "Подоконник",
-  blind: "Ставни", pillar: "Колонна", deco: "Декор", cornice: "Карниз", balcony: "Балкон",
-  molding: "Наличник", shop: "Витрина", facade: "Фасад", porch: "Крыльцо", chimney: "Труба",
-};
-const ROLE = { plinth: "Цоколь", main: "Основная отделка", accent: "Акцентная зона", band: "Пояс" };
-const VARIANT = { regular: "обычное", panoramic: "панорамное", corner: "угловое", strip: "ленточное" };
 const ZOOM_MIN = 0.5, ZOOM_MAX = 40; // относительно «вписать»
 
 let stageCss = null;
@@ -16,7 +9,9 @@ export const metres = (v) =>
   `${Number(v).toLocaleString("ru-RU", { maximumFractionDigits: 2 })} м`;
 
 export class SvgStage {
-  constructor(container, { tooltip, onZoom }) {
+  // labels — подписи к классам, ролям и типам окон с сервера (/api/options).
+  constructor(container, { tooltip, onZoom, labels }) {
+    this.labels = labels;
     this.host = document.createElement("div");
     this.host.className = "canvas";
     container.append(this.host);
@@ -110,7 +105,7 @@ export class SvgStage {
       this.current = target;
     }
     if (!target) { this.tooltip.hidden = true; return; }
-    this.tooltip.innerHTML = target.dataset.cls ? elementCard(target) : zoneCard(target);
+    this.tooltip.innerHTML = (target.dataset.cls ? elementCard : zoneCard)(target, this.labels);
     this.tooltip.hidden = false;
     placeTooltip(this.tooltip, e.clientX, e.clientY);
   }
@@ -124,23 +119,24 @@ function swatch(color) {
   return color ? `<span class="swatch" style="background:${color}"></span>` : "";
 }
 
-function elementCard(el) {
+function elementCard(el, labels) {
   const d = el.dataset;
   const [kind, cols, rows] = (d.variant ?? "").split(":");
-  const color = d.cls === "window" ? el.getAttribute("stroke") : el.getAttribute("fill");
-  return `<div class="tt-title">${swatch(color)}${CLS[d.cls] ?? d.cls}<span class="tt-id">${d.id}</span></div>`
+  // Свой stroke лист пишет только окну с материалом: рама — цвет материала, заливка — стекло.
+  const color = el.getAttribute("stroke") ?? el.getAttribute("fill");
+  return `<div class="tt-title">${swatch(color)}${labels.cls[d.cls] ?? d.cls}<span class="tt-id">${d.id}</span></div>`
     + row("Размер", `${metres(el.getAttribute("width"))} × ${metres(el.getAttribute("height"))}`)
     + row("Слева · снизу", `${metres(el.getAttribute("x"))} · ${metres(el.getAttribute("y"))}`)
     + row("Этаж", d.floor)
-    + row("Тип", kind ? `${VARIANT[kind] ?? kind}${cols > 1 || rows > 1 ? `, ${cols}×${rows}` : ""}` : null)
+    + row("Тип", kind ? `${labels.variant[kind] ?? kind}${cols > 1 || rows > 1 ? `, ${cols}×${rows}` : ""}` : null)
     + row("Материал", d.material)
     + row("Внутри", d.parent)
     + row("Задано планом", d.fixed);
 }
 
-function zoneCard(el) {
+function zoneCard(el, labels) {
   const d = el.dataset;
-  return `<div class="tt-title">${swatch(el.getAttribute("fill"))}${ROLE[d.role] ?? d.role}</div>`
+  return `<div class="tt-title">${swatch(el.getAttribute("fill"))}${labels.role[d.role] ?? d.role}</div>`
     + row("Материал", d.material);
 }
 

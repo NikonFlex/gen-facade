@@ -12,7 +12,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from genfacade.schema import ElementClass
+from genfacade.schema import ElementClass, Mode, VariantKind, ZoneRole
 
 DEFAULTS = files(__package__)
 
@@ -129,9 +129,24 @@ class ViewerPaths(Section):
     plans_dirs: list[Path]
 
 
+class ModeLabel(Section):
+    title: str
+    hint: str
+
+
+class Labels(Section):
+    """Подписи смотрелки к значениям enum из schema.py: страница берёт их отсюда."""
+
+    mode: dict[Mode, ModeLabel]
+    cls: dict[ElementClass, str]
+    role: dict[ZoneRole, str]
+    variant: dict[VariantKind, str]
+
+
 class Viewer(Section):
     server: Server
     paths: ViewerPaths
+    labels: Labels
 
 
 class Config(Section):

@@ -10,6 +10,7 @@ import subprocess  # noqa: S404 — только git rev-parse
 from datetime import datetime
 from importlib.metadata import version
 from pathlib import Path
+from typing import NamedTuple
 
 from pydantic import BaseModel
 
@@ -24,15 +25,28 @@ from genfacade.snap import snap
 from genfacade.unfold import unfold
 from genfacade.validate import errors, validate
 
+SPEC, PLAN_SVG, UNFOLD, LAYOUT, SNAPPED, SHEET = (
+    "01_spec.json", "02_plan.svg", "03_unfold.svg", "04_layout.svg", "05_snapped.svg",
+    "06_sheet.svg")
+REQUEST, INPUT_PLAN, PLAN_JSON, VIOLATIONS, SHEET_JSON, PREVIEW, META = (
+    "request.json", "input_plan.svg", "02_plan.json", "violations.json", "sheet.json",
+    "preview.png", "meta.json")
+
+
+class Step(NamedTuple):
+    """Шаг схемы в трассе: поля — как в meta.json, их читает смотрелка."""
+
+    n: int
+    title: str
+    file: str  # что шаг показывает в смотрелке
+
+
 # Семь шагов схемы (docs/assets/facade-modules.png); седьмой — позже, вместе с Егором.
-STEPS = {1: "Параметры дома", 2: "План", 3: "Развёртка", 4: "Раскладка стен",
-         5: "Сетка и проверка", 6: "Лист фасадов"}
-UNFOLD, SHEET, SHEET_JSON, PREVIEW, META = (
-    "03_unfold.svg", "06_sheet.svg", "sheet.json", "preview.png", "meta.json")
-REQUEST, INPUT_PLAN, SPEC, PLAN_JSON, PLAN_SVG, LAYOUT, SNAPPED, VIOLATIONS = (
-    "request.json", "input_plan.svg", "01_spec.json", "02_plan.json", "02_plan.svg",
-    "04_layout.svg", "05_snapped.svg", "violations.json")
-STEP_FILES = {1: SPEC, 2: PLAN_SVG, 3: UNFOLD, 4: LAYOUT, 5: SNAPPED, 6: SHEET}
+STEPS = (
+    Step(1, "Параметры дома", SPEC), Step(2, "План", PLAN_SVG), Step(3, "Развёртка", UNFOLD),
+    Step(4, "Раскладка стен", LAYOUT), Step(5, "Сетка и проверка", SNAPPED),
+    Step(6, "Лист фасадов", SHEET),
+)
 RUN_ID = re.compile(r"^[\w.-]+$")  # имя папки прогона: без / и .., чтобы не выйти из runs_dir
 
 
@@ -114,7 +128,7 @@ def _finish(sheet: FacadeSheet, out: Path, cfg: Config, extra: dict) -> Path:
         "date": datetime.now().isoformat(timespec="seconds"),
         "git_sha": _git_sha(), "genfacade": version("genfacade"),
         "sheet_json": SHEET_JSON, "preview": PREVIEW if has_png else None,
-        "steps": [{"n": n, "title": t, "file": STEP_FILES[n]} for n, t in STEPS.items()],
+        "steps": [s._asdict() for s in STEPS],
         **extra,
         # Итоговые настройки целиком: прогон повторяется без исходной папки конфига.
         "config": cfg.model_dump(mode="json"),

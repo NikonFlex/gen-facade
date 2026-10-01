@@ -1,12 +1,14 @@
 """Сервер смотрелки: список планов, запуск по плану, трасса, кэш страницы."""
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 from simple_house import SIMPLE
 
 from genfacade import config
-from genfacade.schema import Mode
-from genfacade.viewer.app import create_app
+from genfacade.schema import ElementClass, Mode, VariantKind, ZoneRole
+from genfacade.viewer.app import STATIC, create_app
 
 PLAN_RUN = {"plan": SIMPLE.stem, "text": "A simple one-storey house.", "mode": Mode.BLIND}
 
@@ -26,6 +28,29 @@ def test_page_and_static_revalidated(client):
     # Без этого браузер держит старый app.js при новом index.html — кнопки ломаются.
     for path in ("/", "/static/app.js", "/static/style.css", "/static/stage.js"):
         assert client.get(path).headers["cache-control"] == "no-cache", path
+
+
+def test_options_label_every_enum_value(client):
+    """Режимы и подписи страница берёт с сервера: у каждого значения enum есть подпись."""
+    options = client.get("/api/options").json()
+    assert [m["value"] for m in options["modes"]] == list(Mode)
+    assert all(m["title"] and m["hint"] for m in options["modes"])
+    assert options["default_mode"] in list(Mode)
+    for key, enum in (("cls", ElementClass), ("role", ZoneRole), ("variant", VariantKind)):
+        assert set(options[key]) == set(enum), key
+        assert all(options[key].values()), key
+
+
+def test_page_does_not_repeat_enum_values():
+    """Одно значение — в одном месте: в JS и HTML значений enum из schema.py нет."""
+    values = [*Mode, *ElementClass, *VariantKind, *ZoneRole]
+    quoted = re.compile("[\"'`](" + "|".join(map(re.escape, values)) + ")[\"'`]")
+    key = re.compile(r"\b(" + "|".join(map(re.escape, values)) + r"):")
+    for name in ("app.js", "stage.js"):
+        text = STATIC.joinpath(name).read_text()
+        assert not quoted.findall(text) and not key.findall(text), name
+    html = STATIC.joinpath("index.html").read_text()
+    assert not re.findall('value="(' + "|".join(Mode) + ')"', html)
 
 
 def test_one_plan_listed_and_served(client):
