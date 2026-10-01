@@ -47,31 +47,37 @@ def points(poly: Polygon) -> str:
     return " ".join(f"{num(x)},{num(y)}" for x, y in poly)
 
 
-def _line(g: ElementTree.Element, css_class: str, start: Point, end: Point) -> None:
+def add_line(g: ElementTree.Element, css_class: str, start: Point, end: Point) -> None:
     (x1, y1), (x2, y2) = start, end
     ElementTree.SubElement(g, "line", {"class": css_class, "x1": num(x1), "y1": num(y1),
                                        "x2": num(x2), "y2": num(y2)})
 
 
-def _text(g: ElementTree.Element, css_class: str, at: Point, text: str) -> None:
+def add_text(g: ElementTree.Element, css_class: str, at: Point, text: str) -> None:
     x, y = at
     node = ElementTree.SubElement(g, "text", {"class": css_class, "x": num(x), "y": num(y)})
     node.text = text
+
+
+def canvas(width: float, height: float, css: str) -> ElementTree.Element:
+    """Корень SVG в метрах: стиль и белый фон."""
+    root = ElementTree.Element("svg", {"xmlns": sheet_format.SVG_NS,
+                                       "viewBox": f"0 0 {num(width)} {num(height)}"})
+    ElementTree.SubElement(root, "style").text = css
+    # Размер фона числом, не 100%: проценты считаются от viewBox, и при масштабе
+    # в смотрелке фон обрезался бы.
+    ElementTree.SubElement(root, "rect", {"class": "background",
+                                          "width": num(width), "height": num(height)})
+    return root
 
 
 def sheet_svg(sheet: FacadeSheet, cfg: Config) -> str:
     """Лист всех фасадов; силуэты должны быть посчитаны (unfold)."""
     cells, width, height = _layout(sheet, cfg.sheet.sheet)
     mm_per_m = 1000 / cfg.sheet.sheet.scale
-    root = ElementTree.Element("svg", {
-        "xmlns": sheet_format.SVG_NS, "viewBox": f"0 0 {num(width)} {num(height)}",
-        "width": f"{width * mm_per_m:.0f}mm", "height": f"{height * mm_per_m:.0f}mm",
-    })
-    ElementTree.SubElement(root, "style").text = cfg.css
-    # Размер листа числом, не 100%: проценты считаются от viewBox, и при масштабе
-    # в смотрелке фон обрезался бы.
-    ElementTree.SubElement(root, "rect", {"class": "background",
-                                          "width": num(width), "height": num(height)})
+    root = canvas(width, height, cfg.css)
+    root.set("width", f"{width * mm_per_m:.0f}mm")
+    root.set("height", f"{height * mm_per_m:.0f}mm")
     pen = _pen(sheet, cfg)
     axes, levels = _axis_labels(sheet, cfg.sheet.axes.letters), _levels(sheet, cfg.sheet.levels)
     for facade, origin in zip(sheet.facades, cells, strict=True):
@@ -170,9 +176,9 @@ def _mullions(g: ElementTree.Element, e: Element) -> None:
     cuts += [("y", e.y_m + e.h_m * j / v.rows) for j in range(1, v.rows)]
     for axis, c in cuts:
         if axis == "x":
-            _line(g, "mullion", (c, e.y_m), (c, e.y_m + e.h_m))
+            add_line(g, "mullion", (c, e.y_m), (c, e.y_m + e.h_m))
         else:
-            _line(g, "mullion", (e.x_m, c), (e.x_m + e.w_m, c))
+            add_line(g, "mullion", (e.x_m, c), (e.x_m + e.w_m, c))
 
 
 def _axis_labels(sheet: FacadeSheet, letters: str) -> dict[int, tuple[str, str]]:
@@ -219,18 +225,19 @@ def _annotations(root: ElementTree.Element, origin, length: float, marks: Marks)
     g = ElementTree.SubElement(root, "g", {"class": "annotations",
                                   "transform": f"translate({num(ox)},{num(oy)})"})
     ext = cfg.ground.extend_m
-    _line(g, "ground", (-ext, 0.0), (length + ext, 0.0))
+    add_line(g, "ground", (-ext, 0.0), (length + ext, 0.0))
     for v in marks.levels:
         _level_mark(g, length + cfg.levels.offset_m, v, cfg.levels)
     for x, name in ((0.0, marks.axes[0]), (length, marks.axes[1])):
         _axis_bubble(g, x, name, cfg.axes)
-    _text(g, "title", (length / 2, cfg.title.y_m), f"Фасад в осях {marks.axes[0]}–{marks.axes[1]}")
+    title = f"Фасад в осях {marks.axes[0]}–{marks.axes[1]}"
+    add_text(g, "title", (length / 2, cfg.title.y_m), title)
 
 
 def _level_mark(g: ElementTree.Element, x: float, level: float, cfg: Levels) -> None:
     """Отметка уровня: треугольник на полке и значение над ней, «+3,300»."""
     y = -level
-    _line(g, "level-shelf", (x - cfg.shelf_left_m, y), (x + cfg.shelf_right_m, y))
+    add_line(g, "level-shelf", (x - cfg.shelf_left_m, y), (x + cfg.shelf_right_m, y))
     half, height = cfg.marker_half_width_m, cfg.marker_height_m
     marker = [(x, y), (x - half, y - height), (x + half, y - height)]
     ElementTree.SubElement(g, "polygon", {"class": "level-marker", "points": points(marker)})
@@ -238,11 +245,11 @@ def _level_mark(g: ElementTree.Element, x: float, level: float, cfg: Levels) -> 
     # Земля подписана под полкой: цоколь бывает ниже высоты шрифта, подписи слиплись бы.
     ty = y + cfg.text_below_m if ground else y - cfg.text_above_m
     label = f"{'±' if ground else '+'}{level:.3f}".replace(".", ",")
-    _text(g, "level-text", (x + cfg.text_dx_m, ty), label)
+    add_text(g, "level-text", (x + cfg.text_dx_m, ty), label)
 
 
 def _axis_bubble(g: ElementTree.Element, x: float, name: str, cfg: Axes) -> None:
-    _line(g, "axis-line", (x, cfg.line_from_m), (x, cfg.line_to_m))
+    add_line(g, "axis-line", (x, cfg.line_from_m), (x, cfg.line_to_m))
     ElementTree.SubElement(g, "circle", {"class": "axis-bubble", "cx": num(x),
                                 "cy": num(cfg.bubble_y_m), "r": num(cfg.bubble_radius_m)})
-    _text(g, "axis-text", (x, cfg.bubble_y_m + cfg.text_dy_m), name)
+    add_text(g, "axis-text", (x, cfg.bubble_y_m + cfg.text_dy_m), name)

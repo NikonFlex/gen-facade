@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 EPS = 1e-6  # допуск сравнения координат, м
 
 Point = tuple[float, float]
+Mode = Literal["with_openings", "blind"]  # режим 2 «окна из плана» / режим 1 «глухой куб»
 Polygon = list[Point]
 
 
@@ -106,6 +107,62 @@ class Side(Model):
         """Стена идёт вдоль оси x плана: нормаль смотрит по y."""
         nx, ny = self.orientation
         return abs(ny) > abs(nx)
+
+
+class Rect(Model):
+    """Осевой прямоугольник в плане, метры, y вверх."""
+
+    x0_m: float
+    y0_m: float
+    x1_m: float
+    y1_m: float
+
+    @model_validator(mode="after")
+    def _check(self) -> "Rect":
+        if self.x1_m - self.x0_m <= EPS or self.y1_m - self.y0_m <= EPS:
+            raise ValueError(f"пустой прямоугольник: {self}")
+        return self
+
+
+class PlanOpening(Model):
+    """Проём в координатах плана; на стороне ему соответствует `Opening`."""
+
+    kind: Literal["window", "door", "entrance"]
+    rect: Rect
+    external: bool = True
+    sealed: bool = False  # заделан в глухом режиме (plan-input.md, правило 6)
+
+    @model_validator(mode="after")
+    def _check(self) -> "PlanOpening":
+        # Глухой режим заделывает наружные разрывы, кроме входа.
+        if self.sealed and (self.kind == "entrance" or not self.external):
+            raise ValueError(f"заделан может быть только наружный проём, не вход: {self.kind}")
+        return self
+
+
+def signed_area(poly: Polygon) -> float:
+    """Площадь со знаком (формула шнурования): меньше нуля — обход по часовой стрелке."""
+    pairs = zip(poly, poly[1:] + poly[:1], strict=True)
+    return sum(x0 * y1 - x1 * y0 for (x0, y0), (x1, y1) in pairs) / 2
+
+
+class Plan(Model):
+    """План этажа во внутреннем формате (plan-input.md); метры, y вверх."""
+
+    walls: list[Rect]
+    outline: Polygon
+    openings: list[PlanOpening] = []
+    sides: list[Side] = []  # заполняет препроцессор
+    scale_m_per_px: float = Field(gt=0)
+    source: Literal["genplan", "mkd", "synthetic", "buildingnet", "bio", "manual"]
+
+    @model_validator(mode="after")
+    def _check_outline(self) -> "Plan":
+        if len(self.outline) < 3:
+            raise ValueError(f"outline: точек {len(self.outline)}, нужно не меньше трёх")
+        if signed_area(self.outline) > -EPS:
+            raise ValueError("outline: обход должен быть по часовой стрелке")
+        return self
 
 
 class OpeningVariant(Model):
