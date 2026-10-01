@@ -1,8 +1,9 @@
-"""Настройки, вынесенные из кода: библиотека материалов, оформление листа, смотрелка, план.
+"""Настройки, вынесенные из кода: материалы, лист, смотрелка, план, дом.
 
 По умолчанию — файлы этой папки. Свой конфиг — папка с любыми из тех же файлов:
 TOML сливается с умолчаниями поключно, sheet.css дописывается после умолчаний
-(правила CSS переопределяют предыдущие). Опечатка в ключе TOML — ошибка, а не молчание.
+(правила CSS переопределяют предыдущие), house.json заменяется целиком — это один дом.
+Опечатка в ключе — ошибка, а не молчание.
 """
 
 import tomllib
@@ -10,6 +11,8 @@ from importlib.resources import files
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
+
+from genfacade.schema import HouseSpec
 
 DEFAULTS = files(__package__)
 
@@ -130,6 +133,7 @@ class Config(Section):
     sheet: Sheet
     viewer: Viewer
     plan: PlanConfig
+    house: HouseSpec  # шаг 1 до модели: параметры дома — отсюда, текст не читается
     css: str
 
 
@@ -143,8 +147,16 @@ def load(user_dir: Path | None = None) -> Config:
         sheet=Sheet(**_toml("sheet.toml", user_dir)),
         viewer=Viewer(**_toml("viewer.toml", user_dir)),
         plan=PlanConfig(**_toml("plan.toml", user_dir)),
+        house=HouseSpec.model_validate_json(_file("house.json", user_dir)),
         css=css,
     )
+
+
+def _file(name: str, user_dir: Path | None) -> str:
+    """Файл целиком: свой в user_dir заменяет умолчание, а не сливается с ним."""
+    if user_dir is not None and (user_dir / name).exists():
+        return (user_dir / name).read_text()
+    return DEFAULTS.joinpath(name).read_text()
 
 
 def _toml(name: str, user_dir: Path | None) -> dict:
