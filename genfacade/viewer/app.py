@@ -104,13 +104,9 @@ def _samples_api(app: FastAPI, cfg: Config) -> None:
 
 
 def _samples(cfg: Config) -> list[dict]:
-    """Источники, в которых есть примеры: опись и первые имена для вкладки «Датасеты».
-
-    Опись считается по файлам при каждом запросе — на малых выборках это быстро; для
-    полного датасета на машине сборки читать сохранённую опись (gf#28, «Что осталось»).
-    """
+    """Источники, в которых есть примеры: опись и первые имена для вкладки «Датасеты»."""
     root, shown = cfg.data.paths.samples_dir, cfg.viewer.samples.shown
-    return [{"ids": store.ids(root, source)[:shown], **store.manifest(root, source)}
+    return [{"ids": store.ids(root, source)[:shown], **store.load_manifest(root, source)}
             for source in Source if store.ids(root, source)]
 
 

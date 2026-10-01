@@ -2,6 +2,9 @@
 # (правило 9). Размеры — метры. Ширина входа здесь не задаётся: это протокол масштаба GenPlan
 # (plan/preprocess.py, ENTRANCE_WIDTH_M).
 
+[build]
+val_share = 0.05          # доля домов в val; остальные — train. В тест синтетика не идёт (data.md, п. 5)
+
 [canvas]
 px_per_m = 100            # 1 px = 1 см, как у простого дома tests/fixtures/simple_house.svg
 margin_m = 1.0            # поле холста вокруг дома

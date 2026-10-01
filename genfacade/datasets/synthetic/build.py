@@ -11,6 +11,16 @@ from genfacade.plan.preprocess import preprocess
 from genfacade.schema import FacadeSheet, HouseSpec, Mode, Sample, SideFacade, Source, Split
 
 
+def sample_id(seed: int) -> str:
+    return f"rect-{seed:06d}"
+
+
+def split(seed: int, rules: Synthetic) -> Split:
+    """Часть датасета — по seed, а не по порядку сборки: дом всегда в одной и той же части."""
+    draw = random.Random(f"split/{seed}").random()  # noqa: S311 — не криптография
+    return Split.VAL if draw < rules.build.val_share else Split.TRAIN
+
+
 def sample(seed: int, cfg: Config) -> Sample:
     rules = cfg.synthetic
     svg = genplan_writer.svg(plan.draft(seed, rules), rules.canvas)
@@ -18,8 +28,8 @@ def sample(seed: int, cfg: Config) -> Sample:
         update={"source": Source.SYNTHETIC})
     # Свой поток случайных чисел: правка правил плана не меняет параметры дома, и наоборот.
     spec, look = house(random.Random(f"house/{seed}"), rules)  # noqa: S311 — не криптография
-    return Sample(id=f"rect-{seed:06d}", source=Source.SYNTHETIC, split=Split.TRAIN, plan=floor,
-                  sheet=lay_out(pipeline.walls(spec, floor), look, rules))
+    return Sample(id=sample_id(seed), source=Source.SYNTHETIC, split=split(seed, rules),
+                  plan=floor, sheet=lay_out(pipeline.walls(spec, floor), look, rules))
 
 
 def lay_out(sheet: FacadeSheet, look: Look, rules: Synthetic) -> FacadeSheet:

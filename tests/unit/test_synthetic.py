@@ -130,3 +130,6 @@ def test_synth_command_writes_samples_and_manifest(tmp_path, capsys):
     assert store.ids(tmp_path / "samples", Source.SYNTHETIC) == [
         "rect-000005", "rect-000006", "rect-000007"]
     assert (manifest["samples"], manifest["walls"]) == (3, 12)
+    with pytest.raises(SystemExit, match="сборка остановлена"):  # те же дома другой сборкой
+        (tmp_path / "synthetic.toml").write_text("[house]\nwall_m = 0.2\n")
+        cli.main(["-c", str(tmp_path), "synth", "-n", "3"])

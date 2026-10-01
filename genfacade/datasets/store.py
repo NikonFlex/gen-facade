@@ -2,9 +2,12 @@
 
     <корень>/<источник>/<id>.json        Sample
     <корень>/<источник>/_manifest.json   опись: сколько примеров, разбиение, стены, классы
+
+Служебные файлы источника начинаются с «_» — имя примера так начинаться не может.
 """
 
 import json
+import os
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -23,7 +26,11 @@ def path(root: Path, source: Source, sample_id: str) -> Path:
 def write(sample: Sample, root: Path) -> Path:
     out = path(root, sample.source, sample.id)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(sample.model_dump_json(indent=2))
+    # Сначала рядом, потом переименование: сборку могут оборвать посреди записи, а готовый
+    # файл при продолжении считается целым.
+    draft = out.with_suffix(".part")
+    draft.write_text(sample.model_dump_json(indent=2))
+    os.replace(draft, out)
     return out
 
 
@@ -32,8 +39,8 @@ def read(root: Path, source: Source, sample_id: str) -> Sample:
 
 
 def ids(root: Path, source: Source) -> list[str]:
-    """Имена примеров источника по алфавиту; опись — не пример."""
-    return sorted(p.stem for p in (root / source).glob("*.json") if p.name != MANIFEST)
+    """Имена примеров источника по алфавиту; служебные файлы — не примеры."""
+    return sorted(p.stem for p in (root / source).glob("*.json") if not p.name.startswith("_"))
 
 
 def manifest(root: Path, source: Source) -> dict:
@@ -53,7 +60,19 @@ def manifest(root: Path, source: Source) -> dict:
     }
 
 
-def write_manifest(root: Path, source: Source) -> Path:
+def write_manifest(root: Path, source: Source, extra: dict | None = None) -> Path:
+    """Сохранить опись; extra — что знает только сборщик источника (настройки, отброшенное)."""
     out = root / source / MANIFEST
-    out.write_text(json.dumps(manifest(root, source), ensure_ascii=False, indent=2))
+    out.write_text(json.dumps(manifest(root, source) | (extra or {}), ensure_ascii=False,
+                              indent=2))
     return out
+
+
+def load_manifest(root: Path, source: Source) -> dict:
+    """Сохранённая опись, если она про нынешние файлы; иначе — посчитанная заново."""
+    saved = root / source / MANIFEST
+    if saved.exists():
+        data = json.loads(saved.read_text())
+        if data["samples"] == len(ids(root, source)):
+            return data
+    return manifest(root, source)

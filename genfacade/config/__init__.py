@@ -273,9 +273,14 @@ class FacadeRules(Section):
     entry: Entry
 
 
+class Build(Section):
+    val_share: float
+
+
 class Synthetic(Section):
     """Генератор синтетических домов (config/synthetic.toml, specs/data.md, правило 1)."""
 
+    build: Build
     canvas: Canvas
     house: HouseSize
     openings: OpeningRules

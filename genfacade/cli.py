@@ -5,11 +5,10 @@ import sys
 from pathlib import Path
 
 from genfacade import config, pipeline
-from genfacade.datasets import store
-from genfacade.datasets.synthetic import build
+from genfacade.datasets.synthetic import batch
 from genfacade.models.stub import ModelError
 from genfacade.plan.genplan_svg import PlanError
-from genfacade.schema import Mode, Source
+from genfacade.schema import Mode
 
 
 def run(args: argparse.Namespace) -> Path:
@@ -21,12 +20,9 @@ def run(args: argparse.Namespace) -> Path:
 
 
 def synth(args: argparse.Namespace) -> Path:
-    """Синтетические дома по seed подряд → примеры и опись источника (data.md, правило 10)."""
-    cfg = config.load(args.config)
-    root = cfg.data.paths.samples_dir
-    for seed in range(args.first_seed, args.first_seed + args.count):
-        store.write(build.sample(seed, cfg), root)
-    return store.write_manifest(root, Source.SYNTHETIC)
+    """Синтетические дома по seed подряд → примеры и опись; готовые дома пропускаются."""
+    seeds = range(args.first_seed, args.first_seed + args.count)
+    return batch.run(seeds, config.load(args.config), args.overwrite)
 
 
 def serve(config_dir: Path | None) -> None:
@@ -56,9 +52,14 @@ def main(argv: list[str] | None = None) -> None:
     s = sub.add_parser("synth", help="синтетические дома → примеры датасета и опись")
     s.add_argument("-n", "--count", type=int, required=True, help="сколько домов")
     s.add_argument("--first-seed", type=int, default=0, help="seed первого дома; дальше подряд")
+    s.add_argument("--overwrite", action="store_true",
+                   help="удалить собранные дома и собрать заново (после правки настроек или кода)")
     args = parser.parse_args(argv)
     if args.command == "synth":
-        print(synth(args))
+        try:
+            print(synth(args))
+        except batch.BuildError as e:
+            sys.exit(f"сборка остановлена: {e}")
     elif args.command == "run":
         try:
             print(run(args))
