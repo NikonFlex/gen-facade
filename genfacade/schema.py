@@ -1,4 +1,4 @@
-"""Типы модуля — поля 1:1 из specs/facade.md и specs/plan-input.md.
+"""Типы модуля — поля 1:1 из specs/facade.md, specs/plan-input.md и specs/data.md.
 
 Модули обмениваются только этими объектами; каждый сохраняется в JSON.
 Координаты — метры; на стене x вдоль стороны от её левого края (если смотреть
@@ -37,6 +37,7 @@ class ElementClass(StrEnum):
     GARAGE_DOOR = "garage_door"
     PORCH = "porch"
     CHIMNEY = "chimney"
+    CANOPY = "canopy"
 
 
 class BuildingType(StrEnum):
@@ -57,20 +58,48 @@ class OpeningKind(StrEnum):
     ENTRANCE = "entrance"
 
 
-class PlanSource(StrEnum):
+class Source(StrEnum):
+    """Откуда данные: система, выдавшая план (Plan.source), и датасет примера (Sample.source)."""
+
     GENPLAN = "genplan"
     MKD = "mkd"
     SYNTHETIC = "synthetic"
     BUILDINGNET = "buildingnet"
     BIO = "bio"
     MANUAL = "manual"
+    CMP = "cmp"
+    HZNU = "hznu"
+    LOD3 = "lod3"
+    LSAA = "lsaa"
+
+
+class Split(StrEnum):
+    TRAIN = "train"
+    VAL = "val"
+    TEST = "test"
+
+
+class TextKind(StrEnum):
+    """Как получено описание дома (data.md, правило 6)."""
+
+    TEMPLATE = "template"
+    PARAPHRASE = "paraphrase"
+    MANUAL = "manual"
 
 
 class VariantKind(StrEnum):
+    """Вид проёма (facade.md, Element.variant). У окна — первые четыре; у двери — последние
+    два, а дверь без варианта — глухая."""
+
     REGULAR = "regular"
     PANORAMIC = "panoramic"
     CORNER = "corner"
     STRIP = "strip"
+    GLAZED = "glazed"    # дверь со стеклом в полотне
+    TRANSOM = "transom"  # дверь с остеклённой фрамугой над полотном, в высоте элемента
+
+
+DOOR_KINDS = (VariantKind.GLAZED, VariantKind.TRANSOM)
 
 
 class FixedField(StrEnum):
@@ -85,6 +114,17 @@ class ZoneRole(StrEnum):
     MAIN = "main"
     ACCENT = "accent"
     BAND = "band"
+
+
+class PaletteRole(StrEnum):
+    """Роль материала в палитре дома: так же названы материалы (`Material.id`) у стаба шага 1
+    и у синтетики (generation.md, п. 2)."""
+
+    MAIN = "main"
+    PLINTH = "plinth"
+    ACCENT = "accent"
+    TRIM = "trim"
+    ROOF = "roof"
 
 
 class Severity(StrEnum):
@@ -229,7 +269,7 @@ class Plan(Model):
     openings: list[PlanOpening] = []
     sides: list[Side] = []  # заполняет препроцессор
     scale_m_per_px: float = Field(gt=0)
-    source: PlanSource
+    source: Source
 
     @model_validator(mode="after")
     def _check_outline(self) -> "Plan":
@@ -260,6 +300,14 @@ class Element(Model):
     # Поля, заданные условием, а не моделью: в режиме 2 у проёма из плана — x и ширина
     # (generation.md, п. 4). Один формат на оба режима.
     fixed: list[FixedField] = []
+
+    @model_validator(mode="after")
+    def _check_variant(self) -> "Element":
+        if self.variant is not None:
+            for_door = self.variant.kind in DOOR_KINDS
+            if for_door != (self.cls is ElementClass.DOOR):
+                raise ValueError(f"элемент {self.id}: вид {self.variant.kind} не для {self.cls}")
+        return self
 
 
 class MaterialZone(Model):
@@ -300,6 +348,30 @@ class FacadeSheet(Model):
             missing = sorted(set(used) - palette)
             if missing:
                 raise ValueError(f"сторона {f.side.index}: материалов нет в палитре — {missing}")
+        return self
+
+
+class Description(Model):
+    kind: TextKind
+    text: str
+
+
+class Sample(Model):
+    """Обучающий или тестовый пример: дом с эталонными фасадами (data.md, Sample)."""
+
+    # id — имя файла примера: без «/» и «..», не с «_» (так начинается опись источника).
+    id: str = Field(pattern=r"^[A-Za-z0-9][\w.-]*$")
+    source: Source
+    split: Split
+    plan: Plan | None = None  # нет у источников без плана (CMP)
+    sheet: FacadeSheet
+    texts: list[Description] = []
+
+    @model_validator(mode="after")
+    def _check_sides(self) -> "Sample":
+        if self.plan is not None and len(self.plan.sides) != len(self.sheet.facades):
+            raise ValueError(f"сторон плана {len(self.plan.sides)}, "
+                             f"а фасадов {len(self.sheet.facades)}")
         return self
 
 

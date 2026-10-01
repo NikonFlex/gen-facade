@@ -1,4 +1,5 @@
-"""Настройки, вынесенные из кода: материалы, лист, смотрелка, план, проверка.
+"""Настройки, вынесенные из кода: материалы, лист, смотрелка, план, проверка, данные,
+синтетика.
 
 По умолчанию — файлы этой папки. Свой конфиг — папка с любыми из тех же файлов:
 TOML сливается с умолчаниями поключно, sheet.css дописывается после умолчаний
@@ -12,7 +13,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from genfacade.schema import ElementClass, Mode, VariantKind, ZoneRole
+from genfacade.schema import ElementClass, Mode, PaletteRole, VariantKind, ZoneRole
 
 DEFAULTS = files(__package__)
 
@@ -86,11 +87,18 @@ class PlanLook(Section):
     legend: dict[str, str]  # ключ — класс .plan-<ключ> в sheet.css, значение — подпись
 
 
+class DoorLook(Section):
+    glass_inset: float
+    glazed_span: tuple[float, float]
+    transom_share: float
+
+
 class Sheet(Section):
     sheet: SheetLayout
     ground: Ground
     levels: Levels
     axes: Axes
+    door: DoorLook
     title: Title
     preview: Preview
     plan: PlanLook
@@ -143,10 +151,142 @@ class Labels(Section):
     variant: dict[VariantKind, str]
 
 
+class SamplesView(Section):
+    shown: int
+
+
 class Viewer(Section):
     server: Server
     paths: ViewerPaths
+    samples: SamplesView
     labels: Labels
+
+
+class DataPaths(Section):
+    samples_dir: Path
+
+
+class Data(Section):
+    """Данные для обучения и теста (config/data.toml, specs/data.md)."""
+
+    paths: DataPaths
+
+
+Range = tuple[float, float]
+
+
+class Canvas(Section):
+    px_per_m: int
+    margin_m: float
+
+
+class HouseSize(Section):
+    width_m: Range
+    depth_m: Range
+    grid_m: float
+    wall_m: float
+
+
+class OpeningRules(Section):
+    grid_m: float
+    corner_clear_m: float
+    between_m: float
+    window_widths_m: list[float]
+    widths_per_house: int
+    per_bay_weights: list[float]
+    entrance_long_p: float
+    blind_long_p: float
+    blind_short_p: float
+
+
+class Partitions(Section):
+    max_count: int
+    min_room_m: float
+    passage_m: float
+
+
+class SpecRules(Section):
+    floor_heights_m: list[float]
+    plinth_m: Range
+    grid_m: float
+    styles: list[str]
+    palette: dict[PaletteRole, list[str]]  # виды — из library.toml
+
+
+class Windows(Section):
+    size: dict[str, Range]
+    weights: dict[str, float]
+    sash_max_w_m: float
+    transom_min_h_m: float
+    lintel_m: float
+    narrow_max_w_m: float
+    narrow_low: float
+    wide_min_w_m: float
+    wide_floor_p: float
+
+
+class Height(Section):
+    height_m: float
+
+
+class Door(Section):
+    height_m: float
+    transom_m: float
+    weights: dict[str, float]
+    glazed_panes: tuple[int, int]
+
+
+class Sill(Section):
+    overhang_m: float
+    height_m: float
+
+
+class Casing(Section):
+    styles: list[str]
+    width_m: float
+
+
+class Finish(Section):
+    weights: dict[str, float]  # ключи — схемы отделки (datasets/synthetic/zones.py, Scheme)
+    entrance_pad_m: float
+    wainscot_m: Range
+    corner_m: float
+    pier_max_m: float
+
+
+class Entry(Section):
+    porch_p: float
+    porch_pad_m: float
+    canopy_p: float
+    canopy_pad_m: float
+    canopy_gap_m: float
+    canopy_m: float
+
+
+class FacadeRules(Section):
+    windows: Windows
+    door: Door
+    sill: Sill
+    casing: Casing
+    cornice: Height
+    finish: Finish
+    entry: Entry
+
+
+class Build(Section):
+    val_share: float
+
+
+class Synthetic(Section):
+    """Генератор синтетических домов (config/synthetic.toml, specs/data.md, правило 1)."""
+
+    build: Build
+    canvas: Canvas
+    house: HouseSize
+    openings: OpeningRules
+    partitions: Partitions
+    spec: SpecRules
+    facade: FacadeRules
 
 
 class Config(Section):
@@ -155,6 +295,8 @@ class Config(Section):
     viewer: Viewer
     plan: PlanConfig
     checks: Checks
+    data: Data
+    synthetic: Synthetic
     css: str
 
 
@@ -169,6 +311,8 @@ def load(user_dir: Path | None = None) -> Config:
         viewer=Viewer(**_toml("viewer.toml", user_dir)),
         plan=PlanConfig(**_toml("plan.toml", user_dir)),
         checks=Checks(**_toml("checks.toml", user_dir)),
+        data=Data(**_toml("data.toml", user_dir)),
+        synthetic=Synthetic(**_toml("synthetic.toml", user_dir)),
         css=css,
     )
 

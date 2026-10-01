@@ -1,4 +1,4 @@
-"""Сервер смотрелки: планы и прогоны, режимы и подписи, запуск конвейера, файлы трассы.
+"""Сервер смотрелки: планы и прогоны, примеры датасета, режимы и подписи, файлы трассы.
 
 Страница ничего не считает сама: SVG рисует тот же render/, что и на выходе
 (docs/decisions.md, 29.09 «трасса каждого шага и веб-смотрелка»).
@@ -9,15 +9,17 @@ from importlib.resources import files
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from genfacade import pipeline
 from genfacade.config import Config
+from genfacade.datasets import preview, store
 from genfacade.models.stub import ModelError
 from genfacade.plan.genplan_svg import PlanError
-from genfacade.schema import Mode
+from genfacade.render.svg import sheet_svg
+from genfacade.schema import Mode, Sample, Source
 
 STATIC = files(__package__).joinpath("static")
 
@@ -35,6 +37,7 @@ def create_app(cfg: Config) -> FastAPI:
     app = FastAPI(title="GenFacade · смотрелка")
     app.middleware("http")(_revalidate_page)
     _api(app, cfg, runs_dir)
+    _samples_api(app, cfg)
     app.mount("/files", StaticFiles(directory=runs_dir), name="files")
     app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
@@ -84,6 +87,36 @@ def _api(app: FastAPI, cfg: Config, runs_dir: Path) -> None:
         return {"id": _start_plan(req.plan_run, req.svg, cfg).name}
 
 
+def _samples_api(app: FastAPI, cfg: Config) -> None:
+    @app.get("/api/samples")
+    def samples() -> list[dict]:
+        return _samples(cfg)
+
+    @app.post("/api/samples/{source}/{sample_id}")
+    def open_sample(source: Source, sample_id: str) -> dict:
+        # Папка просмотра рисуется заново при каждом открытии — тем же render/.
+        return {"id": preview.render(_sample(source, sample_id, cfg), cfg).name}
+
+    @app.get("/api/samples/{source}/{sample_id}/sheet.svg")
+    def sample_sheet(source: Source, sample_id: str) -> Response:
+        svg = sheet_svg(_sample(source, sample_id, cfg).sheet, cfg)
+        return Response(svg, media_type="image/svg+xml")
+
+
+def _samples(cfg: Config) -> list[dict]:
+    """Источники, в которых есть примеры: опись и первые имена для вкладки «Датасеты»."""
+    root, shown = cfg.data.paths.samples_dir, cfg.viewer.samples.shown
+    return [{"ids": store.ids(root, source)[:shown], **store.load_manifest(root, source)}
+            for source in Source if store.ids(root, source)]
+
+
+def _sample(source: Source, sample_id: str, cfg: Config) -> Sample:
+    root = cfg.data.paths.samples_dir
+    if sample_id not in store.ids(root, source):
+        raise HTTPException(404, f"нет примера {source}/{sample_id}")
+    return store.read(root, source, sample_id)
+
+
 def _options(cfg: Config) -> dict:
     """Режимы и подписи к классам, ролям и типам окон: страница своих списков не держит."""
     labels = cfg.viewer.labels
@@ -116,11 +149,12 @@ def _start_plan(run: pipeline.PlanRun, svg: str | None, cfg: Config) -> Path:
 
 
 def _runs(runs_dir: Path) -> list[dict]:
-    """Прогоны с трассой, новые сверху; папки без meta.json со списком шагов — пропуск."""
+    """Прогоны с трассой, новые сверху; папки без meta.json со списком шагов и просмотры
+    примеров датасета — пропуск."""
     result = []
     for meta_path in sorted(runs_dir.glob(f"*/{pipeline.META}"), reverse=True):
         meta = json.loads(meta_path.read_text())
-        if "steps" in meta:
+        if "steps" in meta and "sample" not in meta:
             result.append({"id": meta_path.parent.name, "source": meta["source"],
                            "date": meta["date"], "preview": meta["preview"]})
     return result

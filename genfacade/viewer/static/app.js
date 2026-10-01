@@ -154,6 +154,47 @@ function runCard(r) {
   return listItem(btn);
 }
 
+// ——— датасеты ———
+
+async function loadSamples() {
+  const sources = await api("/api/samples");
+  const blocks = sources.flatMap(sourceBlock);
+  $("samples").replaceChildren(...(blocks.length ? blocks : [el("p", { className: "empty-note", textContent: "Примеров пока нет — появятся после сборки датасета." })]));
+}
+
+// Источник: заголовок, опись числами и дома карточками; всё — из ответа сервера.
+function sourceBlock(s) {
+  const counts = (obj, label) => Object.entries(obj).map(([k, n]) => `<span class="chip">${label(k)} <b>${n}</b></span>`).join("");
+  const head = el("div", { className: "section-head" },
+    `<h2>${s.source}</h2>
+     <span class="section-note">опись на ${fmtDate(s.date)}${s.samples > s.ids.length ? ` · показаны первые ${s.ids.length}` : ""}</span>`);
+  const stats = el("div", { className: "dataset-stats" },
+    `<span class="chip">домов <b>${s.samples}</b></span><span class="chip">стен <b>${s.walls}</b></span><span class="chip">из них глухих <b>${s.blind_walls}</b></span>
+     ${s.generator ? `<span class="chip" title="дома с ошибкой валидатора в датасет не пишутся">отброшено <b>${Object.keys(s.generator.rejected).length}</b></span>` : ""}
+     ${counts(s.splits, (k) => k)}${counts(s.elements, (k) => state.options.cls[k].toLowerCase())}`);
+  const grid = el("ul", { className: "run-grid" });
+  grid.append(...s.ids.map((id) => sampleCard(s.source, id)));
+  return [head, stats, grid];
+}
+
+function sampleCard(source, id) {
+  const url = `/api/samples/${source}/${encodeURIComponent(id)}`;
+  const btn = el("button", { className: "run-card", title: `${source}/${id}` },
+    `<img class="run-thumb" src="${url}/sheet.svg" alt="" loading="lazy"><span class="run-info"><span class="run-name">${id}</span></span>`);
+  btn.addEventListener("click", () => openSample(url, btn).catch((err) => toast(err.message, "error")));
+  return listItem(btn);
+}
+
+async function openSample(url, busyEl) {
+  busyEl.classList.add("busy");
+  try {
+    const run = await api(url, {});
+    await goToRun(run.id);
+  } finally {
+    busyEl.classList.remove("busy");
+  }
+}
+
 async function startRun(body, busyEl, { quiet = false } = {}) {
   busyEl?.classList.add("busy");
   const t0 = performance.now(), nav = state.nav;
@@ -186,31 +227,47 @@ async function goToRun(id, step = null) {
   await openRun(id, step);
 }
 
+// Вкладки главной: что показать, чем заполнить и какой у вкладки адрес.
+const TABS = {
+  home: { load: loadRuns, url: () => location.pathname },
+  datasets: { load: loadSamples, url: () => "#datasets" },
+};
+// Пример датасета открыт со вкладки «Датасеты» — туда же и возвращаемся.
+const tabOfRun = () => (state.meta?.sample ? "datasets" : "home");
+
 function goHome() {
   if (history.state?.fromHome) return history.back();
-  history.replaceState(null, "", location.pathname);
-  return showHome();
+  const tab = tabOfRun();
+  history.replaceState(null, "", TABS[tab].url());
+  return showTab(tab);
 }
 
-function showHome() {
-  state.nav += 1; // загрузка прогона, начатая до ухода на главную, не откроет его поверх
+function goToTab(tab) {
+  history.pushState(null, "", TABS[tab].url());
+  return showTab(tab);
+}
+
+function showTab(tab) {
+  state.nav += 1; // загрузка прогона, начатая до ухода на вкладку, не откроет его поверх
   Object.assign(state, { meta: null, runId: null, step: null, stage: null });
   $("run").hidden = true;
   $("run-bar").hidden = true;
-  $("home").hidden = false;
-  $("brand-sub").hidden = false;
+  $("tabs").hidden = false;
+  for (const name of Object.keys(TABS)) $(name).hidden = name !== tab;
+  for (const link of $("tabs").children) link.classList.toggle("active", link.dataset.tab === tab);
   $("run-actions").replaceChildren();
   $("tooltip").hidden = true;
   document.title = "GenFacade · смотрелка";
-  return loadRuns();
+  return TABS[tab].load();
 }
 
 async function route() {
   const hash = new URLSearchParams(location.hash.slice(1));
-  if (!hash.get("run")) return showHome();
+  const tab = Object.keys(TABS).find((name) => hash.has(name)) ?? "home";
+  if (!hash.get("run")) return showTab(tab);
   return openRun(hash.get("run"), hash.get("step")).catch(() => {
     toast("Прогон из ссылки не найден", "error");
-    return showHome();
+    return showTab("home");
   });
 }
 
@@ -222,8 +279,8 @@ async function openRun(id, step = null) {
   if (nav !== state.nav) return; // пока грузили, пользователь ушёл — не перехватываем экран
   state.meta = meta;
   state.runId = id;
-  $("home").hidden = true;
-  $("brand-sub").hidden = true;
+  for (const name of Object.keys(TABS)) $(name).hidden = true;
+  $("tabs").hidden = true;
   $("run").hidden = false;
   $("run-bar").hidden = false;
   renderHead();
@@ -233,18 +290,24 @@ async function openRun(id, step = null) {
 
 function renderHead() {
   const m = state.meta, id = state.runId, file = (f) => `/files/${id}/${f}`;
-  $("run-title").textContent = runName(id);
-  document.title = `${runName(id)} · GenFacade`;
+  $("back-btn").innerHTML = `${ICON.back}<span>${$("tabs").querySelector(`[data-tab=${tabOfRun()}]`).textContent}</span>`;
+  // У примера датасета имя — его id: в нём номер, который runName принял бы за суффикс прогона.
+  const title = m.sample ? m.sample.id : runName(id);
+  $("run-title").textContent = title;
+  document.title = `${title} · GenFacade`;
   $("run-chips").innerHTML = [
     `<span class="chip">${fmtDate(m.date)}</span>`,
     m.git_sha ? `<span class="chip">коммит <code>${m.git_sha.slice(0, 7)}</code></span>` : "",
-    `<span class="chip" title="${m.source}">${m.source.split("/").at(-1)}</span>`,
+    m.sample ? `<span class="chip">${m.sample.source} · ${m.sample.split}</span>`
+      : `<span class="chip" title="${m.source}">${m.source.split("/").at(-1)}</span>`,
   ].join("");
   const sheet = m.steps.find((s) => s.n === 6)?.file;
   const links = [[sheet, "SVG"], [m.sheet_json, "JSON"], [m.preview, "PNG"]].filter(([f]) => f)
     .map(([f, label]) => `<a class="btn" href="${file(f)}" target="_blank" rel="noopener" title="Открыть ${label}">${ICON.file}<span>${label}</span></a>`);
-  $("run-actions").innerHTML = `${links.join("")}<button class="btn" id="rerun" title="Прогнать тот же вход ещё раз">${ICON.redo}<span>Прогнать заново</span></button>`;
-  $("rerun").addEventListener("click", rerun);
+  // У примера датасета входа нет: перезапускать нечего.
+  const redo = m.input ? `<button class="btn" id="rerun" title="Прогнать тот же вход ещё раз">${ICON.redo}<span>Прогнать заново</span></button>` : "";
+  $("run-actions").innerHTML = links.join("") + redo;
+  $("rerun")?.addEventListener("click", rerun);
 }
 
 async function rerun() {
@@ -259,8 +322,8 @@ async function runBody(input) {
 }
 
 function renderStepper() {
-  const steps = [{ key: "input", n: "", title: "Вход", file: state.meta.input }]
-    .concat(state.meta.steps.map((s) => ({ ...s, key: String(s.n) })));
+  const input = state.meta.input ? [{ key: "input", n: "", title: "Вход", file: state.meta.input }] : [];
+  const steps = input.concat(state.meta.steps.map((s) => ({ ...s, key: String(s.n) })));
   const nodes = steps.flatMap((s, i) => {
     const btn = el("button", {
       className: `step${s.key === state.step ? " active" : ""}`, disabled: !s.file,
@@ -273,13 +336,15 @@ function renderStepper() {
   $("stepper").replaceChildren(...nodes);
 }
 
-function showStep(key) {
+function showStep(wanted) {
+  const done = state.meta.steps.filter((s) => s.file);
+  // Нет такого шага — «Вход»; у примера датасета входа нет — его последний шаг.
+  const step = done.find((s) => String(s.n) === wanted) ?? (state.meta.input ? null : done.at(-1));
+  const key = step ? String(step.n) : "input";
   state.step = key;
   history.replaceState(history.state, "", `#run=${encodeURIComponent(state.runId)}&step=${key}`);
   renderStepper();
-  if (key === "input") return renderInput();
-  const step = state.meta.steps.find((s) => String(s.n) === key);
-  if (!step?.file) return renderInput();
+  if (!step) return renderInput();
   return step.file.endsWith(".json") ? renderJsonStep(step) : renderSvgStep(step);
 }
 
@@ -437,9 +502,9 @@ function onKey(e) {
 }
 
 async function init() {
-  $("back-btn").innerHTML = `${ICON.back}<span>Все прогоны</span>`;
   $("back-btn").addEventListener("click", goHome);
   $("home-link").addEventListener("click", (e) => { e.preventDefault(); goHome(); });
+  for (const link of $("tabs").children) link.addEventListener("click", (e) => { e.preventDefault(); goToTab(link.dataset.tab); });
   window.addEventListener("popstate", route);
   document.addEventListener("keydown", onKey);
   state.options = await api("/api/options");

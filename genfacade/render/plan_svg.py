@@ -1,8 +1,8 @@
 """Трасса шага 2: план после препроцессора — стены, контур, стороны, проёмы, запретные зоны.
 
 Не чертёж для сдачи, а картинка для проверки глазами: номера сторон с длинами, вход,
-заделанные в глухом режиме разрывы, запретные зоны у сторон. Оформление — config/sheet.toml
-([plan]) и config/sheet.css (.plan-*).
+заделанные в глухом режиме разрывы, запретные зоны — отметкой на наружной стене.
+Оформление — config/sheet.toml ([plan]) и config/sheet.css (.plan-*).
 """
 
 import math
@@ -64,7 +64,7 @@ def _legend(root: ElementTree.Element, top: float, look: PlanLook) -> None:
     for i, (key, label) in enumerate(look.legend.items()):
         y = top + look.legend_line_m * i
         css = PREFIX + key
-        if css == Mark.FORBIDDEN:  # на плане запретная зона — линия у стороны, а не заливка
+        if css == Mark.FORBIDDEN:  # на плане запретная зона — линия по стене, а не заливка
             add_line(g, css, (x, y + s / 2), (x + s, y + s / 2))
         else:
             ElementTree.SubElement(g, "rect", {"class": css, "x": num(x), "y": num(y),

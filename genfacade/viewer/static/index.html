@@ -16,7 +16,10 @@
         </svg>
         <span class="brand-name">GenFacade</span>
       </a>
-      <span class="brand-sub" id="brand-sub">смотрелка прогонов</span>
+      <nav class="tabs" id="tabs" aria-label="Разделы">
+        <a href="#" data-tab="home">Прогоны</a>
+        <a href="#datasets" data-tab="datasets">Датасеты</a>
+      </nav>
       <div class="run-bar" id="run-bar" hidden>
         <button class="btn ghost" id="back-btn" title="Все дома и прогоны (Esc)"></button>
         <h1 id="run-title"></h1>
@@ -59,6 +62,10 @@
         </div>
         <ul class="run-grid" id="runs"></ul>
       </div>
+    </section>
+
+    <section class="home" id="datasets" hidden>
+      <div class="home-inner" id="samples"></div>
     </section>
 
     <section class="run" id="run" hidden>

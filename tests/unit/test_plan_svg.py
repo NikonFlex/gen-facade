@@ -15,9 +15,13 @@ COLOR_WORDS = re.compile(r"зел[её]н|голуб|красн|оранж|ко�
 
 
 @pytest.fixture
-def plan_tree(preprocess_svg, simple_svg, cfg):
+def plan(preprocess_svg, simple_svg):
     """План простого дома в глухом режиме с внутренней стеной: на нём есть все классы."""
-    plan = preprocess_svg(simple_svg(before_leaf(INNER)), mode=Mode.BLIND)
+    return preprocess_svg(simple_svg(before_leaf(INNER)), mode=Mode.BLIND)
+
+
+@pytest.fixture
+def plan_tree(plan, cfg):
     return ElementTree.fromstring(plan_svg(plan, cfg))
 
 
@@ -38,6 +42,15 @@ def test_every_drawn_class_has_legend_entry(plan_tree):
     shape = {n.get("class"): _tag(n) for n in drawing.iter() if n.get("class") in drawn}
     assert all(_tag(n) == shape[n.get("class")] for n in _legend(plan_tree)
                if n.get("class") in drawn)
+
+
+def test_forbidden_zone_marked_on_outer_wall(plan, plan_tree):
+    """Отметка лежит на наружной стене, а не на перегородке, которая в неё упирается."""
+    outer = max(plan.walls, key=lambda w: w.x1_m - w.x0_m)  # верхняя стена: к ней идёт INNER
+    [mark] = [n for n in plan_tree.iter() if n.get("class") == Mark.FORBIDDEN
+              and n not in list(_legend(plan_tree))]
+    for x, y in ((mark.get("x1"), mark.get("y1")), (mark.get("x2"), mark.get("y2"))):
+        assert outer.x0_m <= float(x) <= outer.x1_m and outer.y0_m <= float(y) <= outer.y1_m
 
 
 def _tag(node) -> str:

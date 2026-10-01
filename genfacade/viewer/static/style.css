@@ -51,9 +51,12 @@ h1, h2 { margin: 0; font-weight: 600; }
 .brand-mark path { fill: var(--accent); }
 .brand-mark rect { fill: var(--panel); }
 .brand-name { font-weight: 650; letter-spacing: 0.01em; }
-.brand-sub { color: var(--muted); font-size: 13px; }
+.tabs { display: flex; gap: 2px; padding-left: 12px; border-left: 1px solid var(--line); }
+.tabs a { padding: 6px 11px; border-radius: 8px; color: var(--muted); text-decoration: none; font-weight: 550; }
+.tabs a:hover { background: var(--panel-2); color: var(--ink); }
+.tabs a.active { background: var(--accent-soft); color: var(--accent); }
 .run-bar { display: flex; align-items: center; gap: 12px; min-width: 0; padding-left: 12px; border-left: 1px solid var(--line); }
-.run-bar[hidden], .brand-sub[hidden] { display: none; }
+.run-bar[hidden], .tabs[hidden] { display: none; }
 .run-bar h1 { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .icon-btn {
@@ -96,6 +99,9 @@ ul { list-style: none; margin: 0; padding: 0; }
 .run-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .run-when { color: var(--muted); font-size: 12px; }
 .empty-note { color: var(--faint); font-size: 13px; padding: 4px 2px; }
+.dataset-stats { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 2px 14px; }
+.section-head + .dataset-stats { margin-bottom: 14px; }
+.dataset-stats + .run-grid { margin-bottom: 30px; }
 
 /* ——— план и описание ——— */
 .plan-form {
@@ -270,7 +276,7 @@ kbd {
   .chips { display: none; }
 }
 @media (max-width: 860px) {
-  .brand-sub, .brand-name { display: none; }
+  .brand-name { display: none; }
   /* SVG, JSON, PNG — короткие, их подписи нужны; прячется только длинная. */
   #rerun span { display: none; }
   .input-view { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }

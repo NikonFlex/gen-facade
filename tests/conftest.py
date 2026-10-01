@@ -13,7 +13,7 @@ from genfacade import config
 from genfacade.models import stub
 from genfacade.pipeline import walls
 from genfacade.plan.preprocess import preprocess
-from genfacade.schema import FacadeSheet, Mode
+from genfacade.schema import Description, FacadeSheet, Mode, Sample, Source, Split, TextKind
 
 
 @pytest.fixture(scope="session")
@@ -62,6 +62,14 @@ def lay_out(cfg):
 def house(lay_out) -> FacadeSheet:
     """Простой дом после шагов 1–4 — как его рисует лист (шаг 6)."""
     return lay_out()
+
+
+@pytest.fixture
+def sample(house, preprocess_svg) -> Sample:
+    """Простой дом как пример датасета: план, эталонные фасады, одно описание."""
+    text = Description(kind=TextKind.MANUAL, text="A simple one-storey house with a flat roof.")
+    return Sample(id="simple_house", source=Source.SYNTHETIC, split=Split.TRAIN,
+                  plan=preprocess_svg(), sheet=house, texts=[text])
 
 
 @pytest.fixture

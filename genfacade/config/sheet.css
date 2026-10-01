@@ -9,6 +9,7 @@ svg { font-family: "Golos Text", "DejaVu Sans", sans-serif; font-size: 0.3px; }
 .outline { fill: none; stroke-width: 0.04px; }
 .facade [data-cls="window"] { stroke-width: 0.06px; }
 .mullion { stroke-width: 0.04px; }
+.door-glass { stroke-width: 0.03px; }
 
 .annotations { stroke: #2b2b2b; stroke-width: 0.015px; fill: #2b2b2b; }
 .annotations text { stroke: none; }
