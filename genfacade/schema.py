@@ -5,26 +5,104 @@
 снаружи), y вверх от уровня земли.
 """
 
-from typing import Literal
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 EPS = 1e-6  # допуск сравнения координат, м
 
 Point = tuple[float, float]
-Mode = Literal["with_openings", "blind"]  # режим 2 «окна из плана» / режим 1 «глухой куб»
 Polygon = list[Point]
 
 
-def top_y(*polygons: Polygon) -> float:
-    """Самая высокая точка нескольких многоугольников."""
-    return max(y for poly in polygons for _, y in poly)
+class Mode(StrEnum):
+    WITH_OPENINGS = "with_openings"  # режим 2 «окна из плана»
+    BLIND = "blind"                  # режим 1 «глухой куб»
 
-# 11 классов объектов CMP + классы коттеджей (facade.md, Element.cls)
-ElementClass = Literal[
-    "window", "pillar", "sill", "blind", "deco", "cornice", "balcony",
-    "molding", "shop", "facade", "door", "garage_door", "porch", "chimney",
-]
+
+class ElementClass(StrEnum):
+    """11 классов объектов CMP + классы коттеджей (facade.md, Element.cls)."""
+
+    WINDOW = "window"
+    PILLAR = "pillar"
+    SILL = "sill"
+    BLIND = "blind"
+    DECO = "deco"
+    CORNICE = "cornice"
+    BALCONY = "balcony"
+    MOLDING = "molding"
+    SHOP = "shop"
+    FACADE = "facade"
+    DOOR = "door"
+    GARAGE_DOOR = "garage_door"
+    PORCH = "porch"
+    CHIMNEY = "chimney"
+
+
+class BuildingType(StrEnum):
+    COTTAGE = "cottage"
+    APARTMENT = "apartment"
+
+
+class RoofKind(StrEnum):
+    # Пока только плоская (хозяин 01.10): скатные — на этапе модели, сюда же новыми видами.
+    FLAT = "flat"
+
+
+class OpeningKind(StrEnum):
+    """Проём плана (plan-input.md, Opening.kind)."""
+
+    WINDOW = "window"
+    DOOR = "door"
+    ENTRANCE = "entrance"
+
+
+class PlanSource(StrEnum):
+    GENPLAN = "genplan"
+    MKD = "mkd"
+    SYNTHETIC = "synthetic"
+    BUILDINGNET = "buildingnet"
+    BIO = "bio"
+    MANUAL = "manual"
+
+
+class VariantKind(StrEnum):
+    REGULAR = "regular"
+    PANORAMIC = "panoramic"
+    CORNER = "corner"
+    STRIP = "strip"
+
+
+class FixedField(StrEnum):
+    """Поле элемента, заданное условием, а не моделью."""
+
+    X = "x_m"
+    W = "w_m"
+
+
+class ZoneRole(StrEnum):
+    PLINTH = "plinth"
+    MAIN = "main"
+    ACCENT = "accent"
+    BAND = "band"
+
+
+class Severity(StrEnum):
+    ERROR = "error"
+    WARNING = "warning"
+
+
+class Rule(StrEnum):
+    """Правила валидатора (evaluation.md, правило 1); что проверяет каждое — validate.py."""
+
+    SVG_PARSE = "svg_parse"
+    OUTSIDE = "outside"
+    OVERLAP = "overlap"
+    FORBIDDEN = "forbidden"
+    PLAN_OPENING = "plan_opening"
+    CORNER = "corner"
+    FLOOR_ALIGN = "floor_align"
+    AXIS_ALIGN = "axis_align"
 
 
 class Model(BaseModel):
@@ -41,15 +119,14 @@ class Material(Model):
 
 
 class Roof(Model):
-    # Пока только плоская (хозяин 01.10): скатные — на этапе модели, сюда же новыми видами.
-    kind: Literal["flat"]
+    kind: RoofKind
     material: str | None = None  # покрытие из палитры
 
 
 class HouseSpec(Model):
     """Параметры, общие для всех сторон дома (facade.md, правило 2)."""
 
-    building_type: Literal["cottage", "apartment"]
+    building_type: BuildingType
     floors: int = Field(ge=1)
     floor_heights_m: list[float]
     plinth_m: float = Field(ge=0)
@@ -79,7 +156,7 @@ class HouseSpec(Model):
 
 
 class Opening(Model):
-    kind: Literal["window", "door", "entrance"]
+    kind: OpeningKind
     x_m: float
     width_m: float = Field(gt=0)
     external: bool = True
@@ -125,7 +202,7 @@ class Rect(Model):
 class PlanOpening(Model):
     """Проём в координатах плана; на стороне ему соответствует `Opening`."""
 
-    kind: Literal["window", "door", "entrance"]
+    kind: OpeningKind
     rect: Rect
     external: bool = True
     sealed: bool = False  # заделан в глухом режиме (plan-input.md, правило 6)
@@ -133,7 +210,7 @@ class PlanOpening(Model):
     @model_validator(mode="after")
     def _check(self) -> "PlanOpening":
         # Глухой режим заделывает наружные разрывы, кроме входа.
-        if self.sealed and (self.kind == "entrance" or not self.external):
+        if self.sealed and (self.kind is OpeningKind.ENTRANCE or not self.external):
             raise ValueError(f"заделан может быть только наружный проём, не вход: {self.kind}")
         return self
 
@@ -152,7 +229,7 @@ class Plan(Model):
     openings: list[PlanOpening] = []
     sides: list[Side] = []  # заполняет препроцессор
     scale_m_per_px: float = Field(gt=0)
-    source: Literal["genplan", "mkd", "synthetic", "buildingnet", "bio", "manual"]
+    source: PlanSource
 
     @model_validator(mode="after")
     def _check_outline(self) -> "Plan":
@@ -164,7 +241,7 @@ class Plan(Model):
 
 
 class OpeningVariant(Model):
-    kind: Literal["regular", "panoramic", "corner", "strip"] = "regular"
+    kind: VariantKind = VariantKind.REGULAR
     cols: int = Field(default=1, ge=1)  # деление рамы на створки
     rows: int = Field(default=1, ge=1)
 
@@ -182,13 +259,13 @@ class Element(Model):
     variant: OpeningVariant | None = None
     # Поля, заданные условием, а не моделью: в режиме 2 у проёма из плана — x и ширина
     # (generation.md, п. 4). Один формат на оба режима.
-    fixed: list[Literal["x_m", "w_m"]] = []
+    fixed: list[FixedField] = []
 
 
 class MaterialZone(Model):
     shape: Polygon
     material: str
-    role: Literal["plinth", "main", "accent", "band"]
+    role: ZoneRole
 
 
 class SideFacade(Model):
@@ -229,8 +306,8 @@ class FacadeSheet(Model):
 class Violation(Model):
     """Нарушение, найденное валидатором (evaluation.md, Violation)."""
 
-    rule: str
-    severity: Literal["error", "warning"]
+    rule: Rule
+    severity: Severity
     side: int | None = None
     element: str | None = None
     message: str

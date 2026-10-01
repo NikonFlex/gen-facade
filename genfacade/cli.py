@@ -7,6 +7,7 @@ from pathlib import Path
 from genfacade import config, pipeline
 from genfacade.models.stub import ModelError
 from genfacade.plan.genplan_svg import PlanError
+from genfacade.schema import Mode
 
 
 def run(args: argparse.Namespace) -> Path:
@@ -35,8 +36,9 @@ def main(argv: list[str] | None = None) -> None:
     g = sub.add_parser("run", help="план GenPlan + описание → фасады, трасса шагов 1–6")
     g.add_argument("plan", type=Path, help="SVG-план GenPlan")
     g.add_argument("-t", "--text", required=True, help="описание дома по-английски")
-    g.add_argument("-m", "--mode", choices=["with_openings", "blind"], default="with_openings",
-                   help="with_openings — окна из плана (режим 2), blind — глухой куб (режим 1)")
+    g.add_argument("-m", "--mode", type=Mode, choices=list(Mode), default=Mode.WITH_OPENINGS,
+                   help=f"{Mode.WITH_OPENINGS} — окна из плана (режим 2), "
+                        f"{Mode.BLIND} — глухой куб (режим 1)")
     g.add_argument("-o", "--out", type=Path,
                    help="папка прогона; по умолчанию runs_dir/<время>-<имя>")
     sub.add_parser("serve", help="смотрелка прогонов в браузере")

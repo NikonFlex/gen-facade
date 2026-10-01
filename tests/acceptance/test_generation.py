@@ -7,21 +7,22 @@
 
 import pytest
 
-from genfacade.schema import EPS
+from genfacade.schema import EPS, ElementClass, Mode
 
 
 def test_plan_openings_kept_in_place(lay_out):
     """Режим с референсами: все проёмы плана на фасаде в тех же положениях."""
     sheet = lay_out()
     for f in sheet.facades:
-        ground = [e for e in f.elements if e.floor == 1 and e.cls in ("window", "door")]
+        openings = (ElementClass.WINDOW, ElementClass.DOOR)
+        ground = [e for e in f.elements if e.floor == 1 and e.cls in openings]
         for o in f.side.openings:
             same = [e for e in ground
                     if abs(e.x_m - o.x_m) <= EPS and abs(e.w_m - o.width_m) <= EPS]
             assert same, f"сторона {f.side.index}: проём {o} потерян"
 
 
-@pytest.mark.parametrize("mode", ["with_openings", "blind"])
+@pytest.mark.parametrize("mode", list(Mode))
 def test_same_input_same_result(lay_out, mode):
     """Стаб детерминирован: seed и случайность появятся с моделью (этап 4)."""
     assert lay_out(mode) == lay_out(mode)

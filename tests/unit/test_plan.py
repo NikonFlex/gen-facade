@@ -5,12 +5,14 @@ GenPlan, шов, снятая стена. Отдельных планов нет
 """
 
 import pytest
+from simple_house import LEAF, before_leaf
 
 from genfacade.plan.gaps import find_gaps
 from genfacade.plan.genplan_svg import Box, PlanError
 from genfacade.plan.outline import straighten
+from genfacade.schema import OpeningKind
 
-LEAF = '<rect x="800" y="495" width="5" height="90" fill="#000000" />'
+WINDOW, ENTRANCE = OpeningKind.WINDOW, OpeningKind.ENTRANCE
 ARC = ('<path d="M890.0,585.0 A90,90,0,0,0,800.0,495.0" stroke="#000000" fill="none" '
        'stroke-width="5" />')
 TOP_LEFT = '<rect x="100" y="100" width="500" height="15" fill="#000000" />'
@@ -35,7 +37,7 @@ def _with(*rects: tuple[float, float, float, float]) -> tuple[str, str]:
     extra = "".join(
         f'<rect x="{x0}" y="{y0}" width="{x1 - x0}" height="{y1 - y0}" fill="#000000" />\n'
         for x0, y0, x1, y1 in rects)
-    return LEAF, extra + LEAF
+    return before_leaf(extra)
 
 
 def test_sides_and_openings_seen_from_outside(preprocess_svg):
@@ -45,10 +47,10 @@ def test_sides_and_openings_seen_from_outside(preprocess_svg):
     assert [s.orientation for s in plan.sides] == [(0.0, -1.0), (-1.0, 0.0), (0.0, 1.0), (1.0, 0.0)]
     assert [s.length_m for s in plan.sides] == pytest.approx([10, 5, 10, 5])
     assert [_openings(s) for s in plan.sides] == [
-        [("window", 1.5, 1.2), ("entrance", 7.0, 0.9)],  # низ: снаружи с юга слева запад
-        [("window", 2.5, 1.0)],                          # лево: слева север
-        [("window", 3.0, 2.0)],                          # верх: слева восток
-        [("window", 2.0, 1.5)],                          # право: слева юг
+        [(WINDOW, 1.5, 1.2), (ENTRANCE, 7.0, 0.9)],  # низ: снаружи с юга слева запад
+        [(WINDOW, 2.5, 1.0)],                        # лево: слева север
+        [(WINDOW, 3.0, 2.0)],                        # верх: слева восток
+        [(WINDOW, 2.0, 1.5)],                        # право: слева юг
     ]
     assert [s.has_entrance for s in plan.sides] == [True, False, False, False]
 
@@ -69,21 +71,21 @@ def test_false_genplan_window_ignored(simple_svg, preprocess_svg):
     false = '<rect x="200" y="115" width="200" height="470" fill="#99ccff" />'
     svg = simple_svg(("</svg>", false + "</svg>"))
     plan = preprocess_svg(svg)
-    assert sorted(o.kind for o in plan.openings) == ["entrance"] + ["window"] * 4
+    assert sorted(o.kind for o in plan.openings) == [ENTRANCE] + [WINDOW] * 4
 
 
 def test_walls_only_plan_narrowest_gap_is_entrance(simple_svg, preprocess_svg):
     # план до decorator GenPlan: разрывы без окон и створки
     plan = preprocess_svg(simple_svg((LEAF, ""), (ARC, ""), *[(b, "") for b in BLUE]))
-    assert sorted(o.kind for o in plan.openings) == ["entrance"] + ["window"] * 4
-    assert _openings(plan.sides[0])[1] == ("entrance", 7.0, 0.9)
+    assert sorted(o.kind for o in plan.openings) == [ENTRANCE] + [WINDOW] * 4
+    assert _openings(plan.sides[0])[1] == (ENTRANCE, 7.0, 0.9)
 
 
 def test_outer_door_wins_over_narrower_window(simple_svg, preprocess_svg):
     # окно снизу сужено до 70 px — уже входа, но вход — разрыв со створкой
     svg = simple_svg(('<rect x="100" y="585" width="150"', '<rect x="100" y="585" width="200"'),
                      (BLUE[0], '<rect x="300" y="585" width="70" height="15" fill="#99ccff" />'))
-    assert _openings(preprocess_svg(svg).sides[0]) == [("window", 2.0, 0.7), ("entrance", 7.0, 0.9)]
+    assert _openings(preprocess_svg(svg).sides[0]) == [(WINDOW, 2.0, 0.7), (ENTRANCE, 7.0, 0.9)]
 
 
 def test_seam_is_not_an_opening(simple_svg, preprocess_svg):

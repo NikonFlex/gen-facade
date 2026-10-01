@@ -6,12 +6,31 @@
 """
 
 import math
+from enum import StrEnum
 from xml.etree import ElementTree
 
 from genfacade.config import Config, PlanLook
 from genfacade.render.sheet_format import num
 from genfacade.render.svg import add_line, canvas, points
-from genfacade.schema import Plan, Point, Rect, Side
+from genfacade.schema import Plan, PlanOpening, Point, Rect, Side
+
+PREFIX = "plan-"  # классы плана в sheet.css; ключ легенды в sheet.toml — класс без префикса
+
+
+class Mark(StrEnum):
+    """Классы плана, которые не проём: у проёма класс — PREFIX + его вид (OpeningKind)."""
+
+    WALL = PREFIX + "wall"
+    OUTLINE = PREFIX + "outline"
+    SEALED = PREFIX + "sealed"
+    FORBIDDEN = PREFIX + "forbidden"
+    LABEL = PREFIX + "label"
+    LEGEND = PREFIX + "legend"
+    LEGEND_BOX = PREFIX + "legend-box"
+
+
+def _opening_class(o: PlanOpening) -> str:
+    return Mark.SEALED if o.sealed else PREFIX + o.kind
 
 
 def plan_svg(plan: Plan, cfg: Config) -> str:
@@ -24,10 +43,10 @@ def plan_svg(plan: Plan, cfg: Config) -> str:
     g = ElementTree.SubElement(root, "g", {
         "transform": f"translate({num(-x0)},{num(top)}) scale(1,-1)"})
     for w in plan.walls:
-        _rect(g, w, "plan-wall")
+        _rect(g, w, Mark.WALL)
     for o in plan.openings:
-        _rect(g, o.rect, "plan-sealed" if o.sealed else f"plan-{o.kind}")
-    ElementTree.SubElement(g, "polygon", {"class": "plan-outline", "points": points(plan.outline)})
+        _rect(g, o.rect, _opening_class(o))
+    ElementTree.SubElement(g, "polygon", {"class": Mark.OUTLINE, "points": points(plan.outline)})
     for side in plan.sides:
         _forbidden(g, plan.outline, side, look.forbidden_inset_m)
         _label(root, _side_label_at(plan.outline, side, look.label_offset_m), (x0, top), side)
@@ -40,16 +59,17 @@ def _legend(root: ElementTree.Element, top: float, look: PlanLook) -> None:
 
     Своего цвета у образца нет — перекрасили класс в sheet.css, перекрасилась и легенда.
     """
-    g = ElementTree.SubElement(root, "g", {"class": "plan-legend-box"})
+    g = ElementTree.SubElement(root, "g", {"class": Mark.LEGEND_BOX})
     s, x = look.legend_swatch_m, look.legend_margin_m
     for i, (key, label) in enumerate(look.legend.items()):
         y = top + look.legend_line_m * i
-        if key == "forbidden":  # на плане запретная зона — линия у стороны, а не заливка
-            add_line(g, "plan-forbidden", (x, y + s / 2), (x + s, y + s / 2))
+        css = PREFIX + key
+        if css == Mark.FORBIDDEN:  # на плане запретная зона — линия у стороны, а не заливка
+            add_line(g, css, (x, y + s / 2), (x + s, y + s / 2))
         else:
-            ElementTree.SubElement(g, "rect", {"class": f"plan-{key}", "x": num(x), "y": num(y),
+            ElementTree.SubElement(g, "rect", {"class": css, "x": num(x), "y": num(y),
                                                "width": num(s), "height": num(s)})
-        node = ElementTree.SubElement(g, "text", {"class": "plan-legend",
+        node = ElementTree.SubElement(g, "text", {"class": Mark.LEGEND,
                                                   "x": num(x + s + look.legend_gap_m),
                                                   "y": num(y + s)})
         node.text = label
@@ -72,7 +92,7 @@ def _along(outline: list[Point], side: Side, x_m: float, inset: float) -> Point:
 
 def _forbidden(g: ElementTree.Element, outline: list[Point], side: Side, inset: float) -> None:
     for z in side.forbidden:
-        add_line(g, "plan-forbidden", _along(outline, side, z.x0_m, inset),
+        add_line(g, Mark.FORBIDDEN, _along(outline, side, z.x0_m, inset),
                  _along(outline, side, z.x1_m, inset))
 
 
@@ -82,7 +102,7 @@ def _side_label_at(outline: list[Point], side: Side, offset: float) -> Point:
 
 def _label(root: ElementTree.Element, at: Point, origin: Point, side: Side) -> None:
     (x, y), (x0, top) = at, origin
-    node = ElementTree.SubElement(root, "text", {"class": "plan-label", "x": num(x - x0),
+    node = ElementTree.SubElement(root, "text", {"class": Mark.LABEL, "x": num(x - x0),
                                                  "y": num(top - y)})
     entrance = " · вход" if side.has_entrance else ""
     node.text = f"{side.index}: {side.length_m:.2f} м{entrance}"

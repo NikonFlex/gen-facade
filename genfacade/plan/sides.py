@@ -10,7 +10,7 @@ from typing import NamedTuple
 
 from genfacade.plan.gaps import Found
 from genfacade.plan.genplan_svg import TOL_PX, Box
-from genfacade.schema import ForbiddenZone, Opening, Point, Polygon, Side
+from genfacade.schema import ForbiddenZone, Opening, OpeningKind, Point, Polygon, Side
 
 
 class Contour(NamedTuple):
@@ -64,7 +64,7 @@ def build(c: Contour, openings: list[Found], walls: list[Box], scale: float) -> 
             index=i, length_m=e.length * scale, orientation=e.n,
             openings=[_opening(e, f, scale) for f in own],
             forbidden=_forbidden(e, inner, thickness, scale),
-            has_entrance=any(f.kind == "entrance" for f in own),
+            has_entrance=any(f.kind is OpeningKind.ENTRANCE for f in own),
         ))
     return sides
 

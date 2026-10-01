@@ -1,21 +1,19 @@
 """Конвейер genfacade run на простом доме: трасса шагов 1–6, нарушения, CLI (gf#52, gf#58)."""
 
 import json
-from pathlib import Path
 
 import pytest
+from simple_house import SIMPLE, WALL_INTO_WINDOW, before_leaf
 
 from genfacade import cli, pipeline
 from genfacade.models import stub
 from genfacade.render.parse import parse_sheet_svg
-from genfacade.schema import HouseSpec, Plan
+from genfacade.schema import HouseSpec, Mode, Plan, Rule
 
-SIMPLE = Path(__file__).parents[1] / "fixtures" / "simple_house.svg"
 TEXT = "A simple one-storey house with a flat roof."
-LEAF = '<rect x="800" y="495" width="5" height="90" fill="#000000" />'
 
 
-def _generate(cfg, out, mode="with_openings", svg=None):
+def _generate(cfg, out, mode=Mode.WITH_OPENINGS, svg=None):
     req = pipeline.PlanRun(plan=str(SIMPLE), text=TEXT, mode=mode)
     return pipeline.generate(req, svg or SIMPLE.read_text(), out, cfg)
 
@@ -24,7 +22,7 @@ def _meta(out):
     return json.loads((out / pipeline.META).read_text())
 
 
-@pytest.mark.parametrize("mode", ["with_openings", "blind"])
+@pytest.mark.parametrize("mode", list(Mode))
 def test_simple_house_traces_all_six_steps(cfg, tmp_path, mode):
     """Вся цепочка на простом доме: шесть файлов шагов, лист без нарушений."""
     out = _generate(cfg, tmp_path / "run", mode)
@@ -73,11 +71,9 @@ def test_unfold_step_has_walls_but_no_elements(cfg, tmp_path):
 
 
 def test_violations_marked_on_step_5_only(cfg, tmp_path, simple_svg):
-    # внутренняя стена заходит в полосу верхнего окна плана (дефект GenPlan)
-    wall = '<rect x="700" y="108" width="9" height="200" fill="#000000" />'
-    out = _generate(cfg, tmp_path / "run", svg=simple_svg((LEAF, wall + LEAF)))
+    out = _generate(cfg, tmp_path / "run", svg=simple_svg(before_leaf(WALL_INTO_WINDOW)))
     violations = json.loads((out / pipeline.VIOLATIONS).read_text())
-    assert {v["rule"] for v in violations} == {"forbidden"}
+    assert {v["rule"] for v in violations} == {Rule.FORBIDDEN}
     assert (_meta(out)["errors"], _meta(out)["warnings"]) == (1, 0)
     snapped = (out / pipeline.SNAPPED).read_text()
     assert snapped.count('class="violation error"') == len(violations)

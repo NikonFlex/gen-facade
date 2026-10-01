@@ -12,6 +12,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
+from genfacade.schema import ElementClass
+
 DEFAULTS = files(__package__)
 
 
@@ -28,7 +30,7 @@ class Fill(Section):
 class Library(Section):
     kinds: dict[str, str]
     fill: Fill
-    class_fill: dict[str, str]
+    class_fill: dict[ElementClass, str]  # опечатка в классе элемента — ошибка загрузки
 
 
 class SheetLayout(Section):

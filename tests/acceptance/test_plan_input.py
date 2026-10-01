@@ -5,15 +5,16 @@ import pytest
 from genfacade import config
 from genfacade.plan.gaps import find_gaps
 from genfacade.plan.genplan_svg import PlanError, parse
+from genfacade.schema import Mode, OpeningKind
 
 CANVAS_H = 700
 ACCURACY_PX = 2  # «все проёмы из SVG с точностью до 2 px»
 # Проёмы простого дома в пикселях SVG (x0, y0, x1, y1): окна — <rect> #99ccff в разрыве
 # стены, вход — разрыв нижней стены со створкой (tests/fixtures/make_simple_house.py).
 OPENINGS = {
-    ("window", (250, 585, 370, 600)), ("window", (100, 350, 115, 450)),
-    ("window", (1085, 250, 1100, 400)), ("window", (600, 100, 800, 115)),
-    ("entrance", (800, 585, 890, 600)),
+    (OpeningKind.WINDOW, (250, 585, 370, 600)), (OpeningKind.WINDOW, (100, 350, 115, 450)),
+    (OpeningKind.WINDOW, (1085, 250, 1100, 400)), (OpeningKind.WINDOW, (600, 100, 800, 115)),
+    (OpeningKind.ENTRANCE, (800, 585, 890, 600)),
 }
 # Та же коробка без единого разрыва: четыре стены целиком.
 BOX = ('<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700">'
@@ -51,10 +52,10 @@ def test_box_without_gaps_has_no_openings(preprocess_svg):
 
 
 def test_blind_mode_keeps_only_entrance(preprocess_svg):
-    plan = preprocess_svg(mode="blind")
+    plan = preprocess_svg(mode=Mode.BLIND)
     visible = [o for o in plan.openings if o.external and not o.sealed]
-    assert [o.kind for o in visible] == ["entrance"]
-    assert [o.kind for s in plan.sides for o in s.openings] == ["entrance"]
+    assert [o.kind for o in visible] == [OpeningKind.ENTRANCE]
+    assert [o.kind for s in plan.sides for o in s.openings] == [OpeningKind.ENTRANCE]
 
 
 def test_plan_without_entrance_rejected_with_reason(preprocess_svg):
