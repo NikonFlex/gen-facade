@@ -4,23 +4,9 @@ import json
 
 import pytest
 
-from genfacade import config
 from genfacade.datasets import store
 from genfacade.datasets.synthetic import batch, build
 from genfacade.schema import Rule, Severity, Source, Split, Violation
-
-
-@pytest.fixture
-def at(tmp_path):
-    """Настройки с корнем данных в tmp_path/<имя>; extra — свои строки synthetic.toml."""
-    def load(name: str, extra: str = "") -> config.Config:
-        folder = tmp_path / f"cfg-{name}-{len(extra)}"
-        folder.mkdir()
-        (folder / "data.toml").write_text(f'[paths]\nsamples_dir = "{tmp_path / name}"\n')
-        (folder / "synthetic.toml").write_text(extra)
-        return config.load(folder)
-
-    return load
 
 
 def _files(cfg) -> dict[str, str]:

@@ -8,7 +8,7 @@ version = "0.0.1"
 description = "Генерация векторных чертежей фасадов по плану дома и текстовому описанию"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["pydantic>=2.13", "shapely>=2.1"]
+dependencies = ["numpy>=2", "pydantic>=2.13", "shapely>=2.1"]
 
 [project.scripts]
 genfacade = "genfacade.cli:main"

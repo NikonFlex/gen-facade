@@ -1,4 +1,4 @@
-"""Командная строка: genfacade run <план.svg> --text …, genfacade serve, genfacade synth."""
+"""Командная строка: genfacade run <план.svg> --text …, serve, synth, tokens."""
 
 import argparse
 import sys
@@ -8,7 +8,8 @@ from genfacade import config, pipeline
 from genfacade.datasets.synthetic import batch
 from genfacade.models.stub import ModelError
 from genfacade.plan.genplan_svg import PlanError
-from genfacade.schema import Mode
+from genfacade.schema import Mode, Source
+from genfacade.train import corpus
 
 
 def run(args: argparse.Namespace) -> Path:
@@ -25,6 +26,11 @@ def synth(args: argparse.Namespace) -> Path:
     return batch.run(seeds, config.load(args.config), args.overwrite)
 
 
+def tokens(args: argparse.Namespace) -> Path:
+    """Собранные дома источника → номера токенов одним файлом и опись."""
+    return corpus.build(args.source, config.load(args.config))
+
+
 def serve(config_dir: Path | None) -> None:
     # uvicorn и fastapi — в группе [viewer]: без смотрелки пакет их не тянет.
     import uvicorn
@@ -35,7 +41,7 @@ def serve(config_dir: Path | None) -> None:
     uvicorn.run(create_app(cfg), host=cfg.viewer.server.host, port=cfg.viewer.server.port)
 
 
-def main(argv: list[str] | None = None) -> None:
+def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="genfacade")
     parser.add_argument("-c", "--config", type=Path,
                         help="папка своих настроек: любые файлы из genfacade/config/")
@@ -54,12 +60,24 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("--first-seed", type=int, default=0, help="seed первого дома; дальше подряд")
     s.add_argument("--overwrite", action="store_true",
                    help="удалить собранные дома и собрать заново (после правки настроек или кода)")
-    args = parser.parse_args(argv)
+    t = sub.add_parser("tokens", help="дома источника → корпус для обучения: номера токенов")
+    t.add_argument("-s", "--source", type=Source, choices=list(Source), default=Source.SYNTHETIC,
+                   help="источник домов в samples_dir")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = _parser().parse_args(argv)
     if args.command == "synth":
         try:
             print(synth(args))
         except batch.BuildError as e:
             sys.exit(f"сборка остановлена: {e}")
+    elif args.command == "tokens":
+        try:
+            print(tokens(args))
+        except corpus.CorpusError as e:
+            sys.exit(f"корпус не собран: {e}")
     elif args.command == "run":
         try:
             print(run(args))

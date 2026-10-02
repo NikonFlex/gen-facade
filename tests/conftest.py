@@ -23,6 +23,19 @@ def cfg() -> config.Config:
 
 
 @pytest.fixture
+def at(tmp_path):
+    """Настройки с корнем данных в tmp_path/<имя>; extra — свои строки synthetic.toml."""
+    def load(name: str, extra: str = "") -> config.Config:
+        folder = tmp_path / f"cfg-{name}-{len(extra)}"
+        folder.mkdir()
+        (folder / "data.toml").write_text(f'[paths]\nsamples_dir = "{tmp_path / name}"\n')
+        (folder / "synthetic.toml").write_text(extra)
+        return config.load(folder)
+
+    return load
+
+
+@pytest.fixture
 def preprocess_svg(cfg):
     """Препроцессор с настройками по умолчанию: текст SVG или путь → Plan."""
     def run(svg=SIMPLE, mode=Mode.WITH_OPENINGS):
