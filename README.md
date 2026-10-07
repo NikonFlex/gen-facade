@@ -105,6 +105,26 @@ GenPlan, режим) и история прогонов; прогон откры
 `/fpsr`, `/spec-audit`; хуки в `.claude/settings.json` напоминают про задачу, следят за
 занятостью контекста и не пускают коммит, пока `tools/check.sh` не прошёл.
 
+### Telegram: переписка во входящие
+
+Переписка с научруками идёт в Telegram. Её пересылают пачкой в тему «Входящие» своей группы.
+Бот забирает новое в буфер, это ветка `tg-inbox`: раз в час и по запросу `/inbox` (Action
+[tg-pull](.github/workflows/tg-pull.yml), скрипт [tools/tg_inbox.py](tools/tg_inbox.py), gf#82).
+
+Настройка, один раз:
+
+1. В @BotFather — `/newbot`, токен — в `.env` как `TELEGRAM_BOT_TOKEN`.
+2. Группа только для себя и бота, с включёнными темами. Темы: Входящие, Разбор, Вопросы
+   научрукам, Задачи и PR, Результаты. Бот — админ группы: иначе он видит только команды.
+3. Написать что-нибудь в каждую тему и выполнить `python3 tools/tg_inbox.py discover`:
+   он печатает id группы, номера тем и id отправителей. Записать их в `.env`:
+   `TELEGRAM_CHAT_ID`, `TELEGRAM_OWNER_ID` (свой id) и
+   `TELEGRAM_THREAD_{INBOX,ANALYSIS,QUESTIONS,TASKS,RESULTS}`.
+4. Проба: `python3 tools/tg_inbox.py send --topic inbox --file <текст>` — сообщение
+   в теме; `--thread 999999` должен дать отказ 400.
+5. Секреты репозитория (Settings → Secrets → Actions) с теми же именами: для сбора
+   нужны `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_OWNER_ID`, `TELEGRAM_THREAD_INBOX`.
+
 ## Связанные проекты лаборатории
 
 - [GenPlan](https://github.com/CTLab-ITMO/GenPlan) — генерация векторных планов частных домов и 3D
