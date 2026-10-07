@@ -1,0 +1,14 @@
+{
+  "docs": ["CLAUDE.md", "README.md", ".claude/rules/*.md", ".claude/skills/*/SKILL.md",
+           "docs/*.md", "docs/examples/tasks/README.md", "docs/incoming/README.md",
+           "specs/*.md"],
+  "skip_docs": ["docs/decisions.md", "docs/lab-repos.md", "docs/methods.md",
+                "docs/datasets.md"],
+  "bases": ["genfacade"],
+  "ignore_paths": ["docs/examples/tasks/draft-zvuk-pryzhka.md", "specs/accounts.md",
+                   "datasets/texts.py", "train/", "eval/",
+                   "decorator/*", "dto/*", "examples/svgs/*", "metrics/"],
+  "ignore_patterns": ["^10\\.\\d{4,}/"],
+  "caveats": ["for now", "placeholder", "simplified", "not verified", "honest caveat",
+              "пока что", "временно", "упрощённо", "упрощенно", "не проверено"]
+}
