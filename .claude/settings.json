@@ -2,7 +2,8 @@
   "permissions": {
     "deny": [
       "Read(./.env)",
-      "Read(./.env.*)"
+      "Read(./.env.local)",
+      "Read(./.env.*.local)"
     ],
     "ask": [
       "Bash(gh issue close:*)",
