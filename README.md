@@ -24,8 +24,7 @@
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"      # код, тесты, линтер
 .venv/bin/pip install -e ".[dev,train]" # + torch, для обучения
-.venv/bin/pytest && .venv/bin/ruff check .
-npx -y jscpd@5.3.3 -c .jscpd.json genfacade tests tools   # копипаста, нужен Node
+sh tools/check.sh       # все проверки: ruff, pytest, спеки, контекст, копипаста (нужен Node)
 
 .venv/bin/genfacade run tests/fixtures/simple_house.svg \
     -t "A simple one-storey house" -m with_openings   # план + описание → фасады
@@ -85,9 +84,26 @@ GenPlan, режим) и история прогонов; прогон откры
 | [docs/metrics.md](docs/metrics.md) | Метрики и проверки корректности |
 | [docs/decisions.md](docs/decisions.md) | Журнал решений |
 
-Правила работы над проектом — [CLAUDE.md](CLAUDE.md).
+Правила работы над проектом — [CLAUDE.md](CLAUDE.md), почему они такие — [docs/WHY.md](docs/WHY.md).
 Исходная постановка от руководителя — [docs/incoming/](docs/incoming/README.md).
 Порядок работы с требованиями — [docs/SPEC-DRIVEN.md](docs/SPEC-DRIVEN.md).
+
+## Как идёт работа
+
+Процесс — из шаблона [agent-project-template](https://github.com/NikonFlex/agent-project-template)
+(переведено 07.10.2026, gf#74).
+
+```
+документ от научруков → docs/incoming/ (как есть) → дельта в specs/
+просьба хозяина → задача (docs/tasks/draft → backlog.py new) → ветка 12-имя → код по спеке
+находки по ходу → низ файла задачи; общее → docs/*.md; выбор → docs/decisions.md
+урок → /journal → INSIGHTS.md (читается перед нетривиальной работой)
+```
+
+Для Claude Code: `.claude/rules/` — правила по темам (код, спеки, задачи), подгружаются при
+работе с файлами; `.claude/skills/` — `/catchup`, `/task`, `/journal`, `/contradictions`,
+`/fpsr`, `/spec-audit`; хуки в `.claude/settings.json` напоминают про задачу, следят за
+занятостью контекста и не пускают коммит, пока `tools/check.sh` не прошёл.
 
 ## Связанные проекты лаборатории
 
@@ -104,7 +120,7 @@ GenPlan, режим) и история прогонов; прогон откры
 genfacade/ пакет фасадного модуля
 specs/     требования — единственный источник
 docs/      база знаний, входящие, задачи, журнал
-tools/     вспомогательный код (бэклог, проверка спек, парсеры датасетов)
+tools/     процесс (бэклог, check.sh, проверки спек и контекста, хуки) и парсеры датасетов
 tests/     тесты: unit/ по модулям, acceptance/ по критериям спек
 materials/ чужие документы (вне git, опись в README)
 data/      датасеты, не версионируется
