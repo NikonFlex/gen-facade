@@ -18,22 +18,9 @@ jobs:
       - name: Зависимости
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[dev]" -r tools/requirements.txt
 
-      - name: Линтер
-        run: ruff check .
-
-      - name: Тесты
+      - name: Проверки
+        # Список проверок — в tools/check.sh: его же запускает хук перед git commit.
         # Ключей в CI нет: тест, которому нужен настоящий API, упадёт — так и задумано.
-        run: pytest -q
-
-      - name: Копипаста
-        # jscpd ловит скопированные блоки и в одном файле, и между файлами (pylint —
-        # только между файлами). Пороги — в .jscpd.json. Node на раннере уже есть.
-        run: npx -y jscpd@5.3.3 -c .jscpd.json genfacade tests tools
-
-      - name: Самопроверка скрипта задач
-        run: python3 tools/backlog.py --selftest
-
-      - name: Спеки и входящие
-        run: python3 tools/spec_check.py
+        run: sh tools/check.sh

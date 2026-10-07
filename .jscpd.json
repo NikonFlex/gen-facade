@@ -3,7 +3,12 @@
   "mode": "weak",
   "minLines": 3,
   "minTokens": 30,
-  "ignore": ["**/tools/backlog.py", "**/.venv/**"],
+  "ignore": [
+    "**/tools/backlog.py",
+    "**/.venv/**",
+    "**/node_modules/**",
+    "**/outputs/**"
+  ],
   "reporters": ["console"],
   "exitCode": 1
 }

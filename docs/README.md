@@ -14,6 +14,9 @@
 | [incoming/](incoming/README.md) | Входящие документы как получены (ТЗ, переписка 26–28.09); не требования |
 | [plan.md](plan.md) | План работы для научруков — снимок 28.09 |
 | [SPEC-DRIVEN.md](SPEC-DRIVEN.md) | Порядок работы: входящие → спеки → дельты |
+| [WHY.md](WHY.md) | Почему правила и задачи устроены так |
+| [examples/tasks/](examples/tasks/README.md) | Устройство файла задачи, команды `backlog.py`, образцы |
+| [journal/](journal/JOURNAL.md) | Журнал эпизодов и уроки ([INSIGHTS](journal/INSIGHTS.md)) |
 | [statement.md](statement.md) | Постановка до 28.09 — история, актуальное в specs/ |
 | [datasets.md](datasets.md) | Датасеты фасадов: что есть, в каком формате, пригодность |
 | [methods.md](methods.md) | Подходы к генерации и векторизации, их плюсы/минусы |

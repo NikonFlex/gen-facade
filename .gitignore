@@ -32,12 +32,19 @@ wandb/
 *.pdf
 *.pptx
 
-# из baseline-kit
+# ключи
 .env
 .env.*
 !.env.example
 .pytest_cache/
 .ruff_cache/
+
+# обзор задач — пересоздаёт `backlog.py review`
+docs/tasks/REVIEW.md
+
+# локальные настройки агента
+.claude/settings.local.json
+CLAUDE.local.md
 
 # чужие примеры (GenPlan без лицензии)
 materials/*.svg
