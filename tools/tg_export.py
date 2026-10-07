@@ -152,7 +152,9 @@ def header(record: dict) -> str:
         return when
     quote = " ".join(reply["text"].split())
     quote = quote if len(quote) <= QUOTE else quote[:QUOTE] + "…"
-    return f"{when}, в ответ {reply['author']} [{local(reply['date']):%d.%m.%Y %H:%M}] «{quote}»"
+    # у ответа на картинку без подписи цитировать нечего — пустые «» только путают
+    quote = f" «{quote}»" if quote else ""
+    return f"{when}, в ответ {reply['author']} [{local(reply['date']):%d.%m.%Y %H:%M}]{quote}"
 
 
 def render(record: dict, files: list[str]) -> str:
@@ -241,7 +243,8 @@ def make_buffer(folder: Path) -> None:
                    author="Valeria Efimova (@evaleria)", reply_to={
                        "author": "Egor Bazhenov", "date": "2026-10-06T15:15:07+00:00",
                        "text": "статья на VISAPP?"}),
-            record("d", "2026-10-06T16:10:00+00:00", "чертёж", files=[pdf, big]),
+            record("d", "2026-10-06T16:10:00+00:00", "чертёж", files=[pdf, big], reply_to={
+                "author": "Egor Bazhenov", "date": "2026-10-06T16:05:00+00:00", "text": ""}),
             record("e", "2026-10-07T23:12:43+00:00", "к пачке", forwarded=False,
                    author="Никон Парвицкий (@nikusyaus)")]
     folder.mkdir(parents=True)
@@ -255,6 +258,7 @@ EXPECTED_LINES = [
     "[ссылки: https://example.org/x] <!-- tg:bbbbbbbbbbbbbbbb -->",
     "[06.10.2026 19:03] Valeria Efimova (@evaleria), в ответ Egor Bazhenov [06.10.2026 18:15] "
     "«статья на VISAPP?»: Может быть на другую? <!-- tg:cccccccccccccccc -->",
+    "[06.10.2026 19:10] Egor Bazhenov, в ответ Egor Bazhenov [06.10.2026 19:05]: чертёж",
     "[файл: materials/telegram/2026-10-06-план.pdf, 1 КБ]",
     "[файл: video, не скачан — 400: file is too big] <!-- tg:dddddddddddddddd -->",
     "[08.10.2026 02:12] Никон Парвицкий (@nikusyaus), заметка во «Входящих»: к пачке "
