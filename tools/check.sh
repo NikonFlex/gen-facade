@@ -32,6 +32,7 @@ run "claude_hooks.py --selftest" python3 tools/claude_hooks.py --selftest
 run "fpsr.py --selftest" python3 tools/fpsr.py --selftest
 run "spec_audit.py --selftest" python3 tools/spec_audit.py --selftest
 run "context_check.py --selftest" python3 tools/context_check.py --selftest
+run "tg_inbox.py --selftest" python3 tools/tg_inbox.py --selftest
 run "spec_check.py" python3 tools/spec_check.py
 run "context_check.py" python3 tools/context_check.py
 # data/ и materials/ — гигабайты чужих файлов вне git, поэтому только наши папки
