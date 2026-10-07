@@ -218,9 +218,26 @@ def iso(timestamp: int) -> str:
     return datetime.fromtimestamp(timestamp, UTC).isoformat()
 
 
+def body(message: dict) -> str:
+    return message.get("text") or message.get("caption") or ""
+
+
+def reply_context(message: dict) -> dict | None:
+    """На что ответ. Пересланный ответ Telegram пересылает вместе с исходным сообщением и
+    кладёт его в `reply_to_message`; каждое сообщение темы ещё и «отвечает» на её корень —
+    это не контекст, у корня нет `forward_origin`."""
+    parent = message.get("reply_to_message")
+    if not parent or "forward_origin" not in parent:
+        return None
+    return {"author": author(parent)[1], "date": iso(parent["forward_origin"]["date"]),
+            "text": body(parent)}
+
+
 def to_record(message: dict) -> dict:
+    """Ключ отсева — без `reply_to`: ответ, пересланный сам по себе и вместе с исходным, —
+    одно и то же сообщение."""
     files = attachments(message)
-    text = message.get("text") or message.get("caption") or ""
+    text = body(message)
     entities = message.get("entities") or message.get("caption_entities") or []
     key_author, name = author(message)
     date = message.get("forward_origin", message)["date"]
@@ -228,7 +245,7 @@ def to_record(message: dict) -> dict:
     return {"key": hashlib.sha256(source.encode()).hexdigest(), "author": name,
             "date": iso(date), "forwarded": "forward_origin" in message, "text": text,
             "links": [entity["url"] for entity in entities if entity.get("url")],
-            "files": files, "received": iso(message["date"])}
+            "reply_to": reply_context(message), "files": files, "received": iso(message["date"])}
 
 
 def from_inbox(update: dict, cfg: Config) -> dict | None:
@@ -240,8 +257,7 @@ def from_inbox(update: dict, cfg: Config) -> dict | None:
         return None
     if message.get("from", {}).get("id") != cfg.owner_id:
         return None
-    has_content = message.get("text") or message.get("caption") or attachments(message)
-    return message if has_content else None
+    return message if body(message) or attachments(message) else None
 
 
 # ---------------------------------------------------------------------------
@@ -419,11 +435,13 @@ class FakeTelegram:
 
 def message(text: str, origin: dict | None = None, **where: int) -> dict:
     """Сообщение в «Входящих» от хозяина; `where` переопределяет чат, тему, отправителя."""
-    body = {"message_id": len(text), "date": 1_800_000_000, "text": text,
+    fields = {"message_id": len(text), "date": 1_800_000_000, "text": text,
             "chat": {"id": where.get("chat", CHAT)}, "from": {"id": where.get("sender", OWNER),
                                                              "first_name": "Никон"},
-            "message_thread_id": where.get("thread", INBOX)}
-    return body | ({"forward_origin": origin} if origin else {})
+            "message_thread_id": where.get("thread", INBOX),
+            # каждое сообщение темы отвечает на её корень — сборщик не должен счесть это контекстом
+            "reply_to_message": {"message_id": INBOX, "forum_topic_created": {"name": "Входящие"}}}
+    return fields | ({"forward_origin": origin} if origin else {})
 
 
 def from_user(user_id: int, date: int) -> dict:
@@ -432,8 +450,8 @@ def from_user(user_id: int, date: int) -> dict:
 
 def first_batch() -> list[dict]:
     hidden = {"type": "hidden_user", "date": 1_700_000_100, "sender_user_name": "Валерия"}
-    return [message("план готов", from_user(1, 1_700_000_000)),
-            message("окна по сетке", hidden),
+    plan = message("план готов", from_user(1, 1_700_000_000))
+    return [plan, message("окна по сетке", hidden) | {"reply_to_message": plan},
             message("", from_user(1, 1_700_000_200)) | {
                 "caption": "чертёж", "document": {"file_id": "F1", "file_unique_id": "U1",
                                                    "file_name": "a.pdf", "file_size": 10}}]
@@ -472,6 +490,9 @@ def check_pull(cfg: Config, fake: FakeTelegram, folder: Path) -> list[str]:
     if len(lines) != 6 or files != [[{"kind": "document", "file_id": "F1", "file_unique_id": "U1",
                                       "name": "a.pdf", "size": 10}]]:
         bad.append(f"в буфере {len(lines)} строк, вложения {files}; ждали 6 и один a.pdf")
+    replies = [r["reply_to"] for r in map(json.loads, lines) if r["reply_to"]]
+    if replies != [{"author": "Егор", "date": iso(1_700_000_000), "text": "план готов"}]:
+        bad.append(f"контекст ответа: {replies}; ждали один — на «план готов» Егора")
     sent_before = len(fake.sent)
     if pull(cfg, folder) != (0, 0) or len(fake.sent) != sent_before:
         bad.append("третий сбор без новых апдейтов должен молчать")
