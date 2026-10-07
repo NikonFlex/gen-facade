@@ -103,19 +103,20 @@ def state_near_ref(line: str, ref: re.Pattern) -> bool:
 
 
 def check_deltas(path: Path, ref: re.Pattern, tasks: Path, incoming: set[str]) -> list[str]:
-    """Дельта называет основание: задачу из docs/tasks/ или документ из index.yaml."""
+    """Дельта называет основание: задачу из docs/tasks/ или документ из index.yaml.
+    Ищем по всему тексту: пометка бывает перенесена на следующую строку."""
     problems = []
-    for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        for delta in DELTA.findall(line):
-            where = f"{path.name}:{n}"
-            refs = list(ref.finditer(delta))
-            docs = [name for name in incoming if f"incoming/{name}" in delta]
-            if not refs and not docs:
-                problems.append(f"{where}: у дельты нет основания — задачи или incoming/<файл>")
-            if "incoming/" in delta and not docs:
-                problems.append(f"{where}: дельта ссылается на документ, которого нет в index.yaml")
-            problems += [f"{where}: дельта ссылается на задачу {m.group(0)}, её нет в {tasks.name}/"
-                         for m in refs if not task_file(tasks, ref_number(m))]
+    text = path.read_text(encoding="utf-8")
+    for match in DELTA.finditer(text):
+        delta, where = match.group(1), f"{path.name}:{text.count(chr(10), 0, match.start()) + 1}"
+        refs = list(ref.finditer(delta))
+        docs = [name for name in incoming if f"incoming/{name}" in delta]
+        if not refs and not docs:
+            problems.append(f"{where}: у дельты нет основания — задачи или incoming/<файл>")
+        if "incoming/" in delta and not docs:
+            problems.append(f"{where}: дельта ссылается на документ, которого нет в index.yaml")
+        problems += [f"{where}: дельта ссылается на задачу {m.group(0)}, её нет в {tasks.name}/"
+                     for m in refs if not task_file(tasks, ref_number(m))]
     return problems
 
 
@@ -214,6 +215,9 @@ DEFECTS = {
     "distilled_into на несуществующую спеку": (
         lambda r: (r / SPECS / "accounts.md").rename(r / SPECS / "users.md"), "несуществующую"),
     "дельта без основания": (lambda r: edit(r, "28.09, ab#3", "28.09, по разговору"), "основания"),
+    "дельта без основания через перенос": (
+        lambda r: edit(r, "28.09, ab#3)", "28.09,\n   по разговору)"),
+        "accounts.md:15: у дельты нет"),
     "дельта на несуществующую задачу": (lambda r: edit(r, "28.09, ab#3", "28.09, ab#9"), "ab#9"),
     "дельта на документ не из индекса": (
         lambda r: edit(r, "incoming/тз.md", "incoming/старое.md"), "на документ, которого"),
