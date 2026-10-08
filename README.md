@@ -102,7 +102,7 @@ GenPlan, режим) и история прогонов; прогон откры
 
 Для Claude Code: `.claude/rules/` — правила по темам (код, спеки, задачи), подгружаются при
 работе с файлами; `.claude/skills/` — `/catchup`, `/task`, `/journal`, `/contradictions`,
-`/fpsr`, `/spec-audit`, `/inbox`; хуки в `.claude/settings.json` напоминают про задачу, следят за
+`/fpsr`, `/spec-audit`, `/inbox`, `/to-supervisors`; хуки в `.claude/settings.json` напоминают про задачу, следят за
 занятостью контекста и не пускают коммит, пока `tools/check.sh` не прошёл.
 
 ### Telegram: переписка во входящие
@@ -111,8 +111,9 @@ GenPlan, режим) и история прогонов; прогон откры
 Бот забирает новое в буфер, это ветка `tg-inbox`: раз в час и по запросу `/inbox` (Action
 [tg-pull](.github/workflows/tg-pull.yml), скрипт [tools/tg_inbox.py](tools/tg_inbox.py), gf#82).
 `/inbox` в Claude Code собирает новое сейчас, выгружает его в `docs/incoming/`
-([tools/tg_export.py](tools/tg_export.py)), разбирает по спекам и пишет итог в тему «Разбор»,
-вопросы научрукам — в «Вопросы научрукам» (gf#83).
+([tools/tg_export.py](tools/tg_export.py)), разбирает по спекам и пишет итог в тему «Разбор» (gf#83).
+Сообщение научрукам — `/to-supervisors`, только по просьбе: собираем вопросы, доделываем
+вместе, в тему «Вопросы научрукам» оно уходит по «отправь».
 
 Настройка, один раз:
 
