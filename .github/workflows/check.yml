@@ -3,6 +3,11 @@ name: check
 on:
   push:
   pull_request:
+    types: [opened, synchronize, reopened, edited, labeled]
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   check:
@@ -21,6 +26,60 @@ jobs:
           pip install -e ".[dev]" -r tools/requirements.txt
 
       - name: Проверки
-        # Список проверок — в tools/check.sh: его же запускает хук перед git commit.
+        # Полный прогон: локально хук гоняет `check.sh --quick` — только затронутые тесты.
         # Ключей в CI нет: тест, которому нужен настоящий API, упадёт — так и задумано.
         run: sh tools/check.sh
+
+      - name: Слова, закрывающие задачу
+        # Задачу закрывает только хозяин (CLAUDE.md, «Задачи»): close/fix/resolve рядом со
+        # ссылкой в заголовке, описании или коммитах PR закрыли бы её при слиянии.
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr view ${{ github.event.pull_request.number }} --repo "${{ github.repository }}" \
+            --json title,body,commits > pr.json
+          python3 tools/closing_words.py --pr pr.json
+
+  automerge:
+    # PR с меткой automerge сливается, когда полный прогон зелёный (gf#96). Защита ветки на
+    # бесплатном тарифе для приватного репозитория недоступна, поэтому сливает сам CI.
+    needs: check
+    if: >-
+      github.event_name == 'pull_request'
+      && contains(github.event.pull_request.labels.*.name, 'automerge')
+      && !github.event.pull_request.draft
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Слить
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr merge ${{ github.event.pull_request.number }} --repo "${{ github.repository }}" --merge
+
+      - name: Уведомить
+        # Слияние токеном CI не запускает другие workflow — tg-notify.yml о нём не узнает,
+        # поэтому то же уведомление «PR слит» отсюда.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_THREAD_TASKS: ${{ secrets.TELEGRAM_THREAD_TASKS }}
+        run: |
+          gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}" \
+            | python3 -c 'import json,sys; json.dump({"action": "closed", "pull_request": json.load(sys.stdin)}, sys.stdout)' \
+            > event.json
+          python3 tools/tg_notify.py --event pull_request --payload event.json > message.txt
+          [ -s message.txt ] || exit 0
+          python3 tools/tg_inbox.py send --topic tasks --file message.txt \
+            || echo "::warning::уведомление в Telegram не ушло"
