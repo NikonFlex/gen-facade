@@ -22,7 +22,7 @@
 `offset` хранится в `state.json` и подтверждает их следующим сбором, уже после коммита.
 
 Адрес — переменные окружения или `.env`: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
-TELEGRAM_OWNER_ID, TELEGRAM_THREAD_{INBOX,ANALYSIS,QUESTIONS,TASKS,RESULTS};
+TELEGRAM_OWNER_ID, TELEGRAM_THREAD_{INBOX,ANALYSIS,QUESTIONS,TASKS,RESULTS,CLAUDE};
 TELEGRAM_API_BASE — подставной сервер для проверки. Без токена — предупреждение и выход 0:
 тот же скрипт запускают CI и машины, где бота нет.
 """
@@ -69,6 +69,7 @@ class Topic(StrEnum):
     QUESTIONS = "questions"
     TASKS = "tasks"
     RESULTS = "results"
+    CLAUDE = "claude"  # пинги «Claude закончил» — tools/tg_ping.py, gf#92
 
     @property
     def env(self) -> str:

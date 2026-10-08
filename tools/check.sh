@@ -35,6 +35,7 @@ run "context_check.py --selftest" python3 tools/context_check.py --selftest
 run "tg_inbox.py --selftest" python3 tools/tg_inbox.py --selftest
 run "tg_export.py --selftest" python3 tools/tg_export.py --selftest
 run "tg_notify.py --selftest" python3 tools/tg_notify.py --selftest
+run "tg_ping.py --selftest" python3 tools/tg_ping.py --selftest
 run "spec_check.py" python3 tools/spec_check.py
 run "context_check.py" python3 tools/context_check.py
 # data/ и materials/ — гигабайты чужих файлов вне git, поэтому только наши папки
