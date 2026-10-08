@@ -154,5 +154,22 @@ def test_snap_keeps_plan_windows(lay_out, cfg):
     assert _window(snapped, floor=2).x_m == pytest.approx(plan_w.x_m)
 
 
+def test_snap_centers_model_windows_on_common_axis(clean, cfg):
+    """Режим 1: окна ставит модель (без `fixed`) — ось группы — медиана центров, а не левых краёв.
+
+    Окна разной ширины со смещёнными осями встают на общую ось по центру и общую ширину.
+    """
+    low = _window(clean, floor=1)
+    center = low.x_m + low.w_m / 2
+    narrow = low.w_m - 0.2
+    sheet = _edit(clean, SIDE, low.id, fixed=[])
+    sheet = _edit(sheet, SIDE, "upper", w_m=narrow, x_m=center + 0.1 - narrow / 2)
+    snapped = snap(sheet, cfg.checks)
+    width = (low.w_m + narrow) / 2                   # медиана двух ширин
+    for w in (_window(snapped, floor=1), _window(snapped, floor=2)):
+        assert w.w_m == pytest.approx(width)
+        assert w.x_m + w.w_m / 2 == pytest.approx(center + 0.05)  # медиана двух центров
+
+
 def test_snap_leaves_clean_sheet_alone(clean, cfg):
     assert snap(clean, cfg.checks) == clean
