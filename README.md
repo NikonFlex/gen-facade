@@ -118,6 +118,9 @@ GenPlan, режим) и история прогонов; прогон откры
 установлено»), PR открыт и слит, красный CI на `main` (Action
 [tg-notify](.github/workflows/tg-notify.yml), текст — [tools/tg_notify.py](tools/tg_notify.py),
 gf#84).
+Когда Claude закончил долгий ход (дольше `min_minutes` из [.claude/ping.json](.claude/ping.json))
+или ждёт разрешения — пинг в тему «Claude» (хуки в `.claude/settings.json`,
+[tools/tg_ping.py](tools/tg_ping.py), gf#92); номер темы — `TELEGRAM_THREAD_CLAUDE` в `.env`.
 
 Настройка, один раз:
 
@@ -127,7 +130,7 @@ gf#84).
 3. Написать что-нибудь в каждую тему и выполнить `python3 tools/tg_inbox.py discover`:
    он печатает id группы, номера тем и id отправителей. Записать их в `.env`:
    `TELEGRAM_CHAT_ID`, `TELEGRAM_OWNER_ID` (свой id) и
-   `TELEGRAM_THREAD_{INBOX,ANALYSIS,QUESTIONS,TASKS,RESULTS}`.
+   `TELEGRAM_THREAD_{INBOX,ANALYSIS,QUESTIONS,TASKS,RESULTS,CLAUDE}`.
 4. Проба: `python3 tools/tg_inbox.py send --topic inbox --file <текст>` — сообщение
    в теме; `--thread 999999` должен дать отказ 400.
 5. Секреты репозитория (Settings → Secrets → Actions) с теми же именами: для сбора
