@@ -9,6 +9,12 @@ permissions:
   contents: read
   pull-requests: read
 
+# PR, открытый сразу с меткой, даёт события opened и labeled — два прогона, два слияния и два
+# уведомления. Прогоны одного PR (и одной ветки при push) — в одну очередь, устаревший отменяется.
+concurrency:
+  group: check-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
