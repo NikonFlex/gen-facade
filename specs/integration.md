@@ -35,3 +35,4 @@
 - Как вызывать модуль из GenPlan: CLI, как сейчас в `pipeline.py`, или MCP,
   как их `server.py`.
 - Разрешение на использование кода GenPlan, Text2SVG, VGLib.
+- Доступ к HF-организации `VectorGraphics` (из gf#1).
