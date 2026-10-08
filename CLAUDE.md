@@ -21,8 +21,8 @@ NikonFlex/agent-project-template (gf#74).
 
 ## Схема пайплайна — держать в голове всегда
 
-Картинка — [docs/assets/facade-modules.png](docs/assets/facade-modules.png), научруки одобрили
-29.09. Ниже — скелет; шаги подробно, режим 2 и обучение — `.claude/rules/scheme.md`
+Картинка — [docs/assets/facade-modules.png](docs/assets/facade-modules.png), отправлена
+научрукам 29.09 (Егор: суть верная, просил упростить). Ниже — скелет; шаги подробно, режим 2 и обучение — `.claude/rules/scheme.md`
 (подгружается при работе с кодом, спеками, тестами). Схема поменялась — перерисовать
 картинку, поправить скелет, `.claude/rules/scheme.md` и спеки в тот же заход.
 

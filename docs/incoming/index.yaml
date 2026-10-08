@@ -32,7 +32,8 @@
     сообщение хозяина в общий чат с Валерией Ефимовой и Егором Баженовым
     (схема модуля + состав данных + три вопроса), вставлено в сессию 29.09;
     ответы — пересказ хозяина, оригиналов нет
-  status: distilled
+  status: superseded
+  superseded_by: docs/incoming/Переписка в Telegram 29.09–06.10.md
   sha256: 0eb8e4f490cda6526c09df1e9dd6d82b63f97803d71996fa3af51d2902c89596
   distilled_into:
   - specs/generation.md
@@ -40,3 +41,16 @@
   - specs/data.md
   - specs/plan-input.md
   - specs/integration.md
+- path: docs/incoming/Переписка в Telegram 29.09–06.10.md
+  received: '2026-10-08'
+  source: >-
+    пересланное хозяином во «Входящие» своей Telegram-группы (бот-сборщик, gf#82);
+    выгрузка tools/tg_export.py; вложения — в materials/telegram/, вне git. Оригинал
+    ответов на сообщение 29.09 (заменяет пересказ) и переписка 06.10
+  status: distilled
+  sha256: 86db6ebc87af5301abdb156bfa5510e1f677791d3db68705654d114a89f00e8d
+  distilled_into:
+  - specs/data.md
+  - specs/generation.md
+  - specs/task.md
+  - specs/README.md
