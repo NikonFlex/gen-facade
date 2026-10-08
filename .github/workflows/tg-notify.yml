@@ -18,8 +18,11 @@ permissions:
 
 jobs:
   notify:
-    # зелёный CI не интересен — даже раннер не поднимаем
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'failure'
+    # зелёный CI не интересен — даже раннер не поднимаем; репозиторий публичный, и задачу или PR
+    # может открыть кто угодно — в Telegram идут только события от владельца (gf#96)
+    if: >-
+      github.actor == github.repository_owner
+      && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'failure')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
