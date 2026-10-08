@@ -3,7 +3,7 @@
 > **Статус: provisional.** Собрано агентом 28.09.2026.
 > Источники: docs/incoming/Переписка в Telegram 26–28.09.md (два режима и отдельный
 > сервис — Егор 13:00; планы МКД от коллег — Валерия 19:31); код GenPlan —
-> docs/tasks/gf-0036.md; docs/decisions.md, 28.09; docs/incoming/Сообщение научрукам и ответы 29.09.md.
+> docs/tasks/gf-0036.md; docs/decisions.md, 28.09; docs/incoming/Переписка в Telegram 29.09–06.10.md.
 > Владелец дельт: Никон Парвицкий.
 
 Как модуль встаёт в пайплайн лаборатории.
@@ -35,3 +35,4 @@
 - Как вызывать модуль из GenPlan: CLI, как сейчас в `pipeline.py`, или MCP,
   как их `server.py`.
 - Разрешение на использование кода GenPlan, Text2SVG, VGLib.
+- Доступ к HF-организации `VectorGraphics` (из gf#1).

@@ -2,7 +2,8 @@
   "permissions": {
     "deny": [
       "Read(./.env)",
-      "Read(./.env.*)"
+      "Read(./.env.local)",
+      "Read(./.env.*.local)"
     ],
     "ask": [
       "Bash(gh issue close:*)",
@@ -22,6 +23,33 @@
           {
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/claude_hooks.py\" context"
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/tg_ping.py\" start"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "async": true,
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/tg_ping.py\" stop"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "async": true,
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/tg_ping.py\" wait"
           }
         ]
       }
@@ -32,9 +60,13 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/closing_words.py\" --hook"
+          },
+          {
+            "type": "command",
             "if": "Bash(git commit*)",
             "timeout": 300,
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/claude_hooks.py\" is-commit || exit 0; sh \"$CLAUDE_PROJECT_DIR/tools/check.sh\" >&2 || { echo 'Коммит остановлен: проверки не прошли (вывод выше). Исправить и закоммитить снова.' >&2; exit 2; }"
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/claude_hooks.py\" is-commit || exit 0; sh \"$CLAUDE_PROJECT_DIR/tools/check.sh\" --quick >&2 || { echo 'Коммит остановлен: проверки не прошли (вывод выше). Исправить и закоммитить снова.' >&2; exit 2; }"
           }
         ]
       }

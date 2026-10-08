@@ -3,6 +3,17 @@ name: check
 on:
   push:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# Прогоны одного PR (и одной ветки при push) — в одну очередь, устаревший отменяется: правка
+# описания и новый коммит подряд не дают двух прогонов.
+concurrency:
+  group: check-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
@@ -21,6 +32,19 @@ jobs:
           pip install -e ".[dev]" -r tools/requirements.txt
 
       - name: Проверки
-        # Список проверок — в tools/check.sh: его же запускает хук перед git commit.
+        # Полный прогон: локально хук гоняет `check.sh --quick` — только затронутые тесты.
+        # Проверка `check` обязательна для слияния в main (защита ветки, gf#96): PR с
+        # `gh pr merge --auto` GitHub сольёт сам, когда она зелёная.
         # Ключей в CI нет: тест, которому нужен настоящий API, упадёт — так и задумано.
         run: sh tools/check.sh
+
+      - name: Слова, закрывающие задачу
+        # Задачу закрывает только хозяин (CLAUDE.md, «Задачи»): close/fix/resolve рядом со
+        # ссылкой в заголовке, описании или коммитах PR закрыли бы её при слиянии.
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr view ${{ github.event.pull_request.number }} --repo "${{ github.repository }}" \
+            --json title,body,commits > pr.json
+          python3 tools/closing_words.py --pr pr.json

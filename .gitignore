@@ -48,3 +48,8 @@ CLAUDE.local.md
 
 # чужие примеры (GenPlan без лицензии)
 materials/*.svg
+# вложения из Telegram — чужие файлы любого вида (tools/tg_export.py)
+materials/telegram/
+
+# база pytest-testmon: какие тесты затрагивает какой код (tools/check.sh --quick)
+.testmondata*

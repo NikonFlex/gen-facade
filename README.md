@@ -62,7 +62,7 @@ GenPlan, режим) и история прогонов; прогон откры
   в `genfacade/config/`
 - постановка согласована с научруками и сведена в спеки; семь шагов конвейера,
   два режима, состав фасада по уровням (зоны отделки, палитра); схему и состав
-  данных научруки одобрили 29.09
+  данных отправили научрукам 29.09 — Егор: суть верная, схему просил упростить
 - разобраны код GenPlan (формат плана, генерация) и Facades-3D
 - найдены данные: основной источник — 3D-модели BuildingNet v1 (~700–900 домов
   с планом и всеми фасадами), плюс синтетика своим генератором и ручная разметка
@@ -102,8 +102,40 @@ GenPlan, режим) и история прогонов; прогон откры
 
 Для Claude Code: `.claude/rules/` — правила по темам (код, спеки, задачи), подгружаются при
 работе с файлами; `.claude/skills/` — `/catchup`, `/task`, `/journal`, `/contradictions`,
-`/fpsr`, `/spec-audit`; хуки в `.claude/settings.json` напоминают про задачу, следят за
+`/fpsr`, `/spec-audit`, `/inbox`, `/to-supervisors`; хуки в `.claude/settings.json` напоминают про задачу, следят за
 занятостью контекста и не пускают коммит, пока `tools/check.sh` не прошёл.
+
+### Telegram: переписка во входящие
+
+Переписка с научруками идёт в Telegram. Её пересылают пачкой в тему «Входящие» своей группы.
+Бот забирает новое в буфер, это ветка `tg-inbox`: раз в час и по запросу `/inbox` (Action
+[tg-pull](.github/workflows/tg-pull.yml), скрипт [tools/tg_inbox.py](tools/tg_inbox.py), gf#82).
+`/inbox` в Claude Code собирает новое сейчас, выгружает его в `docs/incoming/`
+([tools/tg_export.py](tools/tg_export.py)), разбирает по спекам и пишет итог в тему «Разбор» (gf#83).
+Сообщение научрукам — `/to-supervisors`, только по просьбе: собираем вопросы, доделываем
+вместе, в тему «Вопросы научрукам» оно уходит по «отправь».
+События репозитория идут в тему «Задачи и PR»: новая и закрытая задача (с итогом «Что
+установлено»), PR открыт и слит, красный CI на `main` (Action
+[tg-notify](.github/workflows/tg-notify.yml), текст — [tools/tg_notify.py](tools/tg_notify.py),
+gf#84).
+Когда Claude закончил долгий ход (дольше `min_minutes` из [.claude/ping.json](.claude/ping.json))
+или ждёт разрешения — пинг в тему «Claude» (хуки в `.claude/settings.json`,
+[tools/tg_ping.py](tools/tg_ping.py), gf#92); номер темы — `TELEGRAM_THREAD_CLAUDE` в `.env`.
+
+Настройка, один раз:
+
+1. В @BotFather — `/newbot`, токен — в `.env` как `TELEGRAM_BOT_TOKEN`.
+2. Группа только для себя и бота, с включёнными темами. Темы: Входящие, Разбор, Вопросы
+   научрукам, Задачи и PR, Результаты. Бот — админ группы: иначе он видит только команды.
+3. Написать что-нибудь в каждую тему и выполнить `python3 tools/tg_inbox.py discover`:
+   он печатает id группы, номера тем и id отправителей. Записать их в `.env`:
+   `TELEGRAM_CHAT_ID`, `TELEGRAM_OWNER_ID` (свой id) и
+   `TELEGRAM_THREAD_{INBOX,ANALYSIS,QUESTIONS,TASKS,RESULTS,CLAUDE}`.
+4. Проба: `python3 tools/tg_inbox.py send --topic inbox --file <текст>` — сообщение
+   в теме; `--thread 999999` должен дать отказ 400.
+5. Секреты репозитория (Settings → Secrets → Actions) с теми же именами: для сбора
+   нужны `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_OWNER_ID`, `TELEGRAM_THREAD_INBOX`,
+   для уведомлений ещё `TELEGRAM_THREAD_TASKS`.
 
 ## Связанные проекты лаборатории
 

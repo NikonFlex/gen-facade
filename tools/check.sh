@@ -1,9 +1,14 @@
 #!/bin/sh
 # Все проверки проекта одним списком. Запускают CI и хук перед `git commit`
 # (.claude/settings.json) — список живёт в одном месте.
+#   sh tools/check.sh           полный прогон — CI
+#   sh tools/check.sh --quick   хук перед коммитом: из тестов только те, что затрагивает
+#                               изменённый код (pytest-testmon, база — .testmondata), gf#96
 # Код 0 — всё прошло, 1 — что-то упало; у упавших печатается хвост вывода.
 cd "$(dirname "$0")/.." || exit 1
 failed=0
+pytest_args=""
+[ "${1:-}" = "--quick" ] && pytest_args="--testmon"
 
 run() {
     name=$1
@@ -17,9 +22,10 @@ run() {
     fi
 }
 
-# Код 5 у pytest — «тестов не найдено»: пока их нет, это не ошибка.
+# Код 5 у pytest — «тестов не найдено»: пока их нет (или testmon не нашёл затронутых), это
+# не ошибка. testmon следит за кодом на Python, а не за конфигами и данными, — их ловит CI.
 pytest_or_none() {
-    python3 -m pytest -q
+    python3 -m pytest -q $pytest_args
     code=$?
     [ "$code" -eq 0 ] || [ "$code" -eq 5 ]
 }
@@ -32,6 +38,11 @@ run "claude_hooks.py --selftest" python3 tools/claude_hooks.py --selftest
 run "fpsr.py --selftest" python3 tools/fpsr.py --selftest
 run "spec_audit.py --selftest" python3 tools/spec_audit.py --selftest
 run "context_check.py --selftest" python3 tools/context_check.py --selftest
+run "tg_inbox.py --selftest" python3 tools/tg_inbox.py --selftest
+run "tg_export.py --selftest" python3 tools/tg_export.py --selftest
+run "tg_notify.py --selftest" python3 tools/tg_notify.py --selftest
+run "tg_ping.py --selftest" python3 tools/tg_ping.py --selftest
+run "closing_words.py --selftest" python3 tools/closing_words.py --selftest
 run "spec_check.py" python3 tools/spec_check.py
 run "context_check.py" python3 tools/context_check.py
 # data/ и materials/ — гигабайты чужих файлов вне git, поэтому только наши папки

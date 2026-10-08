@@ -15,7 +15,7 @@ genfacade = "genfacade.cli:main"
 
 [project.optional-dependencies]
 # pyyaml — для tools/spec_check.py, он проверяет входящие и в пакет не входит
-dev = ["pytest", "ruff", "pyyaml>=6", "httpx2", "genfacade[viewer]"]
+dev = ["pytest", "pytest-testmon>=2.2", "ruff", "pyyaml>=6", "httpx2", "genfacade[viewer]"]
 # смотрелка прогонов: genfacade serve
 viewer = ["fastapi>=0.142", "uvicorn>=0.54"]
 # обучение — отдельно, чтобы CI и смотрелка не тянули torch
