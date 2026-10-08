@@ -114,6 +114,10 @@ GenPlan, режим) и история прогонов; прогон откры
 ([tools/tg_export.py](tools/tg_export.py)), разбирает по спекам и пишет итог в тему «Разбор» (gf#83).
 Сообщение научрукам — `/to-supervisors`, только по просьбе: собираем вопросы, доделываем
 вместе, в тему «Вопросы научрукам» оно уходит по «отправь».
+События репозитория идут в тему «Задачи и PR»: новая и закрытая задача (с итогом «Что
+установлено»), PR открыт и слит, красный CI на `main` (Action
+[tg-notify](.github/workflows/tg-notify.yml), текст — [tools/tg_notify.py](tools/tg_notify.py),
+gf#84).
 
 Настройка, один раз:
 
@@ -127,7 +131,8 @@ GenPlan, режим) и история прогонов; прогон откры
 4. Проба: `python3 tools/tg_inbox.py send --topic inbox --file <текст>` — сообщение
    в теме; `--thread 999999` должен дать отказ 400.
 5. Секреты репозитория (Settings → Secrets → Actions) с теми же именами: для сбора
-   нужны `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_OWNER_ID`, `TELEGRAM_THREAD_INBOX`.
+   нужны `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_OWNER_ID`, `TELEGRAM_THREAD_INBOX`,
+   для уведомлений ещё `TELEGRAM_THREAD_TASKS`.
 
 ## Связанные проекты лаборатории
 

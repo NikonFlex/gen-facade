@@ -1,0 +1,54 @@
+name: tg-notify
+
+# События репозитория → тема «Задачи и PR» Telegram-группы (gf#84). Текст собирает
+# tools/tg_notify.py, отправляет tools/tg_inbox.py send — повторы и деление длинного текста там.
+on:
+  issues:
+    types: [opened, closed]
+  pull_request:
+    types: [opened, reopened, ready_for_review, closed]
+  workflow_run:
+    workflows: [check]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  notify:
+    # зелёный CI не интересен — даже раннер не поднимаем
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Итог закрытой задачи
+        if: github.event_name == 'issues' && github.event.action == 'closed'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments?per_page=100" > comments.json
+
+      - name: Текст
+        run: |
+          args=""
+          [ -f comments.json ] && args="--comments comments.json"
+          python3 tools/tg_notify.py --event "$GITHUB_EVENT_NAME" --payload "$GITHUB_EVENT_PATH" $args > message.txt
+          cat message.txt
+
+      - name: Отправить
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_THREAD_TASKS: ${{ secrets.TELEGRAM_THREAD_TASKS }}
+        # пустой текст — событие, о котором молчим; сбой отправки прогон не красит
+        run: |
+          [ -s message.txt ] || { echo "молчим"; exit 0; }
+          python3 tools/tg_inbox.py send --topic tasks --file message.txt \
+            || echo "::warning::уведомление в Telegram не ушло"
