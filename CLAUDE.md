@@ -201,7 +201,7 @@ NikonFlex/agent-project-template (gf#74).
 
 Прогон — `genfacade run tests/fixtures/simple_house.svg -t "…"` (трасса шагов — в
 `outputs/runs/`); смотрелка — `genfacade serve`; тесты — `python3 -m pytest`; все проверки —
-`sh tools/check.sh`. Установка и остальное — `README.md`.
+`sh tools/check.sh`; переписка из Telegram — `/inbox`; сообщение научрукам — `/to-supervisors`, только когда хозяин попросил. Установка и остальное — `README.md`.
 
 ### Ключи и деньги
 

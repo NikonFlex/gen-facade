@@ -54,6 +54,7 @@ API_BASE = "https://api.telegram.org"
 RETRY_PAUSES = (5, 15, 40)
 TIMEOUT = 30
 PAGE = 100  # больше getUpdates за вызов не отдаёт
+LIMIT = 4096  # длина текста sendMessage: 1–4096 знаков
 # Поля сообщения Bot API, в которых приходит файл.
 MEDIA_FIELDS = ("document", "photo", "video", "audio", "voice", "animation", "video_note")
 MESSAGES = "messages.jsonl"
@@ -170,9 +171,21 @@ def call_with_retries(cfg: Config, method: str, params: dict) -> object:
     raise AssertionError("цикл повторов кончается return или raise")
 
 
+def chunks(text: str) -> list[str]:
+    """Куски не длиннее LIMIT: режет по строкам, слишком длинную строку — по LIMIT."""
+    parts = [""]
+    for line in text.splitlines(keepends=True):
+        for piece in (line[i:i + LIMIT] for i in range(0, len(line), LIMIT)):
+            if len(parts[-1]) + len(piece) > LIMIT:
+                parts.append("")
+            parts[-1] += piece
+    return [part for part in parts if part.strip()]
+
+
 def send(cfg: Config, thread: int | None, text: str) -> None:
-    call_with_retries(cfg, "sendMessage",
-                      {"chat_id": cfg.chat_id, "message_thread_id": thread, "text": text})
+    for part in chunks(text):
+        call_with_retries(cfg, "sendMessage",
+                          {"chat_id": cfg.chat_id, "message_thread_id": thread, "text": part})
 
 
 # ---------------------------------------------------------------------------
@@ -390,6 +403,7 @@ def run(root: Path) -> int:
 # ---------------------------------------------------------------------------
 
 OWNER, CHAT, INBOX, OTHER_THREAD, STRANGER = 7, -100500, 11, 12, 8
+FILE_BYTES = b"%PDF-1.4 fake"
 
 
 class FakeTelegram:
@@ -405,6 +419,8 @@ class FakeTelegram:
         self.calls.append(method)
         if self.failures:
             return self.failures.pop(0)
+        if method == "getFile":
+            return self.file_info(params["file_id"])
         if method == "getUpdates":
             if params.get("offset") is not None:
                 self.updates = [u for u in self.updates if u["update_id"] >= params["offset"]]
@@ -413,6 +429,12 @@ class FakeTelegram:
             return 400, {"ok": False, "error_code": 400, "description": "message thread not found"}
         self.sent.append(params)
         return 200, {"ok": True, "result": {}}
+
+    def file_info(self, file_id: str) -> tuple[int, dict]:
+        """Файл BIG — больше лимита скачивания, остальные отдаются как FILE_BYTES."""
+        if file_id == "BIG":
+            return 400, {"ok": False, "error_code": 400, "description": "file is too big"}
+        return 200, {"ok": True, "result": {"file_path": f"documents/{file_id}.pdf"}}
 
     def serve(self) -> http.server.ThreadingHTTPServer:
         fake = self
@@ -424,6 +446,11 @@ class FakeTelegram:
                 self.send_response(status)
                 self.end_headers()
                 self.wfile.write(json.dumps(body).encode())
+
+            def do_GET(self) -> None:  # скачивание файла: /file/bot<token>/<file_path>
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(FILE_BYTES)
 
             def log_message(self, *args: object) -> None:
                 """Тише: журнал запросов самопроверке не нужен."""
@@ -512,6 +539,12 @@ def check_retries(cfg: Config, fake: FakeTelegram) -> list[str]:
     if len(fake.calls) - before != 3:
         bad.append(f"429 и 502 → повторы и успех: вызовов {len(fake.calls) - before}, ждали 3")
     fake.failures = []  # недоеденные отказы не должны перетечь в следующую проверку
+    before = len(fake.sent)
+    send(cfg, INBOX, ("строка\n" * 700) + "x" * (LIMIT + 10))
+    # 700 строк по 7 знаков режутся по строкам (585 строк = 4095), строка длиннее LIMIT — по LIMIT
+    pieces = [len(item["text"]) for item in fake.sent[before:]]
+    if pieces != [4095, 805, LIMIT, 10]:
+        bad.append(f"длинный текст: куски {pieces}, ждали [4095, 805, {LIMIT}, 10]")
     before = len(fake.calls)
     try:
         send(cfg, 999_999, "проба")
@@ -536,7 +569,7 @@ def selftest() -> int:
             bad.append("без токена pull должен выйти с кодом 0")
     server.shutdown()
     return report(bad, "отсев повторов и чужих, offset, ответ в теме, повторы 429/5xx, "
-                       "400 без повтора, без токена — выход 0")
+                       "400 без повтора, длинный текст кусками, без токена — выход 0")
 
 
 if __name__ == "__main__":
