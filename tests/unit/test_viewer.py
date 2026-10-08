@@ -10,6 +10,7 @@ from genfacade import config
 from genfacade.datasets import store
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import ElementClass, Mode, VariantKind, ZoneRole
+from genfacade.train import tokens
 from genfacade.viewer.app import STATIC, create_app
 
 PLAN_RUN = {"plan": SIMPLE.stem, "text": "A simple one-storey house.", "mode": Mode.BLIND}
@@ -114,16 +115,50 @@ def test_sample_thumbnail_is_its_sheet(client, sample, tmp_path, cfg):
     assert client.get(f"/api/samples/{sample.source}/nope/sheet.svg").status_code == 404
 
 
-def test_sample_opens_as_plan_and_sheet(client, sample, tmp_path):
-    """Пример открывается тем же экраном, что прогон: план и лист; в прогоны не попадает."""
-    store.write(sample, tmp_path / "samples")
-    run_id = client.post(f"/api/samples/{sample.source}/{sample.id}").json()["id"]
-    meta = client.get(f"/api/runs/{run_id}").json()
-    assert [s["n"] for s in meta["steps"]] == [2, 6] and "input" not in meta
+@pytest.fixture
+def opened(client, tmp_path):
+    """Записать пример и открыть его в смотрелке → (имя папки просмотра, её meta)."""
+    def open_(sample) -> tuple[str, dict]:
+        store.write(sample, tmp_path / "samples")
+        run_id = client.post(f"/api/samples/{sample.source}/{sample.id}").json()["id"]
+        return run_id, client.get(f"/api/runs/{run_id}").json()
+
+    return open_
+
+
+def test_sample_opens_as_plan_tokens_and_sheet(client, sample, opened):
+    """Пример открывается тем же экраном, что прогон; в список прогонов не попадает."""
+    run_id, meta = opened(sample)
+    assert [s["n"] for s in meta["steps"]] == [2, 4, 6] and "input" not in meta
     assert meta["sample"]["split"] == sample.split
     for step in meta["steps"]:
-        assert "<svg" in client.get(f"/files/{run_id}/{step['file']}").text, step
+        expected = "<house>" if step["file"] == meta["tokens"] else "<svg"
+        assert expected in client.get(f"/files/{run_id}/{step['file']}").text, step
     assert client.get("/api/runs").json() == []
+
+
+def test_sample_tokens_shown_for_every_mode(client, sample, opened, cfg):
+    """Шаг «Токены»: по режиму — условие и ответ; строки складываются в ту же цепочку."""
+    run_id, meta = opened(sample)
+    shown = client.get(f"/files/{run_id}/{meta['tokens']}").json()
+    assert set(shown) == set(Mode)
+    for mode in Mode:
+        given, answer = shown[mode]
+        assert " ".join(given["lines"]).split() == tokens.condition(sample.sheet, mode, cfg)
+        assert " ".join(answer["lines"]).split() == tokens.answer(sample.sheet, mode, cfg)
+        assert answer["count"] == len(tokens.answer(sample.sheet, mode, cfg))
+        # своя строка — у <answer>, каждой стены, каждого элемента и зоны, и у <end>
+        walls = sample.sheet.facades
+        rows = 2 + len(walls) + sum(len(f.elements) + len(f.zones) for f in walls)
+        assert len(answer["lines"]) == rows
+
+
+def test_sample_that_cannot_be_tokenized_opens_without_tokens(sample, opened):
+    """Дом со стилем не из словаря: план и лист открываются, шага «Токены» нет."""
+    odd = sample.sheet.spec.model_copy(update={"style": "gothic"})
+    _, meta = opened(sample.model_copy(update={
+        "sheet": sample.sheet.model_copy(update={"spec": odd})}))
+    assert [s["n"] for s in meta["steps"]] == [2, 6] and meta["tokens"] is None
 
 
 def test_unknown_sample_and_source(client):

@@ -345,14 +345,20 @@ function showStep(wanted) {
   history.replaceState(history.state, "", `#run=${encodeURIComponent(state.runId)}&step=${key}`);
   renderStepper();
   if (!step) return renderInput();
+  if (step.file === state.meta.tokens) return renderTokensStep(step);
   return step.file.endsWith(".json") ? renderJsonStep(step) : renderSvgStep(step);
+}
+
+// JSON шага без чертежа: холста у такого шага нет.
+async function stepData(step) {
+  state.stage = null;
+  return (await fetch(`/files/${state.runId}/${step.file}`)).json();
 }
 
 // ——— шаг-JSON: параметры дома ———
 
 async function renderJsonStep(step) {
-  state.stage = null;
-  const data = await (await fetch(`/files/${state.runId}/${step.file}`)).json();
+  const data = await stepData(step);
   const view = el("div", { className: "input-view" }, `
     <div class="editor-pane">
       <div class="pane-head"><h2>${step.file}</h2><span class="pane-note">шаг ${step.n}: ${step.title}</span></div>
@@ -362,6 +368,23 @@ async function renderJsonStep(step) {
   view.querySelector(".json-view").textContent = JSON.stringify(data, null, 2);
   $("stage").replaceChildren(view);
   renderSummary(data.spec, data.colors);
+}
+
+// ——— шаг «Токены»: что модель шага 4 получает и что пишет, по режимам ———
+
+async function renderTokensStep(step) {
+  const data = await stepData(step);
+  const view = el("div", { className: "tokens-view" });
+  for (const mode of state.options.modes.filter((m) => data[m.value])) {
+    const column = el("div", { className: "editor-pane" });
+    column.append(el("div", { className: "pane-head" }, `<h2>${mode.title}</h2><span class="pane-note">${mode.hint}</span>`));
+    for (const part of data[mode.value]) {
+      column.append(el("div", { className: "pane-head" }, `<h2>${part.title}</h2><span class="pane-note">токенов: ${part.count}</span>`));
+      column.append(el("pre", { className: "json-view", textContent: part.lines.join("\n") }));
+    }
+    view.append(column);
+  }
+  $("stage").replaceChildren(view);
 }
 
 // ——— шаг с чертежом ———
