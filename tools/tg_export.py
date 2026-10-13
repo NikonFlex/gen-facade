@@ -165,10 +165,10 @@ def render(record: dict, files: list[str]) -> str:
 
 
 def index_entry(path: Path, digest: str, today: date) -> str:
-    return (f"- path: {path.as_posix()}\n  received: '{today.isoformat()}'\n  source: >-\n"
+    return (f"- path: {path.as_posix()}\n  received: '{today.isoformat()}'\n  origin: >-\n"
             "    пересланное хозяином во «Входящие» своей Telegram-группы (бот-сборщик, gf#82);\n"
             f"    выгрузка tools/tg_export.py; вложения — в {MATERIALS.as_posix()}/, вне git\n"
-            f"  status: incoming\n  sha256: {digest}\n")
+            f"  sha256: {digest}\n")
 
 
 def export(root: Path, buffer: Path, cfg: tg_inbox.Config | None) -> Path | None:

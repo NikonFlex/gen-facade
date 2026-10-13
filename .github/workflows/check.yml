@@ -20,9 +20,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          # вся история: номер задачи проверяется во всех коммитах ветки от базы
+          fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -31,6 +34,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]" -r tools/requirements.txt
 
+      - name: gitleaks
+        # Архив релиза, сверенный по контрольным суммам; версия — tools/secret_scan.py.
+        run: |
+          python3 tools/secret_scan.py install --binary
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
       - name: Проверки
         # Полный прогон: локально хук гоняет `check.sh --quick` — только затронутые тесты.
         # Проверка `check` обязательна для слияния в main (защита ветки, gf#96): PR с
@@ -38,8 +47,18 @@ jobs:
         # Ключей в CI нет: тест, которому нужен настоящий API, упадёт — так и задумано.
         run: sh tools/check.sh
 
+      - name: Номер задачи в каждом коммите
+        # Хук commit-msg обходится `--no-verify` — поэтому то же правило здесь.
+        if: github.event_name == 'pull_request'
+        run: python3 tools/commit_check.py range "origin/${{ github.base_ref }}..${{ github.event.pull_request.head.sha }}"
+
+      - name: Ключи в коммитах
+        # Хук pre-commit обходится `--no-verify` — поэтому то же по всем коммитам PR.
+        if: github.event_name == 'pull_request'
+        run: python3 tools/secret_scan.py range "origin/${{ github.base_ref }}..${{ github.event.pull_request.head.sha }}"
+
       - name: Слова, закрывающие задачу
-        # Задачу закрывает только хозяин (CLAUDE.md, «Задачи»): close/fix/resolve рядом со
+        # Задачу закрывает только хозяин (AGENTS.md, «Задачи»): close/fix/resolve рядом со
         # ссылкой в заголовке, описании или коммитах PR закрыли бы её при слиянии.
         if: github.event_name == 'pull_request'
         env:

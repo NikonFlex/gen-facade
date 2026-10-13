@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Слова, по которым GitHub закрывает задачу, — запрещены в коммитах и PR (gf#96).
+"""Слова, по которым GitHub закрывает задачу, — запрещены в коммитах и PR.
 
     python3 tools/closing_words.py --hook           PreToolUse Bash: JSON вызова на stdin
     python3 tools/closing_words.py --pr PR.json     CI: заголовок, описание и коммиты PR
@@ -8,7 +8,7 @@
 
 GitHub закрывает задачу, когда PR или коммит, попавший в основную ветку, содержит close, fix
 или resolve в любой форме рядом со ссылкой на неё. Задачу закрывает только хозяин своим
-словом (CLAUDE.md, «Задачи»), поэтому ссылка пишется «Задача gf#12», а не «Closes #12».
+словом (AGENTS.md, «Задачи»), поэтому ссылка пишется «Implements <префикс>#12», а не «Closes #12».
 """
 
 from __future__ import annotations
@@ -28,20 +28,24 @@ KEYWORD = re.compile(rf"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:{REF}
 START = r"(?:^|[;&|\n])\s*"
 WATCHED = re.compile(rf"{START}git(?:\s+-\S+(?:\s+[^\s-]\S*)?)*\s+commit\b"
                      rf"|{START}gh\s+pr\s+(?:create|edit|merge)\b")
-ADVICE = "задачу закрывает только хозяин; ссылка — «Задача gf#12»"
+ADVICE = "задачу закрывает только хозяин; ссылка — «Implements <префикс>#12»"
 
 
 def found(text: str) -> list[str]:
     return [m.group(0) for m in KEYWORD.finditer(text)]
 
 
-def hook(call: dict) -> int:
-    """Код 2 — Claude Code остановит команду и покажет причину."""
-    command = (call.get("tool_input") or {}).get("command") or ""
+def closing_hits(command: str) -> list[str]:
+    """Закрывающие слова в коммите или PR, который делает команда (сторож .agents/guards/)."""
     # Смотрим с первого коммита или PR до конца: сообщение и описание идут после команды, а
     # текст до неё (правка файла, заметки) в историю не попадает.
     start = WATCHED.search(command)
-    hits = found(command[start.start():]) if start else []
+    return found(command[start.start():]) if start else []
+
+
+def hook(call: dict) -> int:
+    """Код 2 — Claude Code остановит команду и покажет причину."""
+    hits = closing_hits((call.get("tool_input") or {}).get("command") or "")
     if hits:
         print(f"Остановлено: {', '.join(hits)} — GitHub закроет задачу при слиянии; {ADVICE}.",
               file=sys.stderr)
@@ -58,7 +62,9 @@ def pr_problems(pr: dict) -> list[str]:
 
 CAUGHT = ["Closes #12", "fixes gf#7", "Resolved: owner/repo#3", "FIX #1",
           "close https://github.com/a/b/issues/5", "Задача сделана.\n\nCloses gf#96"]
-SPARED = ["Задача gf#12", "fix the bug in #12", "closed issue", "fixture #1", "prefix #3",
+SPARED = ["Implements gf#12", "Задача gf#12", "fix: пустая строка источника",
+          "fix(parser): разбор\n\nImplements gf#12", "fix the bug in #12", "closed issue",
+          "fixture #1", "prefix #3",
           "Merge pull request #80 from NikonFlex/76-x"]
 
 

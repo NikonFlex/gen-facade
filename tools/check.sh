@@ -1,9 +1,9 @@
 #!/bin/sh
 # Все проверки проекта одним списком. Запускают CI и хук перед `git commit`
-# (.claude/settings.json) — список живёт в одном месте.
+# (templates/githooks/pre-commit) — список живёт в одном месте.
 #   sh tools/check.sh           полный прогон — CI
 #   sh tools/check.sh --quick   хук перед коммитом: из тестов только те, что затрагивает
-#                               изменённый код (pytest-testmon, база — .testmondata), gf#96
+#                               изменённый код (pytest-testmon, база — .testmondata)
 # Код 0 — всё прошло, 1 — что-то упало; у упавших печатается хвост вывода.
 cd "$(dirname "$0")/.." || exit 1
 failed=0
@@ -23,28 +23,61 @@ run() {
 }
 
 # Код 5 у pytest — «тестов не найдено»: пока их нет (или testmon не нашёл затронутых), это
-# не ошибка. testmon следит за кодом на Python, а не за конфигами и данными, — их ловит CI.
+# не ошибка. `python3 -m pytest`, а не `pytest`: в worktree команда `pytest` берёт
+# editable-пакет из другой папки. testmon следит за кодом на Python, а не за конфигами и
+# данными, — их ловит полный прогон в CI.
 pytest_or_none() {
     python3 -m pytest -q $pytest_args
     code=$?
     [ "$code" -eq 0 ] || [ "$code" -eq 5 ]
 }
 
+# Строгий валидатор формы спек (openspec/README.md). Версия закреплена: обновлять осознанно,
+# прогнав образец docs/examples/project/. Корень OpenSpec ищется от папки запуска.
+openspec_validate() {
+    (cd "$1" && OPENSPEC_TELEMETRY=0 npx -y @fission-ai/openspec@1.14.1 \
+        validate --specs --strict --no-interactive)
+}
+
 run "ruff" ruff check .
 run "pytest" pytest_or_none
 run "backlog.py --selftest" python3 tools/backlog.py --selftest
+run "secret_scan.py --selftest" python3 tools/secret_scan.py --selftest
+run "changelog.py --selftest" python3 tools/changelog.py --selftest
 run "spec_check.py --selftest" python3 tools/spec_check.py --selftest
 run "claude_hooks.py --selftest" python3 tools/claude_hooks.py --selftest
 run "fpsr.py --selftest" python3 tools/fpsr.py --selftest
-run "spec_audit.py --selftest" python3 tools/spec_audit.py --selftest
-run "context_check.py --selftest" python3 tools/context_check.py --selftest
 run "tg_inbox.py --selftest" python3 tools/tg_inbox.py --selftest
 run "tg_export.py --selftest" python3 tools/tg_export.py --selftest
 run "tg_notify.py --selftest" python3 tools/tg_notify.py --selftest
 run "tg_ping.py --selftest" python3 tools/tg_ping.py --selftest
+run "context_check.py --selftest" python3 tools/context_check.py --selftest
 run "closing_words.py --selftest" python3 tools/closing_words.py --selftest
+run "commit_check.py --selftest" python3 tools/commit_check.py --selftest
+run "guard.py --selftest" python3 .agents/guards/guard.py --selftest
+run "agent_rules.py --selftest" python3 tools/agent_rules.py --selftest
+run "agent_rules.py" python3 tools/agent_rules.py
+run "context_budget.py --selftest" python3 tools/context_budget.py --selftest
+run "context_budget.py" python3 tools/context_budget.py
 run "spec_check.py" python3 tools/spec_check.py
+run "spec_check.py: docs/examples/project" python3 tools/spec_check.py docs/examples/project
+run "source_check.py --selftest" python3 tools/source_check.py --selftest
+run "source_check.py" python3 tools/source_check.py
+run "source_check.py: docs/examples/project" python3 tools/source_check.py docs/examples/project
+run "paths_check.py --selftest" python3 tools/paths_check.py --selftest
+run "paths_check.py" python3 tools/paths_check.py
+run "paths_check.py: docs/examples/project" python3 tools/paths_check.py docs/examples/project
+run "task_links.py --selftest" python3 tools/task_links.py --selftest
+run "task_links.py" python3 tools/task_links.py
+run "task_links.py: docs/examples/project" python3 tools/task_links.py docs/examples/project
+run "scenario.py --selftest" python3 tools/scenario.py --selftest
+run "scenario.py --control" python3 tools/scenario.py --control
+run "req_status.py --selftest" python3 tools/req_status.py --selftest
+run "req_status.py" python3 tools/req_status.py
+run "req_status.py: docs/examples/project" python3 tools/req_status.py docs/examples/project
+run "openspec validate --strict" openspec_validate .
+run "openspec validate --strict: docs/examples/project" openspec_validate docs/examples/project
 run "context_check.py" python3 tools/context_check.py
 # data/ и materials/ — гигабайты чужих файлов вне git, поэтому только наши папки
-run "jscpd" npx -y jscpd@5.3.3 -c .jscpd.json genfacade tests tools
+run "jscpd" npx -y jscpd@5.3.3 -c .jscpd.json genfacade tests tools .agents
 exit $failed

@@ -4,8 +4,8 @@
   "minLines": 3,
   "minTokens": 30,
   "ignore": [
-    "**/tools/backlog.py",
     "**/.venv/**",
+    "**/.git/**",
     "**/node_modules/**",
     "**/outputs/**"
   ],
