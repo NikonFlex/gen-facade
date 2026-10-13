@@ -1,5 +1,5 @@
 # данные
-data/
+/data/
 *.zip
 *.tar
 *.tar.gz
@@ -21,6 +21,8 @@ env/
 checkpoints/
 outputs/
 runs/
+# записи прогонов сценариев (docs/shared/SDD.md) — в git
+!**/openspec/runs/
 wandb/
 
 # среда
@@ -31,6 +33,9 @@ wandb/
 # чужие документы: статьи под копирайтом, презентации научрука
 *.pdf
 *.pptx
+
+# гипотезы и черновики сессии (AGENTS.md, «Ход работы») — не в git
+tmp/
 
 # ключи
 .env

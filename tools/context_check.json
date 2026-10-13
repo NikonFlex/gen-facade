@@ -1,15 +1,57 @@
 {
-  "docs": ["CLAUDE.md", "README.md", ".claude/rules/*.md", ".claude/skills/*/SKILL.md",
-           "docs/*.md", "docs/examples/tasks/README.md", "docs/incoming/README.md",
-           "specs/*.md"],
-  "skip_docs": ["docs/decisions.md", "docs/lab-repos.md", "docs/methods.md",
-                "docs/datasets.md"],
-  "bases": ["genfacade"],
-  "ignore_paths": ["docs/examples/tasks/draft-zvuk-pryzhka.md", "docs/tasks/g-0012.md",
-                   "specs/accounts.md",
-                   "datasets/texts.py", "train/", "eval/",
-                   "decorator/*", "dto/*", "examples/svgs/*", "metrics/"],
-  "ignore_patterns": ["^10\\.\\d{4,}/"],
-  "caveats": ["for now", "placeholder", "simplified", "not verified", "honest caveat",
-              "пока что", "временно", "упрощённо", "упрощенно", "не проверено"]
+  "docs": [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "README.md",
+    "docs/agents/*.md",
+    ".claude/skills/*/SKILL.md",
+    "docs/*.md",
+    "docs/examples/tasks/README.md",
+    "docs/incoming/README.md",
+    "docs/shared/*.md",
+    "openspec/README.md",
+    "openspec/*.md",
+    "openspec/paths/README.md",
+    "tests/scenarios/README.md"
+  ],
+  "skip_docs": [
+    "docs/decisions.md",
+    "docs/lab-repos.md",
+    "docs/methods.md",
+    "docs/datasets.md"
+  ],
+  "bases": [
+    "genfacade"
+  ],
+  "ignore_patterns": [
+    "^10\\.\\d{4,}/"
+  ],
+  "ignore_paths": [
+    "openspec/specs/accounts/spec.md",
+    "docs/examples/tasks/draft-zvuk-pryzhka.md",
+    "docs/tasks/g-0012.md",
+    "docs/tasks/draft-bootstrap.md",
+    "docs/shared/acceptance",
+    "tests/scenarios/stand.json",
+    "repos",
+    "datasets/texts.py",
+    "train/",
+    "eval/",
+    "decorator/*",
+    "dto/*",
+    "examples/svgs/*",
+    "metrics/"
+  ],
+  "caveats": [
+    "for now",
+    "placeholder",
+    "simplified",
+    "not verified",
+    "honest caveat",
+    "пока что",
+    "временно",
+    "упрощённо",
+    "упрощенно",
+    "не проверено"
+  ]
 }

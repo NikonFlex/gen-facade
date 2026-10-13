@@ -99,7 +99,7 @@ def test_external_window_can_be_sealed(raw_plan):
 @pytest.mark.parametrize("cls, kind", [(ElementClass.WINDOW, VariantKind.GLAZED),
                                        (ElementClass.DOOR, VariantKind.REGULAR)])
 def test_variant_kind_must_fit_element_class(raw_house, cls, kind):
-    """Виды окна — окну, виды двери — двери (facade.md, Element.variant)."""
+    """Виды окна — окну, виды двери — двери (спека facade, «Элемент», вариант)."""
     raw = raw_house
     target = next(e for e in raw["facades"][0]["elements"] if e["cls"] == cls)
     target["variant"] = {"kind": kind, "cols": 1, "rows": 1}

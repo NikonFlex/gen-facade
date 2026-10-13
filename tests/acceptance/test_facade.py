@@ -1,4 +1,4 @@
-"""Критерии приёмки specs/facade.md, которые закрывает этап 0."""
+"""Сценарии требований спеки facade, которые закрывает этап 0."""
 
 import pytest
 
@@ -33,6 +33,6 @@ def test_json_svg_json_roundtrip(house, cfg):
 
 
 def test_svg_is_deterministic(house, cfg):
-    """SVG получается из JSON детерминированно (facade.md, правило 7)."""
+    """SVG получается из JSON детерминированно (`facade: JSON и SVG — одно содержимое`)."""
     sheet = house
     assert sheet_svg(sheet, cfg) == sheet_svg(sheet.model_copy(deep=True), cfg)

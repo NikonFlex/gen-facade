@@ -1,4 +1,5 @@
-"""Синтетические дома ступени 1: план в формате GenPlan и правила генератора (data.md, п. 1)."""
+"""Синтетические дома ступени 1: план в формате GenPlan и правила генератора
+(`data: Синтетика своим генератором`)."""
 
 import json
 import re
@@ -102,7 +103,8 @@ def test_openings_keep_clear_of_corners_partitions_and_each_other(houses, cfg):
 
 
 def test_blind_walls_are_made_on_purpose(houses):
-    """Глухие стены есть, но не все: у каждого дома хотя бы одно окно (data.md, правило 1)."""
+    """Глухие стены есть, но не все: у каждого дома хотя бы одно окно
+    (`data: Глухие стены в синтетике`)."""
     walls = [s for _, house in houses for s in house.plan.sides]
     blind = sum(not s.openings for s in walls) / len(walls)
     assert 0.1 < blind < 0.5

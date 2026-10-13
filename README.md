@@ -12,7 +12,7 @@
 ```
 
 Схема модуля — [docs/assets/facade-modules.png](docs/assets/facade-modules.png),
-требования — [specs/](specs/README.md).
+требования — [openspec/](openspec/README.md).
 
 В отличие от растровой генерации, результат должен оставаться **чертежом**:
 сохранять геометрическую структуру, повторяемость элементов и выравнивание,
@@ -24,7 +24,11 @@
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"      # код, тесты, линтер
 .venv/bin/pip install -e ".[dev,train]" # + torch, для обучения
-sh tools/check.sh       # все проверки: ruff, pytest, спеки, контекст, копипаста (нужен Node)
+.venv/bin/pip install -r tools/requirements.txt   # скрипты процесса: pyyaml, git-cliff
+sh tools/install_hooks.sh                         # git-хуки и `git ticket <номер>`
+python3 tools/secret_scan.py install              # gitleaks закреплённой версии для хука
+sh tools/check.sh       # все проверки: ruff, pytest, спеки OpenSpec, сверка с источником,
+                        # контекст, копипаста (нужен Node)
 
 .venv/bin/genfacade run tests/fixtures/simple_house.svg \
     -t "A simple one-storey house" -m with_openings   # план + описание → фасады
@@ -74,9 +78,9 @@ GenPlan, режим) и история прогонов; прогон откры
 
 | Документ | Содержание |
 |---|---|
-| [specs/](specs/README.md) | **Требования: постановка, вход, представление, метод, данные, оценка** |
+| [openspec/](openspec/README.md) | **Требования: постановка, вход, представление, метод, данные, оценка, стыковка** |
 | [docs/plan.md](docs/plan.md) | План работы для научруков — снимок 28.09 |
-| [docs/statement.md](docs/statement.md) | Постановка до 28.09 — история; актуальное в specs/ |
+| [docs/statement.md](docs/statement.md) | Постановка до 28.09 — история; актуальное в openspec/ |
 | [docs/datasets.md](docs/datasets.md) | Датасеты фасадов, разбор формата CMP |
 | [docs/methods.md](docs/methods.md) | Подходы к генерации и векторизации |
 | [docs/lab-repos.md](docs/lab-repos.md) | Что уже есть в CTLab-ITMO |
@@ -84,26 +88,33 @@ GenPlan, режим) и история прогонов; прогон откры
 | [docs/metrics.md](docs/metrics.md) | Метрики и проверки корректности |
 | [docs/decisions.md](docs/decisions.md) | Журнал решений |
 
-Правила работы над проектом — [CLAUDE.md](CLAUDE.md), почему они такие — [docs/WHY.md](docs/WHY.md).
-Исходная постановка от руководителя — [docs/incoming/](docs/incoming/README.md).
-Порядок работы с требованиями — [docs/SPEC-DRIVEN.md](docs/SPEC-DRIVEN.md).
+Правила работы над проектом — [AGENTS.md](AGENTS.md) (для Claude Code ещё [CLAUDE.md](CLAUDE.md)),
+почему они такие — [docs/WHY.md](docs/WHY.md). Исходная постановка от руководителя —
+[docs/incoming/](docs/incoming/README.md). Порядок работы с требованиями —
+[docs/shared/SDD.md](docs/shared/SDD.md), статус требований —
+[таблица](docs/shared/product/Таблица%20требований.md).
 
 ## Как идёт работа
 
 Процесс — из шаблона [agent-project-template](https://github.com/NikonFlex/agent-project-template)
-(переведено 07.10.2026, gf#74).
+(переведено 07.10.2026, gf#74; на процесс SDD — 13.10.2026, gf#116).
 
 ```
-документ от научруков → docs/incoming/ (как есть) → дельта в specs/
-просьба хозяина → задача (docs/tasks/draft → backlog.py new) → ветка 12-имя → код по спеке
+документ от научруков → docs/incoming/ (как есть) + строка в «Источники и старшинство»
+  → требование в openspec/specs/ со строкой источника; сверка в обе стороны (source_check)
+просьба хозяина → задача (docs/tasks/draft → backlog.py new) → ветка 12-имя + git ticket 12
+  → код по спеке → коммит feat(<спека>): … → PR «Implements gf#12» → CI → GitHub сливает
 находки по ходу → низ файла задачи; общее → docs/*.md; выбор → docs/decisions.md
 урок → /journal → INSIGHTS.md (читается перед нетривиальной работой)
 ```
 
-Для Claude Code: `.claude/rules/` — правила по темам (код, спеки, задачи), подгружаются при
-работе с файлами; `.claude/skills/` — `/catchup`, `/task`, `/journal`, `/contradictions`,
-`/fpsr`, `/spec-audit`, `/inbox`, `/to-supervisors`; хуки в `.claude/settings.json` напоминают про задачу, следят за
-занятостью контекста и не пускают коммит, пока `tools/check.sh` не прошёл.
+После клона — `sh tools/install_hooks.sh`: git-хуки `pre-commit` (ключи в индексе — gitleaks,
+`tools/check.sh --quick`) и `commit-msg` (заголовок по Conventional Commits, номер задачи из
+`git ticket`). Общие правила для Claude Code, Codex и Cursor — `AGENTS.md`, правила по темам —
+`docs/agents/` (копии в `.claude/rules/`, `.cursor/rules/`), сторожа команд —
+`.agents/guards/`. Навыки Claude Code — `/catchup`, `/task`, `/accept`, `/journal`,
+`/contradictions`, `/fpsr`, `/inbox`, `/to-supervisors`. Состояние обвязки —
+`python3 tools/harness.py`; выпуск версии — Actions → `release` (`cliff.toml`).
 
 ### Telegram: переписка во входящие
 
@@ -150,10 +161,10 @@ gf#84).
 
 ```
 genfacade/ пакет фасадного модуля
-specs/     требования — единственный источник
-docs/      база знаний, входящие, задачи, журнал
-tools/     процесс (бэклог, check.sh, проверки спек и контекста, хуки) и парсеры датасетов
-tests/     тесты: unit/ по модулям, acceptance/ по критериям спек
+openspec/  требования — единственный источник; карта источника, пути
+docs/      база знаний, входящие, задачи, журнал, процесс (shared/), правила агентов (agents/)
+tools/     процесс (бэклог, check.sh, приборы спек и контекста, хуки) и парсеры датасетов
+tests/     тесты: unit/ по модулям, acceptance/ по требованиям спек; scenarios/ — раннер
 materials/ чужие документы (вне git, опись в README)
 data/      датасеты, не версионируется
 ```

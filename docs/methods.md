@@ -1,6 +1,6 @@
 # Подходы к генерации векторного фасада
 
-> ⚠ Снимок 25–26.09: пути A/B, представление и выбор домена — история. Актуальный метод — [specs/generation.md](../specs/generation.md), представление — [specs/facade.md](../specs/facade.md), схема — CLAUDE.md. Разбор EvoVec и building_tools — в силе.
+> ⚠ Снимок 25–26.09: пути A/B, представление и выбор домена — история. Актуальный метод — [openspec/specs/generation/spec.md](../openspec/specs/generation/spec.md), представление — [openspec/specs/facade/spec.md](../openspec/specs/facade/spec.md), схема — AGENTS.md. Разбор EvoVec и building_tools — в силе.
 
 Обновлено: 2026-09-25
 

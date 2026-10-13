@@ -23,7 +23,7 @@ class ModelError(ValueError):
 
 @dataclass(frozen=True)
 class LayoutContext:
-    """Условие раскладки, общее для всех стен дома (generation.md, п. 3)."""
+    """Условие раскладки, общее для всех стен дома (`generation: Условие модели шага 4`)."""
 
     spec: HouseSpec
     mode: Mode
@@ -49,7 +49,7 @@ def layout_model(wall: SideFacade, ctx: LayoutContext) -> SideFacade:
 
 
 def layout_all(sheet: FacadeSheet, ctx: LayoutContext) -> FacadeSheet:
-    """Все стены дома при одном контексте (generation.md, п. 8)."""
+    """Все стены дома при одном контексте (`facade: Общие параметры дома`)."""
     if len(sheet.facades) != len(_facades()):
         raise ModelError(f"стаб знает только простой дом из {len(_facades())} стен, "
                          f"а у плана их {len(sheet.facades)}")

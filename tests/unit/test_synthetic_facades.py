@@ -1,4 +1,5 @@
-"""Синтетические дома: параметры дома и раскладка стен правилами (data.md, правило 1)."""
+"""Синтетические дома: параметры дома и раскладка стен правилами
+(`data: Синтетика своим генератором`)."""
 
 import random
 
@@ -212,7 +213,7 @@ def test_houses_differ_in_character(looks, cfg):
 
 
 def test_sheets_survive_svg(houses, cfg):
-    """JSON → SVG → разбор SVG даёт те же элементы и зоны (facade.md, критерии приёмки) —
+    """JSON → SVG → разбор SVG даёт те же элементы и зоны (`facade: JSON и SVG — одно содержимое`) —
     на домах со всеми видами дверей, крыльцом и козырьком."""
     for h in houses[:20]:
         parsed = parse_sheet_svg(sheet_svg(h.sheet, cfg))

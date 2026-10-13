@@ -1,4 +1,4 @@
-"""Примеры на диске: файл на дом и опись источника (specs/data.md, правило 10).
+"""Примеры на диске: файл на дом и опись источника (`data: Хранение примеров`).
 
     <корень>/<источник>/<id>.json        Sample
     <корень>/<источник>/_manifest.json   опись: сколько примеров, разбиение, стены, классы
@@ -52,7 +52,8 @@ def manifest(root: Path, source: Source) -> dict:
         "samples": len(samples),
         "splits": dict(Counter(s.split for s in samples)),
         "walls": len(facades),
-        # глухие стены синтетика делает намеренно — их доля видна здесь (data.md, правило 1)
+        # глухие стены синтетика делает намеренно — их доля видна здесь
+        # (`data: Глухие стены в синтетике`)
         "blind_walls": sum(not any(e.cls in OPENINGS for e in f.elements) for f in facades),
         "elements": dict(Counter(e.cls for f in facades for e in f.elements)),
         "date": datetime.now().isoformat(timespec="seconds"),
