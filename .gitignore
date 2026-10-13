@@ -1,5 +1,5 @@
 # данные
-data/
+/data/
 *.zip
 *.tar
 *.tar.gz
@@ -21,6 +21,8 @@ env/
 checkpoints/
 outputs/
 runs/
+# записи прогонов сценариев (docs/shared/SDD.md) — в git
+!**/openspec/runs/
 wandb/
 
 # среда
