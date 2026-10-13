@@ -1,56 +1,36 @@
-# Индекс входящих документов. Порядок работы — docs/SPEC-DRIVEN.md.
+# Индекс входящих документов. Порядок работы — docs/shared/SDD.md.
 # Проверка: python3 tools/spec_check.py
+# Каждый документ отсюда — строкой в «Источники и старшинство» openspec/README.md
+# (проверяет tools/source_check.py). Что из него стало требованиями — карта и реестр в openspec/.
+# Запись:
+# - path: docs/incoming/<имя>.md
+#   received: 'ГГГГ-ММ-ДД'
+#   origin: откуда и от кого; адрес оригинала, если документ выгружен по ссылке
+#   sha256: <sha256sum файла>
 - path: docs/incoming/ТЗ Валерии и заметка Егора.md
   received: '2026-09-25'
-  source: >-
-    описание темы 1.5 из гугл-дока Валерии Ефимовой и заметка Егора Баженова
-    (переписка 21.09); до 28.09 лежал в корне как important.md
-  status: distilled
+  origin: >-
+    описание темы 1.5 из гугл-дока Валерии Ефимовой и заметка Егора Баженова (переписка
+    21.09); до 28.09 лежал в корне как important.md
   sha256: 21729d5d1f700b4561811a0ebbd93aa7c973942c516a22f388792e895967b0e2
-  distilled_into:
-  - specs/task.md
-  - specs/facade.md
-  - specs/generation.md
-  - specs/evaluation.md
-  - specs/data.md
 - path: docs/incoming/Переписка в Telegram 26–28.09.md
   received: '2026-09-28'
-  source: >-
-    общий чат с Валерией Ефимовой и Егором Баженовым, 26.09–28.09; вставлен
-    хозяином в сессию 28.09. Вложения (PPSN 2024.pdf, Safari.pdf, test3.svg,
-    PDF от 17:42) в текст не входят. Переписка 21.09 сюда не вошла
-  status: distilled
+  origin: >-
+    общий чат с Валерией Ефимовой и Егором Баженовым, 26.09–28.09; вставлен хозяином в
+    сессию 28.09. Вложения (PPSN 2024.pdf, Safari.pdf, test3.svg, PDF от 17:42) в текст не
+    входят. Переписка 21.09 сюда не вошла
   sha256: 67ad980c97a8209961e8cf9dc4505621e4bdb0cf3acfa9a3e1bc5a0b6561474e
-  distilled_into:
-  - specs/task.md
-  - specs/plan-input.md
-  - specs/data.md
-  - specs/integration.md
 - path: docs/incoming/Сообщение научрукам и ответы 29.09.md
   received: '2026-09-29'
-  source: >-
-    сообщение хозяина в общий чат с Валерией Ефимовой и Егором Баженовым
-    (схема модуля + состав данных + три вопроса), вставлено в сессию 29.09;
-    ответы — пересказ хозяина, оригиналов нет
-  status: superseded
-  superseded_by: docs/incoming/Переписка в Telegram 29.09–06.10.md
+  origin: >-
+    сообщение хозяина в общий чат с Валерией Ефимовой и Егором Баженовым (схема модуля +
+    состав данных + три вопроса), вставлено в сессию 29.09; ответы — пересказ хозяина,
+    оригиналов нет; заменён оригиналом docs/incoming/Переписка в Telegram 29.09–06.10.md
   sha256: 0eb8e4f490cda6526c09df1e9dd6d82b63f97803d71996fa3af51d2902c89596
-  distilled_into:
-  - specs/generation.md
-  - specs/task.md
-  - specs/data.md
-  - specs/plan-input.md
-  - specs/integration.md
 - path: docs/incoming/Переписка в Telegram 29.09–06.10.md
   received: '2026-10-08'
-  source: >-
-    пересланное хозяином во «Входящие» своей Telegram-группы (бот-сборщик, gf#82);
-    выгрузка tools/tg_export.py; вложения — в materials/telegram/, вне git. Оригинал
-    ответов на сообщение 29.09 (заменяет пересказ) и переписка 06.10
-  status: distilled
+  origin: >-
+    пересланное хозяином во «Входящие» своей Telegram-группы (бот-сборщик, gf#82); выгрузка
+    tools/tg_export.py; вложения — в materials/telegram/, вне git. Оригинал ответов на
+    сообщение 29.09 (заменяет пересказ) и переписка 06.10
   sha256: 86db6ebc87af5301abdb156bfa5510e1f677791d3db68705654d114a89f00e8d
-  distilled_into:
-  - specs/data.md
-  - specs/generation.md
-  - specs/task.md
-  - specs/README.md
