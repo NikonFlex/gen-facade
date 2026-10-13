@@ -1,4 +1,4 @@
-"""Типы модуля — поля 1:1 из specs/facade.md, specs/plan-input.md и specs/data.md.
+"""Типы модуля — сущности спек facade, plan-input и data (openspec/specs/).
 
 Модули обмениваются только этими объектами; каждый сохраняется в JSON.
 Координаты — метры; на стене x вдоль стороны от её левого края (если смотреть
@@ -21,7 +21,7 @@ class Mode(StrEnum):
 
 
 class ElementClass(StrEnum):
-    """11 классов объектов CMP + классы коттеджей (facade.md, Element.cls)."""
+    """11 классов объектов CMP + классы коттеджей (спека facade, «Элемент», класс)."""
 
     WINDOW = "window"
     PILLAR = "pillar"
@@ -51,7 +51,7 @@ class RoofKind(StrEnum):
 
 
 class OpeningKind(StrEnum):
-    """Проём плана (plan-input.md, Opening.kind)."""
+    """Проём плана (спека plan-input, «Проём плана», вид)."""
 
     WINDOW = "window"
     DOOR = "door"
@@ -80,7 +80,7 @@ class Split(StrEnum):
 
 
 class TextKind(StrEnum):
-    """Как получено описание дома (data.md, правило 6)."""
+    """Как получено описание дома (`data: Описания из разметки`)."""
 
     TEMPLATE = "template"
     PARAPHRASE = "paraphrase"
@@ -88,7 +88,7 @@ class TextKind(StrEnum):
 
 
 class VariantKind(StrEnum):
-    """Вид проёма (facade.md, Element.variant). У окна — первые четыре; у двери — последние
+    """Вид проёма (спека facade, «Элемент», вариант). У окна — первые четыре; у двери — последние
     два, а дверь без варианта — глухая."""
 
     REGULAR = "regular"
@@ -118,7 +118,7 @@ class ZoneRole(StrEnum):
 
 class PaletteRole(StrEnum):
     """Роль материала в палитре дома: так же названы материалы (`Material.id`) у стаба шага 1
-    и у синтетики (generation.md, п. 2)."""
+    и у синтетики (`generation: Стаб шага 1`)."""
 
     MAIN = "main"
     PLINTH = "plinth"
@@ -133,7 +133,7 @@ class Severity(StrEnum):
 
 
 class Rule(StrEnum):
-    """Правила валидатора (evaluation.md, правило 1); что проверяет каждое — validate.py."""
+    """Правила валидатора (`evaluation: Ошибки геометрии`); что проверяет каждое — validate.py."""
 
     SVG_PARSE = "svg_parse"
     OUTSIDE = "outside"
@@ -164,7 +164,7 @@ class Roof(Model):
 
 
 class HouseSpec(Model):
-    """Параметры, общие для всех сторон дома (facade.md, правило 2)."""
+    """Параметры, общие для всех сторон дома (`facade: Общие параметры дома`)."""
 
     building_type: BuildingType
     floors: int = Field(ge=1)
@@ -245,7 +245,7 @@ class PlanOpening(Model):
     kind: OpeningKind
     rect: Rect
     external: bool = True
-    sealed: bool = False  # заделан в глухом режиме (plan-input.md, правило 6)
+    sealed: bool = False  # заделан в глухом режиме (`plan-input: Глухой режим заделывает разрывы`)
 
     @model_validator(mode="after")
     def _check(self) -> "PlanOpening":
@@ -262,7 +262,7 @@ def signed_area(poly: Polygon) -> float:
 
 
 class Plan(Model):
-    """План этажа во внутреннем формате (plan-input.md); метры, y вверх."""
+    """План этажа во внутреннем формате (спека plan-input); метры, y вверх."""
 
     walls: list[Rect]
     outline: Polygon
@@ -298,7 +298,7 @@ class Element(Model):
     material: str | None = None
     variant: OpeningVariant | None = None
     # Поля, заданные условием, а не моделью: в режиме 2 у проёма из плана — x и ширина
-    # (generation.md, п. 4). Один формат на оба режима.
+    # (`generation: Режимы отличаются входом`). Один формат на оба режима.
     fixed: list[FixedField] = []
 
     @model_validator(mode="after")
@@ -357,7 +357,7 @@ class Description(Model):
 
 
 class Sample(Model):
-    """Обучающий или тестовый пример: дом с эталонными фасадами (data.md, Sample)."""
+    """Обучающий или тестовый пример: дом с эталонными фасадами (спека data, «Пример»)."""
 
     # id — имя файла примера: без «/» и «..», не с «_» (так начинается опись источника).
     id: str = Field(pattern=r"^[A-Za-z0-9][\w.-]*$")
@@ -376,7 +376,7 @@ class Sample(Model):
 
 
 class Violation(Model):
-    """Нарушение, найденное валидатором (evaluation.md, Violation)."""
+    """Нарушение, найденное валидатором (спека evaluation, «Нарушение»)."""
 
     rule: Rule
     severity: Severity

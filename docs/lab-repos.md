@@ -7,7 +7,7 @@
 
 Всё ниже — `[проверено: GitHub API + README]`; Facades-3D, Text2SVG, VGLib и GenPlan потом разобраны по коду (разделы ниже, gf#34, gf#36).
 
-> ⚠ 29.09: вывод «вклад — встать в Facades-3D вместо процедурного генератора» — история; модуль встаёт после GenPlan (specs/integration.md), Facades-3D + EvoVec — только базовый подход (specs/generation.md).
+> ⚠ 29.09: вывод «вклад — встать в Facades-3D вместо процедурного генератора» — история; модуль встаёт после GenPlan (openspec/specs/integration/spec.md), Facades-3D + EvoVec — только базовый подход (openspec/specs/generation/spec.md).
 
 ---
 

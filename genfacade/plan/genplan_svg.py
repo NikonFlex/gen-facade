@@ -1,6 +1,6 @@
 """Разбор SVG GenPlan в примитивы: стены, окна, двери — в пикселях и осях SVG (y вниз).
 
-Формат (plan-input.md, правило 1) сверен с кодом GenPlan HEAD 2ed651c:
+Формат (`plan-input: Чтение плана GenPlan`) сверен с кодом GenPlan HEAD 2ed651c:
 `dto/rect.py`, `dto/opened_door/opened_door.py`, `decorator/decoration.py`.
 - стена — `<rect>` `#000000`, окно — `<rect>` `#99ccff` в разрыве стены;
 - дверь (и вход, и внутренняя) — пустой разрыв, рядом открытая створка: чёрный
@@ -38,7 +38,8 @@ SAFE_EXPAT = (2, 6, 0)
 
 
 class PlanError(ValueError):
-    """План не читается или дефектен; текст — причина отказа (plan-input.md, правило 7)."""
+    """План не читается или дефектен; текст — причина отказа
+    (`plan-input: Отказ на дефектном плане`)."""
 
 
 @dataclass(frozen=True)

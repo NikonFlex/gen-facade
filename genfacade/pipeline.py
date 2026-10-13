@@ -1,4 +1,5 @@
-"""Конвейер и его трасса: выход каждого шага — в папку прогона (generation.md, п. 1, 9, 10).
+"""Конвейер и его трасса: выход каждого шага — в папку прогона
+(`generation: Конвейер из семи шагов`, `generation: Трасса шагов`).
 
 `generate`: SVG-план GenPlan + текст → шаги 1–6. Смотрелка и CLI читают одно и то же — папку
 прогона с `meta.json`, где перечислены шаги и файлы.
@@ -51,7 +52,7 @@ RUN_ID = re.compile(r"^[\w.-]+$")  # имя папки прогона: без / 
 
 
 class PlanRun(BaseModel):
-    """Запрос на прогон (task.md, Request): план — имя или путь, откуда он пришёл.
+    """Запрос на прогон (спека task, «Запрос»): план — имя или путь, откуда он пришёл.
 
     seed нет: до модели всё детерминировано; появится с ней (этап 4, хозяин 30.09).
     """
@@ -80,7 +81,7 @@ def generate(req: PlanRun, svg: str, out: Path, cfg: Config) -> Path:
     (out / REQUEST).write_text(req.model_dump_json(indent=2))
     bare = _prepare(req, svg, out, cfg)
     # Шаги 4–5. Брак не перегенерируем: стаб детерминирован, повтор дал бы то же самое;
-    # «брак — заново» (generation.md, п. 1) вернётся с моделью. Нарушения — в трассу.
+    # `generation: Брак — заново` вернётся с моделью. Нарушения — в трассу.
     raw = stub.layout_all(bare, stub.LayoutContext(bare.spec, req.mode, req.text))
     sheet = snap(raw, cfg.checks)
     violations = validate(sheet, cfg.checks)

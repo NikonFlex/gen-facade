@@ -167,7 +167,7 @@ class DataPaths(Section):
 
 
 class Data(Section):
-    """Данные для обучения и теста (config/data.toml, specs/data.md)."""
+    """Данные для обучения и теста (config/data.toml, спека data)."""
 
     paths: DataPaths
 
@@ -278,7 +278,8 @@ class Build(Section):
 
 
 class Synthetic(Section):
-    """Генератор синтетических домов (config/synthetic.toml, specs/data.md, правило 1)."""
+    """Генератор синтетических домов
+    (config/synthetic.toml, `data: Синтетика своим генератором`)."""
 
     build: Build
     canvas: Canvas

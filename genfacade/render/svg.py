@@ -1,4 +1,4 @@
-"""Шаг 6: лист фасадов в SVG (facade.md, правила 5–7).
+"""Шаг 6: лист фасадов в SVG (`facade: Элементы в SVG`, `facade: JSON и SVG — одно содержимое`).
 
 Координаты — метры натуры; оформление — config/sheet.toml (размеры) и
 config/sheet.css (линии, шрифты), заливки по умолчанию — config/library.toml.
@@ -210,7 +210,7 @@ def _mullions(g: ElementTree.Element, e: Element, glass: tuple[float, ...]) -> N
 
 
 def _door_glass(e: Element, look: DoorLook) -> tuple[float, float, float, float]:
-    """Где у двери стекло: в полотне или фрамугой сверху (facade.md, Element.variant)."""
+    """Где у двери стекло: в полотне или фрамугой сверху (спека facade, «Элемент», вариант)."""
     if e.variant.kind is VariantKind.TRANSOM:
         h = e.h_m * look.transom_share
         return (e.x_m, e.y_m + e.h_m - h, e.w_m, h)

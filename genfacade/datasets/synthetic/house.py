@@ -30,7 +30,7 @@ class Scheme(Enum):
 
 @dataclass(frozen=True)
 class Look:
-    """Чего нет в HouseSpec, но у дома одно на все стены (generation.md, п. 3)."""
+    """Чего нет в HouseSpec, но у дома одно на все стены (`generation: Условие модели шага 4`)."""
 
     window_span: Range   # низ и верх обычного окна в долях высоты этажа
     wide_to_floor: bool  # большие окна — в пол

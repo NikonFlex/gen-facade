@@ -13,7 +13,7 @@ from genfacade.train import corpus
 
 
 def run(args: argparse.Namespace) -> Path:
-    """План GenPlan + текст → трасса шагов 1–6 (generation.md, п. 1)."""
+    """План GenPlan + текст → трасса шагов 1–6 (`generation: Конвейер из семи шагов`)."""
     cfg = config.load(args.config)
     req = pipeline.PlanRun(plan=str(args.plan), text=args.text, mode=args.mode)
     out = args.out or pipeline.new_run_dir(cfg.viewer.paths.runs_dir, args.plan.stem)
