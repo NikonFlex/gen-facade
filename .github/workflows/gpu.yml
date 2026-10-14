@@ -1,0 +1,63 @@
+name: gpu
+
+# Запуски на домашнем GPU хозяина: RTX 3060 12 ГБ, Ubuntu 24.04 в WSL2, раннер с меткой `gpu`
+# (gf#106, устройство машины — в низу docs/tasks/gf-0106.md). Только вручную: workflow_dispatch
+# запускает лишь тот, у кого есть запись в репо, а PR из форка ждут апрува хозяина
+# (approval_policy: all_external_contributors). Обучение — только после «обучай» хозяина.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Видюха одна: следующий запуск ждёт предыдущего, а не отменяет его.
+concurrency:
+  group: gpu
+  cancel-in-progress: false
+
+env:
+  # Драйвер на машине — 581.42, держит CUDA до 13.0.
+  TORCH: torch==2.14.1
+  TORCH_INDEX: https://download.pytorch.org/whl/cu130
+  VENV: /home/runner/venvs/genfacade
+
+jobs:
+  probe:
+    runs-on: [self-hosted, gpu]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Видюха
+        run: nvidia-smi
+
+      - name: Окружение
+        # venv переживает запуски: torch с CUDA — несколько гигабайт, качать каждый раз незачем.
+        run: |
+          python3 -m venv "$VENV"
+          "$VENV/bin/pip" install -q --upgrade pip
+          "$VENV/bin/pip" install -q "$TORCH" --index-url "$TORCH_INDEX"
+          "$VENV/bin/pip" install -q -e .
+          echo "$VENV/bin" >> "$GITHUB_PATH"
+
+      - name: PyTorch видит GPU
+        run: |
+          python - <<'PY'
+          import time
+
+          import torch
+
+          assert torch.cuda.is_available(), "PyTorch не видит CUDA"
+          props = torch.cuda.get_device_properties(0)
+          print(f"torch {torch.__version__}, CUDA {torch.version.cuda}, {props.name}, "
+                f"{props.total_memory / 2**30:.1f} ГиБ")
+          n, repeats = 8192, 10
+          x = torch.randn(n, n, device="cuda")
+          torch.cuda.synchronize()
+          start = time.perf_counter()
+          for _ in range(repeats):
+              x @ x
+          torch.cuda.synchronize()
+          step = (time.perf_counter() - start) / repeats
+          print(f"matmul {n}x{n} fp32: {step * 1e3:.1f} мс, {2 * n**3 / step / 1e12:.1f} TFLOPS")
+          PY
