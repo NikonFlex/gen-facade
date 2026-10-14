@@ -18,7 +18,7 @@ from genfacade.train import tokens
 from genfacade.train.tokens import PREFIX, Mark
 from genfacade.validate import OPENINGS  # что не должно пересекаться — как у валидатора
 
-X, W = 0, 2  # места x и w среди чисел рамки x y w h
+X, Y, W = 0, 1, 2  # места x, y и w среди чисел рамки x y w h
 
 
 class Wall(NamedTuple):
@@ -66,13 +66,12 @@ class WallGeometry:
                 self.placed.append((self.box[X], self.box[X] + self.box[W]))
 
     def banned(self) -> list[int]:
-        """Номера токенов, запрещённых следующим. На месте x и w окна разрешены только годные
-        числа: если запретить лишь негодные, вероятность уходит к нечисловым токенам, и ответ
-        ломается («ждали число») — gf#132, run 38635189845. Годных нет — не запрещаем ничего,
-        брак поймает валидатор."""
-        if self.cls is not ElementClass.WINDOW or not 0 <= self.at < len(self.walls):
-            return []
-        if len(self.box) not in (X, W):
+        """Номера токенов, запрещённых следующим. Внутри рамки x y w h любого элемента — только
+        числа, ширина и высота больше нуля: иначе после непривычного x или w модель пишет на
+        месте числа другой токен, и ответ ломается («ждали число») — gf#132, run 38637413314.
+        У окна x и w ещё и годные по стене. Годных нет — не запрещаем ничего, брак поймает
+        валидатор."""
+        if self.cls is None or len(self.box) >= 4 or not 0 <= self.at < len(self.walls):
             return []
         allowed = self._allowed()
         if not allowed:
@@ -81,13 +80,16 @@ class WallGeometry:
         return [i for i in range(self.vocab.size) if i not in keep]
 
     def _allowed(self) -> list[int]:
+        numbers = list(self.vocab.token)
+        place = len(self.box)
+        if self.cls is not ElementClass.WINDOW or place not in (X, W):
+            return [n for n in numbers if n > 0 or place in (X, Y)]
         wall = self.walls[self.at]
         busy = wall.busy + self.placed
-        if len(self.box) == X:
-            return [n for n in self.vocab.token if n < wall.length
-                    and not any(a <= n < b for a, b in busy)]
+        if place == X:
+            return [n for n in numbers if n < wall.length and not any(a <= n < b for a, b in busy)]
         x = self.box[X]
-        return [n for n in self.vocab.token if 0 < n and x + n <= wall.length
+        return [n for n in numbers if 0 < n and x + n <= wall.length
                 and not any(x < b and x + n > a for a, b in busy)]
 
 

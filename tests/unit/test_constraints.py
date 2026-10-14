@@ -53,10 +53,13 @@ def test_window_width_stops_at_next_busy_span_and_is_remembered(guard, vocab):
     assert not set(range(52, 72)) & _allowed(g, vocab)   # поставленное окно 52–72 занято
 
 
-def test_no_bans_outside_window_box(guard):
-    assert guard(WINDOW).banned() == []                              # до первой стены
-    assert guard(Mark.WALL, WINDOW, 52).banned() == []               # пишется y
-    assert guard(Mark.WALL, DOOR).banned() == []                     # дверь — из плана
+def test_box_takes_only_numbers_and_nothing_is_banned_outside_it(guard, vocab):
+    numbers = set(vocab.token)
+    assert guard(WINDOW).banned() == []                                   # до первой стены
+    assert _allowed(guard(Mark.WALL, WINDOW, 52), vocab) == numbers       # y — любое число
+    assert _allowed(guard(Mark.WALL, DOOR), vocab) == numbers             # x двери — из плана
+    assert _allowed(guard(Mark.WALL, DOOR, 30, 10), vocab) == numbers - {0}   # ширина > 0
+    assert guard(Mark.WALL, WINDOW, 52, 10, 20, 30).banned() == []        # рамка дописана
     assert guard(Mark.WALL, WINDOW, 52, 10, 20, 30, ZONE).banned() == []  # числа зоны
 
 
