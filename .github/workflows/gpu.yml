@@ -29,7 +29,8 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Видюха
-        run: nvidia-smi
+        # В WSL nvidia-smi лежит рядом с драйвером Windows, а PATH службы раннера его не знает.
+        run: /usr/lib/wsl/lib/nvidia-smi
 
       - name: Окружение
         # venv переживает запуски: torch с CUDA — несколько гигабайт, качать каждый раз незачем.
