@@ -3,22 +3,28 @@ name: gpu
 # Запуски на домашнем GPU хозяина: RTX 3060 12 ГБ, Ubuntu 24.04 в WSL2, раннер с меткой `gpu`
 # (gf#106, устройство машины — в низу docs/tasks/gf-0106.md). Только вручную: workflow_dispatch
 # запускает лишь тот, у кого есть запись в репо, а PR из форка ждут апрува хозяина
-# (approval_policy: all_external_contributors). Обучение — только после «обучай» хозяина.
+# (approval_policy: all_external_contributors). Обучение — только после «обучай» хозяина;
+# оценка (eval) — тоже на его машине, запуск согласуется с ним.
 on:
   workflow_dispatch:
     inputs:
       job:
-        description: "probe — проверить GPU; train — обучить модель шага 4 (genfacade train)"
+        description: "probe — проверить GPU; train — обучить модель шага 4; eval — оценить её на val"
         type: choice
-        options: [probe, train]
+        options: [probe, train, eval]
         default: probe
       houses:
         description: "train: сколько синтетических домов в корпусе (собранные раньше не пересобираются)"
         type: number
         default: 10000
+      model_run:
+        description: "eval: номер запуска train, чью модель оценивать (артефакт train-<номер>)"
+        type: string
+        default: "38560937357"
 
 permissions:
   contents: read
+  actions: read   # eval скачивает модель — артефакт другого запуска
 
 # Видюха одна: следующий запуск ждёт предыдущего, а не отменяет его.
 concurrency:
@@ -79,7 +85,7 @@ jobs:
           PY
 
       - name: Дома и корпус
-        if: inputs.job == 'train'
+        if: inputs.job != 'probe'
         run: |
           mkdir -p "$DATA_CONFIG"
           printf '[paths]\nsamples_dir = "%s"\n' "$SAMPLES" > "$DATA_CONFIG/data.toml"
@@ -103,5 +109,32 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: train-${{ github.run_id }}
+          path: ${{ env.OUT }}
+          if-no-files-found: ignore
+
+      - name: Модель для оценки
+        if: inputs.job == 'eval'
+        uses: actions/download-artifact@v8
+        with:
+          name: train-${{ inputs.model_run }}
+          path: model
+          run-id: ${{ inputs.model_run }}
+          github-token: ${{ github.token }}
+
+      - name: Оценка
+        if: inputs.job == 'eval'
+        # Свой конфиг на запуск: корпус — общий, модель — скачанная в рабочую папку.
+        run: |
+          cfg="$RUNNER_TEMP/eval-config"
+          mkdir -p "$cfg" "$OUT"
+          cp "$DATA_CONFIG/data.toml" "$cfg/"
+          printf '[layout]\ncheckpoint = "%s"\n' "$GITHUB_WORKSPACE/model/model.pt" > "$cfg/models.toml"
+          genfacade -c "$cfg" eval -o "$OUT"
+
+      - name: Результат оценки
+        if: always() && inputs.job == 'eval'
+        uses: actions/upload-artifact@v7
+        with:
+          name: eval-${{ github.run_id }}
           path: ${{ env.OUT }}
           if-no-files-found: ignore

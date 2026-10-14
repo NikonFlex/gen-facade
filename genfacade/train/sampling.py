@@ -57,6 +57,22 @@ class Sampler:
         return [_cut(row[start:].tolist(), self.end) for row in idx]
 
 
+def answer_all(sampler: Sampler, prompts: list, opts: Sampling, batch: int) -> list[list[int]]:
+    """Ответы на много условий: пачками до batch условий одной длины (`Sampler.answer`).
+    prompts — номера токенов условия до `<answer>` включительно; ответы — в том же порядке."""
+    by_length: dict[int, list[int]] = {}
+    for i, p in enumerate(prompts):
+        by_length.setdefault(len(p), []).append(i)
+    answers: list[list[int]] = [[] for _ in prompts]
+    for rows in by_length.values():
+        for start in range(0, len(rows), batch):
+            group = rows[start:start + batch]
+            stacked = torch.tensor([list(prompts[i]) for i in group], dtype=torch.long)
+            for i, ids in zip(group, sampler.answer(stacked, opts), strict=True):
+                answers[i] = ids
+    return answers
+
+
 def _pick(logits: torch.Tensor, opts: Sampling) -> torch.Tensor:
     """Следующий токен: температура, top-k, случайный выбор по вероятностям — как в nanoGPT."""
     logits = logits / opts.temperature

@@ -20,7 +20,7 @@ from typing import NamedTuple
 import numpy
 import torch
 
-from genfacade.config import Config, Fit, SampleRun
+from genfacade.config import Config, Fit
 from genfacade.datasets import store
 from genfacade.pipeline import git_sha
 from genfacade.schema import Device, Mode, Source, Split
@@ -184,7 +184,9 @@ def sample(trainer: Trainer, source: Source, cfg: Config, rng: numpy.random.Gene
     """Ответы модели на условия случайных последовательностей val; разбирает ли их decode."""
     part = trainer.data.parts[Split.VAL]
     chosen = sorted(rng.permutation(len(part.ids))[:cfg.train.sample.count].tolist())
-    answers = _generate(trainer, part, chosen, cfg.train.sample)
+    prompts = [part.ids[i][:part.answer_at[i] + 1].tolist() for i in chosen]
+    answers = dict(zip(chosen, sampling.answer_all(trainer.sampler, prompts, cfg.train.sample,
+                                                   cfg.train.sample.batch), strict=True))
     root = cfg.data.paths.samples_dir
     rows = []
     for i in chosen:
@@ -207,23 +209,6 @@ def _decode_error(words: list[str], walls, cfg: Config) -> str | None:
 
 def _share(rows: list[dict]) -> dict:
     return {"count": len(rows), "parsed": sum(r["error"] is None for r in rows)}
-
-
-def _generate(trainer: Trainer, part: Sequences, chosen: list[int],
-              opts: SampleRun) -> dict[int, list[int]]:
-    """Ответы пачками условий одной длины (train/sampling.py)."""
-    by_length: dict[int, list[int]] = {}
-    for i in chosen:
-        by_length.setdefault(part.answer_at[i], []).append(i)
-    answers = {}
-    for rows in by_length.values():
-        for start in range(0, len(rows), opts.batch):
-            group = rows[start:start + opts.batch]
-            prompts = torch.stack([torch.from_numpy(part.ids[i][:part.answer_at[i] + 1])
-                                   for i in group])
-            for i, ids in zip(group, trainer.sampler.answer(prompts, opts), strict=True):
-                answers[i] = ids
-    return answers
 
 
 def _settings(trainer: Trainer, cfg: Config, result: dict, out: Path) -> Path:

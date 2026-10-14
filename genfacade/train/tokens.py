@@ -164,12 +164,12 @@ def _side(side: Side, mode: Mode, cfg: Tokens) -> list[str]:
     for z in side.forbidden:
         out += [Mark.FORBIDDEN, str(units(z.x0_m, cfg)), str(units(z.x1_m, cfg))]
     for o in side.openings:
-        if _given(o.kind, mode):
+        if given(o.kind, mode):
             out += [tok(o.kind), str(units(o.x_m, cfg)), str(units(o.width_m, cfg))]
     return out
 
 
-def _given(kind: OpeningKind, mode: Mode) -> bool:
+def given(kind: OpeningKind, mode: Mode) -> bool:
     """Проём плана задан модели: вход — всегда, окна — только в режиме 2."""
     return mode is Mode.WITH_OPENINGS or kind is not OpeningKind.WINDOW
 

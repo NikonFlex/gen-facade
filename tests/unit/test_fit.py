@@ -1,19 +1,15 @@
 """Обучение модели шага 4 одной командой (gf#106): крошечная модель на процессоре.
-
-torch — в группе [train], CI его не ставит: без него тесты пропускаются.
 """
 
 import json
 
 import pytest
 
-torch = pytest.importorskip("torch")
-
-from genfacade.datasets.synthetic import batch  # noqa: E402 — после проверки torch
-from genfacade.schema import Mode, Source, Split  # noqa: E402
-from genfacade.train import corpus, fit  # noqa: E402
-from genfacade.train.gpt import IGNORE  # noqa: E402
-from genfacade.train.tokens import Mark  # noqa: E402
+from genfacade.datasets.synthetic import batch
+from genfacade.schema import Mode, Source, Split
+from genfacade.train import corpus, fit
+from genfacade.train.gpt import IGNORE
+from genfacade.train.tokens import Mark
 
 HOUSES = 6
 TINY = """

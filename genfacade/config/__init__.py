@@ -332,6 +332,12 @@ class SampleRun(Sampling):
     batch: int
 
 
+class Evaluate(Section):
+    count: int
+    batch: int
+    untrained: int
+
+
 class TrainPaths(Section):
     runs_dir: Path
 
@@ -342,6 +348,7 @@ class Train(Section):
     model: GPTSize
     fit: Fit
     sample: SampleRun
+    eval: Evaluate
     paths: TrainPaths
 
 
