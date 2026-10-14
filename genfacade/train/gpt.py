@@ -6,7 +6,8 @@ Copyright (c) 2022 Andrej Karpathy, лицензия MIT — текст ниже
 Что изменено: импорты под своими именами и проверки исключениями (правила кода репо); fused
 AdamW — аргументом, а не по имени устройства; убраны загрузка весов GPT-2 (`from_pretrained`),
 обрезка окна, оценка MFU, медленное внимание без `scaled_dot_product_attention` (torch ≥ 2 у нас
-всегда) и `generate` — сэмплирование с остановкой на `<end>` в genfacade/train/fit.py. Сама
+всегда) и `generate` — сэмплирование с остановкой на `<end>` в genfacade/train/sampling.py;
+добавлен KV-кэш для сэмплирования (`step`, аргумент `past` у внимания и блока). Сама
 модель — слои, инициализация, loss с `ignore_index=-1`, группы AdamW — как в оригинале.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy of this
@@ -72,18 +73,24 @@ class CausalSelfAttention(nn.Module):
         self.n_embd = config.n_embd
         self.dropout = config.dropout
 
-    def forward(self, x):
+    def forward(self, x, past=None):
+        """past — ключи и значения прошлых позиций (KV-кэш); вернуть выход и их же с новыми."""
         b, t, c = x.size()
         q, k, v = self.c_attn(x).split(self.n_embd, dim=2)
         k = k.view(b, t, self.n_head, c // self.n_head).transpose(1, 2)
         q = q.view(b, t, self.n_head, c // self.n_head).transpose(1, 2)
         v = v.view(b, t, self.n_head, c // self.n_head).transpose(1, 2)
-        # причинная маска: токен видит только предыдущие — поэтому правый паддинг не мешает
+        if past is not None:
+            if t != 1:
+                raise ValueError(f"с кэшем — по одному токену, а пришло {t}")
+            k, v = torch.cat((past[0], k), dim=2), torch.cat((past[1], v), dim=2)
+        # причинная маска: токен видит только предыдущие — поэтому правый паддинг не мешает;
+        # с кэшем новый токен один и видит все прошлые — маска не нужна
         y = functional.scaled_dot_product_attention(
             q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0,
-            is_causal=True)
+            is_causal=past is None)
         y = y.transpose(1, 2).contiguous().view(b, t, c)
-        return self.resid_dropout(self.c_proj(y))
+        return self.resid_dropout(self.c_proj(y)), (k, v)
 
 
 class MLP(nn.Module):
@@ -108,9 +115,10 @@ class Block(nn.Module):
         self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)
         self.mlp = MLP(config)
 
-    def forward(self, x):
-        x = x + self.attn(self.ln_1(x))
-        return x + self.mlp(self.ln_2(x))
+    def forward(self, x, past=None):
+        y, present = self.attn(self.ln_1(x), past)
+        x = x + y
+        return x + self.mlp(self.ln_2(x)), present
 
 
 class GPT(nn.Module):
@@ -150,20 +158,33 @@ class GPT(nn.Module):
             nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, idx, targets=None):
-        _, t = idx.size()
-        if t > self.config.block_size:
-            raise ValueError(f"последовательность {t} длиннее окна {self.config.block_size}")
-        pos = torch.arange(0, t, dtype=torch.long, device=idx.device)
-        x = self.transformer.drop(self.transformer.wte(idx) + self.transformer.wpe(pos))
-        for block in self.transformer.h:
-            x = block(x)
-        x = self.transformer.ln_f(x)
+        x, _ = self._hidden(idx, None)
         if targets is None:  # при генерации выходной слой нужен только на последней позиции
             return self.lm_head(x[:, [-1], :]), None
         logits = self.lm_head(x)
         loss = functional.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1),
                                         ignore_index=IGNORE)
         return logits, loss
+
+    def step(self, idx, past=None):
+        """Сэмплирование с KV-кэшем: без past — всё условие, с past — один новый токен.
+        Вернуть логиты последней позиции и кэш всех слоёв."""
+        x, present = self._hidden(idx, past)
+        return self.lm_head(x[:, [-1], :]), present
+
+    def _hidden(self, idx, past):
+        _, t = idx.size()
+        start = 0 if past is None else past[0][0].size(2)
+        if start + t > self.config.block_size:
+            raise ValueError(f"последовательность {start + t} длиннее окна "
+                             f"{self.config.block_size}")
+        pos = torch.arange(start, start + t, dtype=torch.long, device=idx.device)
+        x = self.transformer.drop(self.transformer.wte(idx) + self.transformer.wpe(pos))
+        present = []
+        for i, block in enumerate(self.transformer.h):
+            x, kv = block(x, None if past is None else past[i])
+            present.append(kv)
+        return self.transformer.ln_f(x), present
 
     def configure_optimizers(self, weight_decay, learning_rate, betas, fused):
         """AdamW: матрицы и эмбеддинги — с weight decay, bias и LayerNorm — без."""

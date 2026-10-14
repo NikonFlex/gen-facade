@@ -1,5 +1,5 @@
 """Настройки, вынесенные из кода: материалы, лист, смотрелка, план, проверка, данные,
-синтетика, токены, обучение.
+синтетика, токены, обучение, модели.
 
 По умолчанию — файлы этой папки. Свой конфиг — папка с любыми из тех же файлов:
 TOML сливается с умолчаниями поключно, sheet.css дописывается после умолчаний
@@ -320,11 +320,16 @@ class Fit(Section):
     compile: bool
 
 
-class SampleRun(Section):
-    count: int
-    batch: int
+class Sampling(Section):
+    """Как модель выбирает следующий токен: температура и top-k (0 — весь словарь)."""
+
     temperature: float
     top_k: int
+
+
+class SampleRun(Sampling):
+    count: int
+    batch: int
 
 
 class TrainPaths(Section):
@@ -340,6 +345,20 @@ class Train(Section):
     paths: TrainPaths
 
 
+class LayoutModel(Sampling):
+    checkpoint: Path
+    attempts: int
+    seed: int
+    device: Device
+    bf16: bool
+
+
+class Models(Section):
+    """Модели шагов конвейера (config/models.toml, gf#107)."""
+
+    layout: LayoutModel
+
+
 class Config(Section):
     library: Library
     sheet: Sheet
@@ -350,6 +369,7 @@ class Config(Section):
     synthetic: Synthetic
     tokens: Tokens
     train: Train
+    models: Models
     css: str
 
 
@@ -368,6 +388,7 @@ def load(user_dir: Path | None = None) -> Config:
         synthetic=Synthetic(**_toml("synthetic.toml", user_dir)),
         tokens=Tokens(**_toml("tokens.toml", user_dir)),
         train=Train(**_toml("train.toml", user_dir)),
+        models=Models(**_toml("models.toml", user_dir)),
         css=css,
     )
 

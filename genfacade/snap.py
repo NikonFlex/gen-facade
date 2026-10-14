@@ -1,7 +1,9 @@
 """Шаг 5: привязка к сетке этажей и осей (`generation: Привязка к сетке`).
 
-Окна, чьи оси ближе snap_m, встают на одну ось и одну ширину; окна одного этажа — на одну
-линию низа и одну высоту. Заданное планом (`fixed`) не двигается — к нему тянутся остальные.
+Заданное планом (`fixed`) встаёт ровно на проём плана: положение и ширину задаёт план, а не
+модель (`generation: Режимы отличаются входом`). Окна, чьи оси ближе snap_m, встают на одну ось
+и одну ширину — к заданному планом тянутся остальные; окна одного этажа — на одну линию низа и
+одну высоту.
 Подоконник и наличник едут вместе со своим окном. Заготовки стаба шага 4 уже ровные —
 привязка нужна модели, её выход неточный.
 """
@@ -9,7 +11,19 @@
 from statistics import median
 
 from genfacade.config import Checks
-from genfacade.schema import EPS, Element, ElementClass, FacadeSheet, FixedField, SideFacade
+from genfacade.schema import (
+    EPS,
+    Element,
+    ElementClass,
+    FacadeSheet,
+    FixedField,
+    OpeningKind,
+    SideFacade,
+)
+
+# Каким элементом фасада становится проём плана.
+PLAN_CLASS = {OpeningKind.WINDOW: ElementClass.WINDOW, OpeningKind.DOOR: ElementClass.DOOR,
+              OpeningKind.ENTRANCE: ElementClass.DOOR}
 
 
 def snap(sheet: FacadeSheet, cfg: Checks) -> FacadeSheet:
@@ -17,8 +31,9 @@ def snap(sheet: FacadeSheet, cfg: Checks) -> FacadeSheet:
 
 
 def snap_side(f: SideFacade, cfg: Checks) -> SideFacade:
-    windows = [e for e in f.elements if e.cls is ElementClass.WINDOW]
-    moved = {w.id: w for w in windows}
+    planned = _to_plan(f)
+    windows = [planned.get(e.id, e) for e in f.elements if e.cls is ElementClass.WINDOW]
+    moved = planned | {w.id: w for w in windows}
     for group in _clusters(windows, cfg.snap_m):
         x, w = _target(group)
         for e in group:
@@ -33,6 +48,22 @@ def snap_side(f: SideFacade, cfg: Checks) -> SideFacade:
                 moved[e.id] = e.model_copy(update={"y_m": y, "h_m": h})
     elements = [moved.get(e.id) or _follow(e, moved, f.elements) for e in f.elements]
     return f.model_copy(update={"elements": elements})
+
+
+def _to_plan(f: SideFacade) -> dict[str, Element]:
+    """Элементы с заданным планом положением — на свои проёмы плана: того же вида, ближайший по
+    x, каждый проём — одному элементу. Стоит ровно — не трогаем."""
+    free = list(f.side.openings)
+    out = {}
+    for e in sorted((e for e in f.elements if FixedField.X in e.fixed), key=lambda e: e.x_m):
+        same = [o for o in free if PLAN_CLASS[o.kind] is e.cls]
+        if not same:
+            continue
+        o = min(same, key=lambda o: abs(o.x_m - e.x_m))
+        free.remove(o)
+        if _differs((e.x_m, e.w_m), (o.x_m, o.width_m)):
+            out[e.id] = e.model_copy(update={"x_m": o.x_m, "w_m": o.width_m})
+    return out
 
 
 def _differs(a: tuple[float, float], b: tuple[float, float]) -> bool:

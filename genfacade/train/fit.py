@@ -20,12 +20,12 @@ from typing import NamedTuple
 import numpy
 import torch
 
-from genfacade.config import Config, Fit, GPTSize, SampleRun
+from genfacade.config import Config, Fit, SampleRun
 from genfacade.datasets import store
 from genfacade.pipeline import git_sha
 from genfacade.schema import Device, Mode, Source, Split
-from genfacade.train import corpus, plot, tokens
-from genfacade.train.gpt import GPT, IGNORE, GPTConfig
+from genfacade.train import corpus, plot, sampling, tokens
+from genfacade.train.gpt import IGNORE
 from genfacade.train.tokens import Mark, TokenError
 
 MODEL, SETTINGS, SAMPLES = "model.pt", "model.json", "samples.json"
@@ -83,17 +83,6 @@ def batch(part: Sequences, rows: list[int], pad: int) -> tuple[torch.Tensor, tor
     return x, y
 
 
-def device(fit: Fit) -> torch.device:
-    if fit.device is Device.AUTO:
-        return torch.device(Device.CUDA if torch.cuda.is_available() else Device.CPU)
-    return torch.device(fit.device)
-
-
-def build_model(size: GPTSize, vocabulary: int) -> GPT:
-    return GPT(GPTConfig(block_size=size.block, vocab_size=vocabulary, n_layer=size.layers,
-                         n_head=size.heads, n_embd=size.width, dropout=size.dropout))
-
-
 def learning_rate(step: int, total: int, fit: Fit) -> float:
     """Линейный разгон, потом косинус до min_lr — как в nanoGPT."""
     if step < fit.warmup_steps:
@@ -110,23 +99,20 @@ class Trainer:
         if data.longest > cfg.train.model.block:
             raise corpus.CorpusError(f"окно {cfg.train.model.block} короче самой длинной "
                                      f"последовательности корпуса ({data.longest})")
-        self.device = device(fit)
+        self.device = sampling.device(fit.device)
         self.cuda = self.device.type == Device.CUDA
-        self.model = build_model(cfg.train.model, len(data.words)).to(self.device)
+        self.model = sampling.build_model(cfg.train.model, len(data.words)).to(self.device)
         self.opt = self.model.configure_optimizers(fit.weight_decay, fit.lr, fit.betas, self.cuda)
         self.forward = torch.compile(self.model) if fit.compile else self.model
         self.pad = data.words.index(Mark.END)
+        self.sampler = sampling.Sampler(self.model, self.pad, fit.bf16)
         self.step = 0
         self.total = fit.epochs * math.ceil(len(data.parts[Split.TRAIN].ids) / fit.batch)
-
-    def autocast(self):
-        on = self.fit.bf16 and self.cuda
-        return torch.autocast(self.device.type, dtype=torch.bfloat16, enabled=on)
 
     def loss(self, part: Sequences, rows: list[int]) -> tuple[torch.Tensor, int]:
         """Средний loss на токенах ответа и их число."""
         x, y = (t.to(self.device) for t in batch(part, rows, self.pad))
-        with self.autocast():
+        with self.sampler.autocast():
             _, loss = self.forward(x, y)
         return loss, int((y != IGNORE).sum())
 
@@ -223,12 +209,9 @@ def _share(rows: list[dict]) -> dict:
     return {"count": len(rows), "parsed": sum(r["error"] is None for r in rows)}
 
 
-@torch.no_grad()
 def _generate(trainer: Trainer, part: Sequences, chosen: list[int],
               opts: SampleRun) -> dict[int, list[int]]:
-    """Ответ от `<answer>` до `<end>` включительно. Условия одной длины идут одной пачкой:
-    позиции в nanoGPT абсолютные, паддинг слева их бы сдвинул."""
-    trainer.model.eval()
+    """Ответы пачками условий одной длины (train/sampling.py)."""
     by_length: dict[int, list[int]] = {}
     for i in chosen:
         by_length.setdefault(part.answer_at[i], []).append(i)
@@ -238,31 +221,9 @@ def _generate(trainer: Trainer, part: Sequences, chosen: list[int],
             group = rows[start:start + opts.batch]
             prompts = torch.stack([torch.from_numpy(part.ids[i][:part.answer_at[i] + 1])
                                    for i in group])
-            for i, ids in zip(group, _continue(trainer, prompts, opts), strict=True):
+            for i, ids in zip(group, trainer.sampler.answer(prompts, opts), strict=True):
                 answers[i] = ids
     return answers
-
-
-def _continue(trainer: Trainer, prompts: torch.Tensor, opts: SampleRun) -> list[list[int]]:
-    """Дописывать токены, пока у всех не будет `<end>` или не кончится окно."""
-    idx = prompts.to(trainer.device)
-    done = torch.zeros(len(idx), dtype=torch.bool, device=trainer.device)
-    start = idx.size(1) - 1  # ответ начинается с `<answer>` — последнего токена условия
-    while not done.all() and idx.size(1) < trainer.model.config.block_size:
-        with trainer.autocast():
-            logits, _ = trainer.forward(idx)
-        logits = logits[:, -1, :].float() / opts.temperature
-        if opts.top_k:
-            v, _ = torch.topk(logits, min(opts.top_k, logits.size(-1)))
-            logits[logits < v[:, [-1]]] = -float("inf")
-        nxt = torch.multinomial(torch.softmax(logits, dim=-1), num_samples=1)
-        idx = torch.cat((idx, nxt), dim=1)
-        done |= nxt.squeeze(1) == trainer.pad
-    return [_cut(row[start:].tolist(), trainer.pad) for row in idx]
-
-
-def _cut(ids: list[int], end: int) -> list[int]:
-    return ids[:ids.index(end) + 1] if end in ids else ids
 
 
 def _settings(trainer: Trainer, cfg: Config, result: dict, out: Path) -> Path:
