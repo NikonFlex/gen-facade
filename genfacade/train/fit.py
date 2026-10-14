@@ -184,7 +184,7 @@ def sample(trainer: Trainer, source: Source, cfg: Config, rng: numpy.random.Gene
     """Ответы модели на условия случайных последовательностей val; разбирает ли их decode."""
     part = trainer.data.parts[Split.VAL]
     chosen = sorted(rng.permutation(len(part.ids))[:cfg.train.sample.count].tolist())
-    prompts = [part.ids[i][:part.answer_at[i] + 1].tolist() for i in chosen]
+    prompts = [sampling.Prompt(part.ids[i][:part.answer_at[i] + 1].tolist()) for i in chosen]
     answers = dict(zip(chosen, sampling.answer_all(trainer.sampler, prompts, cfg.train.sample,
                                                    cfg.train.sample.batch), strict=True))
     root = cfg.data.paths.samples_dir

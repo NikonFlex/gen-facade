@@ -5,6 +5,8 @@
 `<end>`.
 """
 
+from typing import NamedTuple, Protocol
+
 import torch
 
 from genfacade.config import GPTSize, Sampling
@@ -23,6 +25,21 @@ def build_model(size: GPTSize, vocabulary: int) -> GPT:
                          n_head=size.heads, n_embd=size.width, dropout=size.dropout))
 
 
+class Guard(Protocol):
+    """Страж одного ответа: читает выбранные токены и называет запрещённые следующим."""
+
+    def step(self, token: int) -> None: ...
+
+    def banned(self) -> list[int]: ...
+
+
+class Prompt(NamedTuple):
+    """Условие до `<answer>` включительно и, если надо, страж ответа на него."""
+
+    ids: list[int]
+    guard: Guard | None = None
+
+
 class Sampler:
     """Модель на своём устройстве: прямой проход (на GPU — в bfloat16) и дописывание ответа."""
 
@@ -35,7 +52,8 @@ class Sampler:
         return torch.autocast(self.device.type, dtype=torch.bfloat16, enabled=self.bf16)
 
     @torch.no_grad()
-    def answer(self, prompts: torch.Tensor, opts: Sampling) -> list[list[int]]:
+    def answer(self, prompts: torch.Tensor, opts: Sampling,
+               guards: list[Guard | None] | None = None) -> list[list[int]]:
         """Дописывать токены, пока у всех не будет `<end>` или не кончится окно; вернуть ответы
         от `<answer>` — последнего токена условия — до `<end>` включительно. Условия в пачке —
         одной длины: позиции в nanoGPT абсолютные, паддинг слева их бы сдвинул. Прошлые
@@ -47,7 +65,8 @@ class Sampler:
         with self.autocast():
             logits, past = self.model.step(idx)
         while True:
-            nxt = _pick(logits[:, -1, :].float(), opts)
+            nxt = _pick(_forbid(logits[:, -1, :].float(), guards), opts)
+            _observe(guards, nxt)
             idx = torch.cat((idx, nxt), dim=1)
             done |= nxt.squeeze(1) == self.end
             if done.all() or idx.size(1) >= self.model.config.block_size:
@@ -57,20 +76,36 @@ class Sampler:
         return [_cut(row[start:].tolist(), self.end) for row in idx]
 
 
-def answer_all(sampler: Sampler, prompts: list, opts: Sampling, batch: int) -> list[list[int]]:
-    """Ответы на много условий: пачками до batch условий одной длины (`Sampler.answer`).
-    prompts — номера токенов условия до `<answer>` включительно; ответы — в том же порядке."""
+def answer_all(sampler: Sampler, prompts: list[Prompt], opts: Sampling,
+               batch: int) -> list[list[int]]:
+    """Ответы на много условий: пачками до batch условий одной длины (`Sampler.answer`),
+    в том же порядке, что prompts."""
     by_length: dict[int, list[int]] = {}
     for i, p in enumerate(prompts):
-        by_length.setdefault(len(p), []).append(i)
+        by_length.setdefault(len(p.ids), []).append(i)
     answers: list[list[int]] = [[] for _ in prompts]
     for rows in by_length.values():
         for start in range(0, len(rows), batch):
             group = rows[start:start + batch]
-            stacked = torch.tensor([list(prompts[i]) for i in group], dtype=torch.long)
-            for i, ids in zip(group, sampler.answer(stacked, opts), strict=True):
+            stacked = torch.tensor([prompts[i].ids for i in group], dtype=torch.long)
+            guards = [prompts[i].guard for i in group]
+            for i, ids in zip(group, sampler.answer(stacked, opts, guards), strict=True):
                 answers[i] = ids
     return answers
+
+
+def _forbid(logits: torch.Tensor, guards: list[Guard | None] | None) -> torch.Tensor:
+    """Запрещённые стражами токены — логиты −∞: их вероятность ноль."""
+    for row, g in enumerate(guards or []):
+        if g is not None and (banned := g.banned()):
+            logits[row, banned] = -float("inf")
+    return logits
+
+
+def _observe(guards: list[Guard | None] | None, nxt: torch.Tensor) -> None:
+    for row, g in enumerate(guards or []):
+        if g is not None:
+            g.step(int(nxt[row, 0]))
 
 
 def _pick(logits: torch.Tensor, opts: Sampling) -> torch.Tensor:

@@ -6,14 +6,23 @@
 """
 
 from pathlib import Path
+from typing import NamedTuple
 
 import torch
 
 from genfacade.config import Config, GPTSize, LayoutModel
 from genfacade.models.stub import ModelError
 from genfacade.schema import FacadeSheet, Mode
-from genfacade.train import sampling, tokens
+from genfacade.train import constraints, sampling, tokens
 from genfacade.train.tokens import Mark, TokenError
+
+
+class Condition(NamedTuple):
+    """Условие дома: номера токенов до `<answer>` включительно и режим — по нему страж решает,
+    запрещать ли окна при генерации."""
+
+    ids: list[int]
+    mode: Mode
 
 
 class Layout:
@@ -27,8 +36,9 @@ class Layout:
         model.to(sampling.device(settings.device))
         self.sampler = sampling.Sampler(model, self.words.index(Mark.END), settings.bf16)
         self.number = {w: i for i, w in enumerate(self.words)}
+        self.vocab = constraints.Vocab(self.words)
 
-    def prompt(self, bare: FacadeSheet, mode: Mode, cfg: Config) -> torch.Tensor:
+    def prompt(self, bare: FacadeSheet, mode: Mode, cfg: Config) -> Condition:
         """Условие номерами токенов. Дом, который модель не может прочесть, — ModelError: это
         не брак ответа, повтор не поможет."""
         if self.words != tokens.vocabulary(cfg):
@@ -36,15 +46,19 @@ class Layout:
                              "токенов: модель учили на другой версии — переобучить")
         try:  # `<answer>` в корпусе — первый токен ответа: с него модель начинает отвечать
             words = [*tokens.condition(bare, mode, cfg), Mark.ANSWER]
-            return torch.tensor([[self.number[t] for t in words]])
+            return Condition([self.number[t] for t in words], mode)
         except TokenError as e:
             raise ModelError(f"дом не записывается условием модели: {e}") from e
 
-    def answer(self, prompt: torch.Tensor, bare: FacadeSheet, seed: int,
+    def answer(self, prompt: Condition, bare: FacadeSheet, seed: int,
                cfg: Config) -> FacadeSheet:
-        """Стены после развёртки → стены с элементами и зонами; ответ не разобран — TokenError."""
+        """Стены после развёртки → стены с элементами и зонами; ответ не разобран — TokenError.
+        С `constrain` в глухом режиме окна не заходят в запретные зоны и на проёмы (gf#132)."""
+        on = cfg.models.layout.constrain
+        guard = constraints.guard(bare, prompt.mode, self.vocab, cfg) if on else None
         torch.manual_seed(seed)
-        ids = self.sampler.answer(prompt, cfg.models.layout)[0]
+        ids = sampling.answer_all(self.sampler, [sampling.Prompt(prompt.ids, guard)],
+                                  cfg.models.layout, batch=1)[0]
         return tokens.decode([self.words[i] for i in ids], bare, cfg)
 
 
