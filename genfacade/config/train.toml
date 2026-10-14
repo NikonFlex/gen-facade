@@ -28,5 +28,10 @@ batch = 64
 temperature = 1.0
 top_k = 0            # 0 — из всего словаря
 
+[eval]               # genfacade eval: модель шага 4 (config/models.toml) на val, gf#108
+count = 0            # последовательностей val (дом × режим), случайных с seed модели; 0 — все
+batch = 64
+untrained = 64       # столько же условий — необученной модели того же размера, для сравнения
+
 [paths]
 runs_dir = "outputs/train"   # <время>/: model.pt, model.json, loss.png, loss.json, samples.json

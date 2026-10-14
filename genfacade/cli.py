@@ -1,4 +1,4 @@
-"""Командная строка: genfacade run <план.svg> --text …, serve, synth, tokens, train."""
+"""Командная строка: genfacade run <план.svg> --text …, serve, synth, tokens, train, eval."""
 
 import argparse
 import sys
@@ -41,6 +41,16 @@ def train(args: argparse.Namespace) -> Path:
     return fit.run(args.source, cfg, out)
 
 
+def eval_model(args: argparse.Namespace) -> Path:
+    """Модель шага 4 на val: доли разобранных и годных, статистика против эталона, повторы."""
+    # torch — в группе [train]: без обучения пакет его не тянет.
+    from genfacade.train import evaluate
+
+    cfg = config.load(args.config)
+    out = args.out or pipeline.new_run_dir(cfg.train.paths.runs_dir, f"eval-{args.source}")
+    return evaluate.run(args.source, cfg, out)
+
+
 def serve(config_dir: Path | None) -> None:
     # uvicorn и fastapi — в группе [viewer]: без смотрелки пакет их не тянет.
     import uvicorn
@@ -81,6 +91,10 @@ def _parser() -> argparse.ArgumentParser:
     _source(f)
     f.add_argument("-o", "--out", type=Path,
                    help="папка обучения; по умолчанию runs_dir/<время>-<источник>")
+    e = sub.add_parser("eval", help="модель шага 4 на val: годные ответы, статистика, повторы")
+    _source(e)
+    e.add_argument("-o", "--out", type=Path,
+                   help="папка оценки; по умолчанию runs_dir/<время>-eval-<источник>")
     return parser
 
 
@@ -89,6 +103,8 @@ COMMANDS = {
     "synth": (synth, {batch.BuildError: "сборка остановлена"}),
     "tokens": (tokens, {corpus.CorpusError: "корпус не собран"}),
     "train": (train, {corpus.CorpusError: "обучение не начато"}),
+    "eval": (eval_model, {corpus.CorpusError: "оценка не начата",
+                          ModelError: "модель не загружена"}),
     "run": (run, {PlanError: "план отклонён", ModelError: "модель не ответила"}),
 }
 

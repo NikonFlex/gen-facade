@@ -1,19 +1,17 @@
 """Модель шага 4 (gf#107): сэмплирование с KV-кэшем даёт тот же ответ, что без кэша;
 чекпойнт грузится, условие кончается `<answer>`, чужой словарь — отказ.
-
-torch — в группе [train], CI его не ставит: без него тесты пропускаются.
 """
 
 import pytest
+import tiny_model
+import torch
 
-torch = pytest.importorskip("torch")
-
-from genfacade.config import GPTSize, Sampling  # noqa: E402 — после проверки torch
-from genfacade.models import layout  # noqa: E402
-from genfacade.models.stub import ModelError  # noqa: E402
-from genfacade.schema import Device, Mode  # noqa: E402
-from genfacade.train import sampling, tokens  # noqa: E402
-from genfacade.train.tokens import Mark, TokenError  # noqa: E402
+from genfacade.config import GPTSize, Sampling
+from genfacade.models import layout
+from genfacade.models.stub import ModelError
+from genfacade.schema import Device, Mode
+from genfacade.train import sampling, tokens
+from genfacade.train.tokens import Mark, TokenError
 
 VOCAB, LENGTH = 11, 12
 TINY = GPTSize(block=16, layers=2, heads=2, width=8, dropout=0.0)
@@ -50,13 +48,7 @@ def test_answer_stops_at_end_or_window(model):
 
 @pytest.fixture
 def checkpoint(tmp_path, cfg):
-    """Крошечная необученная модель со словарём нынешней записи токенов."""
-    words = tokens.vocabulary(cfg)
-    size = GPTSize(block=704, layers=1, heads=2, width=8, dropout=0.0)
-    path = tmp_path / "model.pt"
-    torch.save({"model": sampling.build_model(size, len(words)).state_dict(),
-                "size": size.model_dump(), "vocabulary": words}, path)
-    return path
+    return tiny_model.save(tmp_path / "model.pt", cfg)
 
 
 def _settings(cfg, path):

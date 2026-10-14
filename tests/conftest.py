@@ -5,6 +5,7 @@
 """
 
 import json
+from importlib.util import find_spec
 
 import pytest
 from simple_house import SIMPLE
@@ -14,6 +15,10 @@ from genfacade.models import stub
 from genfacade.pipeline import walls
 from genfacade.plan.preprocess import preprocess
 from genfacade.schema import Description, FacadeSheet, Mode, Sample, Source, Split, TextKind
+
+# Обучение и модель — в группе [train] с torch; CI её не ставит, и там эти тесты не собираются.
+collect_ignore = [] if find_spec("torch") else [
+    "unit/test_fit.py", "unit/test_sampling.py", "unit/test_evaluate.py"]
 
 
 @pytest.fixture(autouse=True)
