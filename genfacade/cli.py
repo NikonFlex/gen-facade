@@ -1,4 +1,4 @@
-"""Командная строка: genfacade run <план.svg> --text …, serve, synth, tokens."""
+"""Командная строка: genfacade run <план.svg> --text …, serve, synth, tokens, train."""
 
 import argparse
 import sys
@@ -31,6 +31,16 @@ def tokens(args: argparse.Namespace) -> Path:
     return corpus.build(args.source, config.load(args.config))
 
 
+def train(args: argparse.Namespace) -> Path:
+    """Корпус источника → обученная модель шага 4, кривая потерь, ответы на val."""
+    # torch — в группе [train]: без обучения пакет его не тянет.
+    from genfacade.train import fit
+
+    cfg = config.load(args.config)
+    out = args.out or pipeline.new_run_dir(cfg.train.paths.runs_dir, args.source)
+    return fit.run(args.source, cfg, out)
+
+
 def serve(config_dir: Path | None) -> None:
     # uvicorn и fastapi — в группе [viewer]: без смотрелки пакет их не тянет.
     import uvicorn
@@ -39,6 +49,11 @@ def serve(config_dir: Path | None) -> None:
 
     cfg = config.load(config_dir)
     uvicorn.run(create_app(cfg), host=cfg.viewer.server.host, port=cfg.viewer.server.port)
+
+
+def _source(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("-s", "--source", type=Source, choices=list(Source),
+                        default=Source.SYNTHETIC, help="источник домов в samples_dir")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -61,29 +76,30 @@ def _parser() -> argparse.ArgumentParser:
     s.add_argument("--overwrite", action="store_true",
                    help="удалить собранные дома и собрать заново (после правки настроек или кода)")
     t = sub.add_parser("tokens", help="дома источника → корпус для обучения: номера токенов")
-    t.add_argument("-s", "--source", type=Source, choices=list(Source), default=Source.SYNTHETIC,
-                   help="источник домов в samples_dir")
+    _source(t)
+    f = sub.add_parser("train", help="корпус токенов → модель шага 4, кривая потерь, ответы")
+    _source(f)
+    f.add_argument("-o", "--out", type=Path,
+                   help="папка обучения; по умолчанию runs_dir/<время>-<источник>")
     return parser
+
+
+# Команда → что делает и какие отказы печатаются строкой с причиной, а не трассой.
+COMMANDS = {
+    "synth": (synth, {batch.BuildError: "сборка остановлена"}),
+    "tokens": (tokens, {corpus.CorpusError: "корпус не собран"}),
+    "train": (train, {corpus.CorpusError: "обучение не начато"}),
+    "run": (run, {PlanError: "план отклонён", ModelError: "модель не ответила"}),
+}
 
 
 def main(argv: list[str] | None = None) -> None:
     args = _parser().parse_args(argv)
-    if args.command == "synth":
-        try:
-            print(synth(args))
-        except batch.BuildError as e:
-            sys.exit(f"сборка остановлена: {e}")
-    elif args.command == "tokens":
-        try:
-            print(tokens(args))
-        except corpus.CorpusError as e:
-            sys.exit(f"корпус не собран: {e}")
-    elif args.command == "run":
-        try:
-            print(run(args))
-        except PlanError as e:
-            sys.exit(f"план отклонён: {e}")
-        except ModelError as e:
-            sys.exit(f"модель не ответила: {e}")
-    else:
+    if args.command not in COMMANDS:
         serve(args.config)
+        return
+    command, refusals = COMMANDS[args.command]
+    try:
+        print(command(args))
+    except tuple(refusals) as e:
+        sys.exit(f"{refusals[type(e)]}: {e}")

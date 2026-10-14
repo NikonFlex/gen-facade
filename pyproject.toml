@@ -18,8 +18,8 @@ genfacade = "genfacade.cli:main"
 dev = ["pytest", "pytest-testmon>=2.2", "ruff", "pyyaml>=6", "httpx2", "genfacade[viewer]"]
 # смотрелка прогонов: genfacade serve
 viewer = ["fastapi>=0.142", "uvicorn>=0.54"]
-# обучение — отдельно, чтобы CI и смотрелка не тянули torch
-train = ["torch"]
+# обучение — отдельно, чтобы CI и смотрелка не тянули torch; matplotlib — кривая потерь
+train = ["torch", "matplotlib"]
 
 [tool.setuptools.packages.find]
 include = ["genfacade*"]

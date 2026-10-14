@@ -19,12 +19,6 @@ def sheets(cfg):
     return [build.sample(s, cfg).sheet for s in SEEDS]
 
 
-def _bare(sheet):
-    """Дом после развёртки: стены без элементов и зон — то, что есть до ответа модели."""
-    walls = [f.model_copy(update={"elements": [], "zones": []}) for f in sheet.facades]
-    return sheet.model_copy(update={"facades": walls})
-
-
 def _on_grid(v: float, cfg) -> float:
     """Ближайший узел сетки; ровно полшага — вверх."""
     return round(math.floor(v / cfg.tokens.grid_m + 0.5 + 1e-6) * cfg.tokens.grid_m, 6)
@@ -51,11 +45,16 @@ def _expected(sheet, mode, cfg):
     return sheet.model_copy(update={"facades": out})
 
 
+def _round_trip(sheet, mode, cfg):
+    """Ответ записан токенами и разобран обратно на стены того же дома."""
+    return tokens.decode(tokens.answer(sheet, mode, cfg), tokens.bare(sheet), cfg)
+
+
 @pytest.mark.parametrize("mode", list(Mode))
 def test_answer_decodes_to_the_same_house(sheets, cfg, mode):
     """Запись → разбор возвращает тот же дом с точностью до сетки и имён элементов."""
     for sheet in sheets:
-        back = tokens.decode(tokens.answer(sheet, mode, cfg), _bare(sheet), cfg)
+        back = _round_trip(sheet, mode, cfg)
         assert back == _expected(sheet, mode, cfg)
 
 
@@ -63,7 +62,7 @@ def test_answer_decodes_to_the_same_house(sheets, cfg, mode):
 def test_house_on_grid_still_valid_and_close(sheets, cfg, mode):
     """После сетки дом проходит валидатор без единого замечания и сдвинут меньше чем на шаг."""
     for sheet in sheets:
-        back = tokens.decode(tokens.answer(sheet, mode, cfg), _bare(sheet), cfg)
+        back = _round_trip(sheet, mode, cfg)
         rules = {v.rule for v in validate(back, cfg.checks)}
         # в режиме 1 окна в ответе не помечены заданными — на привязку к плану это не влияет
         assert rules == set(), rules
@@ -163,7 +162,7 @@ def _with_parent(seq: list[str], number: str) -> list[str]:
 def test_broken_answer_refused_with_reason(sheets, cfg, what):
     """Ответ модели бывает негодным: разбор не чинит его молча, а называет причину."""
     with pytest.raises(TokenError, match=what):
-        tokens.decode(_broken(_answer(sheets, cfg), what), _bare(sheets[0]), cfg)
+        tokens.decode(_broken(_answer(sheets, cfg), what), tokens.bare(sheets[0]), cfg)
 
 
 def test_unknown_style_or_too_long_wall_cannot_be_written(sheets, cfg):

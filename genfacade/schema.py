@@ -79,6 +79,14 @@ class Split(StrEnum):
     TEST = "test"
 
 
+class Device(StrEnum):
+    """Где учить модель (config/train.toml): auto — GPU, если PyTorch его видит."""
+
+    AUTO = "auto"
+    CUDA = "cuda"
+    CPU = "cpu"
+
+
 class TextKind(StrEnum):
     """Как получено описание дома (`data: Описания из разметки`)."""
 

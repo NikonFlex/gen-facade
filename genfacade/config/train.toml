@@ -1,0 +1,32 @@
+# Обучение модели шага 4 на корпусе токенов (gf#106; genfacade/train/fit.py).
+# Размеры модели сохраняются с чекпойнтом: с какими обучена, с такими и загружается.
+
+[model]              # GPT из nanoGPT (genfacade/train/gpt.py)
+block = 704          # окно, токенов: не меньше самой длинной последовательности корпуса
+layers = 6
+heads = 6
+width = 384          # размер вектора токена; делится на heads
+dropout = 0.1
+
+[fit]
+epochs = 10
+batch = 32           # последовательностей в шаге
+lr = 6e-4            # после разгона; дальше по косинусу до min_lr к концу обучения
+min_lr = 6e-5
+warmup_steps = 200
+weight_decay = 0.1
+betas = [0.9, 0.95]   # AdamW, как в nanoGPT
+grad_clip = 1.0
+seed = 0
+device = "auto"      # auto | cuda | cpu
+bf16 = true          # вычисления в bfloat16 на GPU; на процессоре не действует
+compile = false      # torch.compile: в WSL2 не проверен (низ docs/tasks/gf-0106.md)
+
+[sample]             # после обучения: ответы модели на условия из val
+count = 200          # последовательностей (дом × режим), случайных с seed обучения
+batch = 64
+temperature = 1.0
+top_k = 0            # 0 — из всего словаря
+
+[paths]
+runs_dir = "outputs/train"   # <время>/: model.pt, model.json, loss.png, loss.json, samples.json

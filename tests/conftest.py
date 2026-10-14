@@ -24,12 +24,14 @@ def cfg() -> config.Config:
 
 @pytest.fixture
 def at(tmp_path):
-    """Настройки с корнем данных в tmp_path/<имя>; extra — свои строки synthetic.toml."""
-    def load(name: str, extra: str = "") -> config.Config:
-        folder = tmp_path / f"cfg-{name}-{len(extra)}"
+    """Настройки с корнем данных в tmp_path/<имя>; extra — свои строки synthetic.toml,
+    train — свои строки train.toml."""
+    def load(name: str, extra: str = "", train: str = "") -> config.Config:
+        folder = tmp_path / f"cfg-{name}-{len(extra)}-{len(train)}"
         folder.mkdir()
         (folder / "data.toml").write_text(f'[paths]\nsamples_dir = "{tmp_path / name}"\n')
         (folder / "synthetic.toml").write_text(extra)
+        (folder / "train.toml").write_text(train)
         return config.load(folder)
 
     return load
