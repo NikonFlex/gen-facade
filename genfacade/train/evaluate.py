@@ -29,13 +29,14 @@ from genfacade.models import layout
 from genfacade.pipeline import git_sha
 from genfacade.schema import ElementClass, FacadeSheet, Mode, Rule, Source, Split, Violation
 from genfacade.snap import snap
-from genfacade.train import corpus, fit, sampling, tokens
+from genfacade.train import constraints, corpus, fit, sampling, tokens
 from genfacade.train.gpt import GPT
 from genfacade.train.tokens import TokenError
 from genfacade.validate import errors, validate
 
 EVAL = "eval.json"
-MODEL, REFERENCE, UNTRAINED = "model", "reference", "untrained"
+MODEL, CONSTRAINED, REFERENCE, UNTRAINED = "model", "constrained", "reference", "untrained"
+WHO = (MODEL, CONSTRAINED, REFERENCE, UNTRAINED)  # строки таблицы; constrained — с запретом gf#132
 
 
 class Case(NamedTuple):
@@ -180,23 +181,36 @@ def run(source: Source, cfg: Config, out: Path) -> Path:
         raise corpus.CorpusError("словарь модели не совпадает со словарём корпуса: переобучить")
     rows = _chosen(len(data.parts[Split.VAL].ids), cfg)
     ev = Evaluation(data, cases(data.parts[Split.VAL], rows, source, cfg), cfg)
-    answers, seconds = _answers(trained.sampler, ev.group, cfg)
-    result = {MODEL: ev.report(answers), REFERENCE: ev.report([c.reference for c in ev.group])}
-    blank = _answers(_untrained(trained.sampler), ev.group[:cfg.train.eval.untrained], cfg)[0]
-    result[UNTRAINED] = ev.report(blank)
+    result, seconds = _reports(ev, trained.sampler, cfg)
     report = {who: r for who, (r, _) in result.items()}
-    report["compare"] = _compare(result[MODEL][1], result[REFERENCE][1], ev.group)
-    report["seconds_per_answer"] = round(seconds / len(answers), 3)
-    report["settings"] = {"checkpoint": str(cfg.models.layout.checkpoint), "source": source,
-                          "eval": cfg.train.eval.model_dump(),
-                          "sampling": cfg.models.layout.model_dump(mode="json"),
-                          "device": str(trained.sampler.device),
-                          "date": datetime.now().isoformat(timespec="seconds"),
-                          "git_sha": git_sha()}
+    report["compare"] = _compare({w: result[w][1] for w in (MODEL, CONSTRAINED, REFERENCE)},
+                                 ev.group)
+    report["seconds_per_answer"] = round(seconds / len(ev.group), 3)
+    report["settings"] = _settings(trained.sampler, cfg)
     out.mkdir(parents=True, exist_ok=True)
     (out / EVAL).write_text(json.dumps(report, ensure_ascii=False, indent=2))
     print(table(report))
     return out / EVAL
+
+
+def _reports(ev: Evaluation, sampler: sampling.Sampler, cfg: Config) -> tuple[dict, float]:
+    """Модель без запрета и с ним, эталон генератора, необученная модель; время без запрета."""
+    vocab = constraints.Vocab(ev.words)
+    free = [sampling.Prompt(c.prompt) for c in ev.group]
+    guarded = [sampling.Prompt(c.prompt, constraints.guard(c.bare, c.mode, vocab, cfg))
+               for c in ev.group]
+    answers, seconds = _answers(sampler, free, cfg)
+    blank = _answers(_untrained(sampler), free[:cfg.train.eval.untrained], cfg)[0]
+    return {MODEL: ev.report(answers),
+            CONSTRAINED: ev.report(_answers(sampler, guarded, cfg)[0]),
+            REFERENCE: ev.report([c.reference for c in ev.group]),
+            UNTRAINED: ev.report(blank)}, seconds
+
+
+def _settings(sampler: sampling.Sampler, cfg: Config) -> dict:
+    return {"checkpoint": str(cfg.models.layout.checkpoint), "eval": cfg.train.eval.model_dump(),
+            "sampling": cfg.models.layout.model_dump(mode="json"), "device": str(sampler.device),
+            "date": datetime.now().isoformat(timespec="seconds"), "git_sha": git_sha()}
 
 
 def _chosen(n: int, cfg: Config) -> list[int]:
@@ -207,11 +221,11 @@ def _chosen(n: int, cfg: Config) -> list[int]:
     return sorted(rng.permutation(n)[:count].tolist())
 
 
-def _answers(sampler: sampling.Sampler, group: list[Case], cfg: Config) -> tuple[list, float]:
+def _answers(sampler: sampling.Sampler, prompts: list[sampling.Prompt],
+             cfg: Config) -> tuple[list, float]:
     torch.manual_seed(cfg.models.layout.seed)
     start = time.perf_counter()
-    answers = sampling.answer_all(sampler, [c.prompt for c in group], cfg.models.layout,
-                                  cfg.train.eval.batch)
+    answers = sampling.answer_all(sampler, prompts, cfg.models.layout, cfg.train.eval.batch)
     return answers, time.perf_counter() - start
 
 
@@ -221,14 +235,19 @@ def _untrained(trained: sampling.Sampler) -> sampling.Sampler:
     return sampling.Sampler(model, trained.end, trained.bf16)
 
 
-def _compare(model: list[Judged], reference: list[Judged], group: list[Case]) -> dict:
-    """Статистика и реакция на условие — на домах, где ответ модели разобран."""
-    out = {}
+def _compare(judged: dict[str, list[Judged]], group: list[Case]) -> dict:
+    """Статистика и реакция на условие модели без запрета и с ним против эталона — на домах,
+    где ответ модели разобран."""
+    out: dict = {}
     for m in Mode:
-        pairs = [(a.sheet, b.sheet) for a, b, c in zip(model, reference, group, strict=True)
-                 if c.mode is m and a.sheet is not None and b.sheet is not None]
-        ours, theirs = [a for a, _ in pairs], [b for _, b in pairs]
-        out[m] = {MODEL: stats(ours), REFERENCE: stats(theirs), "reaction": reaction(ours, theirs)}
+        out[m] = {}
+        for who in (MODEL, CONSTRAINED):
+            pairs = [(a.sheet, b.sheet)
+                     for a, b, c in zip(judged[who], judged[REFERENCE], group, strict=True)
+                     if c.mode is m and a.sheet is not None and b.sheet is not None]
+            ours, theirs = [a for a, _ in pairs], [b for _, b in pairs]
+            out[m][who] = {"stats": stats(ours), "reaction": reaction(ours, theirs)}
+            out[m][REFERENCE] = stats(theirs)
     return out
 
 
@@ -236,15 +255,15 @@ def table(report: dict) -> str:
     """Главное из eval.json строками для консоли."""
     keys = ["parsed", "valid_raw", "valid_snapped", "plan_openings_in_place"]
     lines = ["кто / режим".ljust(26) + "".join(k.rjust(24) for k in keys)]
-    for who in (MODEL, REFERENCE, UNTRAINED):
+    for who in WHO:
         for mode, s in report[who]["by_mode"].items():
             lines.append(f"{who} / {mode}".ljust(26) + "".join(str(s[k]).rjust(24) for k in keys))
-    for who in (MODEL, REFERENCE, UNTRAINED):
+    for who in WHO:
         lines.append(f"{who}: повторов train {report[who]['copies_of_train']}, "
                      f"ошибки до привязки {report[who]['all']['raw_errors']}")
     for mode, c in report["compare"].items():
-        lines.append(f"{mode}: модель {c[MODEL]}")
         lines.append(f"{mode}: эталон {c[REFERENCE]}")
-        lines.append(f"{mode}: реакция {c['reaction']}")
+        for who in (MODEL, CONSTRAINED):
+            lines.append(f"{mode}: {who} {c[who]['stats']}, реакция {c[who]['reaction']}")
     lines.append(f"секунд на ответ: {report['seconds_per_answer']}")
     return "\n".join(lines)

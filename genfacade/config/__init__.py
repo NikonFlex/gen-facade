@@ -358,6 +358,7 @@ class LayoutModel(Sampling):
     seed: int
     device: Device
     bf16: bool
+    constrain: bool
 
 
 class Models(Section):

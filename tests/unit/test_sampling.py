@@ -59,7 +59,7 @@ def test_layout_prompt_ends_with_answer_mark(checkpoint, cfg, lay_out):
     """`<answer>` в корпусе — первый токен ответа: без него модель продолжает условие."""
     model = layout.load(_settings(cfg, checkpoint))
     bare = tokens.bare(lay_out())
-    prompt = model.prompt(bare, Mode.WITH_OPENINGS, cfg)[0].tolist()
+    prompt = model.prompt(bare, Mode.WITH_OPENINGS, cfg).ids
     assert [model.words[i] for i in prompt] == [
         *tokens.condition(bare, Mode.WITH_OPENINGS, cfg), Mark.ANSWER]
     with pytest.raises(TokenError):  # необученная модель отвечает мусором
@@ -72,3 +72,27 @@ def test_layout_refuses_model_with_other_vocabulary(checkpoint, cfg, lay_out):
     model = layout.load(_settings(cfg, checkpoint))
     with pytest.raises(ModelError, match="словарь модели"):
         model.prompt(tokens.bare(lay_out()), Mode.WITH_OPENINGS, cfg)
+
+
+class _Ban:
+    """Страж, запрещающий одни и те же токены на каждом шаге."""
+
+    def __init__(self, ids):
+        self.ids, self.seen = list(ids), []
+
+    def step(self, token):
+        self.seen.append(token)
+
+    def banned(self):
+        return self.ids
+
+
+def test_guarded_tokens_are_never_picked(model):
+    sampler = sampling.Sampler(model, end=0, bf16=False)
+    guards = [_Ban(range(1, 6)), None]
+    torch.manual_seed(2)
+    prompts = [sampling.Prompt([7, 8, 9], g) for g in guards]
+    guarded, free = sampling.answer_all(sampler, prompts, Sampling(temperature=1.0, top_k=0), 2)
+    assert not set(guarded[1:]) & set(range(1, 6))
+    assert guards[0].seen == guarded[1:]        # страж видел все выбранные токены, по порядку
+    assert set(free[1:]) & set(range(1, 6))     # без стража те же токены выпадают

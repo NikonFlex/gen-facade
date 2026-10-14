@@ -10,3 +10,6 @@ temperature = 1.0
 top_k = 0            # 0 — из всего словаря
 device = "auto"      # auto | cuda | cpu
 bf16 = true          # на GPU — в bfloat16, как при обучении; на процессоре не действует
+# Глухой режим: запрещать при генерации x и w окна, при которых оно заходит в запретную зону,
+# на проём или за край стены (genfacade/train/constraints.py, gf#132).
+constrain = true
