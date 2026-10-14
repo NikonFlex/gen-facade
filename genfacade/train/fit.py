@@ -51,7 +51,9 @@ def load(source: Source, cfg: Config) -> Corpus:
     folder = cfg.data.paths.samples_dir / source
     if not (folder / corpus.ARRAYS).exists():
         raise corpus.CorpusError(f"нет {folder / corpus.ARRAYS}: сначала genfacade tokens")
-    data = numpy.load(folder / corpus.ARRAYS)
+    # массивы — в память один раз: обращение к ключу npz каждый раз распаковывает массив заново
+    with numpy.load(folder / corpus.ARRAYS) as npz:
+        data = {key: npz[key] for key in npz.files}
     words = [str(w) for w in data["vocabulary"]]
     if words != tokens.vocabulary(cfg):
         raise corpus.CorpusError("словарь корпуса не совпадает с нынешним: genfacade tokens")
