@@ -1,5 +1,5 @@
 """Настройки, вынесенные из кода: материалы, лист, смотрелка, план, проверка, данные,
-синтетика, токены.
+синтетика, токены, обучение.
 
 По умолчанию — файлы этой папки. Свой конфиг — папка с любыми из тех же файлов:
 TOML сливается с умолчаниями поключно, sheet.css дописывается после умолчаний
@@ -13,7 +13,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from genfacade.schema import ElementClass, Mode, PaletteRole, VariantKind, ZoneRole
+from genfacade.schema import Device, ElementClass, Mode, PaletteRole, VariantKind, ZoneRole
 
 DEFAULTS = files(__package__)
 
@@ -297,6 +297,49 @@ class Tokens(Section):
     max_m: float
 
 
+class GPTSize(Section):
+    block: int
+    layers: int
+    heads: int
+    width: int
+    dropout: float
+
+
+class Fit(Section):
+    epochs: int
+    batch: int
+    lr: float
+    min_lr: float
+    warmup_steps: int
+    weight_decay: float
+    betas: tuple[float, float]
+    grad_clip: float
+    seed: int
+    device: Device
+    bf16: bool
+    compile: bool
+
+
+class SampleRun(Section):
+    count: int
+    batch: int
+    temperature: float
+    top_k: int
+
+
+class TrainPaths(Section):
+    runs_dir: Path
+
+
+class Train(Section):
+    """Обучение модели шага 4 (config/train.toml, gf#106)."""
+
+    model: GPTSize
+    fit: Fit
+    sample: SampleRun
+    paths: TrainPaths
+
+
 class Config(Section):
     library: Library
     sheet: Sheet
@@ -306,6 +349,7 @@ class Config(Section):
     data: Data
     synthetic: Synthetic
     tokens: Tokens
+    train: Train
     css: str
 
 
@@ -323,6 +367,7 @@ def load(user_dir: Path | None = None) -> Config:
         data=Data(**_toml("data.toml", user_dir)),
         synthetic=Synthetic(**_toml("synthetic.toml", user_dir)),
         tokens=Tokens(**_toml("tokens.toml", user_dir)),
+        train=Train(**_toml("train.toml", user_dir)),
         css=css,
     )
 

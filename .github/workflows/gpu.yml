@@ -6,6 +6,16 @@ name: gpu
 # (approval_policy: all_external_contributors). Обучение — только после «обучай» хозяина.
 on:
   workflow_dispatch:
+    inputs:
+      job:
+        description: "probe — проверить GPU; train — обучить модель шага 4 (genfacade train)"
+        type: choice
+        options: [probe, train]
+        default: probe
+      houses:
+        description: "train: сколько синтетических домов в корпусе (собранные раньше не пересобираются)"
+        type: number
+        default: 10000
 
 permissions:
   contents: read
@@ -20,9 +30,13 @@ env:
   TORCH: torch==2.14.1
   TORCH_INDEX: https://download.pytorch.org/whl/cu130
   VENV: /home/runner/venvs/genfacade
+  # Дома и корпус переживают запуски: checkout чистит рабочую папку, а сборка 10 000 домов — минуты.
+  DATA_CONFIG: /home/runner/genfacade-config
+  SAMPLES: /home/runner/data/samples
+  OUT: outputs/train/gpu-${{ github.run_id }}
 
 jobs:
-  probe:
+  gpu:
     runs-on: [self-hosted, gpu]
     timeout-minutes: 30
     steps:
@@ -38,10 +52,11 @@ jobs:
           python3 -m venv "$VENV"
           "$VENV/bin/pip" install -q --upgrade pip
           "$VENV/bin/pip" install -q "$TORCH" --index-url "$TORCH_INDEX"
-          "$VENV/bin/pip" install -q -e .
+          "$VENV/bin/pip" install -q -e ".[train]"
           echo "$VENV/bin" >> "$GITHUB_PATH"
 
       - name: PyTorch видит GPU
+        if: inputs.job == 'probe'
         run: |
           python - <<'PY'
           import time
@@ -62,3 +77,31 @@ jobs:
           step = (time.perf_counter() - start) / repeats
           print(f"matmul {n}x{n} fp32: {step * 1e3:.1f} мс, {2 * n**3 / step / 1e12:.1f} TFLOPS")
           PY
+
+      - name: Дома и корпус
+        if: inputs.job == 'train'
+        run: |
+          mkdir -p "$DATA_CONFIG"
+          printf '[paths]\nsamples_dir = "%s"\n' "$SAMPLES" > "$DATA_CONFIG/data.toml"
+          genfacade -c "$DATA_CONFIG" synth -n "${{ inputs.houses }}"
+          genfacade -c "$DATA_CONFIG" tokens
+          head -30 "$SAMPLES/synthetic/_tokens.json"
+
+      - name: Обучение
+        if: inputs.job == 'train'
+        # Загрузка GPU и видеопамять — раз в 10 с рядом с моделью: PyTorch сам их не меряет.
+        run: |
+          mkdir -p "$OUT"
+          /usr/lib/wsl/lib/nvidia-smi --query-gpu=timestamp,utilization.gpu,memory.used,memory.total \
+            --format=csv -l 10 > "$OUT/gpu.csv" &
+          monitor=$!
+          genfacade -c "$DATA_CONFIG" train -o "$OUT"
+          kill "$monitor"
+
+      - name: Результат обучения
+        if: always() && inputs.job == 'train'
+        uses: actions/upload-artifact@v7
+        with:
+          name: train-${{ github.run_id }}
+          path: ${{ env.OUT }}
+          if-no-files-found: ignore

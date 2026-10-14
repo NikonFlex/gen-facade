@@ -258,6 +258,12 @@ def decode(tokens: list[str], walls: FacadeSheet, cfg: Config) -> FacadeSheet:
     return walls.model_copy(update={"facades": facades})
 
 
+def bare(sheet: FacadeSheet) -> FacadeSheet:
+    """Дом после развёртки: стены без элементов и зон — то, что есть до ответа модели."""
+    walls = [f.model_copy(update={"elements": [], "zones": []}) for f in sheet.facades]
+    return sheet.model_copy(update={"facades": walls})
+
+
 def _wall(r: _Reader, wall: SideFacade) -> SideFacade:
     r.expect(Mark.WALL)
     elements: list[Element] = []

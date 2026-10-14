@@ -1,0 +1,282 @@
+"""Обучение модели шага 4 одной командой (gf#106): корпус токенов → чекпойнт, кривая потерь,
+ответы модели на условия из val и доля тех, что разбирает `tokens.decode`.
+
+    <папка>/model.pt      веса и размеры модели
+    <папка>/model.json    настройки, корпус, словарь, история по эпохам, итог сэмплирования
+    <папка>/loss.png      кривая потерь train и val по эпохам; loss.json — те же числа
+    <папка>/samples.json  ответы модели: дом, режим, токены, разобран ли и почему нет
+
+Loss — только на ответе: условие и паддинг помечены `gpt.IGNORE`. Последовательности разной
+длины дополняются справа токеном `<end>`: внимание причинное, хвост на ответ не влияет.
+"""
+
+import json
+import math
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import NamedTuple
+
+import numpy
+import torch
+
+from genfacade.config import Config, Fit, GPTSize, SampleRun
+from genfacade.datasets import store
+from genfacade.pipeline import git_sha
+from genfacade.schema import Device, Mode, Source, Split
+from genfacade.train import corpus, plot, tokens
+from genfacade.train.gpt import GPT, IGNORE, GPTConfig
+from genfacade.train.tokens import Mark, TokenError
+
+MODEL, SETTINGS, SAMPLES = "model.pt", "model.json", "samples.json"
+
+
+class Sequences(NamedTuple):
+    """Последовательности одной части корпуса: условие и ответ вместе."""
+
+    ids: list[numpy.ndarray]
+    answer_at: list[int]  # место `<answer>`: до него включительно — условие
+    sample: list[str]
+    mode: list[Mode]
+
+
+class Corpus(NamedTuple):
+    parts: dict[Split, Sequences]
+    words: list[str]
+    longest: int
+
+
+def load(source: Source, cfg: Config) -> Corpus:
+    """Корпус с диска (`genfacade tokens`); словарь должен совпасть с нынешней записью."""
+    folder = cfg.data.paths.samples_dir / source
+    if not (folder / corpus.ARRAYS).exists():
+        raise corpus.CorpusError(f"нет {folder / corpus.ARRAYS}: сначала genfacade tokens")
+    data = numpy.load(folder / corpus.ARRAYS)
+    words = [str(w) for w in data["vocabulary"]]
+    if words != tokens.vocabulary(cfg):
+        raise corpus.CorpusError("словарь корпуса не совпадает с нынешним: genfacade tokens")
+    answer = words.index(Mark.ANSWER)
+    starts = [0, *data["ends"][:-1]]
+    seqs = [data["ids"][a:b].astype(numpy.int64) for a, b in zip(starts, data["ends"], strict=True)]
+    parts = {}
+    for split in corpus.SPLITS:
+        rows = [i for i in range(len(seqs)) if corpus.SPLITS[data["split"][i]] is split]
+        parts[split] = Sequences([seqs[i] for i in rows],
+                                 [int(numpy.argmax(seqs[i] == answer)) for i in rows],
+                                 [str(data["sample"][i]) for i in rows],
+                                 [corpus.MODES[data["mode"][i]] for i in rows])
+    return Corpus(parts, words, max(len(s) for s in seqs))
+
+
+def batch(part: Sequences, rows: list[int], pad: int) -> tuple[torch.Tensor, torch.Tensor]:
+    """Вход и метки: метка позиции j — токен j+1; условие и паддинг в loss не идут."""
+    width = max(len(part.ids[i]) for i in rows) - 1
+    x = torch.full((len(rows), width), pad, dtype=torch.long)
+    y = torch.full((len(rows), width), IGNORE, dtype=torch.long)
+    for k, i in enumerate(rows):
+        seq = torch.from_numpy(part.ids[i])
+        x[k, :len(seq) - 1] = seq[:-1]
+        y[k, :len(seq) - 1] = seq[1:]
+        y[k, :part.answer_at[i]] = IGNORE  # первый токен ответа предсказывается на `<answer>`
+    return x, y
+
+
+def device(fit: Fit) -> torch.device:
+    if fit.device is Device.AUTO:
+        return torch.device(Device.CUDA if torch.cuda.is_available() else Device.CPU)
+    return torch.device(fit.device)
+
+
+def build_model(size: GPTSize, vocabulary: int) -> GPT:
+    return GPT(GPTConfig(block_size=size.block, vocab_size=vocabulary, n_layer=size.layers,
+                         n_head=size.heads, n_embd=size.width, dropout=size.dropout))
+
+
+def learning_rate(step: int, total: int, fit: Fit) -> float:
+    """Линейный разгон, потом косинус до min_lr — как в nanoGPT."""
+    if step < fit.warmup_steps:
+        return fit.lr * (step + 1) / fit.warmup_steps
+    progress = min(1.0, (step - fit.warmup_steps) / max(1, total - fit.warmup_steps))
+    return fit.min_lr + 0.5 * (1 + math.cos(math.pi * progress)) * (fit.lr - fit.min_lr)
+
+
+class Trainer:
+    """Модель, оптимизатор и счётчик шагов одного обучения."""
+
+    def __init__(self, data: Corpus, cfg: Config):
+        fit, self.fit, self.data = cfg.train.fit, cfg.train.fit, data
+        if data.longest > cfg.train.model.block:
+            raise corpus.CorpusError(f"окно {cfg.train.model.block} короче самой длинной "
+                                     f"последовательности корпуса ({data.longest})")
+        self.device = device(fit)
+        self.cuda = self.device.type == Device.CUDA
+        self.model = build_model(cfg.train.model, len(data.words)).to(self.device)
+        self.opt = self.model.configure_optimizers(fit.weight_decay, fit.lr, fit.betas, self.cuda)
+        self.forward = torch.compile(self.model) if fit.compile else self.model
+        self.pad = data.words.index(Mark.END)
+        self.step = 0
+        self.total = fit.epochs * math.ceil(len(data.parts[Split.TRAIN].ids) / fit.batch)
+
+    def autocast(self):
+        on = self.fit.bf16 and self.cuda
+        return torch.autocast(self.device.type, dtype=torch.bfloat16, enabled=on)
+
+    def loss(self, part: Sequences, rows: list[int]) -> tuple[torch.Tensor, int]:
+        """Средний loss на токенах ответа и их число."""
+        x, y = (t.to(self.device) for t in batch(part, rows, self.pad))
+        with self.autocast():
+            _, loss = self.forward(x, y)
+        return loss, int((y != IGNORE).sum())
+
+    def epoch(self, rng: numpy.random.Generator) -> float:
+        self.model.train()
+        part = self.data.parts[Split.TRAIN]
+        order = rng.permutation(len(part.ids)).tolist()
+        total = count = 0
+        for start in range(0, len(order), self.fit.batch):
+            for group in self.opt.param_groups:
+                group["lr"] = learning_rate(self.step, self.total, self.fit)
+            loss, n = self.loss(part, order[start:start + self.fit.batch])
+            self.opt.zero_grad(set_to_none=True)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.fit.grad_clip)
+            self.opt.step()
+            self.step += 1
+            total, count = total + loss.item() * n, count + n
+        return total / count
+
+    @torch.no_grad()
+    def evaluate(self, split: Split) -> float:
+        self.model.eval()
+        part = self.data.parts[split]
+        total = count = 0
+        for start in range(0, len(part.ids), self.fit.batch):
+            loss, n = self.loss(part, list(range(start, min(start + self.fit.batch,
+                                                            len(part.ids)))))
+            total, count = total + loss.item() * n, count + n
+        return total / count
+
+
+def run(source: Source, cfg: Config, out: Path) -> Path:
+    """Обучить, сохранить, сэмплировать; вернуть путь к model.json."""
+    fit = cfg.train.fit
+    torch.manual_seed(fit.seed)
+    rng = numpy.random.default_rng(fit.seed)
+    data = load(source, cfg)
+    trainer = Trainer(data, cfg)
+    out.mkdir(parents=True, exist_ok=True)
+    history = []
+    for epoch in range(1, fit.epochs + 1):
+        history.append(_timed_epoch(trainer, rng) | {"epoch": epoch})
+        print(json.dumps(history[-1]), flush=True)
+    torch.save({"model": trainer.model.state_dict(), "size": cfg.train.model.model_dump(),
+                "vocabulary": data.words}, out / MODEL)
+    plot.losses(history, out)
+    samples = sample(trainer, source, cfg, rng)
+    (out / SAMPLES).write_text(json.dumps(samples, ensure_ascii=False, indent=1))
+    summary = {k: v for k, v in samples.items() if k != "rows"}
+    return _settings(trainer, cfg, {"source": source, "history": history, "samples": summary},
+                     out)
+
+
+def _timed_epoch(trainer: Trainer, rng: numpy.random.Generator) -> dict:
+    if trainer.cuda:
+        torch.cuda.reset_peak_memory_stats()
+    start = time.perf_counter()
+    train_loss = trainer.epoch(rng)
+    seconds = time.perf_counter() - start
+    peak = torch.cuda.max_memory_allocated() if trainer.cuda else 0
+    return {"train": round(train_loss, 5), "val": round(trainer.evaluate(Split.VAL), 5),
+            "seconds": round(seconds, 1), "peak_memory_gib": round(peak / 2**30, 2)}
+
+
+# ——— сэмплирование ———
+
+def sample(trainer: Trainer, source: Source, cfg: Config, rng: numpy.random.Generator) -> dict:
+    """Ответы модели на условия случайных последовательностей val; разбирает ли их decode."""
+    part = trainer.data.parts[Split.VAL]
+    chosen = sorted(rng.permutation(len(part.ids))[:cfg.train.sample.count].tolist())
+    answers = _generate(trainer, part, chosen, cfg.train.sample)
+    root = cfg.data.paths.samples_dir
+    rows = []
+    for i in chosen:
+        walls = tokens.bare(store.read(root, source, part.sample[i]).sheet)
+        words = [trainer.data.words[t] for t in answers[i]]
+        rows.append({"sample": part.sample[i], "mode": part.mode[i], "tokens": words,
+                     "error": _decode_error(words, walls, cfg)})
+    return {"count": len(rows), "parsed": sum(r["error"] is None for r in rows),
+            "by_mode": {m: _share([r for r in rows if r["mode"] is m]) for m in Mode},
+            "rows": rows}
+
+
+def _decode_error(words: list[str], walls, cfg: Config) -> str | None:
+    try:
+        tokens.decode(words, walls, cfg)
+    except TokenError as e:
+        return str(e)
+    return None
+
+
+def _share(rows: list[dict]) -> dict:
+    return {"count": len(rows), "parsed": sum(r["error"] is None for r in rows)}
+
+
+@torch.no_grad()
+def _generate(trainer: Trainer, part: Sequences, chosen: list[int],
+              opts: SampleRun) -> dict[int, list[int]]:
+    """Ответ от `<answer>` до `<end>` включительно. Условия одной длины идут одной пачкой:
+    позиции в nanoGPT абсолютные, паддинг слева их бы сдвинул."""
+    trainer.model.eval()
+    by_length: dict[int, list[int]] = {}
+    for i in chosen:
+        by_length.setdefault(part.answer_at[i], []).append(i)
+    answers = {}
+    for rows in by_length.values():
+        for start in range(0, len(rows), opts.batch):
+            group = rows[start:start + opts.batch]
+            prompts = torch.stack([torch.from_numpy(part.ids[i][:part.answer_at[i] + 1])
+                                   for i in group])
+            for i, ids in zip(group, _continue(trainer, prompts, opts), strict=True):
+                answers[i] = ids
+    return answers
+
+
+def _continue(trainer: Trainer, prompts: torch.Tensor, opts: SampleRun) -> list[list[int]]:
+    """Дописывать токены, пока у всех не будет `<end>` или не кончится окно."""
+    idx = prompts.to(trainer.device)
+    done = torch.zeros(len(idx), dtype=torch.bool, device=trainer.device)
+    start = idx.size(1) - 1  # ответ начинается с `<answer>` — последнего токена условия
+    while not done.all() and idx.size(1) < trainer.model.config.block_size:
+        with trainer.autocast():
+            logits, _ = trainer.forward(idx)
+        logits = logits[:, -1, :].float() / opts.temperature
+        if opts.top_k:
+            v, _ = torch.topk(logits, min(opts.top_k, logits.size(-1)))
+            logits[logits < v[:, [-1]]] = -float("inf")
+        nxt = torch.multinomial(torch.softmax(logits, dim=-1), num_samples=1)
+        idx = torch.cat((idx, nxt), dim=1)
+        done |= nxt.squeeze(1) == trainer.pad
+    return [_cut(row[start:].tolist(), trainer.pad) for row in idx]
+
+
+def _cut(ids: list[int], end: int) -> list[int]:
+    return ids[:ids.index(end) + 1] if end in ids else ids
+
+
+def _settings(trainer: Trainer, cfg: Config, result: dict, out: Path) -> Path:
+    """model.json: с чем и на чём учили и что вышло (result: источник, история, сэмплы)."""
+    manifest = cfg.data.paths.samples_dir / result["source"] / corpus.MANIFEST
+    gpu = torch.cuda.get_device_name() if trainer.cuda else None
+    settings = {
+        "train": cfg.train.model_dump(mode="json"),
+        "tokens": cfg.tokens.model_dump(mode="json"),
+        "corpus": json.loads(manifest.read_text()) if manifest.exists() else None,
+        "parameters": trainer.model.get_num_params(),
+        "device": str(trainer.device), "gpu": gpu, "torch": torch.__version__,
+        **result,
+        "date": datetime.now().isoformat(timespec="seconds"),
+        "git_sha": git_sha(),
+    }
+    path = out / SETTINGS
+    path.write_text(json.dumps(settings, ensure_ascii=False, indent=2))
+    return path
