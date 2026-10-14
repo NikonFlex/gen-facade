@@ -17,6 +17,10 @@ on:
         description: "train: сколько синтетических домов в корпусе (собранные раньше не пересобираются)"
         type: number
         default: 10000
+      rebuild:
+        description: "train: пересобрать дома заново — нужно, если код генератора поменялся с прошлой сборки"
+        type: boolean
+        default: false
       model_run:
         description: "eval: номер запуска train, чью модель оценивать (артефакт train-<номер>)"
         type: string
@@ -85,11 +89,12 @@ jobs:
           PY
 
       - name: Дома и корпус
-        if: inputs.job != 'probe'
+        # Только для обучения: оценка берёт готовый корпус, словарь сверяет сама модель.
+        if: inputs.job == 'train'
         run: |
           mkdir -p "$DATA_CONFIG"
           printf '[paths]\nsamples_dir = "%s"\n' "$SAMPLES" > "$DATA_CONFIG/data.toml"
-          genfacade -c "$DATA_CONFIG" synth -n "${{ inputs.houses }}"
+          genfacade -c "$DATA_CONFIG" synth -n "${{ inputs.houses }}" ${{ inputs.rebuild && '--overwrite' || '' }}
           genfacade -c "$DATA_CONFIG" tokens
           head -30 "$SAMPLES/synthetic/_tokens.json"
 
