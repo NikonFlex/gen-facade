@@ -13,6 +13,7 @@
 """
 
 import json
+import re
 import time
 from collections import Counter
 from datetime import datetime
@@ -100,7 +101,13 @@ def summary(judged: list[Judged], group: list[Case]) -> dict:
         "valid_snapped": _share(sum(not j.snapped for j in parsed), n),
         "plan_openings_in_place": _share(in_place, sum(openings)),
         "raw_errors": dict(Counter(str(v.rule) for j in parsed for v in j.raw).most_common()),
+        "parse_errors": dict(Counter(_kind(j.error) for j in judged if j.error).most_common()),
     }
+
+
+def _kind(error: str) -> str:
+    """Причина брака разбора без места и чисел: какой токен пришёл вместо ожидаемого."""
+    return re.sub(r"\d+", "…", error.split(": ", 1)[-1])
 
 
 def _share(k: float, n: int) -> float | None:
