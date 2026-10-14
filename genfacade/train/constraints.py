@@ -2,9 +2,9 @@
 поставленные проёмы и за край стены (`generation: Окна вне запретных зон`).
 
 Окно пишется токенами `cls:window x y w h …` (train/tokens.py), числа — шаги сетки. Страж читает
-ответ по токену и, когда модель пишет x или w окна, называет числа, дающие такое окно: сэмплер
-ставит им логиты −∞. Занятые отрезки стены — запретные зоны и проёмы условия плюс проёмы, уже
-поставленные моделью на этой стене.
+ответ по токену и, когда модель пишет x или w окна, оставляет ей только числа, дающие годное
+окно: остальным токенам сэмплер ставит логиты −∞. Занятые отрезки стены — запретные зоны и
+проёмы условия плюс проёмы, уже поставленные моделью на этой стене.
 
 Только глухой режим: в «окна из плана» окна — проёмы плана, место и ширину им ставит шаг 5.
 Только по горизонтали: этаж модель пишет после размеров — верно, пока дом одноэтажный.
@@ -39,6 +39,7 @@ class Vocab:
                     if w.startswith(f"{cls}:")}
         self.zone = {i for i, w in enumerate(words) if w.startswith(f"{role}:")}
         self.wall = words.index(Mark.WALL)
+        self.size = len(words)
 
 
 class WallGeometry:
@@ -65,22 +66,29 @@ class WallGeometry:
                 self.placed.append((self.box[X], self.box[X] + self.box[W]))
 
     def banned(self) -> list[int]:
-        """Номера токенов-чисел, запрещённых следующим; пусто — если запрещать нечего или
-        запретилось бы всё (тогда брак поймает валидатор)."""
+        """Номера токенов, запрещённых следующим. На месте x и w окна разрешены только годные
+        числа: если запретить лишь негодные, вероятность уходит к нечисловым токенам, и ответ
+        ломается («ждали число») — gf#132, run 38635189845. Годных нет — не запрещаем ничего,
+        брак поймает валидатор."""
         if self.cls is not ElementClass.WINDOW or not 0 <= self.at < len(self.walls):
             return []
+        if len(self.box) not in (X, W):
+            return []
+        allowed = self._allowed()
+        if not allowed:
+            return []
+        keep = {self.vocab.token[n] for n in allowed}
+        return [i for i in range(self.vocab.size) if i not in keep]
+
+    def _allowed(self) -> list[int]:
         wall = self.walls[self.at]
         busy = wall.busy + self.placed
         if len(self.box) == X:
-            bad = [n for n in self.vocab.token if n >= wall.length
-                   or any(a <= n < b for a, b in busy)]
-        elif len(self.box) == W:
-            x = self.box[X]
-            bad = [n for n in self.vocab.token if x + n > wall.length
-                   or any(x < b and x + n > a for a, b in busy)]
-        else:
-            return []
-        return [] if len(bad) == len(self.vocab.token) else [self.vocab.token[n] for n in bad]
+            return [n for n in self.vocab.token if n < wall.length
+                    and not any(a <= n < b for a, b in busy)]
+        x = self.box[X]
+        return [n for n in self.vocab.token if 0 < n and x + n <= wall.length
+                and not any(x < b and x + n > a for a, b in busy)]
 
 
 def walls(bare: FacadeSheet, mode: Mode, cfg: Config) -> list[Wall]:

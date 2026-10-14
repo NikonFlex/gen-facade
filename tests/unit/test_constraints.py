@@ -30,8 +30,11 @@ def guard(cfg, vocab):
     return read
 
 
-def _banned(g, vocab) -> set[int]:
-    return {vocab.number[i] for i in g.banned()}
+def _allowed(g, vocab) -> set[int]:
+    """Числа, которые страж оставил; заодно — всё нечисловое запрещено."""
+    banned = set(g.banned())
+    assert set(range(vocab.size)) - set(vocab.number) <= banned
+    return {n for i, n in vocab.number.items() if i not in banned}
 
 
 WINDOW, DOOR, ZONE = (tokens.tok(v) for v in (ElementClass.WINDOW, ElementClass.DOOR,
@@ -39,19 +42,15 @@ WINDOW, DOOR, ZONE = (tokens.tok(v) for v in (ElementClass.WINDOW, ElementClass.
 
 
 def test_window_x_avoids_zones_entrance_and_wall_end(guard, vocab):
-    g = guard(Mark.WALL, WINDOW)
-    bad = _banned(g, vocab)
-    assert set(range(78, 82)) <= bad and set(range(28, 46)) <= bad
-    assert {n for n in vocab.token if n >= 160} <= bad
-    assert not {0, 27, 46, 50, 77, 82, 159} & bad
+    ok = _allowed(guard(Mark.WALL, WINDOW), vocab)
+    assert ok == set(range(0, 28)) | set(range(46, 78)) | set(range(82, 160))
 
 
 def test_window_width_stops_at_next_busy_span_and_is_remembered(guard, vocab):
-    g = guard(Mark.WALL, WINDOW, 52, 10)
-    bad = _banned(g, vocab)
-    assert 26 not in bad and 27 in bad          # 52 + 26 = 78 — край зоны: касаться можно
+    # 52 + 26 = 78 — край зоны: касаться можно; ширина 0 — не окно
+    assert _allowed(guard(Mark.WALL, WINDOW, 52, 10), vocab) == set(range(1, 27))
     g = guard(Mark.WALL, WINDOW, 52, 10, 20, 30, WINDOW)
-    assert set(range(52, 72)) <= _banned(g, vocab)   # поставленное окно 52–72 занято
+    assert not set(range(52, 72)) & _allowed(g, vocab)   # поставленное окно 52–72 занято
 
 
 def test_no_bans_outside_window_box(guard):
