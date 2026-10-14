@@ -37,8 +37,9 @@
 
 Шаг 7 (окна в 3D-конвертер GenPlan) — позже, вместе с Егором (спека integration).
 
-У стаба и модели на шагах 1 и 4 один интерфейс (`models/stub.py`: `spec_model(text)`,
-`layout_model(wall, ctx)`), поэтому модель заменяет стаб без правок остального кода.
+У стаба и модели шага 1 один интерфейс (`models/stub.py`: `spec_model(text)`). Модель шага 4
+отвечает сразу за весь дом (`models/layout.py`, gf#107): конвейер берёт её, если есть чекпойнт
+(`config/models.toml`), иначе стаб `layout_all`; брак модели — заново с новым seed.
 
 ### Вокруг конвейера
 
@@ -59,7 +60,7 @@ diploma/
 │   ├── schema.py
 │   ├── config/      library.toml  sheet.toml  sheet.css  viewer.toml  plan.toml  checks.toml
 │   │                — только настройки приложения
-│   ├── models/      stub.py  stub_data/ — стабы моделей шагов 1 и 4, потом сами модели
+│   ├── models/      stub.py  stub_data/ — стабы шагов 1 и 4; layout.py — модель шага 4
 │   ├── plan/        genplan_svg.py  gaps.py  outline.py  sides.py  preprocess.py
 │   ├── unfold.py
 │   ├── snap.py  validate.py

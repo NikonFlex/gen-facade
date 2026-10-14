@@ -15,14 +15,16 @@ from typing import NamedTuple
 
 from pydantic import BaseModel
 
-from genfacade.config import Config
+from genfacade.config import Config, LayoutModel
 from genfacade.models import stub
+from genfacade.models.stub import ModelError
 from genfacade.plan.preprocess import preprocess
 from genfacade.render.plan_svg import plan_svg
 from genfacade.render.preview import to_png
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import FacadeSheet, HouseSpec, Mode, Plan, SideFacade
+from genfacade.schema import FacadeSheet, HouseSpec, Mode, Plan, SideFacade, Violation
 from genfacade.snap import snap
+from genfacade.train.tokens import TokenError
 from genfacade.unfold import unfold
 from genfacade.validate import errors, validate
 
@@ -54,7 +56,8 @@ RUN_ID = re.compile(r"^[\w.-]+$")  # имя папки прогона: без / 
 class PlanRun(BaseModel):
     """Запрос на прогон (спека task, «Запрос»): план — имя или путь, откуда он пришёл.
 
-    seed нет: до модели всё детерминировано; появится с ней (этап 4, хозяин 30.09).
+    seed запроса нет: попытки модели идут с seed из config/models.toml, какой сработал —
+    в meta.json («layout»).
     """
 
     plan: str
@@ -80,21 +83,72 @@ def generate(req: PlanRun, svg: str, out: Path, cfg: Config) -> Path:
     (out / INPUT_PLAN).write_text(svg)
     (out / REQUEST).write_text(req.model_dump_json(indent=2))
     bare = _prepare(req, svg, out, cfg)
-    # Шаги 4–5. Брак не перегенерируем: стаб детерминирован, повтор дал бы то же самое;
-    # `generation: Брак — заново` вернётся с моделью. Нарушения — в трассу.
-    raw = stub.layout_all(bare, stub.LayoutContext(bare.spec, req.mode, req.text))
-    sheet = snap(raw, cfg.checks)
-    violations = validate(sheet, cfg.checks)
+    raw, sheet, violations, layout = _layout(bare, req, cfg)
     (out / LAYOUT).write_text(sheet_svg(raw, cfg, violations=[], annotations=False))
     (out / SNAPPED).write_text(sheet_svg(sheet, cfg, violations=violations, annotations=False))
     (out / VIOLATIONS).write_text(json.dumps(
         [v.model_dump() for v in violations], ensure_ascii=False, indent=2))
     extra = {
         "source": req.plan, "input": REQUEST, "plan_input": INPUT_PLAN, "violations": VIOLATIONS,
-        "request": req.model_dump(),
+        "request": req.model_dump(), "layout": layout,
         "errors": len(errors(violations)), "warnings": len(violations) - len(errors(violations)),
     }
     return finish(sheet, out, cfg, extra)
+
+
+class Checked(NamedTuple):
+    """Шаги 4–5: ответ модели, он же после привязки, нарушения и как он получен (в meta.json)."""
+
+    raw: FacadeSheet
+    sheet: FacadeSheet
+    violations: list[Violation]
+    layout: dict
+
+
+def _layout(bare: FacadeSheet, req: PlanRun, cfg: Config) -> Checked:
+    """Шаги 4–5. Обученная модель (config/models.toml), если чекпойнт есть, иначе стаб.
+    Брак модели — ответ не разобран или ошибка валидатора — генерация заново с новым seed
+    (`generation: Брак — заново`); стаб детерминирован, его не повторяем."""
+    settings = cfg.models.layout
+    model = trained_model(settings)
+    if model is None:
+        raw = stub.layout_all(bare, stub.LayoutContext(bare.spec, req.mode, req.text))
+        return _check(raw, cfg, {"model": "stub", "attempts": []})
+    prompt = model.prompt(bare, req.mode, cfg)
+    attempts: list[dict] = []
+    trace = {"model": str(settings.checkpoint), "attempts": attempts}
+    for seed in range(settings.seed, settings.seed + settings.attempts):
+        try:
+            result = _check(model.answer(prompt, bare, seed, cfg), cfg, trace)
+        except TokenError as e:
+            attempts.append({"seed": seed, "error": f"ответ не разобран: {e}"})
+            continue
+        bad = errors(result.violations)
+        attempts.append({"seed": seed, "error": _rejected(bad) if bad else None})
+        if not bad:
+            return result
+    raise ModelError(f"за {settings.attempts} попыток нет годного ответа; последняя причина — "
+                     f"{attempts[-1]['error']}")
+
+
+def trained_model(settings: LayoutModel):
+    """Обученная модель шага 4 или None, если чекпойнта нет. Тесты подменяют эту функцию:
+    конвейер не зависит от файлов на диске."""
+    if not settings.checkpoint.is_file():
+        return None
+    # torch — в группе [train]: без обученной модели конвейер его не тянет.
+    from genfacade.models import layout
+
+    return layout.load(settings)
+
+
+def _check(raw: FacadeSheet, cfg: Config, trace: dict) -> Checked:
+    sheet = snap(raw, cfg.checks)
+    return Checked(raw, sheet, validate(sheet, cfg.checks), trace)
+
+
+def _rejected(bad: list[Violation]) -> str:
+    return f"ошибок валидатора {len(bad)}, первая — {bad[0].rule}: {bad[0].message}"
 
 
 def walls(spec: HouseSpec, plan: Plan) -> FacadeSheet:

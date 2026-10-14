@@ -9,11 +9,18 @@ import json
 import pytest
 from simple_house import SIMPLE
 
-from genfacade import config
+from genfacade import config, pipeline
 from genfacade.models import stub
 from genfacade.pipeline import walls
 from genfacade.plan.preprocess import preprocess
 from genfacade.schema import Description, FacadeSheet, Mode, Sample, Source, Split, TextKind
+
+
+@pytest.fixture(autouse=True)
+def stub_layout(monkeypatch):
+    """Конвейер — на стабе шага 4, даже если в data/models лежит обученная модель: тесты не
+    зависят от файлов на диске. Тест модели подменяет `pipeline.trained_model` сам."""
+    monkeypatch.setattr(pipeline, "trained_model", lambda settings: None)
 
 
 @pytest.fixture(scope="session")

@@ -155,6 +155,20 @@ def test_snap_keeps_plan_windows(lay_out, cfg):
     assert _window(snapped, floor=2).x_m == pytest.approx(plan_w.x_m)
 
 
+def test_snap_returns_plan_window_to_its_opening(lay_out, cfg):
+    """Режим 2: место и ширину окна задаёт план — модель поставила их неточно, шаг 5 ставит
+    окно на проём плана, подоконник едет следом (`generation: Проёмы плана на месте`)."""
+    sheet = lay_out()
+    w = _window(sheet, floor=1)
+    sill_dx = _sill(sheet, w.id).x_m - w.x_m
+    off = _edit(sheet, SIDE, w.id, x_m=w.x_m + 0.1, w_m=w.w_m - 0.2)
+    assert Rule.PLAN_OPENING in _rules(off, cfg)
+    snapped = snap(off, cfg.checks)
+    assert _window(snapped, floor=1) == w
+    assert _sill(snapped, w.id).x_m - w.x_m == pytest.approx(sill_dx - 0.1)
+    assert Rule.PLAN_OPENING not in _rules(snapped, cfg)
+
+
 def test_snap_centers_model_windows_on_common_axis(clean, cfg):
     """Режим 1: окна ставит модель (без `fixed`) — ось группы — медиана центров, а не левых краёв.
 
