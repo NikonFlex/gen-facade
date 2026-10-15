@@ -367,6 +367,25 @@ class Models(Section):
     layout: LayoutModel
 
 
+class Svd(Section):
+    px_per_m: float
+    k_max: int
+
+
+class Calibrate(Section):
+    reference: int
+
+
+class Metrics(Section):
+    """Метрики оценки (config/metrics.toml, gf#16)."""
+
+    seed: int
+    pairs: int
+    quantile_points: int
+    svd: Svd
+    calibrate: Calibrate
+
+
 class Config(Section):
     library: Library
     sheet: Sheet
@@ -378,6 +397,7 @@ class Config(Section):
     tokens: Tokens
     train: Train
     models: Models
+    metrics: Metrics
     css: str
 
 
@@ -397,6 +417,7 @@ def load(user_dir: Path | None = None) -> Config:
         tokens=Tokens(**_toml("tokens.toml", user_dir)),
         train=Train(**_toml("train.toml", user_dir)),
         models=Models(**_toml("models.toml", user_dir)),
+        metrics=Metrics(**_toml("metrics.toml", user_dir)),
         css=css,
     )
 

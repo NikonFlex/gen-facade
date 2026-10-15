@@ -264,6 +264,14 @@ def bare(sheet: FacadeSheet) -> FacadeSheet:
     return sheet.model_copy(update={"facades": walls})
 
 
+def given_sides(sheet: FacadeSheet, mode: Mode) -> FacadeSheet:
+    """Дом, у сторон которого только проёмы условия этого режима. В глухом режиме окна плана
+    заделаны (шаг 2) — валидатор не должен требовать их на фасаде."""
+    facades = [f.model_copy(update={"side": f.side.model_copy(update={"openings": [
+        o for o in f.side.openings if given(o.kind, mode)]})}) for f in sheet.facades]
+    return sheet.model_copy(update={"facades": facades})
+
+
 def _wall(r: _Reader, wall: SideFacade) -> SideFacade:
     r.expect(Mark.WALL)
     elements: list[Element] = []

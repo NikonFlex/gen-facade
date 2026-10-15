@@ -1,4 +1,5 @@
-"""Командная строка: genfacade run <план.svg> --text …, serve, synth, tokens, train, eval."""
+"""Командная строка: genfacade run <план.svg> --text …, serve, synth, tokens, train, eval,
+metrics, calibrate."""
 
 import argparse
 import sys
@@ -51,6 +52,24 @@ def eval_model(args: argparse.Namespace) -> Path:
     return evaluate.run(args.source, cfg, out)
 
 
+def metrics_table(args: argparse.Namespace) -> Path:
+    """Папки листов → таблица метрик против эталона (`evaluation: Метрики одной командой`)."""
+    from genfacade.metrics import table
+
+    cfg = config.load(args.config)
+    out = args.out or pipeline.new_run_dir(cfg.train.paths.runs_dir, "metrics")
+    return table.run(args.folders, args.reference, cfg, out)
+
+
+def metrics_calibrate(args: argparse.Namespace) -> Path:
+    """Эталон генератора против подмен на val источника: каждая метрика их различает."""
+    from genfacade.metrics import calibrate
+
+    cfg = config.load(args.config)
+    out = args.out or pipeline.new_run_dir(cfg.train.paths.runs_dir, f"calibrate-{args.source}")
+    return calibrate.run(args.source, cfg, out)
+
+
 def serve(config_dir: Path | None) -> None:
     # uvicorn и fastapi — в группе [viewer]: без смотрелки пакет их не тянет.
     import uvicorn
@@ -95,6 +114,17 @@ def _parser() -> argparse.ArgumentParser:
     _source(e)
     e.add_argument("-o", "--out", type=Path,
                    help="папка оценки; по умолчанию runs_dir/<время>-eval-<источник>")
+    m = sub.add_parser("metrics", help="папки листов фасадов → таблица метрик против эталона")
+    m.add_argument("folders", type=Path, nargs="+",
+                   help="папки <дом>.json: строка таблицы на папку")
+    m.add_argument("-r", "--reference", type=Path, required=True,
+                   help="папка эталонных листов: распределение структуры и разброс признаков")
+    m.add_argument("-o", "--out", type=Path,
+                   help="папка metrics.json; по умолчанию runs_dir/<время>-metrics")
+    k = sub.add_parser("calibrate", help="эталон генератора против подмен: таблица метрик на val")
+    _source(k)
+    k.add_argument("-o", "--out", type=Path,
+                   help="папка подмен и таблиц; по умолчанию runs_dir/<время>-calibrate-<источник>")
     return parser
 
 
@@ -105,6 +135,8 @@ COMMANDS = {
     "train": (train, {corpus.CorpusError: "обучение не начато"}),
     "eval": (eval_model, {corpus.CorpusError: "оценка не начата",
                           ModelError: "модель не загружена"}),
+    "metrics": (metrics_table, {}),
+    "calibrate": (metrics_calibrate, {}),
     "run": (run, {PlanError: "план отклонён", ModelError: "модель не ответила"}),
 }
 
