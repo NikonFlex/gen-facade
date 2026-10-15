@@ -10,6 +10,10 @@
 - статистика стен — окон на стену, глухие стены, размеры окон, зоны — против эталона тех же домов;
 - дословные повторы ответов train;
 - реакция на условие: число окон на стене против эталона того же дома и против длины стены.
+
+Ответы после привязки (шаг 5) выгружаются листами для `genfacade metrics` (gf#16):
+
+    <out>/sheets/<кто>/<режим>/<дом>.json   — лист; неразобранный ответ — {"error": "…"}
 """
 
 import json
@@ -36,6 +40,7 @@ from genfacade.train.tokens import TokenError
 from genfacade.validate import errors, validate
 
 EVAL = "eval.json"
+SHEETS = "sheets"
 MODEL, CONSTRAINED, REFERENCE, UNTRAINED = "model", "constrained", "reference", "untrained"
 WHO = (MODEL, CONSTRAINED, REFERENCE, UNTRAINED)  # строки таблицы; constrained — с запретом gf#132
 
@@ -69,12 +74,8 @@ def cases(part: fit.Sequences, rows: list[int], source: Source, cfg: Config) -> 
 
 def _as_input(sheet: FacadeSheet, mode: Mode) -> FacadeSheet:
     """Стены дома такими, какими их видит модель в этом режиме: без элементов, а на сторонах —
-    только проёмы условия. В глухом режиме окна плана заделаны (шаг 2) — валидатор не должен
-    требовать их на фасаде."""
-    bare = tokens.bare(sheet)
-    facades = [f.model_copy(update={"side": f.side.model_copy(update={"openings": [
-        o for o in f.side.openings if tokens.given(o.kind, mode)]})}) for f in bare.facades]
-    return bare.model_copy(update={"facades": facades})
+    только проёмы условия."""
+    return tokens.bare(tokens.given_sides(sheet, mode))
 
 
 def judge(ids: list[int], case: Case, words: list[str], cfg: Config) -> Judged:
@@ -190,6 +191,8 @@ def run(source: Source, cfg: Config, out: Path) -> Path:
     ev = Evaluation(data, cases(data.parts[Split.VAL], rows, source, cfg), cfg)
     result, seconds = _reports(ev, trained.sampler, cfg)
     report = {who: r for who, (r, _) in result.items()}
+    for who, (_, judged) in result.items():
+        dump(judged, ev.group, out / SHEETS / who, cfg)
     report["compare"] = _compare({w: result[w][1] for w in (MODEL, CONSTRAINED, REFERENCE)},
                                  ev.group)
     report["seconds_per_answer"] = round(seconds / len(ev.group), 3)
@@ -198,6 +201,16 @@ def run(source: Source, cfg: Config, out: Path) -> Path:
     (out / EVAL).write_text(json.dumps(report, ensure_ascii=False, indent=2))
     print(table(report))
     return out / EVAL
+
+
+def dump(judged: list[Judged], group: list[Case], out: Path, cfg: Config) -> None:
+    """Листы ответов после привязки, как их отдаёт конвейер, — по папке на режим."""
+    for j, c in zip(judged, group, strict=False):
+        folder = out / c.mode
+        folder.mkdir(parents=True, exist_ok=True)
+        text = (json.dumps({"error": j.error}, ensure_ascii=False) if j.sheet is None
+                else snap(j.sheet, cfg.checks).model_dump_json())
+        (folder / f"{c.sample}.json").write_text(text)
 
 
 def _reports(ev: Evaluation, sampler: sampling.Sampler, cfg: Config) -> tuple[dict, float]:

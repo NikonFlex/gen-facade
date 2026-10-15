@@ -8,6 +8,7 @@ import pytest
 import tiny_model
 
 from genfacade.datasets.synthetic import batch
+from genfacade.metrics import table
 from genfacade.schema import Device, Mode, OpeningKind, Source, Split
 from genfacade.train import corpus, evaluate, fit
 
@@ -73,3 +74,15 @@ def test_eval_writes_report_for_model_reference_and_untrained(setup, tmp_path):
     assert report["untrained"]["all"]["count"] == setup.train.eval.untrained
     assert report["model"]["all"]["count"] == report["reference"]["all"]["count"]
     assert set(report["compare"]) == set(Mode)
+
+
+def test_eval_dumps_sheets_for_metrics(setup, tmp_path):
+    """Листы ответов — по папке на кого и режим (gf#16): эталон проходит метрики, ответы
+    необученной модели не разбираются — нижний край доли валидных."""
+    out = evaluate.run(Source.SYNTHETIC, setup, tmp_path / "eval").parent / evaluate.SHEETS
+    ref = out / evaluate.REFERENCE / Mode.BLIND
+    rows = {who: table.row(table.load(out / who / Mode.BLIND, setup),
+                           table.reference(table.load(ref, setup)), setup)
+            for who in (evaluate.REFERENCE, evaluate.UNTRAINED)}
+    assert (rows["reference"]["valid"], rows["reference"]["plan"]) == (1.0, 1.0)
+    assert rows["untrained"]["valid"] == 0.0
