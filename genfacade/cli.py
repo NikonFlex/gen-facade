@@ -1,11 +1,12 @@
 """Командная строка: genfacade run <план.svg> --text …, serve, synth, tokens, train, eval,
-metrics, calibrate."""
+metrics, calibrate, baseline."""
 
 import argparse
 import sys
 from pathlib import Path
 
 from genfacade import config, pipeline
+from genfacade.baselines import Baseline
 from genfacade.datasets.synthetic import batch
 from genfacade.models.stub import ModelError
 from genfacade.plan.genplan_svg import PlanError
@@ -70,6 +71,13 @@ def metrics_calibrate(args: argparse.Namespace) -> Path:
     return calibrate.run(args.source, cfg, out)
 
 
+def baseline(args: argparse.Namespace) -> Path:
+    """Листы папки → фасады базового подхода на тех же домах (`evaluation: Базовые подходы`)."""
+    from genfacade import baselines
+
+    return baselines.run(args.name, args.source_dir, config.load(args.config), args.out)
+
+
 def serve(config_dir: Path | None) -> None:
     # uvicorn и fastapi — в группе [viewer]: без смотрелки пакет их не тянет.
     import uvicorn
@@ -125,6 +133,11 @@ def _parser() -> argparse.ArgumentParser:
     _source(k)
     k.add_argument("-o", "--out", type=Path,
                    help="папка подмен и таблиц; по умолчанию runs_dir/<время>-calibrate-<источник>")
+    b = sub.add_parser("baseline", help="папка листов → фасады базового подхода на тех же домах")
+    b.add_argument("name", choices=list(Baseline), type=Baseline, help="базовый подход")
+    b.add_argument("source_dir", type=Path,
+                   help="папка листов <дом>.json: берутся стены, условие режима, параметры дома")
+    b.add_argument("-o", "--out", type=Path, required=True, help="папка фасадов базового подхода")
     return parser
 
 
@@ -136,6 +149,7 @@ COMMANDS = {
     "eval": (eval_model, {corpus.CorpusError: "оценка не начата",
                           ModelError: "модель не загружена"}),
     "metrics": (metrics_table, {}),
+    "baseline": (baseline, {}),
     "calibrate": (metrics_calibrate, {}),
     "run": (run, {PlanError: "план отклонён", ModelError: "модель не ответила"}),
 }

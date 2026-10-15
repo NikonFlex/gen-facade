@@ -386,6 +386,16 @@ class Metrics(Section):
     calibrate: Calibrate
 
 
+class GenPlanRule(Section):
+    window: tuple[float, float]
+
+
+class Baselines(Section):
+    """Базовые подходы (config/baselines.toml, `evaluation: Базовые подходы`)."""
+
+    genplan: GenPlanRule
+
+
 class Config(Section):
     library: Library
     sheet: Sheet
@@ -398,6 +408,7 @@ class Config(Section):
     train: Train
     models: Models
     metrics: Metrics
+    baselines: Baselines
     css: str
 
 
@@ -418,6 +429,7 @@ def load(user_dir: Path | None = None) -> Config:
         train=Train(**_toml("train.toml", user_dir)),
         models=Models(**_toml("models.toml", user_dir)),
         metrics=Metrics(**_toml("metrics.toml", user_dir)),
+        baselines=Baselines(**_toml("baselines.toml", user_dir)),
         css=css,
     )
 

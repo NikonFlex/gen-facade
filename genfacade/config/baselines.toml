@@ -1,0 +1,6 @@
+# Базовые подходы для таблицы метрик (`evaluation: Базовые подходы`).
+
+[genplan]   # правило GenPlan (gf#141): окна — разрывы плана, высота одна на дом
+# Низ и верх окна — доли высоты этажа от его пола: WindowSizeType.STANDARD GenPlan
+# (dto/enum/window_size_type.py, docs/decisions.md 30.09). Текст не читается — уровень один.
+window = [0.2, 0.9]
