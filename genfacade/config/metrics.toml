@@ -10,3 +10,29 @@ k_max = 25            # rank-k приближения k = 1..k_max, как в с
 
 [calibrate]           # genfacade calibrate: эталон генератора против подмен
 reference = 1000      # домов train — эталонное распределение структуры и разнообразия
+
+[visual]              # FID и KID по растрам стен (gf#143): маска классов, а не оформленный лист
+px_per_m = 20         # шаг растра
+canvas_m = [16, 8]    # холст стены, м: стена — от левого нижнего угла; не влезает — уменьшается
+batch = 32            # растров за проход Inception
+device = "auto"       # где считать Inception: auto — GPU, если PyTorch его видит
+kid_subset = 1000     # размер подвыборки KID; меньше растров в папке — берётся сколько есть
+kid_subsets = 100     # подвыборок KID: число — среднее по ним
+background = "#000000" # холст вне стены
+
+[visual.colors]       # цвет класса на маске; facade — сама стена, элементы — поверх в порядке листа
+facade = "#0000ff"
+window = "#0055ff"
+door = "#00aaff"
+cornice = "#00ffff"
+sill = "#55ffaa"
+balcony = "#aaff55"
+blind = "#ffff00"
+deco = "#ffaa00"
+molding = "#ff5500"
+pillar = "#ff0000"
+shop = "#aa0000"
+garage_door = "#aa00aa"
+porch = "#ff55ff"
+chimney = "#888888"
+canopy = "#55aa55"

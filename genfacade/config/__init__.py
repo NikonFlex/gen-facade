@@ -376,14 +376,26 @@ class Calibrate(Section):
     reference: int
 
 
+class Visual(Section):
+    px_per_m: float
+    canvas_m: tuple[float, float]
+    batch: int
+    device: Device
+    kid_subset: int
+    kid_subsets: int
+    background: str
+    colors: dict[ElementClass, str]  # опечатка в классе элемента — ошибка загрузки
+
+
 class Metrics(Section):
-    """Метрики оценки (config/metrics.toml, gf#16)."""
+    """Метрики оценки (config/metrics.toml, gf#16, gf#143)."""
 
     seed: int
     pairs: int
     quantile_points: int
     svd: Svd
     calibrate: Calibrate
+    visual: Visual
 
 
 class GenPlanRule(Section):

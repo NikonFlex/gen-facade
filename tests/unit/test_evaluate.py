@@ -82,7 +82,7 @@ def test_eval_dumps_sheets_for_metrics(setup, tmp_path):
     out = evaluate.run(Source.SYNTHETIC, setup, tmp_path / "eval").parent / evaluate.SHEETS
     ref = out / evaluate.REFERENCE / Mode.BLIND
     rows = {who: table.row(table.load(out / who / Mode.BLIND, setup),
-                           table.reference(table.load(ref, setup)), setup)
+                           table.reference(table.load(ref, setup), setup), setup)
             for who in (evaluate.REFERENCE, evaluate.UNTRAINED)}
     assert (rows["reference"]["valid"], rows["reference"]["plan"]) == (1.0, 1.0)
     assert rows["untrained"]["valid"] == 0.0
