@@ -5,7 +5,7 @@
     <папка>/<дом>.json   — лист фасадов (FacadeSheet); ответ, который не разобрался, —
                            любой другой JSON, например {"error": "…"}: он считается невалидным
 
-Группы ТЗ без визуального сходства (FID/KID — второй заход) и две свои:
+Пять групп ТЗ и две свои:
 - valid       — доля домов, у которых лист разобран и его SVG читается обратно;
 - geometry    — доля домов без ошибок геометрии: выход за стену, пересечение проёмов, SVG;
 - plan        — согласованность с планом: проёмы плана на месте, запретные зоны пусты, углы;
@@ -14,11 +14,14 @@
 - diversity   — среднее расстояние между раскладками случайных пар стен, признаки — в долях
                 разброса эталона;
 - description — доля выполненных требований описания, видных на чертеже;
+- fid, kid    — визуальное сходство растров стен с эталоном (visual.py, gf#143); меньше — ближе;
+                считаются по разобранным листам, без torch-fidelity — None;
 - svd         — SVD-метрика Beyond Segmentation, вспомогательная: рядом окна на стену.
 Доли — от всех домов папки: неразобранный дом не проходит ни одной проверки.
 """
 
 import json
+import sys
 from pathlib import Path
 from statistics import mean, pstdev
 from typing import NamedTuple
@@ -27,7 +30,7 @@ import numpy
 from pydantic import ValidationError
 
 from genfacade.config import Config
-from genfacade.metrics import measures
+from genfacade.metrics import measures, visual
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import FacadeSheet, Rule, Violation
 from genfacade.validate import errors, validate_svg
@@ -35,8 +38,8 @@ from genfacade.validate import errors, validate_svg
 METRICS = "metrics.json"
 GEOMETRY = {Rule.SVG_PARSE, Rule.OUTSIDE, Rule.OVERLAP}
 PLAN = {Rule.PLAN_OPENING, Rule.FORBIDDEN, Rule.CORNER}
-COLUMNS = ("valid", "geometry", "plan", "structure", "diversity", "description", "svd",
-           "windows_per_wall")
+COLUMNS = ("valid", "geometry", "plan", "structure", "diversity", "description", "fid", "kid",
+           "svd", "windows_per_wall")
 
 
 class Item(NamedTuple):
@@ -48,10 +51,12 @@ class Item(NamedTuple):
 
 
 class Reference(NamedTuple):
-    """Эталон: значения величин структуры и разброс признаков стен."""
+    """Эталон: значения величин структуры, разброс признаков стен и признаки Inception
+    растров стен (None — torch-fidelity не установлен)."""
 
     structure: dict[str, list[float]]
     scale: list[float]
+    inception: numpy.ndarray | None
 
 
 def load(folder: Path, cfg: Config) -> list[Item]:
@@ -68,11 +73,17 @@ def _item(path: Path, cfg: Config) -> Item:
     return Item(path.stem, sheet, errors(validate_svg(svg, sheet, cfg.checks)))
 
 
-def reference(items: list[Item]) -> Reference:
+def reference(items: list[Item], cfg: Config) -> Reference:
     sheets = _sheets(items)
     walls = [measures.features(f, s.spec) for s in sheets for f in s.facades]
     scale = [pstdev(col) or 1.0 for col in zip(*walls, strict=True)] if walls else [1.0] * 5
-    return Reference(measures.structure(sheets), scale)
+    return Reference(measures.structure(sheets), scale, _inception(sheets, cfg))
+
+
+def _inception(sheets: list[FacadeSheet], cfg: Config) -> numpy.ndarray | None:
+    if not visual.available():
+        return None
+    return visual.features(visual.masks(sheets, cfg.metrics.visual), cfg.metrics.visual)
 
 
 def _sheets(items: list[Item]) -> list[FacadeSheet]:
@@ -96,11 +107,19 @@ def row(items: list[Item], ref: Reference, cfg: Config) -> dict:
         "structure": _mean([d for d in distances.values() if d is not None]),
         "diversity": _diversity(walls, ref, cfg),
         "description": _mean(list(checks.values())),
+        **_visual(sheets, ref, cfg),
         "svd": _mean([measures.svd_score(f, spec, cfg.metrics.svd) for f, spec in walls]),
         "windows_per_wall": _mean([len(measures.windows(f)) for f, _ in walls]),
         "details": {"structure": distances, "description": checks,
                     "errors": _counts(items)},
     }
+
+
+def _visual(sheets: list[FacadeSheet], ref: Reference, cfg: Config) -> dict:
+    ours = _inception(sheets, cfg)
+    if ours is None or ref.inception is None:
+        return {"fid": None, "kid": None}
+    return visual.scores(ours, ref.inception, cfg.metrics.visual)
 
 
 def _rules(item: Item) -> set[Rule]:
@@ -148,7 +167,10 @@ def _mean(values: list[float]) -> float | None:
 
 def run(folders: list[Path], ref_folder: Path, cfg: Config, out: Path) -> Path:
     """Строка на папку против эталона из ref_folder → metrics.json в out и таблица в консоль."""
-    ref = reference(load(ref_folder, cfg))
+    if not visual.available():
+        print("fid и kid не считаются: нет torch-fidelity — pip install -e '.[visual]'",
+              file=sys.stderr)
+    ref = reference(load(ref_folder, cfg), cfg)
     report = {"reference": str(ref_folder),
               "rows": {str(f): row(load(f, cfg), ref, cfg) for f in folders}}
     out.mkdir(parents=True, exist_ok=True)

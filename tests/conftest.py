@@ -11,6 +11,8 @@ import pytest
 from simple_house import SIMPLE
 
 from genfacade import config, pipeline
+from genfacade.datasets.synthetic import batch
+from genfacade.metrics import visual
 from genfacade.models import stub
 from genfacade.pipeline import walls
 from genfacade.plan.preprocess import preprocess
@@ -19,6 +21,30 @@ from genfacade.schema import Description, FacadeSheet, Mode, Sample, Source, Spl
 # Обучение и модель — в группе [train] с torch; CI её не ставит, и там эти тесты не собираются.
 collect_ignore = [] if find_spec("torch") else [
     "unit/test_fit.py", "unit/test_sampling.py", "unit/test_evaluate.py"]
+# FID и KID — в группе [visual] с torch-fidelity; CI её не ставит.
+collect_ignore += [] if find_spec("torch_fidelity") else ["unit/test_visual.py"]
+
+
+@pytest.fixture(autouse=True)
+def no_inception(monkeypatch):
+    """FID и KID в таблице — None: Inception на CPU — секунды на растр, а torch есть не везде.
+    Прибор FID/KID проверяет tests/unit/test_visual.py, вызывая его напрямую."""
+    monkeypatch.setattr(visual, "available", lambda: False)
+
+
+@pytest.fixture(scope="module")
+def half_val(tmp_path_factory):
+    """Сборка синтетических домов в своём конфиге, половина — в val: houses → конфиг."""
+    def build(houses: int) -> config.Config:
+        root = tmp_path_factory.mktemp("synthetic")
+        folder = root / "cfg"
+        folder.mkdir()
+        (folder / "data.toml").write_text(f'[paths]\nsamples_dir = "{root / "data"}"\n')
+        (folder / "synthetic.toml").write_text("[build]\nval_share = 0.5\n")
+        cfg = config.load(folder)
+        batch.run(range(houses), cfg)
+        return cfg
+    return build
 
 
 @pytest.fixture(autouse=True)

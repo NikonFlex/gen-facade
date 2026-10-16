@@ -4,14 +4,14 @@ name: gpu
 # (gf#106, устройство машины — в низу docs/tasks/gf-0106.md). Только вручную: workflow_dispatch
 # запускает лишь тот, у кого есть запись в репо, а PR из форка ждут апрува хозяина
 # (approval_policy: all_external_contributors). Обучение — только после «обучай» хозяина;
-# оценка (eval) — тоже на его машине, запуск согласуется с ним.
+# оценка (eval) и метрики с FID и KID (visual) — тоже на его машине, запуск согласуется с ним.
 on:
   workflow_dispatch:
     inputs:
       job:
-        description: "probe — проверить GPU; train — обучить модель шага 4; eval — оценить её на val"
+        description: "probe — проверить GPU; train — обучить модель шага 4; eval — оценить её на val; visual — таблица метрик с FID и KID"
         type: choice
-        options: [probe, train, eval]
+        options: [probe, train, eval, visual]
         default: probe
       houses:
         description: "train: сколько синтетических домов в корпусе (собранные раньше не пересобираются)"
@@ -25,10 +25,14 @@ on:
         description: "eval: номер запуска train, чью модель оценивать (артефакт train-<номер>)"
         type: string
         default: "38560937357"
+      eval_run:
+        description: "visual: номер запуска eval, чьи листы считать (артефакт eval-<номер>)"
+        type: string
+        default: "38811282415"
 
 permissions:
   contents: read
-  actions: read   # eval скачивает модель — артефакт другого запуска
+  actions: read   # eval скачивает модель, visual — листы оценки: артефакты других запусков
 
 # Видюха одна: следующий запуск ждёт предыдущего, а не отменяет его.
 concurrency:
@@ -38,6 +42,8 @@ concurrency:
 env:
   # Драйвер на машине — 581.42, держит CUDA до 13.0.
   TORCH: torch==2.14.1
+  # torchvision — для torch-fidelity (FID, KID); с того же индекса, иначе pip заменит torch на сборку с PyPI.
+  TORCHVISION: torchvision==0.29.1
   TORCH_INDEX: https://download.pytorch.org/whl/cu130
   VENV: /home/runner/venvs/genfacade
   # Дома и корпус переживают запуски: checkout чистит рабочую папку, а сборка 10 000 домов — минуты.
@@ -61,8 +67,8 @@ jobs:
         run: |
           python3 -m venv "$VENV"
           "$VENV/bin/pip" install -q --upgrade pip
-          "$VENV/bin/pip" install -q "$TORCH" --index-url "$TORCH_INDEX"
-          "$VENV/bin/pip" install -q -e ".[train]"
+          "$VENV/bin/pip" install -q "$TORCH" "$TORCHVISION" --index-url "$TORCH_INDEX"
+          "$VENV/bin/pip" install -q -e ".[train,visual]"
           echo "$VENV/bin" >> "$GITHUB_PATH"
 
       - name: PyTorch видит GPU
@@ -142,4 +148,36 @@ jobs:
         with:
           name: eval-${{ github.run_id }}
           path: ${{ env.OUT }}
+          if-no-files-found: ignore
+
+      - name: Листы оценки
+        if: inputs.job == 'visual'
+        uses: actions/download-artifact@v8
+        with:
+          name: eval-${{ inputs.eval_run }}
+          path: eval
+          run-id: ${{ inputs.eval_run }}
+          github-token: ${{ github.token }}
+
+      - name: Метрики с FID и KID
+        if: inputs.job == 'visual'
+        # Калибровка — эталон train и подмены на val (gf#16); строки — ответы оценки и правило
+        # GenPlan на тех же домах (gf#141) против того же эталона train. Inception — на GPU.
+        run: |
+          mkdir -p "$OUT"
+          genfacade -c "$DATA_CONFIG" calibrate -o "$OUT/calibrate"
+          for mode in blind with_openings; do
+            genfacade baseline genplan "eval/sheets/reference/$mode" -o "$OUT/genplan/$mode"
+            genfacade metrics eval/sheets/{reference,model,constrained,untrained}/$mode \
+              "$OUT/genplan/$mode" -r "$OUT/calibrate/$mode/reference" -o "$OUT/rows/$mode"
+          done
+
+      - name: Результат метрик
+        if: always() && inputs.job == 'visual'
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-${{ github.run_id }}
+          path: |
+            ${{ env.OUT }}/calibrate/*/metrics.json
+            ${{ env.OUT }}/rows/*/metrics.json
           if-no-files-found: ignore

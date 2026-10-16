@@ -20,6 +20,8 @@ dev = ["pytest", "pytest-testmon>=2.2", "ruff", "pyyaml>=6", "httpx2", "genfacad
 viewer = ["fastapi>=0.142", "uvicorn>=0.54"]
 # обучение — отдельно, чтобы CI и смотрелка не тянули torch; matplotlib — кривая потерь
 train = ["torch", "matplotlib"]
+# FID и KID в таблице метрик (gf#143): Inception torch-fidelity; без них колонки — None
+visual = ["torch", "torch-fidelity>=0.4"]
 
 [tool.setuptools.packages.find]
 include = ["genfacade*"]

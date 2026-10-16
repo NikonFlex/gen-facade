@@ -11,28 +11,17 @@ import json
 import pytest
 
 from genfacade.cli import main
-from genfacade.datasets.synthetic import batch
-from genfacade.metrics import calibrate, measures, table
+from genfacade.metrics import calibrate, measures, table, visual
 from genfacade.schema import ElementClass, ForbiddenZone, Mode, Source
 from genfacade.unfold import unfold
 
 HOUSES = 12
-VAL_HALF = "[build]\nval_share = 0.5\n"
 
 
 @pytest.fixture(scope="module")
-def calibrated(tmp_path_factory):
+def calibrated(half_val, tmp_path_factory):
     """Дома синтетики (половина в val) и калибровка по ним: строки таблицы по режимам."""
-    from genfacade import config
-
-    root = tmp_path_factory.mktemp("calib")
-    folder = root / "cfg"
-    folder.mkdir()
-    (folder / "data.toml").write_text(f'[paths]\nsamples_dir = "{root / "data"}"\n')
-    (folder / "synthetic.toml").write_text(VAL_HALF)
-    cfg = config.load(folder)
-    batch.run(range(HOUSES), cfg)
-    out = calibrate.run(Source.SYNTHETIC, cfg, root / "out")
+    out = calibrate.run(Source.SYNTHETIC, half_val(HOUSES), tmp_path_factory.mktemp("calib"))
     return {m: {k.rsplit("/", 1)[-1]: r for k, r in
                 json.loads((out / m / table.METRICS).read_text())["rows"].items()} for m in Mode}
 
@@ -78,7 +67,7 @@ def test_unparsed_answer_is_not_valid(cfg, house, tmp_path):
     folder = _folder(tmp_path / "f", [house])
     (folder / "broken.json").write_text(json.dumps({"error": "ждали <end>"}))
     items = table.load(folder, cfg)
-    r = table.row(items, table.reference(items), cfg)
+    r = table.row(items, table.reference(items, cfg), cfg)
     assert (r["valid"], r["geometry"], r["plan"]) == (0.5, 0.5, 0.5)
 
 
@@ -91,7 +80,7 @@ def test_window_in_forbidden_zone_breaks_plan_agreement(cfg, house, tmp_path):
     facades[k] = f.model_copy(update={"side": side})
     bad = house.model_copy(update={"facades": facades})
     items = table.load(_folder(tmp_path / "f", [house, bad]), cfg)
-    r = table.row(items, table.reference(items), cfg)
+    r = table.row(items, table.reference(items, cfg), cfg)
     assert (r["geometry"], r["plan"]) == (1.0, 0.5)
 
 
@@ -119,7 +108,7 @@ def test_two_storey_text_and_one_storey_facade(house):
 
 def test_same_folder_as_reference_is_at_distance_zero(cfg, house, tmp_path):
     items = table.load(_folder(tmp_path / "f", [house, _two_storey(house, upper=True)]), cfg)
-    r = table.row(items, table.reference(items), cfg)
+    r = table.row(items, table.reference(items, cfg), cfg)
     assert r["structure"] == 0.0
 
 
@@ -148,3 +137,36 @@ def test_floor_is_taken_from_height_not_from_field(house):
     f = next(f for f in house.facades if measures.windows(f))
     w = measures.windows(f)[0].model_copy(update={"floor": 2})
     assert w.cls is ElementClass.WINDOW and measures.floor_of(w, house.spec) == 1
+
+
+def _window_wall(house):
+    return next(f for f in house.facades if measures.windows(f))
+
+
+def _pixel(cfg, img, x_m, y_m):
+    """Пиксель растра в точке стены (x, y от левого нижнего угла), метры."""
+    px = cfg.metrics.visual.px_per_m
+    return tuple(img[img.shape[0] - 1 - int(y_m * px), int(x_m * px)])
+
+
+def test_mask_paints_window_where_it_stands(cfg, house):
+    """Растр стены для FID/KID (gf#143): окно — цветом окна на своём месте, низ стены — внизу
+    картинки, за стеной — фон."""
+    v = cfg.metrics.visual
+    f = _window_wall(house)
+    w = measures.windows(f)[0]
+    img = visual.mask(f, house.spec, v)
+    assert img.shape == (round(v.canvas_m[1] * v.px_per_m), round(v.canvas_m[0] * v.px_per_m), 3)
+    assert _pixel(cfg, img, w.x_m + w.w_m / 2, w.y_m + w.h_m * 0.9) == visual.rgb(
+        v.colors[ElementClass.WINDOW])
+    assert _pixel(cfg, img, 0.05, 0.05) == visual.rgb(v.colors[ElementClass.FACADE])
+    assert _pixel(cfg, img, 0.05, house.spec.eaves_m + 0.5) == visual.rgb(v.background)
+
+
+def test_long_wall_is_shrunk_to_canvas(cfg, house):
+    v = cfg.metrics.visual
+    f = _window_wall(house)
+    long = f.model_copy(update={"side": f.side.model_copy(
+        update={"length_m": v.canvas_m[0] * 2})})
+    img = visual.mask(long, house.spec, v)
+    assert tuple(img[-1, -1]) == visual.rgb(v.colors[ElementClass.FACADE])
