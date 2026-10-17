@@ -300,7 +300,8 @@ def _read_element(r: _Reader, cls: ElementClass, index: int) -> Element:
         r.take()
         data["floor"] = r.number()
     if (kind := r.value(VariantKind)) is not None:
-        data["variant"] = OpeningVariant(kind=kind, cols=r.number(), rows=r.number())
+        data["variant"] = _build(OpeningVariant, {"kind": kind, "cols": r.number(),
+                                                  "rows": r.number()}, r)
     if (material := r.value(PaletteRole)) is not None:
         data["material"] = material
     if r.peek() == Mark.PARENT:
