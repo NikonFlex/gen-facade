@@ -11,6 +11,9 @@ from genfacade.train import corpus, fit
 from genfacade.train.gpt import IGNORE
 from genfacade.train.tokens import Mark
 
+# долгий: torch — вне быстрой проверки перед коммитом (gf#165)
+pytestmark = pytest.mark.slow
+
 HOUSES = 6
 TINY = """
 [model]

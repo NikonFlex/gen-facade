@@ -3,12 +3,13 @@
 # (templates/githooks/pre-commit) — список живёт в одном месте.
 #   sh tools/check.sh           полный прогон — CI
 #   sh tools/check.sh --quick   хук перед коммитом: из тестов только те, что затрагивает
-#                               изменённый код (pytest-testmon, база — .testmondata)
+#                               изменённый код (pytest-testmon, база — .testmondata), и без
+#                               долгих (метка slow, pyproject.toml): они — в полном прогоне
 # Код 0 — всё прошло, 1 — что-то упало; у упавших печатается хвост вывода.
 cd "$(dirname "$0")/.." || exit 1
 failed=0
-pytest_args=""
-[ "${1:-}" = "--quick" ] && pytest_args="--testmon"
+quick=""
+[ "${1:-}" = "--quick" ] && quick=1
 
 run() {
     name=$1
@@ -27,7 +28,11 @@ run() {
 # editable-пакет из другой папки. testmon следит за кодом на Python, а не за конфигами и
 # данными, — их ловит полный прогон в CI.
 pytest_or_none() {
-    python3 -m pytest -q $pytest_args
+    if [ -n "$quick" ]; then
+        python3 -m pytest -q --testmon -m "not slow"
+    else
+        python3 -m pytest -q
+    fi
     code=$?
     [ "$code" -eq 0 ] || [ "$code" -eq 5 ]
 }

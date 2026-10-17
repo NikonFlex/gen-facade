@@ -13,6 +13,9 @@ from genfacade.schema import Device, Mode
 from genfacade.train import sampling, tokens
 from genfacade.train.tokens import Mark, TokenError
 
+# долгий: torch — вне быстрой проверки перед коммитом (gf#165)
+pytestmark = pytest.mark.slow
+
 VOCAB, LENGTH = 11, 12
 TINY = GPTSize(block=16, layers=2, heads=2, width=8, dropout=0.0)
 
