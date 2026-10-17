@@ -50,3 +50,19 @@ def test_door_glass_drawn_inside_door(cfg, lay_out, kind):
 
 def test_solid_door_has_no_glass(cfg, lay_out):
     assert 'class="door-glass"' not in sheet_svg(lay_out(), cfg)
+
+
+def test_every_element_has_class_and_material_in_svg(cfg, house):
+    """Окно и дверь стаба своего материала не имеют — в SVG у них материал зоны под ними с
+    пометкой, а разбор возвращает элемент без материала, как в JSON (`facade: Элементы в SVG`)."""
+    svg = sheet_svg(house, cfg)
+    rects = re.findall(r"<rect [^>]*data-cls=[^>]*>", svg)
+    assert rects and all("data-material=" in r for r in rects)
+    window = next(r for r in rects if 'data-cls="window"' in r)
+    door = next(r for r in rects if 'data-cls="door"' in r)
+    # окно — на основной стене, дверь — в обрамлении входа акцентом
+    assert 'data-material="main"' in window and 'data-material="accent"' in door
+    assert 'data-zone-material="true"' in window and 'data-zone-material="true"' in door
+    parsed, _ = parse_sheet_svg(svg)[0]
+    assert all(e.material is None for e in parsed if e.cls in (ElementClass.WINDOW,
+                                                               ElementClass.DOOR))

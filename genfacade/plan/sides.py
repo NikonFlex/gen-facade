@@ -92,6 +92,11 @@ def _on_line(e: Edge, b: Box, tol: float) -> bool:
     return abs(e.depths(b)[0]) <= tol and _along(e, b) >= _depth_extent(e, b)
 
 
+def on_contour(c: Contour, b: Box) -> bool:
+    """Прямоугольник лежит на одной из сторон контура."""
+    return any(_on_line(Edge(c.ring, i), b, c.tol_px) for i in range(len(c.ring)))
+
+
 def _edge_of(c: Contour, b: Box) -> int:
     """Сторона, на линии которой лежит проём."""
     for i in range(len(c.ring)):

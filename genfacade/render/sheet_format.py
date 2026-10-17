@@ -15,6 +15,9 @@ ID = "data-id"
 FLOOR = "data-floor"
 PARENT = "data-parent"
 MATERIAL = "data-material"
+# Есть — материал в MATERIAL не свой, а зоны под элементом: в JSON у элемента его нет
+# (материал элемента — «если отличается от зоны»), а в SVG материал у каждого элемента.
+ZONE_MATERIAL = "data-zone-material"
 VARIANT = "data-variant"
 FIXED = "data-fixed"
 ROLE = "data-role"       # зона отделки — polygon с ролью

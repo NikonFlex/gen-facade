@@ -88,9 +88,14 @@ def test_unknown_plan_and_run(client):
 
 
 def test_defective_plan_explained(client):
+    """Отказ — 400 с причиной, а прогон с ней и с шагом 1 — в списке смотрелки."""
     bad = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>'
     res = client.post("/api/runs", json={"plan_run": PLAN_RUN, "svg": bad})
     assert res.status_code == 400 and "план отклонён" in res.json()["detail"]
+    [run] = client.get("/api/runs").json()
+    meta = client.get(f"/api/runs/{run['id']}").json()
+    assert meta["refusal"] == res.json()["detail"]
+    assert [s["n"] for s in meta["steps"] if s["file"]] == [1]
 
 
 def test_no_samples_no_sources(client):

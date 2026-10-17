@@ -1,6 +1,8 @@
 """Сборка синтетики пачкой: продолжение после обрыва, настройки сборки, отбраковка, части."""
 
 import json
+import shutil
+import subprocess
 
 import pytest
 
@@ -106,3 +108,51 @@ def test_saved_manifest_used_only_while_it_matches_files(at, sample):
     store.write(sample, root)
     fresh = store.load_manifest(root, Source.SYNTHETIC)
     assert fresh["samples"] == 4 and "generator" not in fresh
+
+
+def test_build_survives_commit_outside_generator(at, monkeypatch):
+    """Коммит, который не трогает код генератора, сборку не останавливает: сверяется версия
+    кода генератора, а не коммит репо (`data: Сборка не смешивает настройки`)."""
+    cfg = at("data")
+    batch.run(range(2), cfg)
+    other = subprocess.CompletedProcess([], 0, stdout="0" * 40 + "\n")
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: other)
+    batch.run(range(3), cfg)
+    assert len(_files(cfg)) == 3
+
+
+def test_other_generator_code_stops_the_build(at, monkeypatch):
+    cfg = at("data")
+    batch.run(range(2), cfg)
+    monkeypatch.setattr(batch, "code_version", lambda: "другой")
+    with pytest.raises(batch.BuildError, match="сборка с другой версией кода: дома вышли бы"):
+        batch.run(range(3), cfg)
+
+
+def test_build_without_code_version_stops(at):
+    """Сборка, записанная до версии кода генератора (с git_sha), — отказ, а не KeyError."""
+    cfg = at("data")
+    batch.run(range(1), cfg)
+    path = cfg.data.paths.samples_dir / Source.SYNTHETIC / batch.BUILD
+    state = json.loads(path.read_text())
+    state["git_sha"] = state.pop("code")
+    path.write_text(json.dumps(state))
+    with pytest.raises(batch.BuildError, match="другой версией кода"):
+        batch.run(range(2), cfg)
+
+
+def test_code_version_follows_generator_files_only(tmp_path, monkeypatch):
+    """Хеш меняется от правки файла генератора и не меняется от правки чужого файла."""
+    for name in (*batch.GENERATOR_CODE, "viewer/app.py"):
+        src = batch.PACKAGE / name
+        if src.is_dir():
+            shutil.copytree(src, tmp_path / name, ignore=shutil.ignore_patterns("__pycache__"))
+        else:
+            (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(src, tmp_path / name)
+    monkeypatch.setattr(batch, "PACKAGE", tmp_path)
+    before = batch.code_version()
+    (tmp_path / "viewer/app.py").write_text("# правка смотрелки\n")
+    assert batch.code_version() == before
+    (tmp_path / "datasets/synthetic/build.py").write_text("# правка генератора\n")
+    assert batch.code_version() != before

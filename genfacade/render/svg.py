@@ -11,6 +11,8 @@ import math
 from typing import NamedTuple
 from xml.etree import ElementTree
 
+import shapely
+
 from genfacade.config import Axes, Config, DoorLook, Levels, Sheet, SheetLayout
 from genfacade.render import sheet_format
 from genfacade.render.sheet_format import num
@@ -19,6 +21,7 @@ from genfacade.schema import (
     Element,
     ElementClass,
     FacadeSheet,
+    HouseSpec,
     MaterialZone,
     Point,
     Polygon,
@@ -85,27 +88,29 @@ def sheet_svg(sheet: FacadeSheet, cfg: Config, violations: list[Violation] | Non
     root = canvas(width, height, cfg.css)
     root.set("width", f"{width * mm_per_m:.0f}mm")
     root.set("height", f"{height * mm_per_m:.0f}mm")
-    pen = _pen(sheet, cfg)
-    axes, levels = _axis_labels(sheet, cfg.sheet.axes.letters), _levels(sheet, cfg.sheet.levels)
+    pen = Pen(cfg, palette_colors(sheet.spec, cfg))
+    axes = _axis_labels(sheet, cfg.sheet.axes.letters)
+    marks_at = levels(sheet.spec, cfg.sheet.levels)
     for facade, origin in zip(sheet.facades, cells, strict=True):
         g = _facade_geometry(root, facade, origin, pen)
         if violations is not None:
             _overlay(g, facade, [v for v in violations if v.side == facade.side.index])
         if annotations:
-            marks = Marks(levels, axes[facade.side.index], cfg.sheet)
+            marks = Marks(marks_at, axes[facade.side.index], cfg.sheet)
             _annotations(root, origin, facade.side.length_m, marks)
     ElementTree.indent(root)
     return ElementTree.tostring(root, encoding="unicode")
 
 
-def _pen(sheet: FacadeSheet, cfg: Config) -> Pen:
+def palette_colors(spec: HouseSpec, cfg: Config) -> dict[str, str]:
+    """id материала палитры → цвет: свой или цвет вида из библиотеки."""
     kinds = cfg.library.kinds
     colors = {}
-    for m in sheet.spec.materials:
+    for m in spec.materials:
         if m.color is None and m.kind not in kinds:
             raise ValueError(f"материал {m.id}: нет цвета, и вида {m.kind} нет в библиотеке")
         colors[m.id] = m.color or kinds[m.kind]
-    return Pen(cfg, colors)
+    return colors
 
 
 def _top(facade: SideFacade) -> float:
@@ -140,7 +145,7 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
     # Контур — до элементов: карниз у края стены ложится поверх линии, а не под неё.
     ElementTree.SubElement(g, "polygon", {"class": "outline", "points": silhouette})
     for e in facade.elements:
-        _element(g, e, pen)
+        _element(g, e, pen, facade.zones)
     return g
 
 
@@ -170,19 +175,15 @@ def _zone(g: ElementTree.Element, z: MaterialZone, pen: Pen) -> None:
     })
 
 
-def _element(g: ElementTree.Element, e: Element, pen: Pen) -> None:
+def _element(g: ElementTree.Element, e: Element, pen: Pen, zones: list[MaterialZone]) -> None:
     lib = pen.cfg.library
     attrs = {
         sheet_format.CLS: e.cls, sheet_format.ID: e.id,
         "x": num(e.x_m), "y": num(e.y_m), "width": num(e.w_m), "height": num(e.h_m),
         "fill": pen.colors.get(e.material or "", lib.class_fill.get(e.cls, lib.fill.other)),
     }
-    optional = {
-        sheet_format.FLOOR: e.floor,
-        sheet_format.PARENT: e.parent,
-        sheet_format.MATERIAL: e.material,
-    }
-    attrs |= {k: str(v) for k, v in optional.items() if v is not None}
+    optional = {sheet_format.FLOOR: e.floor, sheet_format.PARENT: e.parent}
+    attrs |= {k: str(v) for k, v in optional.items() if v is not None} | _material(e, zones)
     if e.variant is not None:
         attrs[sheet_format.VARIANT] = sheet_format.encode_variant(e.variant)
     if e.fixed:
@@ -198,6 +199,19 @@ def _element(g: ElementTree.Element, e: Element, pen: Pen) -> None:
         glass = _door_glass(e, pen.cfg.sheet.door)
         _box(g, "door-glass", glass).set("fill", lib.fill.glass)
         _mullions(g, e, glass)
+
+
+def _material(e: Element, zones: list[MaterialZone]) -> dict[str, str]:
+    """Материал элемента в SVG (`facade: Элементы в SVG`): свой, а без своего — зоны под его
+    центром (верхней на листе, то есть последней) с пометкой, что он не свой. Цвет от этого
+    не меняется: окно и дверь без своего материала красятся по классу."""
+    if e.material is not None:
+        return {sheet_format.MATERIAL: e.material}
+    center = shapely.Point(e.x_m + e.w_m / 2, e.y_m + e.h_m / 2)
+    under = [z for z in zones if shapely.Polygon(z.shape).covers(center)]
+    if not under:
+        return {}
+    return {sheet_format.MATERIAL: under[-1].material, sheet_format.ZONE_MATERIAL: "true"}
 
 
 def _mullions(g: ElementTree.Element, e: Element, glass: tuple[float, ...]) -> None:
@@ -244,12 +258,10 @@ def _axis_labels(sheet: FacadeSheet, letters: str) -> dict[int, tuple[str, str]]
     }
 
 
-def _levels(sheet: FacadeSheet, cfg: Levels) -> list[float]:
+def levels(spec: HouseSpec, cfg: Levels) -> list[float]:
     """Земля, цоколь, этажи, карниз — одни на все фасады дома."""
-    spec = sheet.spec
-    levels = [0.0, *spec.floor_levels(), spec.eaves_m]
     uniq: list[float] = []
-    for v in sorted(levels):
+    for v in sorted([0.0, *spec.floor_levels(), spec.eaves_m]):
         if not uniq or v - uniq[-1] > cfg.merge_below_m:
             uniq.append(v)
     return uniq
@@ -264,14 +276,14 @@ def _annotations(root: ElementTree.Element, origin, length: float, marks: Marks)
     ext = cfg.ground.extend_m
     add_line(g, "ground", (-ext, 0.0), (length + ext, 0.0))
     for v in marks.levels:
-        _level_mark(g, length + cfg.levels.offset_m, v, cfg.levels)
+        level_mark(g, length + cfg.levels.offset_m, v, cfg.levels)
     for x, name in ((0.0, marks.axes[0]), (length, marks.axes[1])):
         _axis_bubble(g, x, name, cfg.axes)
     title = f"Фасад в осях {marks.axes[0]}–{marks.axes[1]}"
     add_text(g, "title", (length / 2, cfg.title.y_m), title)
 
 
-def _level_mark(g: ElementTree.Element, x: float, level: float, cfg: Levels) -> None:
+def level_mark(g: ElementTree.Element, x: float, level: float, cfg: Levels) -> None:
     """Отметка уровня: треугольник на полке и значение над ней, «+3,300»."""
     y = -level
     add_line(g, "level-shelf", (x - cfg.shelf_left_m, y), (x + cfg.shelf_right_m, y))

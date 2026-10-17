@@ -26,9 +26,10 @@ def preprocess(svg: Path | str, mode: Mode, cfg: PlanConfig) -> Plan:
     raw = flip(parse(svg))
     gaps = find_gaps(raw.walls, cfg.gaps)
     ring = outline(raw.walls + raw.windows + [g.box for g in gaps], cfg.outline)
-    found = _mark_entrance(_classify(raw, gaps, ring, cfg.gaps.min_opening_px))
+    contour = sides.Contour(ring, cfg.outline.jog_px)
+    found = _mark_entrance(_classify(raw, gaps, contour, cfg.gaps.min_opening_px))
     entrance = next(f for f in found if f.kind is OpeningKind.ENTRANCE)
-    contour = sides.start_at(sides.Contour(ring, cfg.outline.jog_px), entrance.gap.box)
+    contour = sides.start_at(contour, entrance.gap.box)
     scale = ENTRANCE_WIDTH_M / entrance.gap.length_px
     blind = mode is Mode.BLIND
     sealed = [f for f in found if blind and f.external and f.kind is not OpeningKind.ENTRANCE]
@@ -55,19 +56,37 @@ def flip(raw: GenPlanSvg) -> GenPlanSvg:
     return GenPlanSvg(raw.width, h, [fb(w) for w in raw.walls], [fb(w) for w in raw.windows], doors)
 
 
-def _classify(raw: GenPlanSvg, gaps: list[Gap], ring: list, min_px: float) -> list[Found]:
-    """Разрыв со створкой — дверь; наружный без створки — окно, как у GenPlan; швы — мимо."""
-    boundary = LinearRing(ring)
+def _classify(raw: GenPlanSvg, gaps: list[Gap], contour: sides.Contour,
+              min_px: float) -> list[Found]:
+    """Разрыв со створкой — дверь; наружный без створки — окно, как у GenPlan; швы — мимо.
+
+    Наружный — тот, что лежит на стороне контура с тем же допуском, с каким контур
+    выпрямлен: кусок стены, сдвинутый на пару пикселей, проём не теряет. Разрыв, который
+    контура касается, но ни на одной стороне не лежит, — отказ, а не молча пропавшее окно.
+    """
+    boundary = LinearRing(contour.ring)
     found = []
     for g in gaps:
         if g.length_px < min_px:
             continue
-        external = box(g.box.x0, g.box.y0, g.box.x1, g.box.y1).distance(boundary) <= TOL_PX
+        external = sides.on_contour(contour, g.box)
+        if not external and _touches(g.box, boundary):
+            raise PlanError(_off_line(g, raw.height, contour.tol_px))
         is_door = any(g.box.contains(d.hinge) and g.box.contains(d.jamb) for d in raw.doors)
         if is_door or external:
             kind = OpeningKind.DOOR if is_door else OpeningKind.WINDOW
             found.append(Found(kind, g, external))
     return found
+
+
+def _touches(b: Box, boundary: LinearRing) -> bool:
+    return box(b.x0, b.y0, b.x1, b.y1).distance(boundary) <= TOL_PX
+
+
+def _off_line(g: Gap, height: float, tol_px: float) -> str:
+    cx, cy = (g.box.x0 + g.box.x1) / 2, height - (g.box.y0 + g.box.y1) / 2  # обратно в оси SVG
+    return (f"разрыв {g.length_px:.0f} px у ({cx:.0f}, {cy:.0f}) касается контура, но не лежит "
+            f"ни на одной его стороне: кусок стены сдвинут с линии больше чем на {tol_px:g} px")
 
 
 def _mark_entrance(found: list[Found]) -> list[Found]:
