@@ -2,21 +2,29 @@
 (`data: Сборка синтетики по seed`).
 
 Сборку можно оборвать и запустить снова: готовые дома пропускаются. Чем собрано — в файле
-`_build.json` рядом с примерами: настройки генератора и отброшенные дома. Дом с ошибкой
-валидатора в датасет не пишется.
+`_build.json` рядом с примерами: настройки, версия кода генератора и отброшенные дома. Дом с
+ошибкой валидатора в датасет не пишется.
 """
 
+import hashlib
 import json
 from pathlib import Path
 
 from genfacade.config import Config
 from genfacade.datasets import store
 from genfacade.datasets.synthetic import build
-from genfacade.pipeline import git_sha
 from genfacade.schema import Source
 from genfacade.validate import errors, validate
 
 BUILD = "_build.json"
+PACKAGE = Path(__file__).parents[2]
+# Код, от которого зависят дома сборки (`data: Сборка не смешивает настройки`): генератор,
+# запись его плана в SVG GenPlan и препроцессор, который этот план читает (build.sample),
+# развёртка, схема примера, валидатор (отбраковка) и формат файлов примера. Коммит всего репо
+# не годится: правка смотрелки, обучения или документов домов не меняет, а пересборку требовала
+# бы. pipeline.py не входит: из него сборке нужна только walls() — обёртка над unfold.
+GENERATOR_CODE = ("datasets/synthetic", "datasets/genplan_writer.py", "datasets/store.py",
+                  "plan", "unfold.py", "schema.py", "validate.py")
 
 
 class BuildError(ValueError):
@@ -44,8 +52,7 @@ def run(seeds: range, cfg: Config, overwrite: bool = False) -> Path:
 
 def _begin(folder: Path, cfg: Config, overwrite: bool) -> dict:
     """Состояние сборки: новое или прежнее, если настройки и код те же."""
-    fresh = {"config": cfg.synthetic.model_dump(mode="json"), "git_sha": git_sha(),
-             "rejected": {}}
+    fresh = {"config": _settings(cfg), "code": code_version(), "rejected": {}}
     if overwrite and folder.exists():
         for old in folder.glob("*.json"):
             old.unlink()
@@ -56,11 +63,35 @@ def _begin(folder: Path, cfg: Config, overwrite: bool) -> dict:
         _save(folder, fresh)
         return fresh
     state = json.loads((folder / BUILD).read_text())
-    for key, what in (("config", "настройками"), ("git_sha", "версией кода")):
-        if state[key] != fresh[key]:
-            raise BuildError(f"в {folder} — сборка с другими {what}: дома вышли бы разными; "
+    for key, what in (("config", "другими настройками"), ("code", "другой версией кода")):
+        # .get: у сборки, записанной до версии кода генератора, ключа "code" нет
+        if state.get(key) != fresh[key]:
+            raise BuildError(f"в {folder} — сборка с {what}: дома вышли бы разными; "
                              "пересобрать — --overwrite")
     return state
+
+
+def _settings(cfg: Config) -> dict:
+    """Настройки, от которых зависят дома: генератор, препроцессор его плана, валидатор."""
+    return {"synthetic": cfg.synthetic.model_dump(mode="json"),
+            "plan": cfg.plan.model_dump(mode="json"), "checks": cfg.checks.model_dump(mode="json")}
+
+
+def code_version() -> str:
+    """Хеш исходников GENERATOR_CODE: имя файла и содержимое, в постоянном порядке."""
+    digest = hashlib.sha256()
+    for path in sorted(_sources()):
+        digest.update(path.relative_to(PACKAGE).as_posix().encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:16]
+
+
+def _sources() -> list[Path]:
+    found = []
+    for name in GENERATOR_CODE:
+        path = PACKAGE / name
+        found += sorted(path.rglob("*.py")) if path.is_dir() else [path]
+    return found
 
 
 def _save(folder: Path, state: dict) -> None:

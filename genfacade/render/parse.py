@@ -24,7 +24,8 @@ def _element(r: ElementTree.Element) -> Element:
         "id": r.get(sheet_format.ID), "cls": r.get(sheet_format.CLS),
         "x_m": float(r.get("x")), "y_m": float(r.get("y")),
         "w_m": float(r.get("width")), "h_m": float(r.get("height")),
-        "parent": r.get(sheet_format.PARENT), "material": r.get(sheet_format.MATERIAL),
+        "parent": r.get(sheet_format.PARENT),
+        "material": None if r.get(sheet_format.ZONE_MATERIAL) else r.get(sheet_format.MATERIAL),
     }
     if r.get(sheet_format.FLOOR) is not None:
         data["floor"] = int(r.get(sheet_format.FLOOR))

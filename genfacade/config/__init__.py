@@ -87,6 +87,16 @@ class PlanLook(Section):
     legend: dict[str, str]  # ключ — класс .plan-<ключ> в sheet.css, значение — подпись
 
 
+class SpecLook(Section):
+    margin_m: float
+    wall_m: float
+    gap_m: float
+    line_m: float
+    swatch_m: float
+    text_dx_m: float
+    text_w_m: float
+
+
 class DoorLook(Section):
     glass_inset: float
     glazed_span: tuple[float, float]
@@ -102,6 +112,7 @@ class Sheet(Section):
     title: Title
     preview: Preview
     plan: PlanLook
+    spec: SpecLook
 
 
 class Gaps(Section):

@@ -2,7 +2,8 @@
 
 Стаб 1: текст → HouseSpec — всегда один и тот же дом, текст не читается.
 Стаб 2: стена после развёртки + контекст → стена с элементами и зонами — готовые фасады
-простого дома (tests/fixtures/simple_house.svg), один набор на оба режима. Заготовку один раз
+простого дома (tests/fixtures/simple_house.svg), один набор на оба режима; «задано условием»
+(fixed) остаётся только у проёмов, которые есть на стороне плана. Заготовку один раз
 сделало правило раскладки (gf#50), потом правило удалено (gf#60). Модель встанет на место
 функций этого модуля, остальной конвейер не меняется.
 """
@@ -12,7 +13,16 @@ from dataclasses import dataclass
 from functools import cache
 from importlib.resources import files
 
-from genfacade.schema import EPS, Element, FacadeSheet, HouseSpec, MaterialZone, Mode, SideFacade
+from genfacade.schema import (
+    EPS,
+    Element,
+    FacadeSheet,
+    HouseSpec,
+    MaterialZone,
+    Mode,
+    Side,
+    SideFacade,
+)
 
 DATA = files(__package__).joinpath("stub_data")
 
@@ -42,10 +52,19 @@ def layout_model(wall: SideFacade, ctx: LayoutContext) -> SideFacade:
     if ready is None or abs(ready["length_m"] - side.length_m) > EPS:
         raise ModelError(f"стаб знает только простой дом 10 × 5 м (simple_house.svg): сторона "
                          f"{side.index} длиной {side.length_m:.2f} м ему не знакома")
+    elements = [_planned(Element.model_validate(e), side) for e in ready["elements"]]
     return wall.model_copy(update={
-        "elements": [Element.model_validate(e) for e in ready["elements"]],
+        "elements": elements,
         "zones": [MaterialZone.model_validate(z) for z in ready["zones"]],
     })
+
+
+def _planned(e: Element, side: Side) -> Element:
+    """fixed — только у проёма, который есть на стороне плана: в глухом режиме окна плана
+    заделаны, задан один вход (`facade: Проёмы плана — условие`)."""
+    on_plan = any(abs(o.x_m - e.x_m) <= EPS and abs(o.width_m - e.w_m) <= EPS
+                  for o in side.openings)
+    return e if on_plan else e.model_copy(update={"fixed": []})
 
 
 def layout_all(sheet: FacadeSheet, ctx: LayoutContext) -> FacadeSheet:

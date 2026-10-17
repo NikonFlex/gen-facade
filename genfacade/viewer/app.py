@@ -16,8 +16,6 @@ from pydantic import BaseModel
 from genfacade import pipeline
 from genfacade.config import Config
 from genfacade.datasets import preview, store
-from genfacade.models.stub import ModelError
-from genfacade.plan.genplan_svg import PlanError
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import Mode, Sample, Source
 
@@ -134,7 +132,8 @@ def _plans(cfg: Config) -> dict[str, Path]:
 
 
 def _start_plan(run: pipeline.PlanRun, svg: str | None, cfg: Config) -> Path:
-    """План из списка по имени или присланный SVG; дефектный план — 400 с причиной."""
+    """План из списка по имени или присланный SVG; отказ — 400 с причиной, а трасса до отказа
+    с meta.json остаётся в списке прогонов."""
     plans = _plans(cfg)
     if svg is None and run.plan not in plans:
         raise HTTPException(404, f"нет плана {run.plan!r}")
@@ -142,10 +141,8 @@ def _start_plan(run: pipeline.PlanRun, svg: str | None, cfg: Config) -> Path:
     out = pipeline.new_run_dir(cfg.viewer.paths.runs_dir, Path(run.plan).stem)
     try:
         return pipeline.generate(run, text, out, cfg)
-    except PlanError as e:
-        raise HTTPException(400, f"план отклонён: {e}") from e
-    except ModelError as e:
-        raise HTTPException(400, f"модель не ответила: {e}") from e
+    except tuple(pipeline.REFUSALS) as e:
+        raise HTTPException(400, f"{pipeline.REFUSALS[type(e)]}: {e}") from e
 
 
 def _runs(runs_dir: Path) -> list[dict]:

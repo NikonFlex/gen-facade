@@ -5,7 +5,7 @@ GenPlan, шов, снятая стена. Отдельных планов нет
 """
 
 import pytest
-from simple_house import LEAF, before_leaf
+from simple_house import L_SHAPE, LEAF, before_leaf, top_right_shifted
 
 from genfacade.plan.gaps import find_gaps
 from genfacade.plan.genplan_svg import Box, PlanError
@@ -129,3 +129,28 @@ def test_collinear_needs_half_thickness_overlap(cfg, y0, gaps):
     # две горизонтальные стены толщиной 10 px, сдвинутые по y на 3 и на 7 px
     walls = [Box(150, 200, 250, 210), Box(300, y0, 400, y0 + 10)]
     assert len(find_gaps(walls, cfg.plan.gaps)) == gaps
+
+
+@pytest.mark.parametrize("dy", [2, 3])
+def test_window_kept_when_wall_piece_shifted(simple_svg, preprocess_svg, dy):
+    """Кусок стены сдвинут на 2–3 px — соосен (перекрытие ≥ половины толщины), и окно в
+    разрыве остаётся на своей стороне (`plan-input: Соосные стены и швы`)."""
+    plan = preprocess_svg(simple_svg(top_right_shifted(dy)))
+    windows = [o for o in plan.openings if o.kind is WINDOW]
+    assert len(windows) == 4 and all(o.external for o in windows)
+    top = next(s for s in plan.sides if s.orientation == (0.0, 1.0))
+    assert _openings(top) == [(WINDOW, 3.0, 2.0)]
+
+
+@pytest.mark.parametrize("dy", [5, 6, 7])
+def test_gap_off_the_contour_side_rejected(simple_svg, preprocess_svg, dy):
+    """Сдвиг больше, чем выпрямляет контур: разрыв касается контура, но не на его стороне —
+    отказ с причиной, а не ValueError (`plan-input: Отказ на дефектном плане`)."""
+    with pytest.raises(PlanError, match="не лежит ни на одной его стороне: кусок стены сдвинут"):
+        preprocess_svg(simple_svg(top_right_shifted(dy)))
+
+
+def test_l_shaped_outline_has_six_sides(simple_svg, preprocess_svg):
+    """Непрямоугольный контур препроцессор режет на стороны; отказывает развёртка (шаг 3)."""
+    plan = preprocess_svg(simple_svg(*L_SHAPE))
+    assert [s.length_m for s in plan.sides] == pytest.approx([10, 5, 7.3, 2, 2.7, 3])

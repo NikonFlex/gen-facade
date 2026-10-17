@@ -9,7 +9,6 @@ from genfacade import config, pipeline
 from genfacade.baselines import Baseline
 from genfacade.datasets.synthetic import batch
 from genfacade.models.stub import ModelError
-from genfacade.plan.genplan_svg import PlanError
 from genfacade.schema import Mode, Source
 from genfacade.train import corpus
 
@@ -151,7 +150,7 @@ COMMANDS = {
     "metrics": (metrics_table, {}),
     "baseline": (baseline, {}),
     "calibrate": (metrics_calibrate, {}),
-    "run": (run, {PlanError: "план отклонён", ModelError: "модель не ответила"}),
+    "run": (run, pipeline.REFUSALS),
 }
 
 
