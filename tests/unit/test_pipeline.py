@@ -3,12 +3,13 @@
 import json
 
 import pytest
-from simple_house import SIMPLE, WALL_INTO_WINDOW, before_leaf
+from simple_house import L_SHAPE, SIMPLE, WALL_INTO_WINDOW, before_leaf, top_right_shifted
 
 from genfacade import cli, pipeline
 from genfacade.models import stub
+from genfacade.plan.genplan_svg import PlanError
 from genfacade.render.parse import parse_sheet_svg
-from genfacade.schema import HouseSpec, Mode, Plan, Rule
+from genfacade.schema import FacadeSheet, HouseSpec, Mode, Plan, Rule
 
 TEXT = "A simple one-storey house with a flat roof."
 
@@ -29,6 +30,11 @@ def test_simple_house_traces_all_six_steps(cfg, tmp_path, mode):
     meta = _meta(out)
     assert [s["n"] for s in meta["steps"]] == [1, 2, 3, 4, 5, 6]
     assert all((out / s["file"]).stat().st_size > 0 for s in meta["steps"])
+    # у каждого шага — JSON и SVG (`generation: Трасса шагов`)
+    for s in meta["steps"]:
+        assert s["json"].endswith(".json") and s["svg"].endswith(".svg"), s
+        json.loads((out / s["json"]).read_text())
+        assert (out / s["svg"]).read_text().startswith("<svg"), s
     assert meta["request"] == {"plan": str(SIMPLE), "text": TEXT, "mode": mode}
     assert (meta["errors"], meta["warnings"]) == (0, 0)
     assert json.loads((out / pipeline.VIOLATIONS).read_text()) == []
@@ -113,3 +119,80 @@ def test_cli_rejects_defective_plan(tmp_path):
                    '<rect x="1" y="1" width="5" height="1" fill="#000000"/></svg>')
     with pytest.raises(SystemExit, match="план отклонён: контур не замкнулся"):
         cli.main(["run", str(bad), "-t", "house", "-o", str(tmp_path / "run")])
+
+
+def test_step_json_is_what_step_svg_shows(cfg, tmp_path):
+    """JSON шагов 3–5 — тот же лист, что в их SVG: силуэты без элементов, ответ модели, он же
+    после привязки."""
+    out = _generate(cfg, tmp_path / "run")
+    unfold = FacadeSheet.model_validate_json((out / pipeline.UNFOLD_JSON).read_text())
+    assert all(f.silhouette and not f.elements for f in unfold.facades)
+    snapped = FacadeSheet.model_validate_json((out / pipeline.SNAPPED_JSON).read_text())
+    assert snapped == FacadeSheet.model_validate_json((out / pipeline.SHEET_JSON).read_text())
+    layout = FacadeSheet.model_validate_json((out / pipeline.LAYOUT_JSON).read_text())
+    for step, sheet in ((pipeline.LAYOUT, layout), (pipeline.SNAPPED, snapped)):
+        parsed = parse_sheet_svg((out / step).read_text())
+        assert all(parsed[f.side.index][0] == f.elements for f in sheet.facades), step
+
+
+def test_spec_step_svg_has_palette_and_levels(cfg, tmp_path):
+    """SVG шага 1: каждый материал палитры его цветом и отметки уровней, как на листе."""
+    out = _generate(cfg, tmp_path / "run")
+    svg = (out / pipeline.SPEC_SVG).read_text()
+    colors = json.loads((out / pipeline.SPEC).read_text())["colors"]
+    spec = stub.spec_model(TEXT)
+    for m in spec.materials:
+        assert f"{m.id} · {m.kind}" in svg and f'fill="{colors[m.id]}"' in svg
+    for text in ("±0,000", "+0,500", "+3,250"):
+        assert text in svg
+
+
+REFUSED = {
+    "shifted": ((top_right_shifted(6),), "план отклонён: разрыв 200 px"),
+    "shifted-8-sides": ((top_right_shifted(9),), "план отклонён: развёртка пока только для "
+                                                "прямоугольного контура, сторон: 8"),
+    "l-shape": (L_SHAPE, "план отклонён: развёртка пока только для прямоугольного контура, "
+                         "сторон: 6"),
+}
+
+
+@pytest.mark.parametrize("name", list(REFUSED))
+def test_refused_run_explained_and_traced(cfg, tmp_path, simple_svg, name):
+    """Сдвинутая стена и L-контур — отказ с причиной; трасса до отказа и meta.json с ней
+    остаются, смотрелка такой прогон показывает (`plan-input: Отказ на дефектном плане`)."""
+    edits, reason = REFUSED[name]
+    plan = tmp_path / "plan.svg"
+    plan.write_text(simple_svg(*edits))
+    out = tmp_path / "run"
+    with pytest.raises(SystemExit, match=reason):
+        cli.main(["run", str(plan), "-t", TEXT, "-o", str(out)])
+    meta = _meta(out)
+    assert meta["refusal"].startswith(reason)
+    assert (meta["sheet_json"], meta["preview"]) == (None, None)
+    done = [s["n"] for s in meta["steps"] if s["file"]]
+    assert done == ([1] if name == "shifted" else [1, 2])
+    assert all((out / s["file"]).exists() for s in meta["steps"] if s["file"])
+    # шаг, на котором отказ, не оставляет половины выхода: ни JSON, ни SVG
+    assert all(s["json"] is s["svg"] is None for s in meta["steps"] if not s["file"])
+
+
+def test_model_refusal_written_to_meta(cfg, tmp_path, monkeypatch):
+    """Модель не ответила — в meta.json причина, шаги 1–3 есть, 4–6 нет."""
+    def refuse(sheet, ctx):
+        raise stub.ModelError("нет ответа")
+
+    monkeypatch.setattr(stub, "layout_all", refuse)
+    with pytest.raises(stub.ModelError):
+        _generate(cfg, tmp_path / "run")
+    meta = _meta(tmp_path / "run")
+    assert meta["refusal"] == "модель не ответила: нет ответа"
+    assert [s["n"] for s in meta["steps"] if s["file"]] == [1, 2, 3]
+
+
+def test_rerun_into_same_folder_drops_old_steps(cfg, tmp_path, simple_svg):
+    """Папка задана руками и в ней прошлый прогон: шаги, до которых новый не дошёл, — не его."""
+    out = _generate(cfg, tmp_path / "run")
+    with pytest.raises(PlanError):
+        _generate(cfg, out, svg=simple_svg(*L_SHAPE))
+    assert not (out / pipeline.SHEET).exists()
+    assert [s["n"] for s in _meta(out)["steps"] if s["file"]] == [1, 2]

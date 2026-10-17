@@ -301,6 +301,8 @@ function renderHead() {
     m.sample ? `<span class="chip">${m.sample.source} · ${m.sample.split}</span>`
       : `<span class="chip" title="${m.source}">${m.source.split("/").at(-1)}</span>`,
   ].join("");
+  // Причина отказа — текстом, не разметкой: в ней бывают имена тегов SVG.
+  if (m.refusal) $("run-chips").append(el("span", { className: "chip refusal", title: m.refusal, textContent: m.refusal }));
   const sheet = m.steps.find((s) => s.n === 6)?.file;
   const links = [[sheet, "SVG"], [m.sheet_json, "JSON"], [m.preview, "PNG"]].filter(([f]) => f)
     .map(([f, label]) => `<a class="btn" href="${file(f)}" target="_blank" rel="noopener" title="Открыть ${label}">${ICON.file}<span>${label}</span></a>`);
@@ -327,7 +329,8 @@ function renderStepper() {
   const nodes = steps.flatMap((s, i) => {
     const btn = el("button", {
       className: `step${s.key === state.step ? " active" : ""}`, disabled: !s.file,
-      title: s.file ? "" : "Шаг ещё не написан — появится на следующих этапах",
+      title: s.file ? "" : state.meta.refusal ? `Прогон остановлен раньше — ${state.meta.refusal}`
+        : "Шаг ещё не написан — появится на следующих этапах",
     }, `<span class="step-n">${s.n || "⌂"}</span>${s.title}`);
     btn.dataset.key = s.key;
     btn.addEventListener("click", () => showStep(s.key));

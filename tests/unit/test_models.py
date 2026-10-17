@@ -14,14 +14,30 @@ def test_spec_stub_ignores_text():
     assert [m.id for m in a.materials] == ["main", "plinth", "accent", "trim", "roof"]
 
 
+def _unfixed(elements):
+    return [e.model_copy(update={"fixed": []}) for e in elements]
+
+
+def _fixed(sheet):
+    return sorted(e.cls for f in sheet.facades for e in f.elements if e.fixed)
+
+
 def test_layout_stub_same_facades_in_both_modes(lay_out):
-    """Стаб шага 4: заготовка простого дома, один набор на оба режима."""
+    """Стаб шага 4: заготовка простого дома, одна раскладка на оба режима; режимы отличаются
+    только тем, что задано условием (`facade: Проёмы плана — условие`)."""
     plan_mode, blind = lay_out(Mode.WITH_OPENINGS), lay_out(Mode.BLIND)
     for a, b in zip(plan_mode.facades, blind.facades, strict=True):
-        assert (a.elements, a.zones) == (b.elements, b.zones)
+        assert (_unfixed(a.elements), a.zones) == (_unfixed(b.elements), b.zones)
     windows = [e.w_m for f in blind.facades for e in f.elements if e.cls is ElementClass.WINDOW]
     assert sorted(windows) == [1.0, 1.2, 1.5, 2.0]  # окна простого дома — разного размера
     FacadeSheet.model_validate(blind.model_dump())  # материалы — из палитры стаба шага 1
+
+
+def test_layout_stub_fixes_only_plan_openings(lay_out):
+    """В глухом режиме окна плана заделаны — задан условием только вход; в «окна из плана» —
+    все пять проёмов (`generation: Режимы отличаются входом`)."""
+    assert _fixed(lay_out(Mode.BLIND)) == [ElementClass.DOOR]
+    assert _fixed(lay_out(Mode.WITH_OPENINGS)) == [ElementClass.DOOR] + [ElementClass.WINDOW] * 4
 
 
 def test_layout_stub_rejects_unknown_wall(lay_out):

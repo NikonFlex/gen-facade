@@ -2,12 +2,15 @@
 
 У каждой стороны плана — прямоугольник стены: длина из плана, высота до карниза из HouseSpec.
 Крыша пока только плоская, её на фасаде не видно *(хозяин 01.10)*. Контур — только
-прямоугольный: непрямоугольные — открыто в docs/dev-plan.md. Высоты из одного HouseSpec, поэтому
-соседние фасады сходятся на углах по построению (`facade: Общие параметры дома`).
+прямоугольный: на другом отрисовка (оси — от углов, plan_corners) отклоняет план с причиной
+(PlanError) до первого файла шага 3; непрямоугольные — открыто в docs/dev-plan.md. Высоты из
+одного HouseSpec, поэтому соседние фасады сходятся на углах по построению
+(`facade: Общие параметры дома`).
 """
 
 import math
 
+from genfacade.plan.genplan_svg import PlanError
 from genfacade.schema import EPS, FacadeSheet, Point, Side
 
 
@@ -25,15 +28,15 @@ def plan_corners(sides: list[Side]) -> list[Point]:
 
 def _check_rectangle(sides: list[Side]) -> None:
     if len(sides) != 4:
-        raise ValueError(f"развёртка пока только для прямоугольного контура, сторон: {len(sides)}")
+        raise PlanError(f"развёртка пока только для прямоугольного контура, сторон: {len(sides)}")
     for a, b in zip(sides, sides[1:] + sides[:1], strict=True):
         # По часовой нормаль следующей стороны — нормаль текущей, повёрнутая на -90°.
         nx, ny = a.orientation
         if math.dist(b.orientation, (ny, -nx)) > EPS:
-            raise ValueError(f"стороны {a.index} → {b.index}: не обход по часовой")
+            raise PlanError(f"стороны {a.index} → {b.index}: не обход по часовой")
     for a, b in ((sides[0], sides[2]), (sides[1], sides[3])):
         if abs(a.length_m - b.length_m) > EPS:
-            raise ValueError(f"стороны {a.index} и {b.index}: противоположные, а длины разные")
+            raise PlanError(f"стороны {a.index} и {b.index}: противоположные, а длины разные")
 
 
 def unfold(sheet: FacadeSheet) -> FacadeSheet:
