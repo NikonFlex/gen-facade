@@ -144,7 +144,8 @@ gf#84).
    `TELEGRAM_CHAT_ID`, `TELEGRAM_OWNER_ID` (свой id) и
    `TELEGRAM_THREAD_{INBOX,ANALYSIS,QUESTIONS,TASKS,RESULTS,CLAUDE}`.
 4. Проба: `python3 tools/tg_inbox.py send --topic inbox --file <текст>` — сообщение
-   в теме; `--thread 999999` должен дать отказ 400.
+   в теме; `--thread 999999` должен дать отказ 400. Файл документом — `send-file --topic results
+   --file <файл> [--caption <подпись>]`: так агент шлёт таблицы и сводки в «Результаты» (gf#159).
 5. Секреты репозитория (Settings → Secrets → Actions) с теми же именами: для сбора
    нужны `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_OWNER_ID`, `TELEGRAM_THREAD_INBOX`,
    для уведомлений ещё `TELEGRAM_THREAD_TASKS`.

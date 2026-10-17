@@ -4,6 +4,7 @@
     python3 tools/tg_inbox.py pull --buffer ПАПКА        новое из темы «Входящие» → буфер
     python3 tools/tg_inbox.py discover                   id групп, номера тем, id отправителей
     python3 tools/tg_inbox.py send --topic T --file F    текст файла в тему; --thread N — проба
+    python3 tools/tg_inbox.py send-file --topic T --file F [--caption C]   сам файл в тему (gf#159)
     python3 tools/tg_inbox.py --selftest
 
 Хозяин пересылает пачку сообщений из чата научруков в тему «Входящие» своей группы. `pull`
@@ -42,7 +43,10 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from datetime import UTC, datetime
+from email.parser import BytesParser
+from email.policy import HTTP
 from enum import StrEnum
 from pathlib import Path
 
@@ -135,11 +139,37 @@ def load_config(env: dict[str, str]) -> Config | None:
 # ---------------------------------------------------------------------------
 
 
-def call(cfg: Config, method: str, params: dict) -> object:
+@dataclasses.dataclass(frozen=True)
+class Upload:
+    """Файл для метода с вложением: поле формы, имя и содержимое."""
+
+    field: str
+    name: str
+    data: bytes
+
+
+def multipart(params: dict, upload: Upload) -> tuple[bytes, str]:
+    """Тело multipart/form-data: поля params строками и файл — так Bot API принимает вложение."""
+    boundary = uuid.uuid4().hex
+    # кодировка поля явно: подпись по-русски без неё читается как latin-1
+    parts = [f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n'
+             f'Content-Type: text/plain; charset=utf-8\r\n\r\n{value}\r\n'.encode()
+             for key, value in params.items() if value is not None]
+    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{upload.field}"; '
+                 f'filename="{upload.name}"\r\nContent-Type: application/octet-stream\r\n\r\n'
+                 .encode() + upload.data + b"\r\n")
+    return b"".join(parts) + f"--{boundary}--\r\n".encode(), \
+        f"multipart/form-data; boundary={boundary}"
+
+
+def call(cfg: Config, method: str, params: dict, upload: Upload | None = None) -> object:
+    if upload is None:
+        body, kind = json.dumps(params).encode(), "application/json"
+    else:
+        body, kind = multipart(params, upload)
     # схема адреса проверена в load_config: только http(s)
     request = urllib.request.Request(f"{cfg.base}/bot{cfg.token}/{method}",  # noqa: S310
-                                     json.dumps(params).encode(),
-                                     {"Content-Type": "application/json"})
+                                     body, {"Content-Type": kind})
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT) as response:  # noqa: S310
             body = json.load(response)
@@ -154,11 +184,12 @@ def call(cfg: Config, method: str, params: dict) -> object:
     return body["result"]
 
 
-def call_with_retries(cfg: Config, method: str, params: dict) -> object:
+def call_with_retries(cfg: Config, method: str, params: dict,
+                      upload: Upload | None = None) -> object:
     """Обрыв, 429 и 5xx — повтор; отказ вроде «chat not found» — сразу наверх."""
     for pause in (*cfg.pauses, None):
         try:
-            return call(cfg, method, params)
+            return call(cfg, method, params, upload)
         except TelegramError as error:
             if not error.retryable or pause is None:
                 raise
@@ -187,6 +218,13 @@ def send(cfg: Config, thread: int | None, text: str) -> None:
     for part in chunks(text):
         call_with_retries(cfg, "sendMessage",
                           {"chat_id": cfg.chat_id, "message_thread_id": thread, "text": part})
+
+
+def send_file(cfg: Config, thread: int | None, path: Path, caption: str | None = None) -> None:
+    """Файл документом в тему: таблицы и сводки, которые хозяин смотрит с телефона (gf#159)."""
+    call_with_retries(cfg, "sendDocument",
+                      {"chat_id": cfg.chat_id, "message_thread_id": thread, "caption": caption},
+                      Upload("document", path.name, path.read_bytes()))
 
 
 # ---------------------------------------------------------------------------
@@ -349,11 +387,13 @@ def parser() -> argparse.ArgumentParser:
     commands = cli.add_subparsers(dest="command", required=True)
     commands.add_parser("pull").add_argument("--buffer", type=Path, required=True)
     commands.add_parser("discover")
-    sender = commands.add_parser("send")
-    sender.add_argument("--file", type=Path, required=True)
-    where = sender.add_mutually_exclusive_group(required=True)
-    where.add_argument("--topic", type=Topic, choices=list(Topic))
-    where.add_argument("--thread", type=int)
+    for name in ("send", "send-file"):
+        sender = commands.add_parser(name)
+        sender.add_argument("--file", type=Path, required=True)
+        where = sender.add_mutually_exclusive_group(required=True)
+        where.add_argument("--topic", type=Topic, choices=list(Topic))
+        where.add_argument("--thread", type=int)
+    sender.add_argument("--caption", help="подпись к файлу")
     return cli
 
 
@@ -374,7 +414,10 @@ def execute(cfg: Config, args: argparse.Namespace) -> None:
         print("\n".join(discover(cfg)) or "апдейтов нет: напишите в каждую тему и повторите")
     else:
         thread = cfg.threads[args.topic] if args.topic else args.thread
-        send(cfg, thread, args.file.read_text(encoding="utf-8"))
+        if args.command == "send-file":
+            send_file(cfg, thread, args.file, args.caption)
+        else:
+            send(cfg, thread, args.file.read_text(encoding="utf-8"))
         print("отправлено")
 
 
@@ -442,7 +485,9 @@ class FakeTelegram:
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_POST(self) -> None:  # имя метода задаёт http.server
-                params = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                raw = self.rfile.read(int(self.headers["Content-Length"]))
+                kind = self.headers["Content-Type"]
+                params = form(kind, raw) if kind.startswith("multipart/") else json.loads(raw)
                 status, body = fake.answer(self.path.rsplit("/", 1)[-1], params)
                 self.send_response(status)
                 self.end_headers()
@@ -459,6 +504,21 @@ class FakeTelegram:
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         threading.Thread(target=server.serve_forever, daemon=True).start()
         return server
+
+
+def form(kind: str, raw: bytes) -> dict:
+    """Разбор multipart/form-data, как его разбирает Telegram: числа — числами, файл — имя и
+    байты."""
+    whole = BytesParser(policy=HTTP).parsebytes(f"Content-Type: {kind}\r\n\r\n".encode() + raw)
+    out: dict = {}
+    for part in whole.iter_parts():
+        name = part.get_param("name", header="content-disposition")
+        if part.get_filename():
+            out[name] = {"name": part.get_filename(), "data": part.get_payload(decode=True)}
+        else:
+            value = part.get_content().strip()
+            out[name] = int(value) if value.lstrip("-").isdigit() else value
+    return out
 
 
 def message(text: str, origin: dict | None = None, **where: int) -> dict:
@@ -556,6 +616,24 @@ def check_retries(cfg: Config, fake: FakeTelegram) -> list[str]:
     return bad
 
 
+def check_send_file(cfg: Config, fake: FakeTelegram, folder: Path) -> list[str]:
+    """Файл уходит полем `document` в нужную тему с подписью; 502 — повтор, как у текста."""
+    bad = []
+    path = folder / "metrics.md"
+    path.write_text("| строка | FID |\n", encoding="utf-8")
+    fake.failures = [(502, {"ok": False, "error_code": 502, "description": "x"})]
+    before = len(fake.calls)
+    send_file(cfg, INBOX, path, "таблица")
+    want = {"chat_id": CHAT, "message_thread_id": INBOX, "caption": "таблица",
+            "document": {"name": "metrics.md", "data": path.read_bytes()}}
+    if fake.sent[-1:] != [want] or len(fake.calls) - before != 2:
+        bad.append(f"файл: ушло {fake.sent[-1:]} за {len(fake.calls) - before} вызова, "
+                   f"ждали {want} за 2")
+    if cli(["send-file", "--topic", "results", "--file", str(path)], {}) != 0:
+        bad.append("без токена send-file должен выйти с кодом 0")
+    return bad
+
+
 def selftest() -> int:
     fake = FakeTelegram()
     server = fake.serve()
@@ -566,11 +644,13 @@ def selftest() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         bad = check_pull(cfg, fake, Path(tmp) / "inbox")
         bad += check_retries(cfg, fake)
+        bad += check_send_file(cfg, fake, Path(tmp))
         if cli(["pull", "--buffer", tmp], {}) != 0:
             bad.append("без токена pull должен выйти с кодом 0")
     server.shutdown()
     return report(bad, "отсев повторов и чужих, offset, ответ в теме, повторы 429/5xx, "
-                       "400 без повтора, длинный текст кусками, без токена — выход 0")
+                       "400 без повтора, длинный текст кусками, файл документом в тему, "
+                       "без токена — выход 0")
 
 
 if __name__ == "__main__":
