@@ -153,9 +153,12 @@ def run(source: Source, cfg: Config, out: Path) -> Path:
     data = load(source, cfg)
     trainer = Trainer(data, cfg)
     out.mkdir(parents=True, exist_ok=True)
+    probe = _probe(data, source, cfg)
     history = []
     for epoch in range(1, fit.epochs + 1):
         history.append(_timed_epoch(trainer, rng) | {"epoch": epoch})
+        if probe and (epoch % cfg.train.probe.every == 0 or epoch == fit.epochs):
+            history[-1]["probe"] = probe.measure(trainer.sampler)
         print(json.dumps(history[-1]), flush=True)
     torch.save({"model": trainer.model.state_dict(), "size": cfg.train.model.model_dump(),
                 "vocabulary": data.words}, out / MODEL)
@@ -165,6 +168,16 @@ def run(source: Source, cfg: Config, out: Path) -> Path:
     summary = {k: v for k, v in samples.items() if k != "rows"}
     return _settings(trainer, cfg, {"source": source, "history": history, "samples": summary},
                      out)
+
+
+def _probe(data: Corpus, source: Source, cfg: Config):
+    """Датчик по эпохам (`evaluate.Probe`); every = 0 — выключен."""
+    if not cfg.train.probe.every:
+        return None
+    # evaluate сам импортирует fit: здесь — только при обучении, а не при загрузке модуля
+    from genfacade.train import evaluate
+
+    return evaluate.Probe(data, source, cfg)
 
 
 def _timed_epoch(trainer: Trainer, rng: numpy.random.Generator) -> dict:

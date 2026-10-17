@@ -338,6 +338,11 @@ class Evaluate(Section):
     untrained: int
 
 
+class Probe(Section):
+    every: int
+    count: int
+
+
 class TrainPaths(Section):
     runs_dir: Path
 
@@ -349,6 +354,7 @@ class Train(Section):
     fit: Fit
     sample: SampleRun
     eval: Evaluate
+    probe: Probe
     paths: TrainPaths
 
 

@@ -6,6 +6,7 @@
 
 import json
 from importlib.util import find_spec
+from itertools import count
 
 import pytest
 from simple_house import SIMPLE
@@ -64,8 +65,10 @@ def cfg() -> config.Config:
 def at(tmp_path):
     """Настройки с корнем данных в tmp_path/<имя>; extra — свои строки synthetic.toml,
     train — свои строки train.toml."""
+    made = count()
+
     def load(name: str, extra: str = "", train: str = "") -> config.Config:
-        folder = tmp_path / f"cfg-{name}-{len(extra)}-{len(train)}"
+        folder = tmp_path / f"cfg-{name}-{next(made)}"
         folder.mkdir()
         (folder / "data.toml").write_text(f'[paths]\nsamples_dir = "{tmp_path / name}"\n')
         (folder / "synthetic.toml").write_text(extra)

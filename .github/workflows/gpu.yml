@@ -17,6 +17,10 @@ on:
         description: "train: сколько синтетических домов в корпусе (собранные раньше не пересобираются)"
         type: number
         default: 10000
+      epochs:
+        description: "train: эпох обучения (умолчание config/train.toml — 10); датчик [probe] пишется в историю"
+        type: number
+        default: 10
       rebuild:
         description: "train: пересобрать дома заново — нужно, если код генератора поменялся с прошлой сборки"
         type: boolean
@@ -54,7 +58,8 @@ env:
 jobs:
   gpu:
     runs-on: [self-hosted, gpu]
-    timeout-minutes: 30
+    # 40 эпох обучения с датчиком — около 40 минут; оценка и метрики укладываются в 30
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
 
@@ -112,7 +117,11 @@ jobs:
           /usr/lib/wsl/lib/nvidia-smi --query-gpu=timestamp,utilization.gpu,memory.used,memory.total \
             --format=csv -l 10 > "$OUT/gpu.csv" &
           monitor=$!
-          genfacade -c "$DATA_CONFIG" train -o "$OUT"
+          cfg="$RUNNER_TEMP/train-config"
+          mkdir -p "$cfg"
+          cp "$DATA_CONFIG/data.toml" "$cfg/"
+          printf '[fit]\nepochs = %s\n' "${{ inputs.epochs }}" > "$cfg/train.toml"
+          genfacade -c "$cfg" train -o "$OUT"
           kill "$monitor"
 
       - name: Результат обучения
