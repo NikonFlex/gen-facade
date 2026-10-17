@@ -36,3 +36,5 @@ include = ["genfacade*"]
 testpaths = ["tests"]
 # общие данные тестов — tests/simple_house.py
 pythonpath = ["tests"]
+# долгие — вне быстрой проверки перед коммитом (`check.sh --quick`), в полном прогоне и CI (gf#165)
+markers = ["slow: тест дольше 30 с на машине разработки — Inception, калибровка, обучение"]

@@ -12,6 +12,9 @@ from genfacade.metrics import table
 from genfacade.schema import Device, Mode, OpeningKind, Source, Split
 from genfacade.train import corpus, evaluate, fit
 
+# долгий: torch — вне быстрой проверки перед коммитом (gf#165)
+pytestmark = pytest.mark.slow
+
 HOUSES = 4
 VAL_HALF = "[build]\nval_share = 0.5\n"
 EVAL = "[eval]\ncount = 0\nbatch = 8\nuntrained = 2\n"

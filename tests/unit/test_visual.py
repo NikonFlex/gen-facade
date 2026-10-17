@@ -15,6 +15,9 @@ import pytest
 from genfacade.metrics import calibrate, visual
 from genfacade.schema import Source, Split
 
+# долгий: torch — вне быстрой проверки перед коммитом (gf#165)
+pytestmark = pytest.mark.slow
+
 HOUSES = 80  # половина в val; у дома четыре стены и больше — WALLS набирается в обеих частях
 WALLS = 128
 
