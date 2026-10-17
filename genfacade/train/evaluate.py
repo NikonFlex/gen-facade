@@ -32,7 +32,16 @@ from genfacade.config import Config
 from genfacade.datasets import store
 from genfacade.models import layout
 from genfacade.pipeline import git_sha
-from genfacade.schema import ElementClass, FacadeSheet, Mode, Rule, Source, Split, Violation
+from genfacade.schema import (
+    Device,
+    ElementClass,
+    FacadeSheet,
+    Mode,
+    Rule,
+    Source,
+    Split,
+    Violation,
+)
 from genfacade.snap import snap
 from genfacade.train import constraints, corpus, fit, sampling, tokens
 from genfacade.train.gpt import GPT
@@ -104,6 +113,29 @@ def summary(judged: list[Judged], group: list[Case]) -> dict:
         "raw_errors": dict(Counter(str(v.rule) for j in parsed for v in j.raw).most_common()),
         "parse_errors": dict(Counter(_kind(j.error) for j in judged if j.error).most_common()),
     }
+
+
+class Probe:
+    """Датчик по эпохам обучения (gf#148): ответы модели с первой попытки, без запрета, на первые
+    `probe.count` последовательностей глухого режима val — разобрано, годных до привязки,
+    ошибки валидатора по правилам. Свой генератор случайных чисел: обучение идёт так же, как
+    без датчика."""
+
+    def __init__(self, data: fit.Corpus, source: Source, cfg: Config):
+        part = data.parts[Split.VAL]
+        rows = [i for i, m in enumerate(part.mode) if m is Mode.BLIND][:cfg.train.probe.count]
+        self.group, self.words, self.cfg = cases(part, rows, source, cfg), data.words, cfg
+
+    def measure(self, sampler: sampling.Sampler) -> dict:
+        opts = self.cfg.train.sample
+        devices = [sampler.device] if sampler.device.type == Device.CUDA else []
+        with torch.random.fork_rng(devices=devices):
+            torch.manual_seed(self.cfg.train.fit.seed)
+            answers = sampling.answer_all(sampler, [sampling.Prompt(c.prompt) for c in self.group],
+                                          opts, opts.batch)
+        judged = [judge(a, c, self.words, self.cfg)
+                  for a, c in zip(answers, self.group, strict=True)]
+        return summary(judged, self.group)
 
 
 def _kind(error: str) -> str:

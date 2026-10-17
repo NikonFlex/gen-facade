@@ -84,3 +84,27 @@ def test_window_shorter_than_corpus_is_refused(at, houses, tmp_path):
     cfg = at("data", VAL_HALF, TINY.replace("[model]", "[model]\nblock = 8"))
     with pytest.raises(corpus.CorpusError, match="окно 8 короче"):
         fit.run(Source.SYNTHETIC, cfg, tmp_path / "run")
+
+
+PROBE = "\n[probe]\nevery = 1\ncount = 2\n"
+
+
+def _history(at, extra: str, tmp_path, name: str) -> list[dict]:
+    cfg = at("data", VAL_HALF, TINY.replace("dropout = 0.0", "dropout = 0.1") + extra)
+    return json.loads(fit.run(Source.SYNTHETIC, cfg, tmp_path / name).read_text())["history"]
+
+
+def test_probe_measures_blind_mode_every_epoch(at, houses, tmp_path):
+    """Датчик gf#148: ответы на условия глухого режима val после каждой эпохи."""
+    history = _history(at, PROBE, tmp_path, "probe")
+    for h in history:
+        assert h["probe"]["count"] == 2
+        assert set(h["probe"]) >= {"parsed", "valid_raw", "raw_errors"}
+
+
+def test_probe_does_not_change_training(at, houses, tmp_path):
+    """Датчик сэмплирует своим генератором: потери те же, что без него (dropout включён)."""
+    on = _history(at, PROBE, tmp_path, "on")
+    off = _history(at, PROBE.replace("every = 1", "every = 0"), tmp_path, "off")
+    assert [(h["train"], h["val"]) for h in on] == [(h["train"], h["val"]) for h in off]
+    assert all("probe" not in h for h in off)
