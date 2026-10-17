@@ -73,10 +73,11 @@ def test_unfold_step_has_walls_but_no_elements(cfg, tmp_path):
 def test_violations_marked_on_step_5_only(cfg, tmp_path, simple_svg):
     out = _generate(cfg, tmp_path / "run", svg=simple_svg(before_leaf(WALL_INTO_WINDOW)))
     violations = json.loads((out / pipeline.VIOLATIONS).read_text())
-    assert {v["rule"] for v in violations} == {Rule.FORBIDDEN}
-    assert (_meta(out)["errors"], _meta(out)["warnings"]) == (1, 0)
+    # окно плана в запретной зоне — предупреждение (`evaluation: Окно плана в запретной зоне`)
+    assert {v["rule"] for v in violations} == {Rule.PLAN_FORBIDDEN}
+    assert (_meta(out)["errors"], _meta(out)["warnings"]) == (0, 1)
     snapped = (out / pipeline.SNAPPED).read_text()
-    assert snapped.count('class="violation error"') == len(violations)
+    assert snapped.count('class="violation warning"') == len(violations)
     assert 'class="violation' not in (out / pipeline.SHEET).read_text()
     assert 'class="forbidden-zone"' in (out / pipeline.LAYOUT).read_text()
 

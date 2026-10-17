@@ -20,6 +20,7 @@ from genfacade.schema import (
     Element,
     ElementClass,
     FacadeSheet,
+    FixedField,
     Rule,
     Severity,
     SideFacade,
@@ -27,7 +28,7 @@ from genfacade.schema import (
 )
 
 OPENINGS = (ElementClass.WINDOW, ElementClass.DOOR, ElementClass.GARAGE_DOOR)
-WARNINGS = {Rule.FLOOR_ALIGN, Rule.AXIS_ALIGN}  # остальные правила — ошибки
+WARNINGS = {Rule.FLOOR_ALIGN, Rule.AXIS_ALIGN, Rule.PLAN_FORBIDDEN}  # остальные — ошибки
 
 
 def validate(sheet: FacadeSheet, cfg: Checks) -> list[Violation]:
@@ -78,7 +79,11 @@ def _overlaps(f: SideFacade, cfg: Checks) -> list[Violation]:
 
 
 def _forbidden(f: SideFacade, cfg: Checks) -> list[Violation]:
-    return [_v(f, Rule.FORBIDDEN, e, f"окно {e.id} в запретной зоне {z.x0_m:.2f}–{z.x1_m:.2f} м")
+    """Окно модели в запретной зоне — ошибка. Окно плана (x задан планом) — предупреждение: план
+    главнее, его окно не двигается (`evaluation: Окно плана в запретной зоне`)."""
+    return [_v(f, Rule.PLAN_FORBIDDEN if FixedField.X in e.fixed else Rule.FORBIDDEN, e,
+               f"окно {'плана ' if FixedField.X in e.fixed else ''}{e.id} в запретной зоне "
+               f"{z.x0_m:.2f}–{z.x1_m:.2f} м")
             for e in f.elements if e.cls is ElementClass.WINDOW for z in f.side.forbidden
             if min(e.x_m + e.w_m, z.x1_m) - max(e.x_m, z.x0_m) > cfg.eps_m]
 

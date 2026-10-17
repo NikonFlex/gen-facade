@@ -76,8 +76,10 @@ def test_window_in_forbidden_zone_breaks_plan_agreement(cfg, house, tmp_path):
     k, f = next((k, f) for k, f in enumerate(house.facades) if measures.windows(f))
     w = measures.windows(f)[0]
     side = f.side.model_copy(update={"forbidden": [ForbiddenZone(x0_m=w.x_m, x1_m=w.x_m + 0.1)]})
+    # окно ставит модель: окно плана в зоне — предупреждение, не ошибка метода (gf#156)
+    elements = [e.model_copy(update={"fixed": []}) if e.id == w.id else e for e in f.elements]
     facades = list(house.facades)
-    facades[k] = f.model_copy(update={"side": side})
+    facades[k] = f.model_copy(update={"side": side, "elements": elements})
     bad = house.model_copy(update={"facades": facades})
     items = table.load(_folder(tmp_path / "f", [house, bad]), cfg)
     r = table.row(items, table.reference(items, cfg), cfg)
