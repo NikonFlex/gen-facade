@@ -6,7 +6,7 @@ import math
 import pytest
 
 from genfacade.datasets.synthetic import build
-from genfacade.schema import ElementClass, FixedField, Mode, OpeningKind
+from genfacade.schema import ElementClass, FixedField, Mode, OpeningKind, VariantKind
 from genfacade.train import tokens
 from genfacade.train.tokens import Mark, TokenError
 from genfacade.validate import validate
@@ -148,7 +148,14 @@ def _broken(seq: list[str], what: str) -> list[str]:
         "ещё 1 токенов": seq + ["0"],
         "ждали <answer>": seq[1:],
         "greater than 0": seq[:door + 3] + ["0"] + seq[door + 4:],
+        "greater than or equal to 1": _frame_rows(seq, "0"),
     }[what]
+
+
+def _frame_rows(seq: list[str], rows: str) -> list[str]:
+    """Деление рамы на ряды — второе число после вида проёма; недоученная модель пишет 0."""
+    at = next(i for i, t in enumerate(seq) if t.startswith(f"{tokens.PREFIX[VariantKind]}:"))
+    return seq[:at + 2] + [rows] + seq[at + 3:]
 
 
 def _with_parent(seq: list[str], number: str) -> list[str]:
@@ -158,7 +165,7 @@ def _with_parent(seq: list[str], number: str) -> list[str]:
 
 @pytest.mark.parametrize("what", [
     "оборвалась", "ждали <wall>", "ждали число", "такого номера в стене нет", "ещё 1 токенов",
-    "ждали <answer>", "greater than 0"])
+    "ждали <answer>", "greater than 0", "greater than or equal to 1"])
 def test_broken_answer_refused_with_reason(sheets, cfg, what):
     """Ответ модели бывает негодным: разбор не чинит его молча, а называет причину."""
     with pytest.raises(TokenError, match=what):
