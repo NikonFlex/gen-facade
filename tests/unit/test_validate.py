@@ -9,7 +9,7 @@ import pytest
 from simple_house import WALL_INTO_WINDOW, before_leaf
 
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import ElementClass, Rule
+from genfacade.schema import ElementClass, Rule, Severity
 from genfacade.snap import snap
 from genfacade.unfold import unfold
 from genfacade.validate import errors, validate, validate_svg
@@ -74,10 +74,21 @@ def test_openings_overlap(clean, cfg):
     assert Rule.OVERLAP in _rules(_edit(clean, SIDE, b.id, y_m=a.y_m + 0.1), cfg)
 
 
-def test_window_in_forbidden_zone(lay_out, simple_svg, cfg):
-    # режим 2: окно плана стоит там, куда упирается внутренняя стена
+def test_plan_window_in_forbidden_zone_is_a_warning(lay_out, simple_svg, cfg):
+    """Сценарий «Стена в окне плана» (`evaluation: Окно плана в запретной зоне`, gf#156): режим 2,
+    окно плана там, куда упирается внутренняя стена, — предупреждение, ошибок нет."""
     found = validate(lay_out(svg=simple_svg(before_leaf(WALL_INTO_WINDOW))), cfg.checks)
-    assert {(v.rule, v.side) for v in found} == {(Rule.FORBIDDEN, 2)}
+    assert {(v.rule, v.side, v.severity) for v in found} == {
+        (Rule.PLAN_FORBIDDEN, 2, Severity.WARNING)}
+
+
+def test_model_window_in_forbidden_zone_is_an_error(lay_out, simple_svg, cfg):
+    """То же окно, но поставленное моделью (x не задан планом), — ошибка."""
+    sheet = lay_out(svg=simple_svg(before_leaf(WALL_INTO_WINDOW)))
+    f = sheet.facades[2]
+    w = next(e for e in f.elements if e.cls is ElementClass.WINDOW and e.fixed)
+    found = _rules(_edit(sheet, 2, w.id, fixed=[]), cfg)
+    assert Rule.FORBIDDEN in found and Rule.PLAN_FORBIDDEN not in found
 
 
 def test_plan_opening_moved(lay_out, cfg):

@@ -147,6 +147,7 @@ class Rule(StrEnum):
     OUTSIDE = "outside"
     OVERLAP = "overlap"
     FORBIDDEN = "forbidden"
+    PLAN_FORBIDDEN = "plan_forbidden"  # окно плана в запретной зоне — предупреждение (gf#156)
     PLAN_OPENING = "plan_opening"
     CORNER = "corner"
     FLOOR_ALIGN = "floor_align"
