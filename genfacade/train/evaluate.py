@@ -14,6 +14,11 @@
 Ответы после привязки (шаг 5) выгружаются листами для `genfacade metrics` (gf#16):
 
     <out>/sheets/<кто>/<режим>/<дом>.json   — лист; неразобранный ответ — {"error": "…"}
+
+Строки ablation (`evaluation: Ablation`, gf#163) — от основного метода (модель с запретом и
+привязкой): без запрета — `model`; без привязки — `constrained_raw`, те же ответы до шага 5;
+независимые стороны — `independent`: каждая стена дома отвечается отдельно, с параметрами
+другого дома val того же режима, и стены собираются в один лист.
 """
 
 import json
@@ -45,13 +50,15 @@ from genfacade.schema import (
 from genfacade.snap import snap
 from genfacade.train import constraints, corpus, fit, sampling, tokens
 from genfacade.train.gpt import GPT
-from genfacade.train.tokens import TokenError
+from genfacade.train.tokens import Mark, TokenError
+from genfacade.unfold import unfold
 from genfacade.validate import errors, validate
 
 EVAL = "eval.json"
 SHEETS = "sheets"
 MODEL, CONSTRAINED, REFERENCE, UNTRAINED = "model", "constrained", "reference", "untrained"
 WHO = (MODEL, CONSTRAINED, REFERENCE, UNTRAINED)  # строки таблицы; constrained — с запретом gf#132
+CONSTRAINED_RAW, INDEPENDENT = "constrained_raw", "independent"  # строки ablation (gf#163)
 
 
 class Case(NamedTuple):
@@ -92,6 +99,11 @@ def judge(ids: list[int], case: Case, words: list[str], cfg: Config) -> Judged:
         sheet = tokens.decode([words[i] for i in ids], case.bare, cfg)
     except TokenError as e:
         return Judged(None, str(e), [], [])
+    return checked(sheet, cfg)
+
+
+def checked(sheet: FacadeSheet, cfg: Config) -> Judged:
+    """Разобранный ответ: ошибки валидатора до привязки и после неё."""
     return Judged(sheet, None, errors(validate(sheet, cfg.checks)),
                   errors(validate(snap(sheet, cfg.checks), cfg.checks)))
 
@@ -207,10 +219,46 @@ class Evaluation:
         """Сводка по всем и по режимам на первых len(answers) последовательностях."""
         group = self.group[:len(answers)]
         judged = [judge(a, c, self.words, self.cfg) for a, c in zip(answers, group, strict=True)]
-        by_mode = {m: summary([j for j, c in zip(judged, group, strict=True) if c.mode is m],
-                              [c for c in group if c.mode is m]) for m in Mode}
-        return {"all": summary(judged, group), "by_mode": by_mode,
-                "copies_of_train": copies(answers, self.train)}, judged
+        return summaries(judged, group) | {"copies_of_train": copies(answers, self.train)}, judged
+
+
+def summaries(judged: list[Judged], group: list[Case]) -> dict:
+    by_mode = {m: summary([j for j, c in zip(judged, group, strict=True) if c.mode is m],
+                          [c for c in group if c.mode is m]) for m in Mode}
+    return {"all": summary(judged, group), "by_mode": by_mode}
+
+
+def independent(ev: Evaluation, sampler: sampling.Sampler, cfg: Config) -> list[Judged]:
+    """Ablation «независимые стороны»: стена k дома — ответ модели (с запретом) на этот дом с
+    параметрами k-го после него дома того же режима; стены собираются в лист со своими
+    параметрами дома. Без общих параметров соседние стены не сходятся на углах."""
+    walls = [(c, k, _donated(c, k, ev.group))
+             for c in ev.group for k in range(len(c.bare.facades))]
+    number, vocab = {w: i for i, w in enumerate(ev.words)}, constraints.Vocab(ev.words)
+    prompts = [sampling.Prompt([number[w] for w in [*tokens.condition(b, c.mode, cfg),
+                                                     Mark.ANSWER]],
+                               constraints.guard(b, c.mode, vocab, cfg)) for c, _, b in walls]
+    answers = iter(zip(walls, _answers(sampler, prompts, cfg)[0], strict=True))
+    return [_assembled(c, [next(answers) for _ in c.bare.facades], ev.words, cfg)
+            for c in ev.group]
+
+
+def _donated(case: Case, k: int, group: list[Case]) -> FacadeSheet:
+    """Стены дома case с параметрами k-го после него по кругу дома того же режима."""
+    same = [c for c in group if c.mode is case.mode]
+    at = next(i for i, c in enumerate(same) if c is case)
+    donor = same[(at + k + 1) % len(same)].bare.spec
+    return unfold(case.bare.model_copy(update={"spec": donor}))
+
+
+def _assembled(case: Case, parts: list, words: list[str], cfg: Config) -> Judged:
+    facades = []
+    for k, ((_, _, bare), ids) in enumerate(parts):
+        try:
+            facades.append(tokens.decode([words[i] for i in ids], bare, cfg).facades[k])
+        except TokenError as e:
+            return Judged(None, str(e), [], [])
+    return checked(case.bare.model_copy(update={"facades": facades}), cfg)
 
 
 def run(source: Source, cfg: Config, out: Path) -> Path:
@@ -222,9 +270,12 @@ def run(source: Source, cfg: Config, out: Path) -> Path:
     rows = _chosen(len(data.parts[Split.VAL].ids), cfg)
     ev = Evaluation(data, cases(data.parts[Split.VAL], rows, source, cfg), cfg)
     result, seconds = _reports(ev, trained.sampler, cfg)
-    report = {who: r for who, (r, _) in result.items()}
+    alone = independent(ev, trained.sampler, cfg)
+    report = {who: r for who, (r, _) in result.items()} | {INDEPENDENT: summaries(alone, ev.group)}
     for who, (_, judged) in result.items():
         dump(judged, ev.group, out / SHEETS / who, cfg)
+    dump(result[CONSTRAINED][1], ev.group, out / SHEETS / CONSTRAINED_RAW, cfg, snapped=False)
+    dump(alone, ev.group, out / SHEETS / INDEPENDENT, cfg)
     report["compare"] = _compare({w: result[w][1] for w in (MODEL, CONSTRAINED, REFERENCE)},
                                  ev.group)
     report["seconds_per_answer"] = round(seconds / len(ev.group), 3)
@@ -235,13 +286,16 @@ def run(source: Source, cfg: Config, out: Path) -> Path:
     return out / EVAL
 
 
-def dump(judged: list[Judged], group: list[Case], out: Path, cfg: Config) -> None:
-    """Листы ответов после привязки, как их отдаёт конвейер, — по папке на режим."""
+def dump(judged: list[Judged], group: list[Case], out: Path, cfg: Config,
+         snapped: bool = True) -> None:
+    """Листы ответов по папке на режим: после привязки, как их отдаёт конвейер, или до неё —
+    строка ablation «без привязки»."""
     for j, c in zip(judged, group, strict=False):
         folder = out / c.mode
         folder.mkdir(parents=True, exist_ok=True)
-        text = (json.dumps({"error": j.error}, ensure_ascii=False) if j.sheet is None
-                else snap(j.sheet, cfg.checks).model_dump_json())
+        sheet = j.sheet if j.sheet is None or not snapped else snap(j.sheet, cfg.checks)
+        text = (json.dumps({"error": j.error}, ensure_ascii=False) if sheet is None
+                else sheet.model_dump_json())
         (folder / f"{c.sample}.json").write_text(text)
 
 
@@ -310,6 +364,9 @@ def table(report: dict) -> str:
     for who in WHO:
         for mode, s in report[who]["by_mode"].items():
             lines.append(f"{who} / {mode}".ljust(26) + "".join(str(s[k]).rjust(24) for k in keys))
+    for mode, s in report[INDEPENDENT]["by_mode"].items():
+        lines.append(f"{INDEPENDENT} / {mode}".ljust(26)
+                     + "".join(str(s[k]).rjust(24) for k in keys))
     for who in WHO:
         lines.append(f"{who}: повторов train {report[who]['copies_of_train']}, "
                      f"ошибки до привязки {report[who]['all']['raw_errors']}")

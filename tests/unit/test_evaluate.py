@@ -9,7 +9,7 @@ import tiny_model
 
 from genfacade.datasets.synthetic import batch
 from genfacade.metrics import table
-from genfacade.schema import Device, Mode, OpeningKind, Source, Split
+from genfacade.schema import Device, Mode, OpeningKind, Rule, Source, Split
 from genfacade.train import corpus, evaluate, fit
 
 # долгий: torch — вне быстрой проверки перед коммитом (gf#165)
@@ -89,3 +89,26 @@ def test_eval_dumps_sheets_for_metrics(setup, tmp_path):
             for who in (evaluate.REFERENCE, evaluate.UNTRAINED)}
     assert (rows["reference"]["valid"], rows["reference"]["plan"]) == (1.0, 1.0)
     assert rows["untrained"]["valid"] == 0.0
+
+
+def test_independent_sides_take_their_own_house_parameters(setup, monkeypatch):
+    """Ablation «независимые стороны» (gf#163): стена k — с параметрами другого дома val того
+    же режима; где высоты стен разошлись, валидатор видит несходящиеся углы. Ответы модели
+    подменены ответом генератора: расхождение — только от чужих параметров."""
+    data, group = _val(setup)
+    ev = evaluate.Evaluation(data, group, setup)
+    answers = [c.reference for c in group for _ in c.bare.facades]
+    monkeypatch.setattr(evaluate, "_answers", lambda sampler, prompts, cfg: (answers, 0.0))
+    judged = evaluate.independent(ev, None, setup)
+    for case, j in zip(group, judged, strict=True):
+        same = [c for c in group if c.mode is case.mode]
+        at = same.index(case)
+        tops = [max(y for _, y in f.silhouette) for f in j.sheet.facades]
+        donors = [same[(at + k + 1) % len(same)].bare.spec.eaves_m for k in range(len(tops))]
+        assert tops == pytest.approx(donors)
+        assert (Rule.CORNER in {v.rule for v in j.raw}) == (max(tops) - min(tops) > 1e-6)
+    monkeypatch.undo()  # дальше — настоящая оценка: строки ablation выгружены листами
+    report = evaluate.run(Source.SYNTHETIC, setup, setup.train.paths.runs_dir / "e")
+    out = report.parent / evaluate.SHEETS
+    for who in (evaluate.CONSTRAINED_RAW, evaluate.INDEPENDENT):
+        assert sorted(p.name for p in (out / who).iterdir()) == sorted(Mode)

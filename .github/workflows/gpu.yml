@@ -171,13 +171,14 @@ jobs:
       - name: Метрики с FID и KID
         if: inputs.job == 'visual'
         # Калибровка — эталон train и подмены на val (gf#16); строки — ответы оценки и правило
-        # GenPlan на тех же домах (gf#141) против того же эталона train. Inception — на GPU.
+        # GenPlan на тех же домах (gf#141) и строки ablation (gf#163: без привязки, независимые
+        # стороны) против того же эталона train. Inception — на GPU.
         run: |
           mkdir -p "$OUT"
           genfacade -c "$DATA_CONFIG" calibrate -o "$OUT/calibrate"
           for mode in blind with_openings; do
             genfacade baseline genplan "eval/sheets/reference/$mode" -o "$OUT/genplan/$mode"
-            genfacade metrics eval/sheets/{reference,model,constrained,untrained}/$mode \
+            genfacade metrics eval/sheets/{reference,model,constrained,constrained_raw,independent,untrained}/$mode \
               "$OUT/genplan/$mode" -r "$OUT/calibrate/$mode/reference" -o "$OUT/rows/$mode"
           done
 
