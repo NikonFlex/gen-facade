@@ -63,7 +63,9 @@ def test_box_takes_only_numbers_and_nothing_is_banned_outside_it(guard, vocab):
     assert _allowed(guard(Mark.WALL, WINDOW, 52), vocab) == numbers       # y — любое число
     assert _allowed(guard(Mark.WALL, DOOR), vocab) == numbers             # x двери — из плана
     assert _allowed(guard(Mark.WALL, DOOR, 30, 10), vocab) == numbers - {0}   # ширина > 0
-    assert guard(Mark.WALL, WINDOW, 52, 10, 20, 30).banned() == []        # рамка дописана
+    # рамка дописана: следующим — не число (лишнее число ломает ответ, gf#177), дальше — свободно
+    assert set(guard(Mark.WALL, WINDOW, 52, 10, 20, 30).banned()) == set(vocab.number)
+    assert guard(Mark.WALL, WINDOW, 52, 10, 20, 30, Mark.FLOOR).banned() == []
     assert guard(Mark.WALL, WINDOW, 52, 10, 20, 30, ZONE).banned() == []  # числа зоны
 
 

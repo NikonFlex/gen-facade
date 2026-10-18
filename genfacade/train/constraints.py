@@ -52,9 +52,11 @@ class WallGeometry:
         self.placed: list[tuple[int, int]] = []
         self.cls: ElementClass | None = None
         self.box: list[int] = []
+        self.closed = False               # рамка x y w h только что дописана
 
     def step(self, token: int) -> None:
         v = self.vocab
+        self.closed = False
         if token == v.wall:
             self.at, self.placed, self.cls = self.at + 1, [], None
         elif token in v.cls:
@@ -63,6 +65,7 @@ class WallGeometry:
             self.cls = None
         elif self.cls is not None and token in v.number and len(self.box) < 4:
             self.box.append(v.number[token])
+            self.closed = len(self.box) == 4
             if len(self.box) == W + 1 and self.cls in OPENINGS:
                 self.placed.append((self.box[X], self.box[X] + self.box[W]))
 
@@ -71,7 +74,10 @@ class WallGeometry:
         числа, ширина и высота больше нуля: иначе после непривычного x или w модель пишет на
         месте числа другой токен, и ответ ломается («ждали число») — gf#132, run 38637413314.
         У окна x и w ещё и годные по стене. Годных нет — не запрещаем ничего, брак поймает
-        валидатор."""
+        валидатор. Сразу после рамки — не число: урезанная стражем ширина сбивает модель, и она
+        дописывает задуманные ширину и высоту лишними числами (gf#177: «12 32 10 36 50»)."""
+        if self.closed:
+            return list(self.vocab.number)
         if self.cls is None or len(self.box) >= 4 or not 0 <= self.at < len(self.walls):
             return []
         allowed = self._allowed()
