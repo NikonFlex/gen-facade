@@ -24,11 +24,13 @@ from enum import StrEnum
 
 from genfacade.config import Config, Tokens
 from genfacade.schema import (
+    EPS,
     BuildingType,
     Element,
     ElementClass,
     FacadeSheet,
     FixedField,
+    HouseSpec,
     MaterialZone,
     Mode,
     OpeningKind,
@@ -165,7 +167,10 @@ def _side(side: Side, mode: Mode, cfg: Tokens) -> list[str]:
         out += [Mark.FORBIDDEN, str(units(z.x0_m, cfg)), str(units(z.x1_m, cfg))]
     for o in side.openings:
         if given(o.kind, mode):
-            out += [tok(o.kind), str(units(o.x_m, cfg)), str(units(o.width_m, cfg))]
+            # ширина — разность краёв на сетке, как у элемента в ответе (_box): проём плана не на
+            # сетке (окно GenPlan 1,434 м) иначе в условии на шаг шире, чем модель его пишет
+            x = units(o.x_m, cfg)
+            out += [tok(o.kind), str(x), str(units(o.x_m + o.width_m, cfg) - x)]
     return out
 
 
@@ -251,7 +256,7 @@ def decode(tokens: list[str], walls: FacadeSheet, cfg: Config) -> FacadeSheet:
     """Ответ модели → стены с элементами и зонами; walls — дом после развёртки (шаг 3)."""
     r = _Reader(tokens, cfg.tokens)
     r.expect(Mark.ANSWER)
-    facades = [_wall(r, f) for f in walls.facades]
+    facades = [_exact(_wall(r, f), walls.spec, cfg.tokens) for f in walls.facades]
     r.expect(Mark.END)
     if r.at != len(tokens):
         raise TokenError(f"после {Mark.END} ещё {len(tokens) - r.at} токенов")
@@ -286,6 +291,38 @@ def _wall(r: _Reader, wall: SideFacade) -> SideFacade:
     while (role := r.value(ZoneRole)) is not None:
         zones.append(_read_zone(r, role))
     return wall.model_copy(update={"elements": named, "zones": zones})
+
+
+def _exact(wall: SideFacade, spec: HouseSpec, cfg: Tokens) -> SideFacade:
+    """Края на сетке — на настоящие размеры. Модель видит стену и отметки, округлённые до шага
+    сетки, а у плана GenPlan стороны и высоты не на ней (сторона 4,2254 м — в условии 4,25):
+    край элемента или зоны, поставленный ровно на край стены или отметку уровня в сетке,
+    становится настоящим краем — иначе карниз на 2,5 см выходит за стену. Остальное не трогается."""
+    xs = _grid_to_real([0.0, wall.side.length_m], cfg)
+    ys = _grid_to_real([0.0, *spec.floor_levels(), spec.eaves_m], cfg)
+    elements = [_exact_box(e, xs, ys) for e in wall.elements]
+    zones = [z.model_copy(update={"shape": [(_real(x, xs), _real(y, ys)) for x, y in z.shape]})
+             for z in wall.zones]
+    return wall.model_copy(update={"elements": elements, "zones": zones})
+
+
+def _grid_to_real(values: list[float], cfg: Tokens) -> dict[float, float]:
+    """Узел сетки → настоящий размер, только если он и правда не на сетке: хвост float
+    (5.6000000000000005) — не повод менять узел."""
+    grid = {metres(units(v, cfg), cfg): v for v in values}
+    return {g: v for g, v in grid.items() if abs(g - v) > EPS}
+
+
+def _real(value: float, known: dict[float, float]) -> float:
+    return next((real for grid, real in known.items() if abs(value - grid) <= EPS), value)
+
+
+def _exact_box(e: Element, xs: dict[float, float], ys: dict[float, float]) -> Element:
+    x0, x1 = _real(e.x_m, xs), _real(e.x_m + e.w_m, xs)
+    y0, y1 = _real(e.y_m, ys), _real(e.y_m + e.h_m, ys)
+    if (x0, x1, y0, y1) == (e.x_m, e.x_m + e.w_m, e.y_m, e.y_m + e.h_m):
+        return e
+    return e.model_copy(update={"x_m": x0, "w_m": x1 - x0, "y_m": y0, "h_m": y1 - y0})
 
 
 def name(index: int) -> str:

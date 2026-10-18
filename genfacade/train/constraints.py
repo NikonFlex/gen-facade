@@ -45,8 +45,9 @@ class Vocab:
 class WallGeometry:
     """Страж одного ответа: что модель уже написала и какие числа сейчас запрещены."""
 
-    def __init__(self, walls: list[Wall], vocab: Vocab):
-        self.walls, self.vocab = walls, vocab
+    def __init__(self, walls: list[Wall], vocab: Vocab, narrowest: int):
+        # narrowest — самое узкое окно корпуса в шагах: x, за которым оно не помещается, не годен
+        self.walls, self.vocab, self.narrowest = walls, vocab, narrowest
         self.at = -1                      # номер стены; до первого `<wall>` — ещё не стена
         self.placed: list[tuple[int, int]] = []
         self.cls: ElementClass | None = None
@@ -87,7 +88,11 @@ class WallGeometry:
         wall = self.walls[self.at]
         busy = wall.busy + self.placed
         if place == X:
-            return [n for n in numbers if n < wall.length and not any(a <= n < b for a, b in busy)]
+            # Окну нужно место: x, за которым до края или занятого отрезка уже самого узкого окна,
+            # загоняет модель в ширину, какой она не видела, — и ответ ломается (gf#153: x 98 на
+            # стене 109 шагов, ширина 4, дальше «ждали <wall>, пришло '32'»).
+            return [n for n in numbers if n + self.narrowest <= wall.length
+                    and not any(n < b and n + self.narrowest > a for a, b in busy)]
         x = self.box[X]
         return [n for n in numbers if 0 < n and x + n <= wall.length
                 and not any(x < b and x + n > a for a, b in busy)]
@@ -110,4 +115,5 @@ def guard(bare: FacadeSheet, mode: Mode, vocab: Vocab, cfg: Config) -> WallGeome
     Включён ли запрет в конвейере — решает вызывающий (config/models.toml, `constrain`)."""
     if mode is not Mode.BLIND:
         return None
-    return WallGeometry(walls(bare, mode, cfg), vocab)
+    narrowest = tokens.units(min(cfg.synthetic.openings.window_widths_m), cfg.tokens)
+    return WallGeometry(walls(bare, mode, cfg), vocab, narrowest)

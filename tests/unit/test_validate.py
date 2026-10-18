@@ -180,6 +180,23 @@ def test_snap_returns_plan_window_to_its_opening(lay_out, cfg):
     assert Rule.PLAN_OPENING not in _rules(snapped, cfg)
 
 
+
+def test_snap_drops_repeated_plan_window(lay_out, cfg):
+    """Модель повторила окно плана: две копии «заданы планом», проём — один. Лишняя копия и её
+    подоконник убираются, проёмы больше не пересекаются (gf#153)."""
+    sheet = lay_out()
+    f = sheet.facades[SIDE]
+    w = _window(sheet, floor=1)
+    copy = w.model_copy(update={"id": "copy", "x_m": w.x_m + 0.05, "w_m": w.w_m - 0.1})
+    copy_sill = _sill(sheet, w.id).model_copy(update={"id": "copy_sill", "parent": "copy"})
+    facades = list(sheet.facades)
+    facades[SIDE] = f.model_copy(update={"elements": [*f.elements, copy, copy_sill]})
+    doubled = sheet.model_copy(update={"facades": facades})
+    assert Rule.OVERLAP in _rules(doubled, cfg)
+    snapped = snap(doubled, cfg.checks)
+    assert {e.id for e in snapped.facades[SIDE].elements} == {e.id for e in f.elements}
+    assert errors(validate(snapped, cfg.checks)) == []
+
 def test_snap_centers_model_windows_on_common_axis(clean, cfg):
     """Режим 1: окна ставит модель (без `fixed`) — ось группы — медиана центров, а не левых краёв.
 

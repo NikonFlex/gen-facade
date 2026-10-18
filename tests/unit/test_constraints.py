@@ -7,8 +7,10 @@ from genfacade.schema import ElementClass, Mode, ZoneRole
 from genfacade.train import constraints, tokens
 from genfacade.train.tokens import Mark
 
-# Стена 8 м (160 шагов по 5 см): запретная зона 3,9–4,1 м, вход 1,4–2,3 м.
+# Стена 8 м (160 шагов по 5 см): запретная зона 3,9–4,1 м, вход 1,4–2,3 м; самое узкое окно —
+# 12 шагов (0,6 м).
 WALL = constraints.Wall(160, [(78, 82), (28, 46)])
+NARROWEST = 12
 
 
 @pytest.fixture
@@ -22,7 +24,7 @@ def guard(cfg, vocab):
     ids = {w: i for i, w in enumerate(tokens.vocabulary(cfg))}
 
     def read(*words):
-        g = constraints.WallGeometry([WALL], vocab)
+        g = constraints.WallGeometry([WALL], vocab, NARROWEST)
         for w in words:
             g.step(ids[str(w)])
         return g
@@ -42,8 +44,10 @@ WINDOW, DOOR, ZONE = (tokens.tok(v) for v in (ElementClass.WINDOW, ElementClass.
 
 
 def test_window_x_avoids_zones_entrance_and_wall_end(guard, vocab):
+    """x окна — только там, где до входа, зоны или края стены помещается самое узкое окно."""
     ok = _allowed(guard(Mark.WALL, WINDOW), vocab)
-    assert ok == set(range(0, 28)) | set(range(46, 78)) | set(range(82, 160))
+    assert ok == set(range(0, 28 - NARROWEST + 1)) | set(range(46, 78 - NARROWEST + 1)) \
+        | set(range(82, 160 - NARROWEST + 1))
 
 
 def test_window_width_stops_at_next_busy_span_and_is_remembered(guard, vocab):
