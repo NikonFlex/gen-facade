@@ -16,8 +16,11 @@ from genfacade.plan import genplan_svg
 from genfacade.plan.gaps import Axis
 from genfacade.plan.preprocess import ENTRANCE_WIDTH_M
 from genfacade.schema import OpeningKind, Source
+from genfacade.train import tokens
 
 SEEDS = range(60)
+# Стороны примера GenPlan (materials/genplan-plan-example.svg, вне git) после препроцессора, м.
+GENPLAN_SIDES_M = (4.23, 5.47)
 DOOR = Opening(2.0, ENTRANCE_WIDTH_M, Hole.ENTRANCE)
 # Простой дом tests/fixtures/simple_house.svg теми же словами, какими дом описывает генератор.
 SIMPLE_DRAFT = PlanDraft(10.0, 5.0, 0.15, (
@@ -86,6 +89,21 @@ def test_plan_keeps_every_decision_of_draft(houses, cfg):
         assert sides[0].has_entrance and house.plan.scale_m_per_px == pytest.approx(0.01)
         assert sum(len(s.forbidden) for s in sides) == 2 * len(_holes(sketch, Hole.PASSAGE))
         assert house.plan.source is Source.SYNTHETIC and len(house.sheet.facades) == 4
+
+
+def test_house_sizes_cover_genplan_sides(cfg):
+    """Длина стороны в условии модели — число шагов сетки токенов, и каждое такое число модель
+    учит по синтетике: длину, которой там не было, она не читает и раскладывает стену другой
+    длины (gf#153, пример GenPlan: стороны 85 и 109 шагов, а в синтетике были 100…280 через 10)."""
+    house = cfg.synthetic.house
+    step = round(house.grid_m / cfg.tokens.grid_m)
+
+    def reachable(span: tuple[float, float]) -> range:
+        return range(tokens.units(span[0], cfg.tokens), tokens.units(span[1], cfg.tokens) + 1,
+                     step)
+
+    short, long_ = (tokens.units(m, cfg.tokens) for m in GENPLAN_SIDES_M)
+    assert short in reachable(house.depth_m) and long_ in reachable(house.width_m)
 
 
 def test_openings_keep_clear_of_corners_partitions_and_each_other(houses, cfg):
