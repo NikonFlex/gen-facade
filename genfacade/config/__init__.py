@@ -13,6 +13,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
+from genfacade.datasets.buildingnet.mesh import Label
 from genfacade.schema import Device, ElementClass, Mode, PaletteRole, VariantKind, ZoneRole
 
 DEFAULTS = files(__package__)
@@ -177,10 +178,38 @@ class DataPaths(Section):
     samples_dir: Path
 
 
+class BuildingNetPaths(Section):
+    models_dir: Path
+    component_labels: Path
+    test_split: Path
+
+
+class BuildingNet(Section):
+    """Извлечение коттеджей BuildingNet (config/data.toml, `data: Извлечение BuildingNet`)."""
+
+    paths: BuildingNetPaths
+    categories: list[str]
+    door_height_m: float
+    door_quantile: float
+    facing_m: float
+    profile_step_m: float
+    min_wall_m: float
+    min_coverage: float
+    min_side_m: float
+    floor_height_m: float
+    max_plinth_m: float
+    min_element_m: float
+    inside_share: float
+    wall_m: float
+    material: str
+    classes: dict[Label, ElementClass]  # опечатка в метке или классе — ошибка загрузки
+
+
 class Data(Section):
     """Данные для обучения и теста (config/data.toml, спека data)."""
 
     paths: DataPaths
+    buildingnet: BuildingNet
 
 
 Range = tuple[float, float]

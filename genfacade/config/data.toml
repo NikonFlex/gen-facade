@@ -3,3 +3,35 @@
 
 [paths]
 samples_dir = "data/samples"   # примеры: <источник>/<id>.json и опись <источник>/_manifest.json
+
+# Извлечение коттеджей BuildingNet (`data: Извлечение BuildingNet`, gf#154). Данные — вне git,
+# только для некоммерческого исследования (`data: BuildingNet только некоммерчески`).
+[buildingnet.paths]
+models_dir = "data/buildingnet/v1/OBJ_MODELS"                     # <модель>.obj из OBJ_MODELS.zip
+component_labels = "data/buildingnet/probe/v1/component_labels.zip"  # метка каждого компонента
+test_split = "data/buildingnet/probe/v1/test_split.txt"            # официальный тест
+
+[buildingnet]
+categories = ["RESIDENTIALhouse", "RESIDENTIALvilla"]   # коттеджи — префиксы имён моделей
+door_height_m = 2.1       # масштаб: высота дверей становится этой высотой
+door_quantile = 0.9       # какая из высот компонентов-дверей: у 95 % домов теста размер 6–40 м, у медианы — 73 %
+facing_m = 1.5            # стена и элемент на стороне — не глубже этого от её плоскости: ниша крыльца — ещё сторона
+profile_step_m = 0.1      # шаг внешнего профиля стен вдоль стороны
+min_wall_m = 2.0          # стена главного дома не ниже этого: ниже — заборы и подпорные стенки
+min_coverage = 0.7        # доля охвата стороны, где наружная стена не глубже facing_m; меньше — дом не прямоугольник
+min_side_m = 3.0          # сторона короче — плоскости противоположных сторон сошлись, это не дом
+floor_height_m = 3.0      # число этажей — высота до карниза, делённая на это и округлённая
+max_plinth_m = 1.2        # цоколь — низ дверей первого этажа, не выше этого
+min_element_m = 0.2       # элемент уже или ниже этого — обломок разметки, не элемент
+inside_share = 0.5        # элемент за силуэтом стены обрезается, если внутри не меньше этой доли
+wall_m = 0.2              # толщина стен в плане: в OBJ её нет, план нужен для сторон и проёмов
+material = "plaster"      # вид отделки стены из library.toml: материалы OBJ в палитру пока не идут
+
+[buildingnet.classes]
+# метка BuildingNet → класс элемента фасада; метки без строки здесь на фасад не идут
+window = "window"
+door = "door"
+garage = "garage_door"
+shutters = "blind"
+balcony_patio = "balcony"
+awning = "canopy"
