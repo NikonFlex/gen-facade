@@ -1,5 +1,5 @@
-"""Командная строка: genfacade run <план.svg> --text …, serve, synth, tokens, train, eval,
-metrics, calibrate, baseline."""
+"""Командная строка: genfacade run <план.svg> --text …, serve, synth, buildingnet, tokens, train,
+eval, metrics, calibrate, baseline."""
 
 import argparse
 import sys
@@ -25,6 +25,13 @@ def synth(args: argparse.Namespace) -> Path:
     """Синтетические дома по seed подряд → примеры и опись; готовые дома пропускаются."""
     seeds = range(args.first_seed, args.first_seed + args.count)
     return batch.run(seeds, config.load(args.config), args.overwrite)
+
+
+def buildingnet(args: argparse.Namespace) -> Path:
+    """Коттеджи официального теста BuildingNet → примеры и опись с отказами (gf#154)."""
+    from genfacade.datasets.buildingnet import build
+
+    return build.run(config.load(args.config), args.count)
 
 
 def tokens(args: argparse.Namespace) -> Path:
@@ -111,6 +118,8 @@ def _parser() -> argparse.ArgumentParser:
     s.add_argument("--first-seed", type=int, default=0, help="seed первого дома; дальше подряд")
     s.add_argument("--overwrite", action="store_true",
                    help="удалить собранные дома и собрать заново (после правки настроек или кода)")
+    n = sub.add_parser("buildingnet", help="коттеджи теста BuildingNet → примеры датасета и опись")
+    n.add_argument("-n", "--count", type=int, default=0, help="сколько домов теста; 0 — все")
     t = sub.add_parser("tokens", help="дома источника → корпус для обучения: номера токенов")
     _source(t)
     f = sub.add_parser("train", help="корпус токенов → модель шага 4, кривая потерь, ответы")
@@ -143,6 +152,7 @@ def _parser() -> argparse.ArgumentParser:
 # Команда → что делает и какие отказы печатаются строкой с причиной, а не трассой.
 COMMANDS = {
     "synth": (synth, {batch.BuildError: "сборка остановлена"}),
+    "buildingnet": (buildingnet, {}),
     "tokens": (tokens, {corpus.CorpusError: "корпус не собран"}),
     "train": (train, {corpus.CorpusError: "обучение не начато"}),
     "eval": (eval_model, {corpus.CorpusError: "оценка не начата",
