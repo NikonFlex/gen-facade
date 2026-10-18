@@ -4,6 +4,8 @@
 модель (`generation: Режимы отличаются входом`). Окна, чьи оси ближе snap_m, встают на одну ось
 и одну ширину — к заданному планом тянутся остальные; окна одного этажа — на одну линию низа и
 одну высоту.
+Элемент «задан планом», которому проёма плана не досталось, — лишний: модель повторила проём
+плана (gf#153, окно GenPlan не на сетке токенов), он убирается вместе с подоконником и наличником.
 Подоконник и наличник едут вместе со своим окном. Заготовки стаба шага 4 уже ровные —
 привязка нужна модели, её выход неточный.
 """
@@ -17,6 +19,7 @@ from genfacade.schema import (
     ElementClass,
     FacadeSheet,
     FixedField,
+    Opening,
     OpeningKind,
     SideFacade,
 )
@@ -31,6 +34,7 @@ def snap(sheet: FacadeSheet, cfg: Checks) -> FacadeSheet:
 
 
 def snap_side(f: SideFacade, cfg: Checks) -> SideFacade:
+    f = _without_extra(f)
     planned = _to_plan(f)
     windows = [planned.get(e.id, e) for e in f.elements if e.cls is ElementClass.WINDOW]
     moved = planned | {w.id: w for w in windows}
@@ -50,20 +54,32 @@ def snap_side(f: SideFacade, cfg: Checks) -> SideFacade:
     return f.model_copy(update={"elements": elements})
 
 
-def _to_plan(f: SideFacade) -> dict[str, Element]:
-    """Элементы с заданным планом положением — на свои проёмы плана: того же вида, ближайший по
-    x, каждый проём — одному элементу. Стоит ровно — не трогаем."""
-    free = list(f.side.openings)
-    out = {}
+def _pairs(f: SideFacade) -> list[tuple[Element, Opening | None]]:
+    """Элементы с заданным планом положением и их проёмы плана: того же вида, ближайший по x,
+    каждый проём — одному элементу; не досталось — None."""
+    free, out = list(f.side.openings), []
     for e in sorted((e for e in f.elements if FixedField.X in e.fixed), key=lambda e: e.x_m):
         same = [o for o in free if PLAN_CLASS[o.kind] is e.cls]
-        if not same:
-            continue
-        o = min(same, key=lambda o: abs(o.x_m - e.x_m))
-        free.remove(o)
-        if _differs((e.x_m, e.w_m), (o.x_m, o.width_m)):
-            out[e.id] = e.model_copy(update={"x_m": o.x_m, "w_m": o.width_m})
+        o = min(same, key=lambda o: abs(o.x_m - e.x_m)) if same else None
+        if o is not None:
+            free.remove(o)
+        out.append((e, o))
     return out
+
+
+def _without_extra(f: SideFacade) -> SideFacade:
+    """Убрать заданные планом элементы без проёма плана и их подоконники и наличники."""
+    extra = {e.id for e, o in _pairs(f) if o is None and e.cls in PLAN_CLASS.values()}
+    if not extra:
+        return f
+    kept = [e for e in f.elements if e.id not in extra and e.parent not in extra]
+    return f.model_copy(update={"elements": kept})
+
+
+def _to_plan(f: SideFacade) -> dict[str, Element]:
+    """Заданное планом — на свой проём плана. Стоит ровно — не трогаем."""
+    return {e.id: e.model_copy(update={"x_m": o.x_m, "w_m": o.width_m})
+            for e, o in _pairs(f) if o is not None and _differs((e.x_m, e.w_m), (o.x_m, o.width_m))}
 
 
 def _differs(a: tuple[float, float], b: tuple[float, float]) -> bool:

@@ -6,9 +6,10 @@ import math
 import pytest
 
 from genfacade.datasets.synthetic import build
-from genfacade.schema import ElementClass, FixedField, Mode, OpeningKind, VariantKind
+from genfacade.schema import ElementClass, FixedField, Mode, OpeningKind, Rule, VariantKind
 from genfacade.train import tokens
 from genfacade.train.tokens import Mark, TokenError
+from genfacade.unfold import unfold
 from genfacade.validate import validate
 
 SEEDS = range(40)
@@ -182,3 +183,24 @@ def test_unknown_style_or_too_long_wall_cannot_be_written(sheets, cfg):
         sheet.facades[0].model_copy(update={"side": long_side}), *sheet.facades[1:]]})
     with pytest.raises(TokenError, match="вне сетки"):
         tokens.condition(far, Mode.BLIND, cfg)
+
+
+def test_wall_edges_off_grid_are_real_edges(sheets, cfg):
+    """Сторона не на сетке (у GenPlan 4,2254 м — в условии 4,25): карниз и зоны, которые модель
+    поставила на край стены в сетке, после разбора — ровно по настоящей стене; окно посреди стены
+    не двигается (gf#153)."""
+    sheet = sheets[0]
+    off = cfg.tokens.grid_m * 0.49  # длина, которая округляется в тот же узел сетки
+    walls = [f.model_copy(update={"side": f.side.model_copy(update={
+        "length_m": f.side.length_m - off})}) for f in tokens.bare(sheet).facades]
+    walls = unfold(sheet.model_copy(update={"facades": walls}))
+    back = tokens.decode(tokens.answer(sheet, Mode.BLIND, cfg), walls, cfg)
+    assert not [v for v in validate(back, cfg.checks) if v.rule is Rule.OUTSIDE]
+    for was, now in zip(sheet.facades, back.facades, strict=True):
+        length = now.side.length_m
+        cornice = next(e for e in now.elements if e.cls is ElementClass.CORNICE)
+        assert cornice.x_m + cornice.w_m == pytest.approx(length)
+        assert max(x for z in now.zones for x, _ in z.shape) == pytest.approx(length)
+        inner = [(a, b) for a, b in zip(was.elements, now.elements, strict=True)
+                 if a.cls is ElementClass.WINDOW and a.x_m + a.w_m < length - cfg.tokens.grid_m]
+        assert all(b.x_m + b.w_m == pytest.approx(a.x_m + a.w_m) for a, b in inner)
