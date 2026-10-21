@@ -77,4 +77,34 @@ def test_guard_only_in_blind_mode(cfg, lay_out, vocab):
     door = next(o for o in front.openings if tokens.given(o.kind, Mode.BLIND))
     x = tokens.units(door.x_m, cfg.tokens)
     assert walls[0].length == tokens.units(front.length_m, cfg.tokens)
-    assert (x, tokens.units(door.x_m + door.width_m, cfg.tokens)) in walls[0].busy
+    assert (x, tokens.units(door.x_m + door.width_m, cfg.tokens)) in walls[0].ground  # 1-й этаж
+
+
+# Та же стена в два этажа: низ второго — 3,0 м (60 шагов).
+TWO = constraints.Wall(160, [(78, 82)], [(28, 46)], (60,))
+
+
+def _two_storey(vocab, ids, *words):
+    g = constraints.WallGeometry([TWO], vocab, NARROWEST)
+    for w in words:
+        g.step(ids[str(w)])
+    return g
+
+
+def test_two_storey_wall_keeps_floors_apart(cfg, vocab):
+    """`generation: Окна вне запретных зон` на двух этажах: этаж — по y, второму числу рамки.
+    Окно второго этажа над окном первого и над входом годно; запретная зона — на обоих этажах;
+    окна одного этажа не пересекаются."""
+    ids = {w: i for i, w in enumerate(tokens.vocabulary(cfg))}
+    first = (Mark.WALL, WINDOW, 100, 20, 20, 30)            # окно первого этажа 100–120
+    # x: над входом — годен (на втором этаже вход не занят), в запретной зоне — нет
+    assert {30, 100} <= _allowed(_two_storey(vocab, ids, *first, WINDOW), vocab)
+    assert not set(range(78 - NARROWEST + 1, 82)) & _allowed(
+        _two_storey(vocab, ids, *first, WINDOW), vocab)
+    # w окна второго этажа над окном первого: до края стены, минус только запретная зона
+    assert _allowed(_two_storey(vocab, ids, *first, WINDOW, 100, 70), vocab) == set(range(1, 61))
+    # на первом этаже то же x уже занято — годной ширины нет, страж не запрещает ничего
+    assert _two_storey(vocab, ids, *first, WINDOW, 100, 20).banned() == []
+    # второе окно второго этажа обходит первое окно второго этажа
+    second = (*first, WINDOW, 100, 70, 20, 30, WINDOW, 90, 70)
+    assert _allowed(_two_storey(vocab, ids, *second), vocab) == set(range(1, 11))
