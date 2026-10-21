@@ -409,9 +409,14 @@ class LayoutModel(Sampling):
     constrain: bool
 
 
+class SpecStub(Section):
+    floors_words: dict[int, list[str]]  # этажей → слова в тексте
+
+
 class Models(Section):
     """Модели шагов конвейера (config/models.toml, gf#107)."""
 
+    spec: SpecStub
     layout: LayoutModel
 
 
