@@ -3,8 +3,9 @@
 
 Окно пишется токенами `cls:window x y w h …` (train/tokens.py), числа — шаги сетки. Страж читает
 ответ по токену и, когда модель пишет x или w окна, оставляет ей только числа, дающие годное
-окно: остальным токенам сэмплер ставит логиты −∞. Занятые отрезки стены — запретные зоны (на всех
-этажах), проёмы условия (вход — на первом) и проёмы, уже поставленные моделью на этом этаже стены.
+окно: остальным токенам сэмплер ставит логиты −∞. Занятые отрезки стены — запретные зоны и проёмы
+условия (вход) на первом этаже — у верхних этажей плана нет (`evaluation: Запретные зоны — по плану
+этажа`) — и проёмы, уже поставленные моделью на этом этаже стены.
 
 Этаж модель пишет после рамки, поэтому он берётся из y — второго числа рамки, до w: x годен, если
 окно помещается хотя бы на одном этаже, w — по занятым отрезкам этажа, куда попал y
@@ -136,8 +137,9 @@ def walls(bare: FacadeSheet, mode: Mode, cfg: Config) -> list[Wall]:
     for f in bare.facades:
         zones = [(tokens.units(z.x0_m, t), tokens.units(z.x1_m, t)) for z in f.side.forbidden]
         given = [(tokens.units(o.x_m, t), tokens.units(o.x_m + o.width_m, t))
-                 for o in f.side.openings if tokens.given(o.kind, mode)]  # проёмы плана — 1-й этаж
-        out.append(Wall(tokens.units(f.side.length_m, t), zones, given, floors))
+                 for o in f.side.openings if tokens.given(o.kind, mode)]
+        # зоны и проёмы плана — первого этажа: у верхних плана нет
+        out.append(Wall(tokens.units(f.side.length_m, t), [], zones + given, floors))
     return out
 
 
