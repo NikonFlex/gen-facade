@@ -45,7 +45,7 @@ class Look:
 def house(rng: random.Random, cfg: Synthetic) -> tuple[HouseSpec, Look]:
     rules = cfg.spec
     floors = rng.choices(range(1, len(rules.floors_weights) + 1), rules.floors_weights)[0]
-    height = rng.choice(rules.floor_heights_m)  # высота этажа одна на дом, как WallSizeType GenPlan
+    height = on_grid(rng, rules.floor_height_m, rules.grid_m)  # одна на дом
     plinth = on_grid(rng, rules.plinth_m, rules.grid_m)
     style = rng.choice(rules.styles)
     spec = HouseSpec(

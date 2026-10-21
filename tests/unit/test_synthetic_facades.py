@@ -161,8 +161,8 @@ def test_base_zones_meet_at_corners(houses):
         spec = h.sheet.spec
         spans = {z.role: (min(y for _, y in z.shape), max(y for _, y in z.shape))
                  for z in f.zones if z.role is not ZoneRole.ACCENT}
-        assert spans == {ZoneRole.PLINTH: (0, spec.plinth_m),
-                         ZoneRole.MAIN: (spec.plinth_m, spec.eaves_m)}
+        plinth = {ZoneRole.PLINTH: (0, spec.plinth_m)} if spec.plinth_m > 0 else {}  # без цоколя
+        assert spans == {**plinth, ZoneRole.MAIN: (spec.plinth_m, spec.eaves_m)}
         assert all(z.material == z.role for z in f.zones)  # материал — своя роль палитры
 
 
@@ -200,7 +200,8 @@ def test_porch_and_canopy_at_entrance(houses, looks, cfg):
     for h, (spec, look) in zip(houses, looks, strict=True):
         for f in h.sheet.facades:
             porch, canopy = _of(f, ElementClass.PORCH), _of(f, ElementClass.CANOPY)
-            assert len(porch) == (look.porch and f.side.has_entrance), h.id
+            # крыльцо — на высоту цоколя: без цоколя его нет
+            assert len(porch) == (look.porch and f.side.has_entrance and spec.plinth_m > 0), h.id
             assert len(canopy) == (look.canopy and f.side.has_entrance), h.id
             for door in _of(f, ElementClass.DOOR):
                 for p in porch:
@@ -214,7 +215,10 @@ def test_porch_and_canopy_at_entrance(houses, looks, cfg):
 def test_house_parameters_come_from_config(looks, cfg):
     rules = cfg.synthetic.spec
     for spec, _ in looks:
-        assert spec.floor_heights_m[0] in rules.floor_heights_m and spec.style in rules.styles
+        low, high = rules.floor_height_m
+        assert low <= spec.floor_heights_m[0] <= high and spec.style in rules.styles
+        assert spec.floor_heights_m[0] / rules.grid_m == pytest.approx(
+            round(spec.floor_heights_m[0] / rules.grid_m))  # на сетке
         assert rules.plinth_m[0] <= spec.plinth_m <= rules.plinth_m[1]
         assert spec.eaves_m == pytest.approx(spec.plinth_m + sum(spec.floor_heights_m))
         assert len(set(spec.floor_heights_m)) == 1  # высота этажа одна на дом
@@ -228,7 +232,9 @@ def test_house_parameters_come_from_config(looks, cfg):
 def test_houses_differ_in_character(looks, cfg):
     specs = [spec for spec, _ in looks]
     assert {s.style for s in specs} == set(cfg.synthetic.spec.styles)
-    assert {s.floor_heights_m[0] for s in specs} == set(cfg.synthetic.spec.floor_heights_m)
+    heights = {s.floor_heights_m[0] for s in specs}  # `data: Этажность синтетики`: по диапазону
+    assert len(heights) > 10 and min(heights) < 2.6 and max(heights) > 3.4
+    assert 0.0 in {s.plinth_m for s in specs}  # бывает и без цоколя, как у BuildingNet
     assert {s.floors for s in specs} == set(range(1, len(cfg.synthetic.spec.floors_weights) + 1))
     spans = set(cfg.synthetic.facade.windows.size.values())
     assert {look.window_span for _, look in looks} == spans

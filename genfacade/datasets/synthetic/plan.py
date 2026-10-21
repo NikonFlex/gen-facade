@@ -47,7 +47,7 @@ def _cuts(rng: random.Random, width: float, cfg: Synthetic) -> list[float]:
     """Где стоят поперечные перегородки: комнаты не уже min_room_m."""
     room, step = cfg.partitions.min_room_m, cfg.house.grid_m
     cuts: list[float] = []
-    for _ in range(rng.randint(0, cfg.partitions.max_count)):
+    for _ in range(rng.randint(0, int(width // cfg.partitions.room_m))):
         edges = [0.0, *sorted(cuts), width]
         free = [(a + room, b - room) for a, b in zip(edges, edges[1:], strict=False)
                 if b - a >= 2 * room]

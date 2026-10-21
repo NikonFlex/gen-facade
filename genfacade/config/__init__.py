@@ -255,14 +255,14 @@ class OpeningRules(Section):
 
 
 class Partitions(Section):
-    max_count: int
+    room_m: float
     min_room_m: float
     passage_m: float
 
 
 class SpecRules(Section):
     floors_weights: list[float]
-    floor_heights_m: list[float]
+    floor_height_m: Range
     plinth_m: Range
     grid_m: float
     styles: list[str]

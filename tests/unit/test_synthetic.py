@@ -134,6 +134,17 @@ def test_entrance_comes_closer_to_corner_than_windows(houses, cfg):
     assert any(g < wall + rules.corner_clear_m - 1e-6 for g in gaps[OpeningKind.ENTRANCE])
 
 
+def test_partitions_grow_with_house_length(houses, cfg):
+    """Длинный дом делится на больше комнат: перегородок — до длины / room_m (gf#186: у 24 м —
+    до 5, у 10 м — до 2, как раньше): иначе окон на его стене меньше, чем у реальных домов."""
+    room, counts = cfg.synthetic.partitions.room_m, []
+    for sketch, _ in houses:
+        inner = [r for r in sketch.runs if any(o.hole is Hole.PASSAGE for o in r.openings)]
+        assert len(inner) <= sketch.width_m // room, sketch
+        counts.append((sketch.width_m, len(inner)))
+    assert any(w > 14 for w, _ in counts) and any(n > 2 for _, n in counts)
+
+
 def test_blind_walls_are_made_on_purpose(houses):
     """Глухие стены есть, но не все: у каждого дома хотя бы одно окно
     (`data: Глухие стены в синтетике`)."""

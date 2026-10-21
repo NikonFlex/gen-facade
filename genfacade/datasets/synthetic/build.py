@@ -55,7 +55,7 @@ def _wall(wall: SideFacade, spec: HouseSpec, look: Look, rules: Synthetic) -> Si
     elements = [
         *(decor.casings(windows, cfg) if look.casing else []), *windows, *doors,
         *decor.sills(windows, cfg),
-        *([decor.porch(d, spec, cfg) for d in doors] if look.porch else []),
+        *([decor.porch(d, spec, cfg) for d in doors] if look.porch and spec.plinth_m > 0 else []),
         *([decor.canopy(d, cfg) for d in doors] if look.canopy else []),
         decor.cornice(side.length_m, spec, cfg),
     ]
