@@ -14,11 +14,12 @@
 Только глухой режим: в «окна из плана» окна — проёмы плана, место и ширину им ставит шаг 5.
 """
 
+import math
 from bisect import bisect_right
 from typing import NamedTuple
 
 from genfacade.config import Config
-from genfacade.schema import ElementClass, FacadeSheet, Mode, ZoneRole
+from genfacade.schema import EPS, ElementClass, FacadeSheet, ForbiddenZone, Mode, ZoneRole
 from genfacade.train import tokens
 from genfacade.train.tokens import PREFIX, Mark
 from genfacade.validate import OPENINGS  # что не должно пересекаться — как у валидатора
@@ -135,12 +136,20 @@ def walls(bare: FacadeSheet, mode: Mode, cfg: Config) -> list[Wall]:
     floors = tuple(tokens.units(y, t) for y in bare.spec.floor_levels()[1:-1])
     out = []
     for f in bare.facades:
-        zones = [(tokens.units(z.x0_m, t), tokens.units(z.x1_m, t)) for z in f.side.forbidden]
+        zones = [_outward(z, cfg) for z in f.side.forbidden]
         given = [(tokens.units(o.x_m, t), tokens.units(o.x_m + o.width_m, t))
                  for o in f.side.openings if tokens.given(o.kind, mode)]
         # зоны и проёмы плана — первого этажа: у верхних плана нет
         out.append(Wall(tokens.units(f.side.length_m, t), [], zones + given, floors))
     return out
+
+
+def _outward(zone: ForbiddenZone, cfg: Config) -> Span:
+    """Зона на сетке — наружу, до узлов, которые её покрывают с допуском валидатора. Округление к
+    ближнему узлу ужимало зону 1,930–2,006 м до 1,95–2,00 м: окно, кончающееся на 1,95, страж
+    пропускал, а валидатор браковал — заход 2 см (план GenPlan, gf#155)."""
+    grid, eps = cfg.tokens.grid_m, cfg.checks.eps_m
+    return (math.floor((zone.x0_m + eps) / grid + EPS), math.ceil((zone.x1_m - eps) / grid - EPS))
 
 
 def guard(bare: FacadeSheet, mode: Mode, vocab: Vocab, cfg: Config) -> WallGeometry | None:

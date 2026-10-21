@@ -4,6 +4,7 @@
 import pytest
 from simple_house import WALL_INTO_WINDOW, before_leaf
 
+from genfacade import schema
 from genfacade.schema import ElementClass, Mode, ZoneRole
 from genfacade.train import constraints, tokens
 from genfacade.train.tokens import Mark
@@ -122,3 +123,20 @@ def test_two_storey_wall_keeps_floors_apart(cfg, vocab):
     # второе окно второго этажа обходит первое окно второго этажа
     second = (*first, WINDOW, 100, 70, 20, 30, WINDOW, 90, 70)
     assert _allowed(_two_storey(vocab, ids, *second), vocab) == set(range(1, 11))
+
+
+@pytest.mark.parametrize(("x0", "x1", "span"), [
+    (1.9297, 2.0059, (38, 40)),   # план GenPlan: к ближнему узлу — 39–40, окно до 1,95 заходит
+    (3.9, 4.1, (78, 82)),         # на узлах — как есть
+    (1.0, 1.005, (20, 20)),       # уже допуска валидатора — не занимает ничего
+])
+def test_zone_on_grid_covers_real_zone(cfg, lay_out, vocab, x0, x1, span):
+    """Окно, которое страж пускает впритык к зоне на сетке, валидатор не бракует: зона на сетке
+    покрывает настоящую с допуском `eps_m`."""
+    bare = tokens.bare(lay_out(Mode.BLIND))
+    side = bare.facades[1].side.model_copy(update={"forbidden": [
+        schema.ForbiddenZone(x0_m=x0, x1_m=x1)]})
+    facades = list(bare.facades)
+    facades[1] = facades[1].model_copy(update={"side": side})
+    walls = constraints.walls(bare.model_copy(update={"facades": facades}), Mode.BLIND, cfg)
+    assert walls[1].ground == [span]
