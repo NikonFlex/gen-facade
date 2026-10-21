@@ -237,6 +237,7 @@ class OpeningRules(Section):
     entrance_long_p: float
     blind_long_p: float
     blind_short_p: float
+    upper_on_axes_p: float
 
 
 class Partitions(Section):
@@ -246,6 +247,7 @@ class Partitions(Section):
 
 
 class SpecRules(Section):
+    floors_weights: list[float]
     floor_heights_m: list[float]
     plinth_m: Range
     grid_m: float

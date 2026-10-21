@@ -5,7 +5,7 @@ import random
 from genfacade import pipeline
 from genfacade.config import Config, Synthetic
 from genfacade.datasets import genplan_writer
-from genfacade.datasets.synthetic import decor, openings, plan, zones
+from genfacade.datasets.synthetic import decor, openings, plan, upper, zones
 from genfacade.datasets.synthetic.house import Look, house
 from genfacade.plan.preprocess import preprocess
 from genfacade.schema import FacadeSheet, HouseSpec, Mode, Sample, SideFacade, Source, Split
@@ -28,20 +28,29 @@ def sample(seed: int, cfg: Config) -> Sample:
         update={"source": Source.SYNTHETIC})
     # Свой поток случайных чисел: правка правил плана не меняет параметры дома, и наоборот.
     spec, look = house(random.Random(f"house/{seed}"), rules)  # noqa: S311 — не криптография
+    sheet = lay_out(pipeline.walls(spec, floor), look, cfg,
+                    random.Random(f"upper/{seed}"))  # noqa: S311 — не криптография
     return Sample(id=sample_id(seed), source=Source.SYNTHETIC, split=split(seed, rules),
-                  plan=floor, sheet=lay_out(pipeline.walls(spec, floor), look, rules))
+                  plan=floor, sheet=sheet)
 
 
-def lay_out(sheet: FacadeSheet, look: Look, rules: Synthetic) -> FacadeSheet:
-    """Раскладка всех стен дома при одних параметрах и одном характере."""
-    walls = [_wall(f, sheet.spec, look, rules) for f in sheet.facades]
+def lay_out(sheet: FacadeSheet, look: Look, cfg: Config, rng: random.Random) -> FacadeSheet:
+    """Раскладка всех стен дома при одних параметрах и одном характере; rng — окна верхних
+    этажей, которых нет в плане."""
+    spec, rules = sheet.spec, cfg.synthetic
+    walls = []
+    for f in sheet.facades:
+        rows = upper.rows(rng, f.side, spec.floors, cfg)
+        placed = f.model_copy(update={"elements": openings.windows(rows, spec, look,
+                                                                   rules.facade.windows)})
+        walls.append(_wall(placed, spec, look, rules))
     return sheet.model_copy(update={"facades": walls})
 
 
 def _wall(wall: SideFacade, spec: HouseSpec, look: Look, rules: Synthetic) -> SideFacade:
-    cfg, side = rules.facade, wall.side
+    """Стена с уже поставленными окнами (`wall.elements`) — дверь, декор и зоны."""
+    cfg, side, windows = rules.facade, wall.side, wall.elements
     doors = openings.doors(side, spec, look, cfg)
-    windows = openings.windows(side, spec, look, cfg.windows)
     # порядок — порядок отрисовки: наличник под окном, подоконник и карниз поверх стены
     elements = [
         *(decor.casings(windows, cfg) if look.casing else []), *windows, *doors,

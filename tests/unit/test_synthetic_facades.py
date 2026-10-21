@@ -74,6 +74,23 @@ def test_windows_between_floor_and_cornice(houses, cfg):
             assert w.y_m + w.h_m <= spec.eaves_m - rules.windows.lintel_m + EPS, h.id
 
 
+def test_upper_floors_get_windows_the_plan_does_not_give(houses):
+    """`data: Этажность синтетики`: окна на каждом этаже стены с окнами плана, глухая стена глухая
+    на всех этажах; место окна верхнего этажа ставит правило — оно не помечено заданным планом.
+    Ряд верхнего этажа — по осям нижнего или свой; бывает и то, и другое."""
+    kinds = set()
+    for h, f in _walls(houses):
+        windows, floors = _of(f, ElementClass.WINDOW), h.sheet.spec.floors
+        rows = {n: sorted((w.x_m, w.w_m) for w in windows if w.floor == n)
+                for n in range(1, floors + 1)}
+        assert all(bool(row) == bool(rows[1]) for row in rows.values()), (h.id, f.side.index)
+        assert all(not w.fixed for w in windows if w.floor > 1)
+        assert all(rows[n] == rows[2] for n in range(3, floors + 1))  # третий повторяет второй
+        if floors > 1 and rows[1]:
+            kinds.add(rows[2] == rows[1])
+    assert kinds == {True, False}
+
+
 def test_door_kind_one_per_house_and_fits_under_cornice(houses, looks, cfg):
     """Вид двери — по характеру дома; фрамуга — только там, где с козырьком влезает."""
     rules, kinds = cfg.synthetic.facade, set()
@@ -92,15 +109,20 @@ def test_door_kind_one_per_house_and_fits_under_cornice(houses, looks, cfg):
 
 
 def test_window_tops_align_and_sills_follow_width(houses, looks, cfg):
-    """Верх окон дома один; низ — по ширине: узкое высоко, большое в пол, остальные по уровню."""
+    """Верх окон этажа один на дом; низ — по ширине: узкое высоко, большое в пол, остальные по
+    уровню (`data: Этажность синтетики` — так на каждом этаже)."""
     rules = cfg.synthetic.facade.windows
     for h, (spec, look) in zip(houses, looks, strict=True):
         windows = [w for f in h.sheet.facades for w in _of(f, ElementClass.WINDOW)]
         height = spec.floor_heights_m[0]
-        top = spec.plinth_m + min(look.window_span[1] * height, height - rules.lintel_m)
-        assert {round(w.y_m + w.h_m, 3) for w in windows} == {round(top, 3)}, h.id
+        levels = spec.floor_levels()
+        for floor in {w.floor for w in windows}:
+            base = levels[floor - 1]
+            top = base + min(look.window_span[1] * height, height - rules.lintel_m)
+            tops = {round(w.y_m + w.h_m, 3) for w in windows if w.floor == floor}
+            assert tops == {round(top, 3)}, (h.id, floor)
         for w in windows:
-            low = (w.y_m - spec.plinth_m) / spec.floor_heights_m[0]
+            low = (w.y_m - levels[w.floor - 1]) / height
             wide, narrow = w.w_m >= rules.wide_min_w_m, w.w_m <= rules.narrow_max_w_m
             want = (0.0 if wide and look.wide_to_floor
                     else max(rules.narrow_low, look.window_span[0]) if narrow
@@ -165,6 +187,7 @@ def test_accent_follows_house_scheme(houses, looks, cfg):
             else:  # вставки стоят в простенках: не заходят на окна
                 assert len(boxes) <= max(0, len(windows) - 1)
                 assert all(b[2] <= w.x_m + EPS or b[0] >= w.x_m + w.w_m - EPS
+                           or b[3] <= w.y_m + EPS or b[1] >= w.y_m + w.h_m - EPS
                            for b in boxes for w in windows)
                 assert all(b[2] - b[0] <= finish.pier_max_m + EPS for b in boxes)
             seen.add((look.scheme, bool(boxes)))
@@ -193,7 +216,8 @@ def test_house_parameters_come_from_config(looks, cfg):
     for spec, _ in looks:
         assert spec.floor_heights_m[0] in rules.floor_heights_m and spec.style in rules.styles
         assert rules.plinth_m[0] <= spec.plinth_m <= rules.plinth_m[1]
-        assert spec.eaves_m == pytest.approx(spec.plinth_m + spec.floor_heights_m[0])
+        assert spec.eaves_m == pytest.approx(spec.plinth_m + sum(spec.floor_heights_m))
+        assert len(set(spec.floor_heights_m)) == 1  # высота этажа одна на дом
         kinds = {m.id: m.kind for m in spec.materials}
         assert set(kinds) == set(PaletteRole)
         assert all(kinds[r] in rules.palette[r] and kinds[r] in cfg.library.kinds for r in kinds)
@@ -205,6 +229,7 @@ def test_houses_differ_in_character(looks, cfg):
     specs = [spec for spec, _ in looks]
     assert {s.style for s in specs} == set(cfg.synthetic.spec.styles)
     assert {s.floor_heights_m[0] for s in specs} == set(cfg.synthetic.spec.floor_heights_m)
+    assert {s.floors for s in specs} == set(range(1, len(cfg.synthetic.spec.floors_weights) + 1))
     spans = set(cfg.synthetic.facade.windows.size.values())
     assert {look.window_span for _, look in looks} == spans
     assert {look.scheme for _, look in looks} == set(Scheme)
