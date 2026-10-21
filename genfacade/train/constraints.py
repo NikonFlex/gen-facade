@@ -8,8 +8,8 @@
 этажа`) — и проёмы, уже поставленные моделью на этом этаже стены.
 
 Этаж модель пишет после рамки, поэтому он берётся из y — второго числа рамки, до w: x годен, если
-окно помещается хотя бы на одном этаже, w — по занятым отрезкам этажа, куда попал y
-(`docs/decisions.md`, 21.10). Окно второго этажа над окном первого не запрещено.
+окно помещается хотя бы на одном этаже, y — только на этаже, где x годен, w — по занятым отрезкам
+этажа, куда попал y (`docs/decisions.md`, 21.10). Окно второго этажа над окном первого не запрещено.
 
 Только глухой режим: в «окна из плана» окна — проёмы плана, место и ширину им ставит шаг 5.
 """
@@ -24,7 +24,7 @@ from genfacade.train import tokens
 from genfacade.train.tokens import PREFIX, Mark
 from genfacade.validate import OPENINGS  # что не должно пересекаться — как у валидатора
 
-X, Y, W = 0, 1, 2  # места x, y и w среди чисел рамки x y w h
+X, Y, W, H = 0, 1, 2, 3  # места чисел рамки x y w h
 
 
 Span = tuple[int, int]
@@ -111,7 +111,7 @@ class WallGeometry:
     def _allowed(self) -> list[int]:
         numbers = list(self.vocab.token)
         place = len(self.box)
-        if self.cls is not ElementClass.WINDOW or place not in (X, W):
+        if self.cls is not ElementClass.WINDOW or place == H:
             return [n for n in numbers if n > 0 or place in (X, Y)]
         wall = self.walls[self.at]
         if place == X:
@@ -119,11 +119,21 @@ class WallGeometry:
             # загоняет модель в ширину, какой она не видела, — и ответ ломается (gf#153: x 98 на
             # стене 109 шагов, ширина 4, дальше «ждали <wall>, пришло '32'»). Этажа ещё нет —
             # годен x, при котором окно помещается хотя бы на одном.
-            spans = [wall.taken(f, self.placed) for f in range(1, len(wall.floors) + 2)]
-            return [n for n in numbers if n + self.narrowest <= wall.length
-                    and any(_free(n, self.narrowest, busy) for busy in spans)]
+            return [n for n in numbers if n + self.narrowest <= wall.length and self._fits(n)]
+        if place == Y:
+            # x годен не на всех этажах — y только там, где годен: иначе у окна первого этажа
+            # в запретной зоне нет годной ширины (план GenPlan, 9 из 20 браков, gf#155).
+            fits = self._fits(self.box[X])
+            return [n for n in numbers if wall.floor(n) in fits] if len(fits) <= len(
+                wall.floors) else numbers
         x, busy = self.box[X], wall.taken(wall.floor(self.box[Y]), self.placed)
         return [n for n in numbers if 0 < n and x + n <= wall.length and _free(x, n, busy)]
+
+    def _fits(self, x: int) -> set[int]:
+        """Этажи, где на x помещается самое узкое окно."""
+        wall = self.walls[self.at]
+        return {f for f in range(1, len(wall.floors) + 2)
+                if _free(x, self.narrowest, wall.taken(f, self.placed))}
 
 
 def _free(x: int, w: int, busy: list[Span]) -> bool:

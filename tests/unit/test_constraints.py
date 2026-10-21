@@ -65,6 +65,7 @@ def test_box_takes_only_numbers_and_nothing_is_banned_outside_it(guard, vocab):
     assert _allowed(guard(Mark.WALL, WINDOW, 52), vocab) == numbers       # y — любое число
     assert _allowed(guard(Mark.WALL, DOOR), vocab) == numbers             # x двери — из плана
     assert _allowed(guard(Mark.WALL, DOOR, 30, 10), vocab) == numbers - {0}   # ширина > 0
+    assert _allowed(guard(Mark.WALL, WINDOW, 52, 10, 20), vocab) == numbers - {0}  # высота > 0
     # рамка дописана: следующим — не число (лишнее число ломает ответ, gf#177), дальше — свободно
     assert set(guard(Mark.WALL, WINDOW, 52, 10, 20, 30).banned()) == set(vocab.number)
     assert guard(Mark.WALL, WINDOW, 52, 10, 20, 30, Mark.FLOOR).banned() == []
@@ -120,6 +121,11 @@ def test_two_storey_wall_keeps_floors_apart(cfg, vocab):
     assert _allowed(_two_storey(vocab, ids, *first, WINDOW, 100, 70), vocab) == set(range(1, 61))
     # на первом этаже то же x уже занято — годной ширины нет, страж не запрещает ничего
     assert _two_storey(vocab, ids, *first, WINDOW, 100, 20).banned() == []
+    # x годен только на втором этаже (зона первого) — y только на втором: от 60 шагов
+    in_zone = _allowed(_two_storey(vocab, ids, Mark.WALL, WINDOW, 79), vocab)
+    assert in_zone == {n for n in vocab.token if n >= 60}
+    # x годен на обоих этажах — y любой
+    assert _allowed(_two_storey(vocab, ids, Mark.WALL, WINDOW, 100), vocab) == set(vocab.token)
     # второе окно второго этажа обходит первое окно второго этажа
     second = (*first, WINDOW, 100, 70, 20, 30, WINDOW, 90, 70)
     assert _allowed(_two_storey(vocab, ids, *second), vocab) == set(range(1, 11))
