@@ -17,36 +17,24 @@ from statistics import median
 
 import numpy
 
-from genfacade import pipeline
 from genfacade.config import BuildingNet
+from genfacade.datasets import rect_house
 from genfacade.datasets.buildingnet.mesh import Component, Label
+from genfacade.datasets.rect_house import NORMALS, Wall
 from genfacade.schema import (
     BuildingType,
     Element,
     ElementClass,
     HouseSpec,
     Material,
-    MaterialZone,
-    Opening,
-    OpeningKind,
     PaletteRole,
-    Plan,
-    PlanOpening,
-    Rect,
     Roof,
     RoofKind,
     Sample,
-    Side,
-    SideFacade,
     Source,
     Split,
-    ZoneRole,
 )
-from genfacade.validate import OPENINGS
 
-# Нормали сторон по часовой стрелке (y плана — вверх): каждая следующая — предыдущая,
-# повёрнутая на −90°, как ждёт развёртка (unfold.plan_corners).
-NORMALS = ((0.0, 1.0), (1.0, 0.0), (0.0, -1.0), (-1.0, 0.0))
 # Проём, почти целиком лежащий в проёме старшего класса, — его часть: стекло двери, размеченное
 # окном, или калитка в воротах гаража.
 RANK = {ElementClass.GARAGE_DOOR: 0, ElementClass.DOOR: 1, ElementClass.WINDOW: 2}
@@ -68,39 +56,20 @@ class Rejected(Exception):
         self.reason = reason
 
 
-class Wall:
-    """Сторона прямоугольного контура в плане: нормаль, плоскость и отрезок вдоль неё."""
-
-    def __init__(self, normal: tuple[float, float], lo: numpy.ndarray, hi: numpy.ndarray) -> None:
-        corners = numpy.array([(x, y) for x in (lo[0], hi[0]) for y in (lo[1], hi[1])])
-        self.normal = numpy.array(normal)
-        # Снаружи, лицом к стене, вправо — нормаль, повёрнутая на +90°: x фасада растёт вправо
-        # от левого края стороны (schema: координаты на стене).
-        self.right = numpy.array((-normal[1], normal[0]))
-        self.plane = float((corners @ self.normal).max())
-        self.left = float((corners @ self.right).min())
-        self.length = float((corners @ self.right).max()) - self.left
-
-
 def house(model: str, parts: list[Component], cfg: BuildingNet) -> Sample:
     parts = _upright(_turned(parts), cfg)
     lo, hi = _footprint(parts, cfg)
-    walls = [Wall(n, lo, hi) for n in NORMALS]
+    fp = rect_house.Footprint(lo, hi, cfg.wall_m)
     # Второй снизу верх стен: у двускатной крыши два верха — карниз, два — конёк, а одна
     # низкая стена (пристройка, веранда) не опускает карниз всего дома.
-    eaves = sorted(_wall_top(w, parts, cfg) for w in walls)[1]
+    eaves = sorted(_wall_top(w, parts, cfg) for w in fp.walls)[1]
     plinth = _plinth(parts, cfg)
     spec = _spec(plinth, eaves, cfg)
-    facades = [_facade(w, parts, spec, cfg) for w in walls]
-    first = max(range(4), key=lambda i: (_doors(facades[i]), walls[i].length))
-    order = [(first + k) % 4 for k in range(4)]
-    sides = [_side(k, walls[i], facades[i], k == 0) for k, i in enumerate(order)]
-    plan = _plan(lo, hi, sides, walls, order, cfg)
-    sheet = pipeline.walls(spec, plan)
-    laid = [f.model_copy(update={"elements": facades[i], "zones": _zones(f)})
-            for f, i in zip(sheet.facades, order, strict=True)]
-    return Sample(id=model, source=Source.BUILDINGNET, split=Split.TEST, plan=plan,
-                  sheet=sheet.model_copy(update={"facades": laid}))
+    facades = [_facade(w, parts, spec, cfg) for w in fp.walls]
+    first = max(range(4), key=lambda i: (_doors(facades[i]), fp.walls[i].length))
+    laid = [((first + k) % 4, facades[(first + k) % 4]) for k in range(4)]
+    plan, sheet = rect_house.assemble(spec, fp, laid, Source.BUILDINGNET)
+    return Sample(id=model, source=Source.BUILDINGNET, split=Split.TEST, plan=plan, sheet=sheet)
 
 
 def _turned(parts: list[Component]) -> list[Component]:
@@ -258,7 +227,7 @@ def _facade(w: Wall, parts: list[Component], spec: HouseSpec, cfg: BuildingNet) 
              if (box := _on_wall(w, c, spec, cfg)) is not None]
     merged = _absorbed(_merged(boxes))
     return [Element(id=f"e{k}", cls=cls, x_m=x0, y_m=y0, w_m=x1 - x0, h_m=y1 - y0,
-                    floor=_floor((y0 + y1) / 2, spec))
+                    floor=rect_house.floor_of((y0 + y1) / 2, spec))
             for k, (cls, (x0, y0, x1, y1)) in enumerate(merged)]
 
 
@@ -302,55 +271,5 @@ def _absorbed(boxes: list[tuple]) -> list[tuple]:
     return [(cls, box) for cls, box in boxes if not inner(cls, box)]
 
 
-def _floor(y: float, spec: HouseSpec) -> int:
-    """Этаж по высоте середины элемента: ниже цоколя — первый, выше карниза — последний."""
-    tops = spec.floor_levels()[1:-1]
-    return 1 + sum(y >= t for t in tops)
-
-
 def _doors(elements: list[Element]) -> int:
     return sum(e.cls is ElementClass.DOOR and e.floor == 1 for e in elements)
-
-
-def _side(index: int, w: Wall, elements: list[Element], entrance_side: bool) -> Side:
-    """Проёмы первого этажа — проёмы плана; вход — самая широкая дверь стороны входа."""
-    ground = [e for e in elements if e.cls in OPENINGS and e.floor == 1]
-    doors = [e for e in ground if e.cls is not ElementClass.WINDOW]
-    entrance = max(doors, key=lambda e: e.w_m) if entrance_side and doors else None
-    openings = [Opening(kind=OpeningKind.WINDOW if e.cls is ElementClass.WINDOW
-                        else OpeningKind.ENTRANCE if e is entrance else OpeningKind.DOOR,
-                        x_m=e.x_m, width_m=e.w_m) for e in ground]
-    return Side(index=index, length_m=w.length, orientation=tuple(w.normal), openings=openings,
-                has_entrance=entrance is not None)
-
-
-def _plan(lo: numpy.ndarray, hi: numpy.ndarray, sides: list[Side], walls: list[Wall],
-          order: list[int], cfg: BuildingNet) -> Plan:
-    (x0, y0), (x1, y1), t = lo.tolist(), hi.tolist(), cfg.wall_m
-    # стены в порядке NORMALS: верхняя, правая, нижняя, левая
-    rects = [Rect(x0_m=x0, y0_m=y1 - t, x1_m=x1, y1_m=y1),
-             Rect(x0_m=x1 - t, y0_m=y0, x1_m=x1, y1_m=y1),
-             Rect(x0_m=x0, y0_m=y0, x1_m=x1, y1_m=y0 + t),
-             Rect(x0_m=x0, y0_m=y0, x1_m=x0 + t, y1_m=y1)]
-    openings = [_plan_opening(o, walls[i], rects[i]) for s, i in zip(sides, order, strict=True)
-                for o in s.openings]
-    # Обход по часовой стрелке от левого верхнего угла; метры — сразу, пикселей у OBJ нет.
-    return Plan(walls=rects, outline=[(x0, y1), (x1, y1), (x1, y0), (x0, y0)], openings=openings,
-                sides=sides, scale_m_per_px=1.0, source=Source.BUILDINGNET)
-
-
-def _plan_opening(o: Opening, w: Wall, rect: Rect) -> PlanOpening:
-    """Проём в стене плана: от x до x + ширина вдоль стороны, на всю толщину стены."""
-    a, b = (w.left + o.x_m) * w.right, (w.left + o.x_m + o.width_m) * w.right
-    if w.normal[1]:  # стена вдоль x
-        lo_x, hi_x = sorted((a[0], b[0]))
-        return PlanOpening(kind=o.kind, rect=Rect(x0_m=lo_x, y0_m=rect.y0_m, x1_m=hi_x,
-                                                  y1_m=rect.y1_m))
-    lo_y, hi_y = sorted((a[1], b[1]))
-    return PlanOpening(kind=o.kind, rect=Rect(x0_m=rect.x0_m, y0_m=lo_y, x1_m=rect.x1_m,
-                                              y1_m=hi_y))
-
-
-def _zones(f: SideFacade) -> list[MaterialZone]:
-    """Вся стена — основная отделка: материалы OBJ в палитру пока не идут."""
-    return [MaterialZone(shape=f.silhouette or [], material=PaletteRole.MAIN, role=ZoneRole.MAIN)]
