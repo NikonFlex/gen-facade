@@ -205,11 +205,25 @@ class BuildingNet(Section):
     classes: dict[Label, ElementClass]  # опечатка в метке или классе — ошибка загрузки
 
 
+class ManualPaths(Section):
+    markup_dir: Path
+
+
+class Manual(Section):
+    """Ручная разметка реальных коттеджей (config/data.toml, `data: Реальные коттеджи — тест`)."""
+
+    paths: ManualPaths
+    length_tol_m: float
+    wall_m: float
+    inside_share: float
+
+
 class Data(Section):
     """Данные для обучения и теста (config/data.toml, спека data)."""
 
     paths: DataPaths
     buildingnet: BuildingNet
+    manual: Manual
 
 
 Range = tuple[float, float]
