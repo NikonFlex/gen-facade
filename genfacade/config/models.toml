@@ -1,5 +1,15 @@
 # Модели шагов конвейера (gf#107). Путь — от папки, где запущена команда.
 
+[spec]               # шаг 1: стаб (genfacade/models/stub.py) — до модели
+# Этажность из текста (`generation: Стаб шага 1`, gf#155): число этажей — по слову, которое
+# встретилось в тексте раньше других; регистр не важен. Слова нет — этажей, как у заготовки.
+[spec.floors_words]
+1 = ["one-storey", "one-story", "single-storey", "single-story", "bungalow", "одноэтажн",
+     "в один этаж"]
+2 = ["two-storey", "two-story", "2-storey", "2-story", "двухэтажн", "в два этажа", "2 этажа"]
+3 = ["three-storey", "three-story", "3-storey", "3-story", "трёхэтажн", "трехэтажн",
+     "в три этажа", "3 этажа"]
+
 [layout]             # шаг 4: обученный GPT (genfacade/models/layout.py)
 # Чекпойнт genfacade train (model.pt). Файла нет — стаб (genfacade/models/stub.py).
 # Скачать обученную модель: gh run download <run_id> -n train-<run_id> -D data/models/layout

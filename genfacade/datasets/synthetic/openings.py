@@ -5,7 +5,7 @@
 
 import math
 
-from genfacade.config import FacadeRules, Windows
+from genfacade.config import FacadeRules, Range, Windows
 from genfacade.datasets.synthetic.house import Look
 from genfacade.schema import (
     EPS,
@@ -13,6 +13,7 @@ from genfacade.schema import (
     ElementClass,
     FixedField,
     HouseSpec,
+    Opening,
     OpeningKind,
     OpeningVariant,
     Side,
@@ -48,19 +49,27 @@ def _door(spec: HouseSpec, look: Look, rules: FacadeRules) -> tuple[OpeningVaria
     return OpeningVariant(kind=VariantKind.GLAZED, cols=cols, rows=rows), door.height_m
 
 
-def windows(side: Side, spec: HouseSpec, look: Look, cfg: Windows) -> list[Element]:
-    """Окна плана: верх у всех один, низ — по ширине окна (`sill_level`)."""
-    base, height = spec.plinth_m, spec.floor_heights_m[0]
-    top = min(base + look.window_span[1] * height, base + height - cfg.lintel_m)
-    found = [o for o in side.openings if o.kind is OpeningKind.WINDOW]
+def windows(rows: list[list[Opening]], spec: HouseSpec, look: Look, cfg: Windows) -> list[Element]:
+    """Окна по этажам (rows — снизу вверх): на этаже верх у всех один, низ — по ширине окна
+    (`sill_level`). Место и ширина задает план только на первом этаже."""
     out = []
-    for i, o in enumerate(found, start=1):
+    for floor, (row, base) in enumerate(zip(rows, spec.floor_levels(), strict=False), start=1):
+        out += _row(row, floor, (base, spec.floor_heights_m[floor - 1]), look, cfg)
+    return out
+
+
+def _row(row: list[Opening], floor: int, level: Range, look: Look, cfg: Windows) -> list[Element]:
+    """Окна одного этажа; level — низ этажа и его высота."""
+    base, height = level
+    top = min(base + look.window_span[1] * height, base + height - cfg.lintel_m)
+    out = []
+    for i, o in enumerate(row, start=1):
         low = sill_level(o.width_m, look, cfg)
         y = base + low * height
         out.append(Element(
-            id=f"w1_{i}", cls=ElementClass.WINDOW, x_m=o.x_m, y_m=round(y, 3), w_m=o.width_m,
-            h_m=round(top - y, 3), floor=1, fixed=FROM_PLAN,
-            variant=_variant(o.width_m, top - y, low, cfg)))
+            id=f"w{floor}_{i}", cls=ElementClass.WINDOW, x_m=o.x_m, y_m=round(y, 3),
+            w_m=o.width_m, h_m=round(top - y, 3), floor=floor,
+            fixed=FROM_PLAN if floor == 1 else [], variant=_variant(o.width_m, top - y, low, cfg)))
     return out
 
 

@@ -79,25 +79,33 @@ def _with_openings(rng: random.Random, walls: list[_Wall], cfg: OpeningRules) ->
     for wall in walls:
         bays, found = list(wall.bays), []
         if wall is entry:
-            door, bays = _entrance(rng, bays, cfg)
+            door, bays = _entrance(rng, bays, (wall.run.start_m, wall.run.end_m), cfg)
             found.append(door)
         if rng.random() >= (cfg.blind_long_p if wall.long else cfg.blind_short_p):
-            found += [o for bay in bays for o in _windows(rng, bay, rng.choice(widths), cfg)]
+            found += [o for bay in bays for o in bay_windows(rng, bay, rng.choice(widths), cfg)]
         runs.append(replace(wall.run, openings=tuple(found)))
     return runs
 
 
-def _entrance(rng: random.Random, bays: list[Span], cfg: OpeningRules):
-    """Вход в случайном участке → (вход, участки): участок входа делится на два по бокам."""
+def _entrance(rng: random.Random, bays: list[Span], outer: Span, cfg: OpeningRules):
+    """Вход в случайном участке → (вход, участки): участок входа делится на два по бокам.
+
+    Окно отстоит на corner_clear_m от внутренней грани поперечной стены, а вход в крайнем
+    участке — от наружного угла (outer — края стены), как у GenPlan: у входа примера 0,519 м от
+    угла. Иначе модель такого x не видела и у двери пропускает число (gf#177).
+    """
     fits = [b for b in bays if b[1] - b[0] >= ENTRANCE_WIDTH_M]
     lo, hi = rng.choice(fits)
-    at = on_grid(rng, (lo, hi - ENTRANCE_WIDTH_M), cfg.grid_m)
+    clear = cfg.corner_clear_m
+    door_lo = outer[0] + clear if lo == bays[0][0] else lo
+    door_hi = outer[1] - clear if hi == bays[-1][1] else hi
+    at = on_grid(rng, (door_lo, door_hi - ENTRANCE_WIDTH_M), cfg.grid_m)
     rest = [(lo, at - cfg.between_m), (at + ENTRANCE_WIDTH_M + cfg.between_m, hi)]
     others = [b for b in bays if b != (lo, hi)]
     return Opening(at, ENTRANCE_WIDTH_M, Hole.ENTRANCE), others + rest
 
 
-def _windows(rng: random.Random, bay: Span, width: float, cfg: OpeningRules) -> list[Opening]:
+def bay_windows(rng: random.Random, bay: Span, width: float, cfg: OpeningRules) -> list[Opening]:
     """Ноль, одно или два окна на участке — с равными простенками, как ставят в комнате.
 
     Считаем в шагах сетки, целыми: иначе округление съедает простенок или отступ от угла.

@@ -1,6 +1,6 @@
 """Стабы моделей шагов 1 и 4: интерфейс — как у моделей, ответ — заготовка из stub_data/.
 
-Стаб 1: текст → HouseSpec — всегда один и тот же дом, текст не читается.
+Стаб 1: текст → HouseSpec — один и тот же дом, из текста берётся только этажность.
 Стаб 2: стена после развёртки + контекст → стена с элементами и зонами — готовые фасады
 простого дома (tests/fixtures/simple_house.svg), один набор на оба режима; «задано условием»
 (fixed) остаётся только у проёмов, которые есть на стороне плана. Заготовку один раз
@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from functools import cache
 from importlib.resources import files
 
+from genfacade.config import SpecStub
 from genfacade.schema import (
     EPS,
     Element,
@@ -40,9 +41,22 @@ class LayoutContext:
     text: str
 
 
-def spec_model(text: str) -> HouseSpec:
-    """Шаг 1: описание → параметры дома. Стаб: одна спека на любой текст."""
-    return HouseSpec.model_validate_json(DATA.joinpath("house.json").read_text())
+def spec_model(text: str, cfg: SpecStub) -> HouseSpec:
+    """Шаг 1: описание → параметры дома. Стаб: заготовка, этажей — по слову в тексте; высота
+    этажа и цоколь — заготовки, карниз — над последним этажом."""
+    spec = HouseSpec.model_validate_json(DATA.joinpath("house.json").read_text())
+    floors = _floors(text, cfg) or spec.floors
+    heights = [spec.floor_heights_m[0]] * floors
+    return spec.model_copy(update={"floors": floors, "floor_heights_m": heights,
+                                   "eaves_m": round(spec.plinth_m + sum(heights), 3)})
+
+
+def _floors(text: str, cfg: SpecStub) -> int | None:
+    """Этажей — по слову, которое в тексте раньше других; слова нет — None."""
+    low = text.lower()
+    found = [(low.find(w), n) for n, words in cfg.floors_words.items() for w in words
+             if w.lower() in low]
+    return min(found)[1] if found else None
 
 
 def layout_model(wall: SideFacade, ctx: LayoutContext) -> SideFacade:

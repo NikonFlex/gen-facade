@@ -120,6 +120,20 @@ def test_openings_keep_clear_of_corners_partitions_and_each_other(houses, cfg):
                 assert near >= rules.corner_clear_m - 1e-6, (house.id, side.index)
 
 
+def test_entrance_comes_closer_to_corner_than_windows(houses, cfg):
+    """Вход — от corner_clear_m от наружного угла, как у GenPlan (вход примера в 0,519 м от угла),
+    окна — от внутренней грани стены: ближе толщины стены к углу подходит только вход (gf#177)."""
+    rules, wall = cfg.synthetic.openings, cfg.synthetic.house.wall_m
+    gaps = {kind: [] for kind in OpeningKind}
+    for _, house in houses:
+        for side in house.plan.sides:
+            for o in side.openings:
+                gaps[o.kind].append(min(o.x_m, side.length_m - o.x_m - o.width_m))
+    assert min(gaps[OpeningKind.ENTRANCE]) >= rules.corner_clear_m - 1e-6
+    assert min(gaps[OpeningKind.WINDOW]) >= wall + rules.corner_clear_m - 1e-6
+    assert any(g < wall + rules.corner_clear_m - 1e-6 for g in gaps[OpeningKind.ENTRANCE])
+
+
 def test_blind_walls_are_made_on_purpose(houses):
     """Глухие стены есть, но не все: у каждого дома хотя бы одно окно
     (`data: Глухие стены в синтетике`)."""

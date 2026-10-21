@@ -91,6 +91,16 @@ def test_model_window_in_forbidden_zone_is_an_error(lay_out, simple_svg, cfg):
     assert Rule.FORBIDDEN in found and Rule.PLAN_FORBIDDEN not in found
 
 
+def test_forbidden_zones_hold_only_on_ground_floor(lay_out, simple_svg, cfg):
+    """`evaluation: Запретные зоны — по плану этажа`: у верхних этажей плана нет — окно модели
+    второго этажа над примыканием перегородки первого не ошибка; то же окно на первом — ошибка."""
+    sheet = lay_out(svg=simple_svg(before_leaf(WALL_INTO_WINDOW)))
+    w = next(e for e in sheet.facades[2].elements if e.cls is ElementClass.WINDOW and e.fixed)
+    upper = _edit(sheet, 2, w.id, fixed=[], floor=2)
+    assert Rule.FORBIDDEN in _rules(_edit(sheet, 2, w.id, fixed=[]), cfg)
+    assert {Rule.FORBIDDEN, Rule.PLAN_FORBIDDEN}.isdisjoint(_rules(upper, cfg))
+
+
 def test_plan_opening_moved(lay_out, cfg):
     sheet = lay_out()
     door = next(e for e in sheet.facades[0].elements if e.cls is ElementClass.DOOR)

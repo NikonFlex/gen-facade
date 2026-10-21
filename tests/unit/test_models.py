@@ -7,11 +7,24 @@ from genfacade.models.stub import LayoutContext, ModelError
 from genfacade.schema import ElementClass, FacadeSheet, Mode, RoofKind
 
 
-def test_spec_stub_ignores_text():
-    """Стаб шага 1: одна спека на любой текст — один этаж, плоская крыша."""
-    a, b = stub.spec_model("Five-storey apartment block."), stub.spec_model("")
-    assert a == b and (a.floors, a.roof.kind) == (1, RoofKind.FLAT)
-    assert [m.id for m in a.materials] == ["main", "plinth", "accent", "trim", "roof"]
+@pytest.mark.parametrize(("text", "floors"), [
+    ("A simple one-storey house with a flat roof.", 1),
+    ("A Two-Storey villa.", 2),
+    ("Двухэтажный коттедж", 2),
+    ("A three-story house, not a bungalow", 3),   # слово раньше других
+    ("Five-storey apartment block.", 1),          # слова нет — как у заготовки
+    ("", 1),
+])
+def test_spec_stub_reads_only_floors(cfg, text, floors):
+    """`generation: Стаб шага 1`: из текста — только этажность; остальное — заготовка: плоская
+    крыша, палитра по ролям, высота этажа одна, карниз над последним этажом."""
+    spec, base = stub.spec_model(text, cfg.models.spec), stub.spec_model("", cfg.models.spec)
+    assert (spec.floors, spec.roof.kind) == (floors, RoofKind.FLAT)
+    assert [m.id for m in spec.materials] == ["main", "plinth", "accent", "trim", "roof"]
+    assert spec.floor_heights_m == base.floor_heights_m * floors
+    assert spec.eaves_m == pytest.approx(spec.plinth_m + floors * base.floor_heights_m[0])
+    assert spec.model_copy(update={k: getattr(base, k) for k in
+                                   ("floors", "floor_heights_m", "eaves_m")}) == base
 
 
 def _unfixed(elements):
@@ -40,11 +53,12 @@ def test_layout_stub_fixes_only_plan_openings(lay_out):
     assert _fixed(lay_out(Mode.WITH_OPENINGS)) == [ElementClass.DOOR] + [ElementClass.WINDOW] * 4
 
 
-def test_layout_stub_rejects_unknown_wall(lay_out):
+def test_layout_stub_rejects_unknown_wall(lay_out, cfg):
     wall = lay_out().facades[1]
     longer = wall.model_copy(update={"side": wall.side.model_copy(update={"length_m": 7.0})})
     with pytest.raises(ModelError, match="стаб знает только простой дом"):
-        stub.layout_model(longer, LayoutContext(stub.spec_model(""), Mode.WITH_OPENINGS, ""))
+        house = stub.spec_model("", cfg.models.spec)
+        stub.layout_model(longer, LayoutContext(house, Mode.WITH_OPENINGS, ""))
 
 
 def test_layout_stub_rejects_other_number_of_walls(lay_out):

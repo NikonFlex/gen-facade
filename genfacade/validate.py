@@ -80,11 +80,14 @@ def _overlaps(f: SideFacade, cfg: Checks) -> list[Violation]:
 
 def _forbidden(f: SideFacade, cfg: Checks) -> list[Violation]:
     """Окно модели в запретной зоне — ошибка. Окно плана (x задан планом) — предупреждение: план
-    главнее, его окно не двигается (`evaluation: Окно плана в запретной зоне`)."""
+    главнее, его окно не двигается (`evaluation: Окно плана в запретной зоне`). Зоны — по плану
+    первого этажа: у верхних этажей плана нет, их перегородок мы не знаем
+    (`evaluation: Запретные зоны — по плану этажа`)."""
+    ground = [e for e in f.elements if e.cls is ElementClass.WINDOW and (e.floor or 1) == 1]
     return [_v(f, Rule.PLAN_FORBIDDEN if FixedField.X in e.fixed else Rule.FORBIDDEN, e,
                f"окно {'плана ' if FixedField.X in e.fixed else ''}{e.id} в запретной зоне "
                f"{z.x0_m:.2f}–{z.x1_m:.2f} м")
-            for e in f.elements if e.cls is ElementClass.WINDOW for z in f.side.forbidden
+            for e in ground for z in f.side.forbidden
             if min(e.x_m + e.w_m, z.x1_m) - max(e.x_m, z.x0_m) > cfg.eps_m]
 
 

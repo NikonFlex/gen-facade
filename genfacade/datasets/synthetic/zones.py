@@ -47,11 +47,12 @@ def _accents(wall: SideFacade, spec: HouseSpec, look: Look, cfg: Finish) -> list
 
 
 def _piers(windows: list[Element], max_m: float) -> list[Box]:
-    """Вставка в простенке между соседними окнами — на высоту большего из них."""
-    row = sorted(windows, key=lambda w: w.x_m)
+    """Вставка в простенке между соседними окнами этажа — на высоту большего из них."""
+    row = sorted(windows, key=lambda w: (w.floor, w.x_m))
     return [
         (a.x_m + a.w_m, min(a.y_m, b.y_m), b.x_m, max(a.y_m + a.h_m, b.y_m + b.h_m))
-        for a, b in zip(row, row[1:], strict=False) if b.x_m - (a.x_m + a.w_m) <= max_m
+        for a, b in zip(row, row[1:], strict=False)
+        if a.floor == b.floor and b.x_m - (a.x_m + a.w_m) <= max_m
     ]
 
 

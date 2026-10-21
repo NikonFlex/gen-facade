@@ -46,7 +46,7 @@ def test_house_from_spec_stub(cfg, tmp_path):
     out = _generate(cfg, tmp_path / "run")
     spec = HouseSpec.model_validate(json.loads((out / pipeline.SPEC).read_text())["spec"])
     sides = Plan.model_validate_json((out / pipeline.PLAN_JSON).read_text()).sides
-    assert spec == stub.spec_model(TEXT) and len(sides) == 4
+    assert spec == stub.spec_model(TEXT, cfg.models.spec) and len(sides) == 4
 
 
 def test_marks_only_on_sheet(cfg, tmp_path):
@@ -141,7 +141,7 @@ def test_spec_step_svg_has_palette_and_levels(cfg, tmp_path):
     out = _generate(cfg, tmp_path / "run")
     svg = (out / pipeline.SPEC_SVG).read_text()
     colors = json.loads((out / pipeline.SPEC).read_text())["colors"]
-    spec = stub.spec_model(TEXT)
+    spec = stub.spec_model(TEXT, cfg.models.spec)
     for m in spec.materials:
         assert f"{m.id} · {m.kind}" in svg and f'fill="{colors[m.id]}"' in svg
     for text in ("±0,000", "+0,500", "+3,250"):

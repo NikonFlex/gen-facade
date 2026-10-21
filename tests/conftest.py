@@ -108,7 +108,7 @@ def lay_out(cfg):
     """
     def run(mode: Mode = Mode.WITH_OPENINGS, svg=SIMPLE) -> FacadeSheet:
         plan = preprocess(svg, mode, cfg.plan)
-        house = stub.spec_model("")
+        house = stub.spec_model("", cfg.models.spec)
         return stub.layout_all(walls(house, plan), stub.LayoutContext(house, mode, ""))
 
     return run

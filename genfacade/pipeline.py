@@ -196,7 +196,7 @@ def _prepare(req: PlanRun, svg: str, out: Path, cfg: Config) -> FacadeSheet:
 
     Шаг 1 — модель (пока стаб): текст → HouseSpec.
     """
-    spec = stub.spec_model(req.text)
+    spec = stub.spec_model(req.text, cfg.models.spec)
     # цвета — для смотрелки: у палитры без цвета берётся цвет вида из библиотеки
     colors = {m.id: m.color or cfg.library.kinds.get(m.kind) for m in spec.materials}
     (out / SPEC).write_text(json.dumps({"spec": spec.model_dump(), "colors": colors},

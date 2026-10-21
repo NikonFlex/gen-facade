@@ -2,7 +2,9 @@
 оно заходит в запретную зону, на проём или за край стены. torch не нужен — идёт и в CI."""
 
 import pytest
+from simple_house import WALL_INTO_WINDOW, before_leaf
 
+from genfacade import schema
 from genfacade.schema import ElementClass, Mode, ZoneRole
 from genfacade.train import constraints, tokens
 from genfacade.train.tokens import Mark
@@ -63,6 +65,7 @@ def test_box_takes_only_numbers_and_nothing_is_banned_outside_it(guard, vocab):
     assert _allowed(guard(Mark.WALL, WINDOW, 52), vocab) == numbers       # y — любое число
     assert _allowed(guard(Mark.WALL, DOOR), vocab) == numbers             # x двери — из плана
     assert _allowed(guard(Mark.WALL, DOOR, 30, 10), vocab) == numbers - {0}   # ширина > 0
+    assert _allowed(guard(Mark.WALL, WINDOW, 52, 10, 20), vocab) == numbers - {0}  # высота > 0
     # рамка дописана: следующим — не число (лишнее число ломает ответ, gf#177), дальше — свободно
     assert set(guard(Mark.WALL, WINDOW, 52, 10, 20, 30).banned()) == set(vocab.number)
     assert guard(Mark.WALL, WINDOW, 52, 10, 20, 30, Mark.FLOOR).banned() == []
@@ -77,4 +80,69 @@ def test_guard_only_in_blind_mode(cfg, lay_out, vocab):
     door = next(o for o in front.openings if tokens.given(o.kind, Mode.BLIND))
     x = tokens.units(door.x_m, cfg.tokens)
     assert walls[0].length == tokens.units(front.length_m, cfg.tokens)
-    assert (x, tokens.units(door.x_m + door.width_m, cfg.tokens)) in walls[0].busy
+    assert (x, tokens.units(door.x_m + door.width_m, cfg.tokens)) in walls[0].ground  # 1-й этаж
+
+
+def test_forbidden_zones_belong_to_ground_floor(cfg, lay_out, simple_svg, vocab):
+    """Зоны — по плану первого этажа (`evaluation: Запретные зоны — по плану этажа`): страж
+    держит их только для первого этажа."""
+    bare = tokens.bare(lay_out(Mode.BLIND, svg=simple_svg(before_leaf(WALL_INTO_WINDOW))))
+    walls = constraints.guard(bare, Mode.BLIND, vocab, cfg).walls
+    assert any(f.side.forbidden for f in bare.facades)
+    for f, wall in zip(bare.facades, walls, strict=True):
+        zones = {(tokens.units(z.x0_m, cfg.tokens), tokens.units(z.x1_m, cfg.tokens))
+                 for z in f.side.forbidden}
+        assert wall.busy == [] and zones <= set(wall.ground)
+
+
+# Та же стена в два этажа: низ второго — 3,0 м (60 шагов); зона и вход — план первого этажа.
+TWO = constraints.Wall(160, [], [(78, 82), (28, 46)], (60,))
+
+
+def _two_storey(vocab, ids, *words):
+    g = constraints.WallGeometry([TWO], vocab, NARROWEST)
+    for w in words:
+        g.step(ids[str(w)])
+    return g
+
+
+def test_two_storey_wall_keeps_floors_apart(cfg, vocab):
+    """`generation: Окна вне запретных зон` на двух этажах: этаж — по y, второму числу рамки.
+    Окно второго этажа над окном первого, над входом и над запретной зоной годно — зона по плану
+    первого этажа (`evaluation: Запретные зоны — по плану этажа`); окна этажа не пересекаются."""
+    ids = {w: i for i, w in enumerate(tokens.vocabulary(cfg))}
+    first = (Mark.WALL, WINDOW, 100, 20, 20, 30)            # окно первого этажа 100–120
+    # x: над входом и над зоной — годен (на втором этаже они не заняты)
+    assert {30, 70, 100} <= _allowed(_two_storey(vocab, ids, *first, WINDOW), vocab)
+    # w окна первого этажа упирается в зону, окна второго — проходит над ней
+    assert _allowed(_two_storey(vocab, ids, Mark.WALL, WINDOW, 70, 20), vocab) == set(range(1, 9))
+    assert _allowed(_two_storey(vocab, ids, Mark.WALL, WINDOW, 70, 70), vocab) == set(range(1, 91))
+    # w окна второго этажа над окном первого: до края стены
+    assert _allowed(_two_storey(vocab, ids, *first, WINDOW, 100, 70), vocab) == set(range(1, 61))
+    # на первом этаже то же x уже занято — годной ширины нет, страж не запрещает ничего
+    assert _two_storey(vocab, ids, *first, WINDOW, 100, 20).banned() == []
+    # x годен только на втором этаже (зона первого) — y только на втором: от 60 шагов
+    in_zone = _allowed(_two_storey(vocab, ids, Mark.WALL, WINDOW, 79), vocab)
+    assert in_zone == {n for n in vocab.token if n >= 60}
+    # x годен на обоих этажах — y любой
+    assert _allowed(_two_storey(vocab, ids, Mark.WALL, WINDOW, 100), vocab) == set(vocab.token)
+    # второе окно второго этажа обходит первое окно второго этажа
+    second = (*first, WINDOW, 100, 70, 20, 30, WINDOW, 90, 70)
+    assert _allowed(_two_storey(vocab, ids, *second), vocab) == set(range(1, 11))
+
+
+@pytest.mark.parametrize(("x0", "x1", "span"), [
+    (1.9297, 2.0059, (38, 40)),   # план GenPlan: к ближнему узлу — 39–40, окно до 1,95 заходит
+    (3.9, 4.1, (78, 82)),         # на узлах — как есть
+    (1.0, 1.005, (20, 20)),       # уже допуска валидатора — не занимает ничего
+])
+def test_zone_on_grid_covers_real_zone(cfg, lay_out, vocab, x0, x1, span):
+    """Окно, которое страж пускает впритык к зоне на сетке, валидатор не бракует: зона на сетке
+    покрывает настоящую с допуском `eps_m`."""
+    bare = tokens.bare(lay_out(Mode.BLIND))
+    side = bare.facades[1].side.model_copy(update={"forbidden": [
+        schema.ForbiddenZone(x0_m=x0, x1_m=x1)]})
+    facades = list(bare.facades)
+    facades[1] = facades[1].model_copy(update={"side": side})
+    walls = constraints.walls(bare.model_copy(update={"facades": facades}), Mode.BLIND, cfg)
+    assert walls[1].ground == [span]
