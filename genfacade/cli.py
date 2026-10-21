@@ -1,5 +1,5 @@
-"""Командная строка: genfacade run <план.svg> --text …, serve, synth, buildingnet, tokens, train,
-eval, metrics, calibrate, baseline."""
+"""Командная строка: genfacade run <план.svg> --text …, serve, synth, buildingnet, manual, tokens,
+train, eval, metrics, calibrate, baseline."""
 
 import argparse
 import sys
@@ -32,6 +32,13 @@ def buildingnet(args: argparse.Namespace) -> Path:
     from genfacade.datasets.buildingnet import build
 
     return build.run(config.load(args.config), args.count)
+
+
+def markup(args: argparse.Namespace) -> Path:
+    """Ручная разметка реальных коттеджей → примеры теста и опись со срезанным (gf#180)."""
+    from genfacade.datasets import manual
+
+    return manual.run(config.load(args.config))
 
 
 def tokens(args: argparse.Namespace) -> Path:
@@ -120,6 +127,7 @@ def _parser() -> argparse.ArgumentParser:
                    help="удалить собранные дома и собрать заново (после правки настроек или кода)")
     n = sub.add_parser("buildingnet", help="коттеджи теста BuildingNet → примеры датасета и опись")
     n.add_argument("-n", "--count", type=int, default=0, help="сколько домов теста; 0 — все")
+    sub.add_parser("manual", help="ручная разметка реальных коттеджей → примеры теста и опись")
     t = sub.add_parser("tokens", help="дома источника → корпус для обучения: номера токенов")
     _source(t)
     f = sub.add_parser("train", help="корпус токенов → модель шага 4, кривая потерь, ответы")
@@ -153,6 +161,7 @@ def _parser() -> argparse.ArgumentParser:
 COMMANDS = {
     "synth": (synth, {batch.BuildError: "сборка остановлена"}),
     "buildingnet": (buildingnet, {}),
+    "manual": (markup, {}),
     "tokens": (tokens, {corpus.CorpusError: "корпус не собран"}),
     "train": (train, {corpus.CorpusError: "обучение не начато"}),
     "eval": (eval_model, {corpus.CorpusError: "оценка не начата",

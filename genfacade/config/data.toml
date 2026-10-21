@@ -35,3 +35,14 @@ garage = "garage_door"
 shutters = "blind"
 balcony_patio = "balcony"
 awning = "canopy"
+
+# Ручная разметка реальных коттеджей (`data: Реальные коттеджи — тест`, gf#180): TOML на дом,
+# координаты — в pt листа PDF, отметки уровней — в футах с листа. Листы и разметка — вне git:
+# FreeFarmhouse — CC BY-SA 4.0, производное — под той же лицензией.
+[manual.paths]
+markup_dir = "data/freefarmhouse/markup"   # <дом>.toml; листы — рядом, в pdf/ (archive.org)
+
+[manual]
+length_tol_m = 0.1        # противоположные стороны расходятся больше — контур не прямоугольник
+wall_m = 0.2              # толщина стен в плане: план нужен для сторон и проёмов
+inside_share = 0.5        # элемент за карнизом или углом обрезается, если внутри не меньше этой доли
