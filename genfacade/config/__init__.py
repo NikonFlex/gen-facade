@@ -245,7 +245,7 @@ class OpeningRules(Section):
     grid_m: float
     corner_clear_m: float
     between_m: float
-    window_widths_m: list[float]
+    window_width_m: Range
     widths_per_house: int
     per_bay_weights: list[float]
     entrance_long_p: float

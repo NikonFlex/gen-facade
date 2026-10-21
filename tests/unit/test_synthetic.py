@@ -145,6 +145,15 @@ def test_partitions_grow_with_house_length(houses, cfg):
     assert any(w > 14 for w, _ in counts) and any(n > 2 for _, n in counts)
 
 
+def test_window_widths_span_real_range(houses, cfg):
+    """Ширина окна плана — на сетке в `window_width_m`, а не из пяти значений: у 91 % окон плана
+    BuildingNet ширина не из прежнего набора, и модель сбивала чужую ширину (gf#186)."""
+    low, high = cfg.synthetic.openings.window_width_m
+    widths = {o.width_m for sketch, _ in houses for o in _holes(sketch, Hole.WINDOW)}
+    assert all(low - 1e-6 <= w <= high + 1e-6 for w in widths)
+    assert len(widths) > 10
+
+
 def test_blind_walls_are_made_on_purpose(houses):
     """Глухие стены есть, но не все: у каждого дома хотя бы одно окно
     (`data: Глухие стены в синтетике`)."""

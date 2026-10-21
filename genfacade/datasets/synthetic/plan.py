@@ -72,7 +72,8 @@ def _walls(width: float, depth: float, cuts: list[float], cfg: Synthetic) -> lis
 
 def _with_openings(rng: random.Random, walls: list[_Wall], cfg: OpeningRules) -> list[Run]:
     """Вход на одной стене, окна — на свободных участках стен, не выбранных глухими."""
-    widths = rng.sample(cfg.window_widths_m, rng.randint(1, cfg.widths_per_house))
+    widths = [on_grid(rng, cfg.window_width_m, cfg.grid_m)
+              for _ in range(rng.randint(1, cfg.widths_per_house))]
     on_long = rng.random() < cfg.entrance_long_p
     entry = rng.choice([w for w in walls if w.long is on_long])
     runs = []
