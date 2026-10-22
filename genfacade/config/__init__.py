@@ -388,6 +388,7 @@ class Fit(Section):
     device: Device
     bf16: bool
     compile: bool
+    save_every: int
 
 
 class Sampling(Section):

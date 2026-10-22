@@ -1,7 +1,7 @@
 """Обучение модели шага 4 одной командой (gf#106): корпус токенов → чекпойнт, кривая потерь,
 ответы модели на условия из val и доля тех, что разбирает `tokens.decode`.
 
-    <папка>/model.pt      веса и размеры модели
+    <папка>/model.pt      веса и размеры модели; model-e<N>.pt — после эпохи N (`fit.save_every`)
     <папка>/model.json    настройки, корпус, словарь, история по эпохам, итог сэмплирования
     <папка>/loss.png      кривая потерь train и val по эпохам; loss.json — те же числа
     <папка>/samples.json  ответы модели: дом, режим, токены, разобран ли и почему нет
@@ -160,14 +160,21 @@ def run(source: Source, cfg: Config, out: Path) -> Path:
         if probe and (epoch % cfg.train.probe.every == 0 or epoch == fit.epochs):
             history[-1]["probe"] = probe.measure(trainer.sampler)
         print(json.dumps(history[-1]), flush=True)
-    torch.save({"model": trainer.model.state_dict(), "size": cfg.train.model.model_dump(),
-                "vocabulary": data.words}, out / MODEL)
+        if fit.save_every and epoch % fit.save_every == 0 and epoch < fit.epochs:
+            _save(trainer, data, cfg, out / f"model-e{epoch}.pt")
+    _save(trainer, data, cfg, out / MODEL)
     plot.losses(history, out)
     samples = sample(trainer, source, cfg, rng)
     (out / SAMPLES).write_text(json.dumps(samples, ensure_ascii=False, indent=1))
     summary = {k: v for k, v in samples.items() if k != "rows"}
     return _settings(trainer, cfg, {"source": source, "history": history, "samples": summary},
                      out)
+
+
+def _save(trainer: Trainer, data: Corpus, cfg: Config, path: Path) -> None:
+    """Веса, размеры и словарь — то, что читает `models.layout.load`."""
+    torch.save({"model": trainer.model.state_dict(), "size": cfg.train.model.model_dump(),
+                "vocabulary": data.words}, path)
 
 
 def _probe(data: Corpus, source: Source, cfg: Config):
