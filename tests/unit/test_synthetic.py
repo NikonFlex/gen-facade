@@ -10,7 +10,7 @@ from simple_house import SIMPLE
 from genfacade import cli, config
 from genfacade.datasets import genplan_writer, store
 from genfacade.datasets.genplan_writer import Hole, Opening, PlanDraft, Run
-from genfacade.datasets.synthetic import build
+from genfacade.datasets.synthetic import build, sizes
 from genfacade.datasets.synthetic.plan import draft
 from genfacade.plan import genplan_svg
 from genfacade.plan.gaps import Axis
@@ -77,8 +77,8 @@ def test_entrance_read_on_every_wall(cfg, preprocess_svg, wall):
 
 def test_plan_keeps_every_decision_of_draft(houses, cfg):
     """Что решил генератор, то и прочитал препроцессор: размеры, окна, вход, перегородки."""
-    size = cfg.synthetic.house
-    for sketch, house in houses:
+    for seed, (sketch, house) in zip(SEEDS, houses, strict=True):
+        size = sizes.pick(seed, cfg.synthetic)
         sides = house.plan.sides
         windows = [o for s in sides for o in s.openings if o.kind is OpeningKind.WINDOW]
         assert sorted(round(s.length_m, 3) for s in sides) == sorted(
@@ -95,8 +95,8 @@ def test_house_sizes_cover_genplan_sides(cfg):
     """Длина стороны в условии модели — число шагов сетки токенов, и каждое такое число модель
     учит по синтетике: длину, которой там не было, она не читает и раскладывает стену другой
     длины (gf#153, пример GenPlan: стороны 85 и 109 шагов, а в синтетике были 100…280 через 10)."""
-    house = cfg.synthetic.house
-    step = round(house.grid_m / cfg.tokens.grid_m)
+    house = cfg.synthetic.sizes.genplan  # профиль «как GenPlan» (gf#186)
+    step = round(cfg.synthetic.house.grid_m / cfg.tokens.grid_m)
 
     def reachable(span: tuple[float, float]) -> range:
         return range(tokens.units(span[0], cfg.tokens), tokens.units(span[1], cfg.tokens) + 1,
@@ -145,13 +145,17 @@ def test_partitions_grow_with_house_length(houses, cfg):
     assert any(w > 14 for w, _ in counts) and any(n > 2 for _, n in counts)
 
 
-def test_window_widths_span_real_range(houses, cfg):
-    """Ширина окна плана — на сетке в `window_width_m`, а не из пяти значений: у 91 % окон плана
-    BuildingNet ширина не из прежнего набора, и модель сбивала чужую ширину (gf#186)."""
-    low, high = cfg.synthetic.openings.window_width_m
-    widths = {o.width_m for sketch, _ in houses for o in _holes(sketch, Hole.WINDOW)}
-    assert all(low - 1e-6 <= w <= high + 1e-6 for w in widths)
-    assert len(widths) > 10
+def test_house_sizes_follow_their_profile(houses, cfg):
+    """Профиль размеров по seed (gf#186): «как GenPlan» — прежние стороны и пять ширин окна, «как
+    реальные» — стороны до 24 м и ширина окна на сетке; бывают оба, реальных — около real_share."""
+    mix, real = cfg.synthetic.sizes, 0
+    for seed, (sketch, _) in zip(SEEDS, houses, strict=True):
+        size = sizes.pick(seed, cfg.synthetic)
+        real += size is mix.real
+        assert size.width_m[0] - 1e-6 <= sketch.width_m <= size.width_m[1] + 1e-6
+        allowed = sizes.grid(size.window_width_m, size.window_step_m)
+        assert all(o.width_m in allowed for o in _holes(sketch, Hole.WINDOW)), seed
+    assert 0 < real < len(houses)
 
 
 def test_blind_walls_are_made_on_purpose(houses):

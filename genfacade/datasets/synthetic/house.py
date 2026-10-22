@@ -4,8 +4,9 @@ import random
 from dataclasses import dataclass
 from enum import Enum
 
-from genfacade.config import Range, Synthetic
+from genfacade.config import Range, Sizes, Synthetic
 from genfacade.datasets.synthetic.plan import on_grid
+from genfacade.datasets.synthetic.sizes import grid
 from genfacade.schema import (
     DOOR_KINDS,
     BuildingType,
@@ -42,11 +43,12 @@ class Look:
     door: VariantKind | None  # вид входной двери; None — глухая
 
 
-def house(rng: random.Random, cfg: Synthetic) -> tuple[HouseSpec, Look]:
+def house(rng: random.Random, cfg: Synthetic, size: Sizes) -> tuple[HouseSpec, Look]:
+    """Параметры и характер дома; высота этажа и цоколь — из профиля размеров дома."""
     rules = cfg.spec
     floors = rng.choices(range(1, len(rules.floors_weights) + 1), rules.floors_weights)[0]
-    height = on_grid(rng, rules.floor_height_m, rules.grid_m)  # одна на дом
-    plinth = on_grid(rng, rules.plinth_m, rules.grid_m)
+    height = rng.choice(grid(size.floor_height_m, size.floor_height_step_m))  # одна на дом
+    plinth = on_grid(rng, size.plinth_m, rules.grid_m)
     style = rng.choice(rules.styles)
     spec = HouseSpec(
         building_type=BuildingType.COTTAGE, floors=floors, floor_heights_m=[height] * floors,

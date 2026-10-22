@@ -10,6 +10,7 @@ from dataclasses import dataclass, replace
 
 from genfacade.config import OpeningRules, Synthetic
 from genfacade.datasets.genplan_writer import Hole, Opening, PlanDraft, Run
+from genfacade.datasets.synthetic import sizes
 from genfacade.plan.gaps import Axis
 from genfacade.plan.preprocess import ENTRANCE_WIDTH_M
 
@@ -27,12 +28,14 @@ class _Wall:
 
 def draft(seed: int, cfg: Synthetic) -> PlanDraft:
     rng = random.Random(seed)  # noqa: S311 — воспроизводимость по seed, не криптография
-    width = on_grid(rng, cfg.house.width_m, cfg.house.grid_m)
-    depth = min(width, on_grid(rng, cfg.house.depth_m, cfg.house.grid_m))
+    size = sizes.pick(seed, cfg)
+    width = on_grid(rng, size.width_m, cfg.house.grid_m)
+    depth = min(width, on_grid(rng, size.depth_m, cfg.house.grid_m))
     cuts = _cuts(rng, width, cfg)
     walls = _walls(width, depth, cuts, cfg)
+    widths = sizes.grid(size.window_width_m, size.window_step_m)
     while True:  # дом совсем без окон не нужен — тянем раскладку ещё раз тем же генератором
-        runs = _with_openings(rng, walls, cfg.openings)
+        runs = _with_openings(rng, walls, widths, cfg.openings)
         if any(o.hole is Hole.WINDOW for r in runs for o in r.openings):
             break
     inner = [_partition(rng, x, depth, cfg) for x in cuts]
@@ -70,10 +73,11 @@ def _walls(width: float, depth: float, cuts: list[float], cfg: Synthetic) -> lis
     ]
 
 
-def _with_openings(rng: random.Random, walls: list[_Wall], cfg: OpeningRules) -> list[Run]:
-    """Вход на одной стене, окна — на свободных участках стен, не выбранных глухими."""
-    widths = [on_grid(rng, cfg.window_width_m, cfg.grid_m)
-              for _ in range(rng.randint(1, cfg.widths_per_house))]
+def _with_openings(rng: random.Random, walls: list[_Wall], choice: list[float],
+                   cfg: OpeningRules) -> list[Run]:
+    """Вход на одной стене, окна — на свободных участках стен, не выбранных глухими; ширины окон
+    дома — из choice (профиль размеров)."""
+    widths = rng.sample(choice, min(len(choice), rng.randint(1, cfg.widths_per_house)))
     on_long = rng.random() < cfg.entrance_long_p
     entry = rng.choice([w for w in walls if w.long is on_long])
     runs = []

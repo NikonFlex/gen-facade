@@ -6,7 +6,7 @@ import random
 import pytest
 
 from genfacade.datasets import store
-from genfacade.datasets.synthetic import build
+from genfacade.datasets.synthetic import build, sizes
 from genfacade.datasets.synthetic.house import Scheme, house
 from genfacade.render.parse import parse_sheet_svg
 from genfacade.render.svg import sheet_svg
@@ -34,7 +34,8 @@ def houses(cfg):
 @pytest.fixture(scope="module")
 def looks(cfg):
     """Параметры и характер дома по тем же seed, что у примеров."""
-    return [house(random.Random(f"house/{s}"), cfg.synthetic) for s in SEEDS]  # noqa: S311
+    return [house(random.Random(f"house/{s}"), cfg.synthetic,  # noqa: S311
+                  sizes.pick(s, cfg.synthetic)) for s in SEEDS]
 
 
 def _of(facade, cls):
@@ -214,12 +215,11 @@ def test_porch_and_canopy_at_entrance(houses, looks, cfg):
 
 def test_house_parameters_come_from_config(looks, cfg):
     rules = cfg.synthetic.spec
-    for spec, _ in looks:
-        low, high = rules.floor_height_m
-        assert low <= spec.floor_heights_m[0] <= high and spec.style in rules.styles
-        assert spec.floor_heights_m[0] / rules.grid_m == pytest.approx(
-            round(spec.floor_heights_m[0] / rules.grid_m))  # на сетке
-        assert rules.plinth_m[0] <= spec.plinth_m <= rules.plinth_m[1]
+    for seed, (spec, _) in zip(SEEDS, looks, strict=True):
+        size = sizes.pick(seed, cfg.synthetic)  # высота этажа и цоколь — из профиля дома
+        assert spec.floor_heights_m[0] in sizes.grid(size.floor_height_m, size.floor_height_step_m)
+        assert spec.style in rules.styles
+        assert size.plinth_m[0] <= spec.plinth_m <= size.plinth_m[1]
         assert spec.eaves_m == pytest.approx(spec.plinth_m + sum(spec.floor_heights_m))
         assert len(set(spec.floor_heights_m)) == 1  # высота этажа одна на дом
         kinds = {m.id: m.kind for m in spec.materials}
@@ -232,9 +232,9 @@ def test_house_parameters_come_from_config(looks, cfg):
 def test_houses_differ_in_character(looks, cfg):
     specs = [spec for spec, _ in looks]
     assert {s.style for s in specs} == set(cfg.synthetic.spec.styles)
-    heights = {s.floor_heights_m[0] for s in specs}  # `data: Этажность синтетики`: по диапазону
-    assert len(heights) > 10 and min(heights) < 2.6 and max(heights) > 3.4
-    assert 0.0 in {s.plinth_m for s in specs}  # бывает и без цоколя, как у BuildingNet
+    heights = {s.floor_heights_m[0] for s in specs}  # высоты GenPlan и реальных домов (gf#186)
+    assert {2.5, 2.75, 3.0} <= heights and len(heights) > 6
+    assert min(s.plinth_m for s in specs) < 0.3  # ниже, чем бывает у профиля GenPlan
     assert {s.floors for s in specs} == set(range(1, len(cfg.synthetic.spec.floors_weights) + 1))
     spans = set(cfg.synthetic.facade.windows.size.values())
     assert {look.window_span for _, look in looks} == spans
