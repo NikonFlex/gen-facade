@@ -58,8 +58,8 @@ env:
 jobs:
   gpu:
     runs-on: [self-hosted, gpu]
-    # 40 эпох обучения с датчиком — около 40 минут; оценка и метрики укладываются в 30
-    timeout-minutes: 90
+    # Модель 8 × 512 на 20 000 домах, 12 эпох — около 2,5 ч (gf#186); оценка и метрики — до часа
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v7
 
