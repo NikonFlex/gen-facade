@@ -20,3 +20,12 @@ def grid(span: Range, step: float) -> list[float]:
     """Значения на сетке шага от и до: 2,5–3,0 через 0,25 → 2,5 / 2,75 / 3,0."""
     low, high = span
     return [round(low + i * step, 3) for i in range(round((high - low) / step) + 1)]
+
+
+def rules(cfg: Synthetic, size: Sizes) -> Synthetic:
+    """Правила генератора с отступом от угла и простенком профиля, если он их задаёт."""
+    own = {k: v for k, v in (("corner_clear_m", size.corner_clear_m),
+                             ("between_m", size.between_m)) if v is not None}
+    if not own:
+        return cfg
+    return cfg.model_copy(update={"openings": cfg.openings.model_copy(update=own)})

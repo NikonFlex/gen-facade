@@ -107,8 +107,9 @@ def test_house_sizes_cover_genplan_sides(cfg):
 
 
 def test_openings_keep_clear_of_corners_partitions_and_each_other(houses, cfg):
-    rules = cfg.synthetic.openings
-    for _, house in houses:
+    """Отступ от угла и простенок — профиля размеров дома (у «как реальные» теснее, gf#186)."""
+    for seed, (_, house) in zip(SEEDS, houses, strict=True):
+        rules = sizes.rules(cfg.synthetic, sizes.pick(seed, cfg.synthetic)).openings
         for side in house.plan.sides:
             spans = sorted((o.x_m, o.x_m + o.width_m) for o in side.openings)
             blocked = [(0.0, 0.0), *((z.x0_m, z.x1_m) for z in side.forbidden),
@@ -122,16 +123,18 @@ def test_openings_keep_clear_of_corners_partitions_and_each_other(houses, cfg):
 
 def test_entrance_comes_closer_to_corner_than_windows(houses, cfg):
     """Вход — от corner_clear_m от наружного угла, как у GenPlan (вход примера в 0,519 м от угла),
-    окна — от внутренней грани стены: ближе толщины стены к углу подходит только вход (gf#177)."""
-    rules, wall = cfg.synthetic.openings, cfg.synthetic.house.wall_m
-    gaps = {kind: [] for kind in OpeningKind}
-    for _, house in houses:
+    окна — от внутренней грани стены: ближе толщины стены к углу подходит только вход (gf#177).
+    Отступ — профиля размеров дома (gf#186)."""
+    wall, near = cfg.synthetic.house.wall_m, False
+    for seed, (_, house) in zip(SEEDS, houses, strict=True):
+        clear = sizes.rules(cfg.synthetic, sizes.pick(seed, cfg.synthetic)).openings.corner_clear_m
         for side in house.plan.sides:
             for o in side.openings:
-                gaps[o.kind].append(min(o.x_m, side.length_m - o.x_m - o.width_m))
-    assert min(gaps[OpeningKind.ENTRANCE]) >= rules.corner_clear_m - 1e-6
-    assert min(gaps[OpeningKind.WINDOW]) >= wall + rules.corner_clear_m - 1e-6
-    assert any(g < wall + rules.corner_clear_m - 1e-6 for g in gaps[OpeningKind.ENTRANCE])
+                gap = min(o.x_m, side.length_m - o.x_m - o.width_m)
+                least = clear if o.kind is OpeningKind.ENTRANCE else wall + clear
+                assert gap >= least - 1e-6, (house.id, o.kind)
+                near |= o.kind is OpeningKind.ENTRANCE and gap < wall + clear - 1e-6
+    assert near
 
 
 def test_partitions_grow_with_house_length(houses, cfg):
@@ -148,14 +151,19 @@ def test_partitions_grow_with_house_length(houses, cfg):
 def test_house_sizes_follow_their_profile(houses, cfg):
     """Профиль размеров по seed (gf#186): «как GenPlan» — прежние стороны и пять ширин окна, «как
     реальные» — стороны до 24 м и ширина окна на сетке; бывают оба, реальных — около real_share."""
-    mix, real = cfg.synthetic.sizes, 0
-    for seed, (sketch, _) in zip(SEEDS, houses, strict=True):
+    mix, real, tight = cfg.synthetic.sizes, 0, False
+    for seed, (sketch, house) in zip(SEEDS, houses, strict=True):
         size = sizes.pick(seed, cfg.synthetic)
         real += size is mix.real
         assert size.width_m[0] - 1e-6 <= sketch.width_m <= size.width_m[1] + 1e-6
         allowed = sizes.grid(size.window_width_m, size.window_step_m)
         assert all(o.width_m in allowed for o in _holes(sketch, Hole.WINDOW)), seed
-    assert 0 < real < len(houses)
+        if size is mix.real:  # у реальных домов проёмы теснее, чем позволяет [openings]
+            for side in house.plan.sides:
+                spans = sorted((o.x_m, o.x_m + o.width_m) for o in side.openings)
+                tight = tight or any(b[0] - a[1] < cfg.synthetic.openings.between_m - 1e-6
+                                     for a, b in zip(spans, spans[1:], strict=False))
+    assert 0 < real < len(houses) and tight
 
 
 def test_blind_walls_are_made_on_purpose(houses):

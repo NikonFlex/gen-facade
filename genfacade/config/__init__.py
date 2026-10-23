@@ -338,6 +338,9 @@ class Sizes(Section):
     plinth_m: Range
     window_width_m: Range
     window_step_m: float
+    # отступ проёма от угла и простенок; нет — как в [openings]
+    corner_clear_m: float | None = None
+    between_m: float | None = None
 
 
 class SizeMix(Section):

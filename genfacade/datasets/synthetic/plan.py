@@ -29,6 +29,7 @@ class _Wall:
 def draft(seed: int, cfg: Synthetic) -> PlanDraft:
     rng = random.Random(seed)  # noqa: S311 — воспроизводимость по seed, не криптография
     size = sizes.pick(seed, cfg)
+    cfg = sizes.rules(cfg, size)  # отступ от угла и простенок — профиля
     width = on_grid(rng, size.width_m, cfg.house.grid_m)
     depth = min(width, on_grid(rng, size.depth_m, cfg.house.grid_m))
     cuts = _cuts(rng, width, cfg)
