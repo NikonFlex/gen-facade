@@ -137,9 +137,21 @@ def test_entrance_comes_closer_to_corner_than_windows(houses, cfg):
     assert near
 
 
-def test_partitions_grow_with_house_length(houses, cfg):
+@pytest.fixture(scope="module")
+def mixed(cfg):
+    """Настройки с профилем «как реальные» (доля 0,3, сетка токенов до 40 м) и дома по ним: в
+    основных настройках он выключен (gf#186), но генератор его умеет."""
+    sizes_cfg = cfg.synthetic.sizes.model_copy(update={"real_share": 0.3})
+    rules = cfg.synthetic.model_copy(update={"sizes": sizes_cfg})
+    tok = cfg.tokens.model_copy(update={"max_m": 40.0})
+    mix = cfg.model_copy(update={"synthetic": rules, "tokens": tok})
+    return mix, [(draft(s, rules), build.sample(s, mix)) for s in SEEDS]
+
+
+def test_partitions_grow_with_house_length(mixed):
     """Длинный дом делится на больше комнат: перегородок — до длины / room_m (gf#186: у 24 м —
     до 5, у 10 м — до 2, как раньше): иначе окон на его стене меньше, чем у реальных домов."""
+    cfg, houses = mixed
     room, counts = cfg.synthetic.partitions.room_m, []
     for sketch, _ in houses:
         inner = [r for r in sketch.runs if any(o.hole is Hole.PASSAGE for o in r.openings)]
@@ -148,9 +160,17 @@ def test_partitions_grow_with_house_length(houses, cfg):
     assert any(w > 14 for w, _ in counts) and any(n > 2 for _, n in counts)
 
 
-def test_house_sizes_follow_their_profile(houses, cfg):
+def test_genplan_profile_only_by_default(houses, cfg):
+    """В основных настройках все дома — «как GenPlan»: словарь модели — сетка до 20 м (gf#186)."""
+    assert cfg.synthetic.sizes.real_share == 0
+    assert all(sizes.pick(s, cfg.synthetic) is cfg.synthetic.sizes.genplan for s in SEEDS)
+    assert max(sketch.width_m for sketch, _ in houses) <= cfg.synthetic.sizes.genplan.width_m[1]
+
+
+def test_house_sizes_follow_their_profile(mixed):
     """Профиль размеров по seed (gf#186): «как GenPlan» — прежние стороны и пять ширин окна, «как
     реальные» — стороны до 24 м и ширина окна на сетке; бывают оба, реальных — около real_share."""
+    cfg, houses = mixed
     mix, real, tight = cfg.synthetic.sizes, 0, False
     for seed, (sketch, house) in zip(SEEDS, houses, strict=True):
         size = sizes.pick(seed, cfg.synthetic)

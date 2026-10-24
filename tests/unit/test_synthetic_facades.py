@@ -232,9 +232,9 @@ def test_house_parameters_come_from_config(looks, cfg):
 def test_houses_differ_in_character(looks, cfg):
     specs = [spec for spec, _ in looks]
     assert {s.style for s in specs} == set(cfg.synthetic.spec.styles)
-    heights = {s.floor_heights_m[0] for s in specs}  # высоты GenPlan и реальных домов (gf#186)
-    assert {2.5, 2.75, 3.0} <= heights and len(heights) > 6
-    assert min(s.plinth_m for s in specs) < 0.3  # ниже, чем бывает у профиля GenPlan
+    gp = cfg.synthetic.sizes.genplan  # в основных настройках — только профиль GenPlan (gf#186)
+    assert {s.floor_heights_m[0] for s in specs} == set(sizes.grid(gp.floor_height_m,
+                                                                     gp.floor_height_step_m))
     assert {s.floors for s in specs} == set(range(1, len(cfg.synthetic.spec.floors_weights) + 1))
     spans = set(cfg.synthetic.facade.windows.size.values())
     assert {look.window_span for _, look in looks} == spans
