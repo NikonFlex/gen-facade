@@ -24,7 +24,8 @@ def zones(wall: SideFacade, spec: HouseSpec, look: Look, cfg: Finish) -> list[Ma
     """Зоны стены по её проёмам (`wall.elements`) и схеме отделки дома."""
     length = wall.side.length_m
     base = [
-        _zone(ZoneRole.PLINTH, PaletteRole.PLINTH, (0, 0, length, spec.plinth_m)),
+        *([_zone(ZoneRole.PLINTH, PaletteRole.PLINTH, (0, 0, length, spec.plinth_m))]
+          if spec.plinth_m > 0 else []),  # без цоколя — без его зоны
         _zone(ZoneRole.MAIN, PaletteRole.MAIN, (0, spec.plinth_m, length, spec.eaves_m)),
     ]
     return base + [_zone(ZoneRole.ACCENT, PaletteRole.ACCENT, box)

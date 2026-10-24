@@ -91,6 +91,18 @@ def test_valid_sheet(sample):
     assert errors(validate(sample.sheet, CFG.checks)) == []
 
 
+def test_window_over_door_stays_out_of_plan():
+    """Окно над дверью первого этажа налезает на неё по x: в плане — один разрыв стены, дверь,
+    а окно остаётся на фасаде (gf#186) — лист без ошибок, проём плана на месте."""
+    over = box(Label.WINDOW, (0.21, 0.11, 0.295), (0.24, 0.13, 0.305))
+    got = extract.house("RESIDENTIALhouse_mesh0002", turned(HOUSE + [over], 20), RULES)
+    front = got.sheet.facades[0]
+    assert [o.kind for o in front.side.openings] == [OpeningKind.ENTRANCE]
+    assert [(e.cls, e.floor) for e in front.elements if e.cls is ElementClass.WINDOW] == [
+        (ElementClass.WINDOW, 1)]
+    assert errors(validate(got.sheet, CFG.checks)) == []
+
+
 def test_window_in_door_is_door_glass():
     """Стекло двери, размеченное окном, — часть двери, а не второй проём."""
     glass = box(Label.WINDOW, (0.21, 0.03, 0.296), (0.24, 0.09, 0.304))

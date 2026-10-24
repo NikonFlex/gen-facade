@@ -6,7 +6,7 @@ import random
 import pytest
 
 from genfacade.datasets import store
-from genfacade.datasets.synthetic import build
+from genfacade.datasets.synthetic import build, sizes
 from genfacade.datasets.synthetic.house import Scheme, house
 from genfacade.render.parse import parse_sheet_svg
 from genfacade.render.svg import sheet_svg
@@ -34,7 +34,8 @@ def houses(cfg):
 @pytest.fixture(scope="module")
 def looks(cfg):
     """Параметры и характер дома по тем же seed, что у примеров."""
-    return [house(random.Random(f"house/{s}"), cfg.synthetic) for s in SEEDS]  # noqa: S311
+    return [house(random.Random(f"house/{s}"), cfg.synthetic,  # noqa: S311
+                  sizes.pick(s, cfg.synthetic)) for s in SEEDS]
 
 
 def _of(facade, cls):
@@ -161,8 +162,8 @@ def test_base_zones_meet_at_corners(houses):
         spec = h.sheet.spec
         spans = {z.role: (min(y for _, y in z.shape), max(y for _, y in z.shape))
                  for z in f.zones if z.role is not ZoneRole.ACCENT}
-        assert spans == {ZoneRole.PLINTH: (0, spec.plinth_m),
-                         ZoneRole.MAIN: (spec.plinth_m, spec.eaves_m)}
+        plinth = {ZoneRole.PLINTH: (0, spec.plinth_m)} if spec.plinth_m > 0 else {}  # без цоколя
+        assert spans == {**plinth, ZoneRole.MAIN: (spec.plinth_m, spec.eaves_m)}
         assert all(z.material == z.role for z in f.zones)  # материал — своя роль палитры
 
 
@@ -200,7 +201,8 @@ def test_porch_and_canopy_at_entrance(houses, looks, cfg):
     for h, (spec, look) in zip(houses, looks, strict=True):
         for f in h.sheet.facades:
             porch, canopy = _of(f, ElementClass.PORCH), _of(f, ElementClass.CANOPY)
-            assert len(porch) == (look.porch and f.side.has_entrance), h.id
+            # крыльцо — на высоту цоколя: без цоколя его нет
+            assert len(porch) == (look.porch and f.side.has_entrance and spec.plinth_m > 0), h.id
             assert len(canopy) == (look.canopy and f.side.has_entrance), h.id
             for door in _of(f, ElementClass.DOOR):
                 for p in porch:
@@ -213,9 +215,11 @@ def test_porch_and_canopy_at_entrance(houses, looks, cfg):
 
 def test_house_parameters_come_from_config(looks, cfg):
     rules = cfg.synthetic.spec
-    for spec, _ in looks:
-        assert spec.floor_heights_m[0] in rules.floor_heights_m and spec.style in rules.styles
-        assert rules.plinth_m[0] <= spec.plinth_m <= rules.plinth_m[1]
+    for seed, (spec, _) in zip(SEEDS, looks, strict=True):
+        size = sizes.pick(seed, cfg.synthetic)  # высота этажа и цоколь — из профиля дома
+        assert spec.floor_heights_m[0] in sizes.grid(size.floor_height_m, size.floor_height_step_m)
+        assert spec.style in rules.styles
+        assert size.plinth_m[0] <= spec.plinth_m <= size.plinth_m[1]
         assert spec.eaves_m == pytest.approx(spec.plinth_m + sum(spec.floor_heights_m))
         assert len(set(spec.floor_heights_m)) == 1  # высота этажа одна на дом
         kinds = {m.id: m.kind for m in spec.materials}
@@ -228,7 +232,9 @@ def test_house_parameters_come_from_config(looks, cfg):
 def test_houses_differ_in_character(looks, cfg):
     specs = [spec for spec, _ in looks]
     assert {s.style for s in specs} == set(cfg.synthetic.spec.styles)
-    assert {s.floor_heights_m[0] for s in specs} == set(cfg.synthetic.spec.floor_heights_m)
+    gp = cfg.synthetic.sizes.genplan  # в основных настройках — только профиль GenPlan (gf#186)
+    assert {s.floor_heights_m[0] for s in specs} == set(sizes.grid(gp.floor_height_m,
+                                                                     gp.floor_height_step_m))
     assert {s.floors for s in specs} == set(range(1, len(cfg.synthetic.spec.floors_weights) + 1))
     spans = set(cfg.synthetic.facade.windows.size.values())
     assert {look.window_span for _, look in looks} == spans

@@ -4,6 +4,7 @@
 import json
 
 import pytest
+import torch
 
 from genfacade.datasets.synthetic import batch
 from genfacade.schema import Mode, Source, Split
@@ -81,6 +82,18 @@ def test_train_writes_model_curve_and_samples(tiny, tmp_path):
         assert row["tokens"][0] == Mark.ANSWER
         assert row["mode"] in set(Mode)
     assert settings["samples"] == {k: v for k, v in samples.items() if k != "rows"}
+
+
+def test_model_saved_every_n_epochs(tiny, tmp_path):
+    """`fit.save_every`: модель после эпохи N — рядом с итоговой, того же вида; перенос на план
+    GenPlan и BuildingNet меряется по ним вне GPU-машины (gf#186)."""
+    fit_cfg = tiny.train.fit.model_copy(update={"save_every": 1})
+    cfg = tiny.model_copy(update={"train": tiny.train.model_copy(update={"fit": fit_cfg})})
+    out = tmp_path / "run"
+    fit.run(Source.SYNTHETIC, cfg, out)
+    assert sorted(p.name for p in out.glob("model*.pt")) == ["model-e1.pt", fit.MODEL]
+    first, last = (torch.load(out / n, weights_only=False) for n in ("model-e1.pt", fit.MODEL))
+    assert first.keys() == last.keys() and first["vocabulary"] == last["vocabulary"]
 
 
 def test_window_shorter_than_corpus_is_refused(at, houses, tmp_path):

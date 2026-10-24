@@ -167,5 +167,7 @@ def guard(bare: FacadeSheet, mode: Mode, vocab: Vocab, cfg: Config) -> WallGeome
     Включён ли запрет в конвейере — решает вызывающий (config/models.toml, `constrain`)."""
     if mode is not Mode.BLIND:
         return None
-    narrowest = tokens.units(min(cfg.synthetic.openings.window_widths_m), cfg.tokens)
+    mix = cfg.synthetic.sizes  # самое узкое окно — профилей, что в корпусе
+    used = [mix.genplan] + ([mix.real] if mix.real_share > 0 else [])
+    narrowest = tokens.units(min(p.window_width_m[0] for p in used), cfg.tokens)
     return WallGeometry(walls(bare, mode, cfg), vocab, narrowest)

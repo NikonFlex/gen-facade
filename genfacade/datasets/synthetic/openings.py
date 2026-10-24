@@ -61,13 +61,13 @@ def windows(rows: list[list[Opening]], spec: HouseSpec, look: Look, cfg: Windows
 def _row(row: list[Opening], floor: int, level: Range, look: Look, cfg: Windows) -> list[Element]:
     """Окна одного этажа; level — низ этажа и его высота."""
     base, height = level
-    top = min(base + look.window_span[1] * height, base + height - cfg.lintel_m)
+    top = round(min(base + look.window_span[1] * height, base + height - cfg.lintel_m), 3)
     out = []
     for i, o in enumerate(row, start=1):
         low = sill_level(o.width_m, look, cfg)
-        y = base + low * height
+        y = round(base + low * height, 3)  # низ и верх на миллиметрах: верх окон этажа — один
         out.append(Element(
-            id=f"w{floor}_{i}", cls=ElementClass.WINDOW, x_m=o.x_m, y_m=round(y, 3),
+            id=f"w{floor}_{i}", cls=ElementClass.WINDOW, x_m=o.x_m, y_m=y,
             w_m=o.width_m, h_m=round(top - y, 3), floor=floor,
             fixed=FROM_PLAN if floor == 1 else [], variant=_variant(o.width_m, top - y, low, cfg)))
     return out

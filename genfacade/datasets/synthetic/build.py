@@ -5,7 +5,7 @@ import random
 from genfacade import pipeline
 from genfacade.config import Config, Synthetic
 from genfacade.datasets import genplan_writer
-from genfacade.datasets.synthetic import decor, openings, plan, upper, zones
+from genfacade.datasets.synthetic import decor, openings, plan, sizes, upper, zones
 from genfacade.datasets.synthetic.house import Look, house
 from genfacade.plan.preprocess import preprocess
 from genfacade.schema import FacadeSheet, HouseSpec, Mode, Sample, SideFacade, Source, Split
@@ -27,7 +27,8 @@ def sample(seed: int, cfg: Config) -> Sample:
     floor = preprocess(svg, Mode.WITH_OPENINGS, cfg.plan).model_copy(
         update={"source": Source.SYNTHETIC})
     # Свой поток случайных чисел: правка правил плана не меняет параметры дома, и наоборот.
-    spec, look = house(random.Random(f"house/{seed}"), rules)  # noqa: S311 — не криптография
+    spec, look = house(random.Random(f"house/{seed}"), rules,  # noqa: S311 — не криптография
+                       sizes.pick(seed, rules))
     sheet = lay_out(pipeline.walls(spec, floor), look, cfg,
                     random.Random(f"upper/{seed}"))  # noqa: S311 — не криптография
     return Sample(id=sample_id(seed), source=Source.SYNTHETIC, split=split(seed, rules),
@@ -55,7 +56,7 @@ def _wall(wall: SideFacade, spec: HouseSpec, look: Look, rules: Synthetic) -> Si
     elements = [
         *(decor.casings(windows, cfg) if look.casing else []), *windows, *doors,
         *decor.sills(windows, cfg),
-        *([decor.porch(d, spec, cfg) for d in doors] if look.porch else []),
+        *([decor.porch(d, spec, cfg) for d in doors] if look.porch and spec.plinth_m > 0 else []),
         *([decor.canopy(d, cfg) for d in doors] if look.canopy else []),
         decor.cornice(side.length_m, spec, cfg),
     ]

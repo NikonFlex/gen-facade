@@ -235,8 +235,6 @@ class Canvas(Section):
 
 
 class HouseSize(Section):
-    width_m: Range
-    depth_m: Range
     grid_m: float
     wall_m: float
 
@@ -245,7 +243,6 @@ class OpeningRules(Section):
     grid_m: float
     corner_clear_m: float
     between_m: float
-    window_widths_m: list[float]
     widths_per_house: int
     per_bay_weights: list[float]
     entrance_long_p: float
@@ -255,15 +252,13 @@ class OpeningRules(Section):
 
 
 class Partitions(Section):
-    max_count: int
+    room_m: float
     min_room_m: float
     passage_m: float
 
 
 class SpecRules(Section):
     floors_weights: list[float]
-    floor_heights_m: list[float]
-    plinth_m: Range
     grid_m: float
     styles: list[str]
     palette: dict[PaletteRole, list[str]]  # виды — из library.toml
@@ -333,6 +328,27 @@ class Build(Section):
     val_share: float
 
 
+class Sizes(Section):
+    """Профиль размеров дома (config/synthetic.toml, [sizes.*]): значения — на сетке шага."""
+
+    width_m: Range
+    depth_m: Range
+    floor_height_m: Range
+    floor_height_step_m: float
+    plinth_m: Range
+    window_width_m: Range
+    window_step_m: float
+    # отступ проёма от угла и простенок; нет — как в [openings]
+    corner_clear_m: float | None = None
+    between_m: float | None = None
+
+
+class SizeMix(Section):
+    real_share: float
+    genplan: Sizes
+    real: Sizes
+
+
 class Synthetic(Section):
     """Генератор синтетических домов
     (config/synthetic.toml, `data: Синтетика своим генератором`)."""
@@ -340,6 +356,7 @@ class Synthetic(Section):
     build: Build
     canvas: Canvas
     house: HouseSize
+    sizes: SizeMix
     openings: OpeningRules
     partitions: Partitions
     spec: SpecRules
@@ -374,6 +391,7 @@ class Fit(Section):
     device: Device
     bf16: bool
     compile: bool
+    save_every: int
 
 
 class Sampling(Section):

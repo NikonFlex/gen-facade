@@ -9,6 +9,7 @@ import numpy
 
 from genfacade import pipeline
 from genfacade.schema import (
+    EPS,
     Element,
     ElementClass,
     FacadeSheet,
@@ -74,7 +75,7 @@ def floor_of(y: float, spec: HouseSpec) -> int:
 
 def side(index: int, w: Wall, elements: list[Element], entrance_side: bool) -> Side:
     """Проёмы первого этажа — проёмы плана; вход — самая широкая дверь стороны входа."""
-    ground = [e for e in elements if e.cls in OPENINGS and e.floor == 1]
+    ground = _in_plan([e for e in elements if e.cls in OPENINGS and e.floor == 1])
     doors = [e for e in ground if e.cls is not ElementClass.WINDOW]
     entrance = max(doors, key=lambda e: e.w_m) if entrance_side and doors else None
     openings = [Opening(kind=OpeningKind.WINDOW if e.cls is ElementClass.WINDOW
@@ -82,6 +83,18 @@ def side(index: int, w: Wall, elements: list[Element], entrance_side: bool) -> S
                         x_m=e.x_m, width_m=e.w_m) for e in ground]
     return Side(index=index, length_m=w.length, orientation=tuple(w.normal), openings=openings,
                 has_entrance=entrance is not None)
+
+
+def _in_plan(ground: list[Element]) -> list[Element]:
+    """Проёмы первого этажа, налезающие друг на друга по x (окно над дверью, окно в окне), в плане —
+    один разрыв стены: в план идёт самый широкий, при равной ширине — дверь; остальные остаются на
+    фасаде элементами, которые ставит модель (gf#186: у BuildingNet половина простенков уже 0,6 м,
+    10-й процентиль −1,4 м — в настоящем плане так не бывает)."""
+    kept: list[Element] = []
+    for e in sorted(ground, key=lambda e: (-e.w_m, e.cls is ElementClass.WINDOW)):
+        if not any(min(e.x_m + e.w_m, k.x_m + k.w_m) - max(e.x_m, k.x_m) > EPS for k in kept):
+            kept.append(e)
+    return sorted(kept, key=lambda e: e.x_m)
 
 
 def plan(fp: Footprint, sides: list[Side], order: list[int], source: Source) -> Plan:
