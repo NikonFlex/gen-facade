@@ -253,7 +253,7 @@ def _axis_labels(sheet: FacadeSheet, letters: str) -> dict[int, tuple[str, str]]
         return letters[ys.index(key(corner[1]))]
 
     return {
-        s.index: (label(corners[(k + 1) % 4], s), label(corners[k], s))
+        s.index: (label(corners[(k + 1) % len(corners)], s), label(corners[k], s))
         for k, s in enumerate(sides)
     }
 

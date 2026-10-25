@@ -4,7 +4,7 @@
     python tools/markup.py overlay <разметка.toml>... [-o outputs/markup] [--dpi 100]
 
 overlay — кадр каждого фасада из PDF, поверх — края стены, чистый пол, земля, карниз и рамки
-элементов; картинка на дом — четыре стороны сеткой 2 × 2.
+элементов; картинка на дом — стороны по две в ряд.
 
 Цвета: стена и уровни — синие, окна — красные, двери и ворота — зелёные, прочее — оранжевое.
 Нужен pdfplumber (dev-зависимости).
@@ -81,8 +81,9 @@ def sheet(path: Path, pdf_dirs: dict[str, Path], dpi: int) -> Image.Image:
         draw(img, box, e, m, dpi)
         tiles.append(img)
     w, h = max(t.width for t in tiles), max(t.height for t in tiles)
-    out = Image.new("RGB", (2 * w + 10, 2 * h + 40), "white")
-    for k, t in enumerate(tiles):  # 2 × 2: вход и правая сторона сверху, тыл и левая снизу
+    rows = (len(tiles) + 1) // 2
+    out = Image.new("RGB", (2 * w + 10, rows * (h + 10) + 30), "white")
+    for k, t in enumerate(tiles):  # по две стороны в ряд, по часовой от стороны входа
         out.paste(t, ((k % 2) * (w + 10), 30 + (k // 2) * (h + 10)))
     ImageDraw.Draw(out).text((4, 4), f"{m.id}: {m.roof}", fill="black", font=font(18))
     return out

@@ -1,8 +1,10 @@
-"""Прямоугольный дом источника → стороны и план: общее у извлечения BuildingNet и ручной разметки.
+"""Дом источника с ортогональным контуром → стороны и план: общее у извлечения BuildingNet и ручной
+разметки.
 
-Источник даёт прямоугольник в плане и элементы каждой стены в координатах стены (schema: x вдоль
-стороны от левого края снаружи, y от земли); здесь из них — стороны с проёмами первого этажа,
-план со стенами и проёмами и зона основной отделки.
+Источник даёт контур в плане — прямоугольник (BuildingNet) или ортогональный многоугольник с
+внутренними углами (ручная разметка, gf#199) — и элементы каждой стены в координатах стены
+(schema: x вдоль стороны от левого края снаружи, y от земли); здесь из них — стороны с проёмами
+первого этажа, план со стенами и проёмами и зона основной отделки.
 """
 
 import numpy
@@ -34,25 +36,34 @@ NORMALS = ((0.0, 1.0), (1.0, 0.0), (0.0, -1.0), (-1.0, 0.0))
 
 
 class Wall:
-    """Сторона прямоугольного контура в плане: нормаль, плоскость и отрезок вдоль неё."""
+    """Сторона контура в плане — ребро от угла a к углу b по часовой: нормаль, плоскость и отрезок
+    вдоль неё."""
 
-    def __init__(self, normal: tuple[float, float], lo: numpy.ndarray, hi: numpy.ndarray) -> None:
-        corners = numpy.array([(x, y) for x in (lo[0], hi[0]) for y in (lo[1], hi[1])])
-        self.normal = numpy.array(normal)
+    def __init__(self, normal: tuple[float, float], a: numpy.ndarray, b: numpy.ndarray) -> None:
+        self.normal, self.a, self.b = numpy.array(normal, dtype=float), a, b
         # Снаружи, лицом к стене, вправо — нормаль, повёрнутая на +90°: x фасада растёт вправо
         # от левого края стороны (schema: координаты на стене).
-        self.right = numpy.array((-normal[1], normal[0]))
-        self.plane = float((corners @ self.normal).max())
-        self.left = float((corners @ self.right).min())
-        self.length = float((corners @ self.right).max()) - self.left
+        self.right = numpy.array((-normal[1], normal[0]), dtype=float)
+        self.plane = float(a @ self.normal) + 0.0  # + 0.0: −0.0 от нуля на −1 — в 0.0
+        self.left = float(min(a @ self.right, b @ self.right)) + 0.0
+        self.length = abs(float((b - a) @ self.right))
 
 
 class Footprint:
-    """Прямоугольник дома в плане: углы, толщина стен плана и стены в порядке NORMALS."""
+    """Контур дома в плане: углы по часовой, толщина стен плана и стены — ребро на сторону."""
 
-    def __init__(self, lo: numpy.ndarray, hi: numpy.ndarray, wall_m: float) -> None:
-        self.lo, self.hi, self.wall_m = lo, hi, wall_m
-        self.walls = [Wall(n, lo, hi) for n in NORMALS]
+    def __init__(self, vertices: list[numpy.ndarray], normals: list[tuple[float, float]],
+                 wall_m: float) -> None:
+        self.vertices, self.wall_m = vertices, wall_m
+        self.walls = [Wall(n, vertices[k], vertices[(k + 1) % len(vertices)])
+                      for k, n in enumerate(normals)]
+
+
+def rectangle(lo: numpy.ndarray, hi: numpy.ndarray, wall_m: float) -> Footprint:
+    """Прямоугольник: стены в порядке NORMALS — верхняя, правая, нижняя, левая."""
+    (x0, y0), (x1, y1) = lo, hi
+    corners = [numpy.array(p, dtype=float) for p in ((x0, y1), (x1, y1), (x1, y0), (x0, y0))]
+    return Footprint(corners, list(NORMALS), wall_m)
 
 
 def assemble(spec: HouseSpec, fp: Footprint, laid: list[tuple[int, list[Element]]],
@@ -98,18 +109,26 @@ def _in_plan(ground: list[Element]) -> list[Element]:
 
 
 def plan(fp: Footprint, sides: list[Side], order: list[int], source: Source) -> Plan:
-    """План по сторонам; order[k] — номер стены в NORMALS у стороны k."""
-    (x0, y0), (x1, y1), t = fp.lo.tolist(), fp.hi.tolist(), fp.wall_m
-    # стены в порядке NORMALS: верхняя, правая, нижняя, левая
-    rects = [Rect(x0_m=x0, y0_m=y1 - t, x1_m=x1, y1_m=y1),
-             Rect(x0_m=x1 - t, y0_m=y0, x1_m=x1, y1_m=y1),
-             Rect(x0_m=x0, y0_m=y0, x1_m=x1, y1_m=y0 + t),
-             Rect(x0_m=x0, y0_m=y0, x1_m=x0 + t, y1_m=y1)]
+    """План по сторонам; order[k] — номер стены контура у стороны k."""
+    rects = [_wall_rect(w, fp.wall_m) for w in fp.walls]
     openings = [_plan_opening(o, fp.walls[i], rects[i])
                 for s, i in zip(sides, order, strict=True) for o in s.openings]
-    # Обход по часовой стрелке от левого верхнего угла; метры — сразу, пикселей у источника нет.
-    return Plan(walls=rects, outline=[(x0, y1), (x1, y1), (x1, y0), (x0, y0)], openings=openings,
-                sides=sides, scale_m_per_px=1.0, source=source)
+    # Обход по часовой стрелке; метры — сразу, пикселей у источника нет.
+    outline = [(float(v[0]) + 0.0, float(v[1]) + 0.0) for v in fp.vertices]
+    return Plan(walls=rects, outline=outline, openings=openings, sides=sides, scale_m_per_px=1.0,
+                source=source)
+
+
+def _wall_rect(w: Wall, t: float) -> Rect:
+    """Стена плана — полоса толщиной t внутрь от наружной грани, вдоль всего ребра."""
+    (ax, ay), (bx, by), inner = (float(v) + 0.0 for v in w.a), (float(v) + 0.0 for v in w.b), \
+        w.plane - t
+    if w.normal[1]:  # стена вдоль x: наружная грань — y = plane по нормали
+        y_out, y_in = w.plane * w.normal[1] + 0.0, inner * w.normal[1] + 0.0
+        return Rect(x0_m=min(ax, bx), y0_m=min(y_out, y_in), x1_m=max(ax, bx),
+                    y1_m=max(y_out, y_in))
+    x_out, x_in = w.plane * w.normal[0] + 0.0, inner * w.normal[0] + 0.0
+    return Rect(x0_m=min(x_out, x_in), y0_m=min(ay, by), x1_m=max(x_out, x_in), y1_m=max(ay, by))
 
 
 def _plan_opening(o: Opening, w: Wall, rect: Rect) -> PlanOpening:

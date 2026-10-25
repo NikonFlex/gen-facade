@@ -1,5 +1,6 @@
 """Ручная разметка реальных коттеджей → примеры теста (`data: Реальные коттеджи — тест`,
-`data: Стена до карниза в данных`): прямоугольники в pt листа → элементы в метрах от земли."""
+`data: Стена до карниза в данных`): прямоугольники в pt листа → элементы в метрах от земли;
+контур — ортогональный, с внутренними углами (gf#199)."""
 
 import json
 
@@ -75,11 +76,24 @@ def test_markup_becomes_sample_in_metres():
     assert errors(validate(sample.sheet, CFG.checks)) == []
 
 
-def test_opposite_sides_must_match():
+def test_contour_must_close():
     sides = markup().model_dump()["sides"]
-    sides[2] = side("REAR", 14)  # тыл на 2' длиннее фасада
-    with pytest.raises(manual.NotRectangle, match="стороны 0 и 2"):
+    sides[2] = side("REAR", 14)  # тыл на 2' длиннее фасада: обход не возвращается в начало
+    with pytest.raises(manual.BadContour, match="не замкнулся"):
         manual.house(markup(sides=sides), CFG.data.manual)
+
+
+def test_l_shaped_house(tmp_path):
+    """Г-образный дом (gf#199): фасад 12', бок 20', тыл 6', внутренний угол, бок крыла 8', тыл
+    крыла 6', другой бок 28' — шесть сторон; план замкнут, лист проходит валидатор."""
+    l_sides = [side("FRONT", 12, {"cls": "door", "box": box(5, 0, 2, 6.75)}),
+               side("LEFT", 20), side("REAR WING", 6) | {"inner_corner": True},
+               side("WING SIDE", 8), side("REAR", 6), side("RIGHT", 28)]
+    sample, _ = manual.house(markup(sides=l_sides), CFG.data.manual)
+    lengths = [f.side.length_m for f in sample.sheet.facades]
+    assert lengths == pytest.approx([ft(v) for v in (12, 20, 6, 8, 6, 28)])
+    assert len(sample.plan.outline) == 6 and len(sample.plan.walls) == 6
+    assert errors(validate(sample.sheet, CFG.checks)) == []
 
 
 def test_run_writes_samples_and_manifest(tmp_path):
