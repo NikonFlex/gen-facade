@@ -1,0 +1,54 @@
+# Tiny Schoolhouse — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
+# archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#180 — та же лицензия.
+# Один класс 12'x12' на столбах. Спереди по центру — выступ 6' шириной и 1' глубиной вокруг
+# двери, он поднимается над карнизом в купол со своим фронтоном: в разметке — две пилястры
+# (pillar) по сторонам двери на плоскости фасада; козырёк над дверью выше карниза — в cut.
+id = "ffh-schoolhouse"
+pdf = "Schoolhouse - Blueprints and Renderings - Jay Osborne 2023-09-08.pdf"
+roof = "двускатная 10/12, фальцевая; над входом купол 10/12 (CUPOLA EAVE +11'-5\")"
+pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"; дверь 80" = 120 pt, стена 12' = 216 pt
+material = "siding"       # 4-6" FIBER CEMENT CLAPBOARD
+plinth_ft = 1.5           # обшивка до 18 pt под FLOOR +0, ниже до земли 6" MIN (вид справа)
+floor_heights_ft = [6.8333]   # EAVE +6'-10"
+cut = ["front: выступ-купол над входом выше карниза (фронтон, вентрешётка ATTIC VENT)",
+       "front: козырёк с кронштейнами над дверью — выше карниза",
+       "front: деревянная ступень и мощение у входа",
+       "rear: треугольная вентрешётка во фронтоне",
+       "right, left: выступ входа и козырёк в профиле за углом стены",
+       "right, left: скат кровли и купол"]
+
+[[sides]]
+view = "FRONT ELEVATION"
+page = 8
+wall = [116.8, 333.6]
+floor = 427.4
+elements = [
+  { cls = "door", box = [200.8, 307.4, 249.6, 427.4], variant = { kind = "glazed" } },
+  { cls = "pillar", box = [170.8, 303.9, 194.8, 427.4] },
+  { cls = "pillar", box = [254.8, 303.9, 278.8, 427.4] },
+]
+
+[[sides]]
+view = "LEFT SIDE ELEVATION"
+page = 9
+wall = [441.3, 657.3]
+floor = 427.4
+elements = [
+  { cls = "window", box = [527.5, 318.7, 571.0, 392.2], variant = { cols = 2, rows = 2 } },
+]
+
+[[sides]]
+view = "REAR ELEVATION"
+page = 9
+wall = [117.3, 333.3]
+floor = 427.4
+elements = []
+
+[[sides]]
+view = "RIGHT SIDE ELEVATION"
+page = 8
+wall = [477.3, 693.3]
+floor = 427.4
+elements = [
+  { cls = "window", box = [563.5, 318.1, 607.0, 391.6], variant = { cols = 2, rows = 2 } },
+]

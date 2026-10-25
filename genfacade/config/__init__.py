@@ -207,6 +207,7 @@ class BuildingNet(Section):
 
 class ManualPaths(Section):
     markup_dir: Path
+    pdf_dir: Path
 
 
 class Manual(Section):

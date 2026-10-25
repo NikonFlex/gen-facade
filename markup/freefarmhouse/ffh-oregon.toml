@@ -1,0 +1,90 @@
+# Oregon Farmhouse — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
+# archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#180 — та же лицензия.
+# Модульный набор «50 starter farmhouses» (2025-01-18, first draft, format test): ядро 24'x18',
+# двухэтажное, двускатная крыша; у торцов (side 1 и side 3) открытые крыльца 6' под своими
+# крышами 4/12 на столбах — вне стены. Стены сняты с листов модулей 1B–4B (1/8"), где ядро
+# нарисовано целиком до линии стыка; карниз +18'-9" — с общего листа фасадов (стр. 3, 1/16").
+id = "ffh-oregon"
+pdf = "Oregon Farmhouse - Blueprints - by Jay Osborne.pdf"
+roof = "двускатная 10/12 над ядром; крыши крылец 4/12 у торцов"
+pt_per_ft = 9.0           # SCALE: 1/8" = 1'-0"; LEVEL 2 +10' = 90 pt над LEVEL 1, стена 24' = 216 pt
+material = "siding"       # SIDING (lap siding на видах)
+plinth_ft = 2.0           # столбчатый фундамент: низ столбов ~9 pt под 1ST FLOOR на стр. 3 (1/16")
+floor_heights_ft = [10.0, 8.75]   # 2ND FLOOR +10'-0", ROOF EAVE +18'-9"
+cut = ["side 1: фронтон с окном чердака", "side 3: фронтон с окном чердака",
+       "side 1: стойки 6x6 и кронштейны крыльца, настил и ступень",
+       "side 3: стойки 6x6 крыльца, настил и ступень",
+       "side 3: необязательное окно у лестницы (пунктир, OPTIONAL WINDOW @ STAIRS)",
+       "side 2, side 4: скат кровли; крыши крылец за углами"]
+
+[[sides]]
+view = "SIDE 1 ELEVATION MODULE 1B"
+page = 5
+wall = [321.2, 486.2]
+floor = 492.1
+elements = [
+  { cls = "window", box = [347.8, 338.8, 372.5, 384.5], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [434.8, 338.8, 459.5, 384.5], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [434.8, 419.8, 459.5, 474.5], variant = { cols = 2, rows = 2 } },
+  { cls = "door", box = [347.4, 420.2, 374.4, 492.1], variant = { kind = "transom" } },
+  { cls = "blind", box = [335.4, 339.0, 347.4, 383.0], parent = 0 },
+  { cls = "blind", box = [372.9, 339.0, 384.9, 383.0], parent = 0 },
+  { cls = "blind", box = [422.4, 339.0, 434.4, 383.0], parent = 1 },
+  { cls = "blind", box = [459.9, 339.0, 471.9, 383.0], parent = 1 },
+  { cls = "blind", box = [422.4, 420.0, 434.4, 473.0], parent = 2 },
+  { cls = "blind", box = [459.9, 420.0, 471.9, 473.0], parent = 2 },
+  { cls = "canopy", box = [321.2, 388.2, 486.2, 415.2] },
+]
+
+[[sides]]
+view = "SIDE 4 ELEVATION MODULE 4B"
+page = 8
+wall = [298.1, 514.1]
+floor = 492.1
+elements = [
+  { cls = "window", box = [348.8, 338.7, 373.5, 375.1], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [452.3, 338.7, 477.0, 375.1], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [348.8, 419.7, 373.5, 456.1], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [452.3, 419.7, 477.0, 456.1], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [336.4, 339.0, 348.4, 374.0], parent = 0 },
+  { cls = "blind", box = [373.9, 339.0, 385.9, 374.0], parent = 0 },
+  { cls = "blind", box = [439.9, 339.0, 451.9, 374.0], parent = 1 },
+  { cls = "blind", box = [477.4, 339.0, 489.4, 374.0], parent = 1 },
+  { cls = "blind", box = [336.4, 420.0, 348.4, 455.0], parent = 2 },
+  { cls = "blind", box = [373.9, 420.0, 385.9, 455.0], parent = 2 },
+  { cls = "blind", box = [439.9, 420.0, 451.9, 455.0], parent = 3 },
+  { cls = "blind", box = [477.4, 420.0, 489.4, 455.0], parent = 3 },
+]
+
+[[sides]]
+view = "SIDE 3 ELEVATION MODULE 3B"
+page = 7
+wall = [321.2, 486.2]
+floor = 492.1
+elements = [
+  { cls = "window", box = [343.4, 338.8, 368.1, 375.1], variant = { cols = 2, rows = 2 } },
+  { cls = "door", box = [341.9, 431.8, 366.6, 492.1], variant = { kind = "glazed" } },
+  { cls = "blind", box = [331.0, 339.0, 343.0, 374.0], parent = 0 },
+  { cls = "blind", box = [368.5, 339.0, 380.5, 374.0], parent = 0 },
+  { cls = "canopy", box = [321.2, 388.2, 486.2, 415.2] },
+]
+
+[[sides]]
+view = "SIDE 2 ELEVATION MODULE 2B"
+page = 6
+wall = [298.1, 514.1]
+floor = 492.1
+elements = [
+  { cls = "window", box = [343.7, 338.7, 368.5, 384.4], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [442.7, 338.7, 467.5, 384.4], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [343.7, 419.7, 368.5, 474.4], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [442.7, 419.7, 467.5, 474.4], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [331.4, 339.0, 343.3, 383.0], parent = 0 },
+  { cls = "blind", box = [368.9, 339.0, 380.9, 383.0], parent = 0 },
+  { cls = "blind", box = [430.4, 339.0, 442.3, 383.0], parent = 1 },
+  { cls = "blind", box = [467.9, 339.0, 479.9, 383.0], parent = 1 },
+  { cls = "blind", box = [331.4, 420.0, 343.3, 473.0], parent = 2 },
+  { cls = "blind", box = [368.9, 420.0, 380.9, 473.0], parent = 2 },
+  { cls = "blind", box = [430.4, 420.0, 442.3, 473.0], parent = 3 },
+  { cls = "blind", box = [467.9, 420.0, 479.9, 473.0], parent = 3 },
+]

@@ -1,0 +1,70 @@
+# American Farmhouse — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
+# archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#180 — та же лицензия.
+# Лист 17x11", масштаб 1/4" = 1'-0": дверь 36x84 = 54x126 pt, отметки 1ST FLOOR / 2ND FLOOR /
+# ROOF EAVE через 180 pt (10'-0") — сходится. Стена по наружным угловым доскам: 581.5 pt = 32'-4"
+# и 293.7 pt = 16'-4" (план — 32'x16' по каркасу, лишние ~2" на сторону — обшивка).
+# Два полных этажа, карниз +20'-0"; кирпичная труба на западной стене; крыльцо во всю южную стену.
+id = "ffh-american"
+pdf = " Drawing Set - American Farmhouse - Jay Osborne.pdf"
+roof = "двускатная 12/12, коньком вдоль; кирпичная труба у западного щипца; навес крыльца 4/12"
+pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"
+material = "siding"       # CLAPBOARD SIDING
+plinth_ft = 2.5           # APPROX. GRADE -2'-6", кирпичный фундамент
+floor_heights_ft = [10.0, 10.0]   # 2ND FLOOR +10'-0", ROOF EAVE +20'-0"
+cut = ["west: фронтон с вентрешёткой, труба выше карниза",
+       "east: фронтон с вентрешёткой",
+       "south, north: кирпичная труба в профиль — за углом стены",
+       "west, east: крыльцо и задний навес в профиль — за углом стены",
+       "south: ступени крыльца", "north: деревянные ступени у задней двери",
+       "south, north: доски-обрамления окон (window surround) — по раме окна"]
+
+[[sides]]
+view = "FRONT ELEVATION (SOUTH)"
+page = 12
+wall = [321.3, 902.8]
+floor = 627.6
+elements = [
+  { cls = "window", box = [418.7, 501.7, 463.6, 591.6], variant = { cols = 2, rows = 2 } },
+  { cls = "door", box = [585.1, 501.7, 639.0, 627.6], variant = { kind = "glazed" } },
+  { cls = "window", box = [760.4, 501.7, 805.3, 591.6], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [418.7, 303.9, 463.6, 393.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [589.5, 303.9, 634.5, 393.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [760.4, 303.9, 805.3, 393.8], variant = { cols = 2, rows = 2 } },
+  { cls = "canopy", box = [347.2, 411.8, 876.9, 474.8] },   # крыша крыльца до балки
+  { cls = "porch", box = [347.2, 627.6, 876.9, 672.6] },    # настил: от чистого пола до земли
+]
+
+[[sides]]
+view = "SIDE ELEVATION (WEST)"
+page = 13
+wall = [462.6, 756.3]
+floor = 627.6
+elements = [
+  { cls = "chimney", box = [567.5, 482.9, 651.4, 672.6] },
+  { cls = "chimney", box = [585.1, 268.0, 633.8, 482.9] },
+]
+
+[[sides]]
+view = "BACK ELEVATION (NORTH)"
+page = 14
+wall = [321.3, 902.7]
+floor = 627.6
+elements = [
+  { cls = "window", box = [423.2, 492.7, 459.2, 564.7], variant = { cols = 2, rows = 2 } },
+  { cls = "door", box = [549.1, 501.7, 603.0, 627.6], variant = { kind = "glazed" } },
+  { cls = "window", box = [764.8, 492.7, 800.8, 564.7], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [423.2, 312.9, 459.2, 384.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [594.0, 312.9, 630.0, 384.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [764.8, 312.9, 800.8, 384.8], variant = { cols = 2, rows = 2 } },
+  { cls = "canopy", box = [528.6, 447.4, 623.1, 480.3] },
+]
+
+[[sides]]
+view = "SIDE ELEVATION (EAST)"
+page = 15
+wall = [465.7, 759.4]
+floor = 627.6
+elements = [
+  { cls = "window", box = [590.1, 483.8, 635.0, 573.7], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [590.1, 303.9, 635.0, 393.8], variant = { cols = 2, rows = 2 } },
+]

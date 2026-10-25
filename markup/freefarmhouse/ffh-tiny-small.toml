@@ -1,0 +1,75 @@
+# Tiny Farmhouse, Smallest Version — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
+# archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#180 — та же лицензия.
+# Двухэтажный квадрат на столбчатом фундаменте; вход с юга под портиком на двух колоннах,
+# сзади дверь со ступенями. Восточная стена глухая (окно — по желанию, пунктиром — не размечено).
+# Стена по углам обшивки — 277.5 pt = 15'-5.5"; на плане 16'-0" (до каркаса? не сверено).
+id = "ffh-tiny-small"
+pdf = "Tiny Farmhouse - Blueprints - both versions.pdf"
+roof = "двускатная 7.5/12, фальцевая; портик с фронтоном над входом"
+pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"; EAVE +17'-3" = 310.5 pt над FF1, дверь 84" = 126 pt
+material = "siding"       # CLAPBOARD SIDING
+plinth_ft = 2.1667        # линия земли под кирпичным цоколем — 39 pt под FF1 (на листе «18-24"»)
+floor_heights_ft = [9.0, 8.25]   # FF2 +9'-0", EAVE +17'-3"
+cut = ["west, east: фронтон с вентрешёткой", "south, north: скат кровли",
+       "south: колонны портика", "north: ступени у задней двери",
+       "west, east: портик и ступени за углом стены",
+       "east: окно по желанию (пунктир, примечание 5)"]
+
+[[sides]]
+view = "SOUTH ELEVATION (FRONT)"
+page = 4
+wall = [1030.9, 1308.4]
+floor = 799.1
+elements = [
+  { cls = "window", box = [1078.9, 510.3, 1128.4, 601.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1210.9, 510.3, 1260.4, 601.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1078.9, 663.3, 1128.4, 772.8], variant = { cols = 2, rows = 2 } },
+  { cls = "door", box = [1208.6, 673.1, 1263.4, 799.1] },
+  { cls = "blind", box = [1055.2, 511.0, 1077.7, 601.0], parent = 0 },
+  { cls = "blind", box = [1129.5, 511.0, 1152.0, 601.0], parent = 0 },
+  { cls = "blind", box = [1187.2, 511.0, 1209.7, 601.0], parent = 1 },
+  { cls = "blind", box = [1261.5, 511.0, 1284.0, 601.0], parent = 1 },
+  { cls = "blind", box = [1053.7, 664.0, 1077.7, 772.0], parent = 2 },
+  { cls = "blind", box = [1129.5, 664.0, 1153.5, 772.0], parent = 2 },
+  { cls = "canopy", box = [1167.4, 616.9, 1303.9, 659.6] },
+  { cls = "porch", box = [1175.8, 799.1, 1295.4, 838.1] },
+]
+
+[[sides]]
+view = "WEST ELEVATION"
+page = 4
+wall = [462.7, 740.2]
+floor = 799.1
+elements = [
+  { cls = "window", box = [576.7, 510.3, 626.2, 601.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [576.7, 663.3, 626.2, 772.8], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [553.1, 511.0, 575.5, 601.0], parent = 0 },
+  { cls = "blind", box = [627.4, 511.0, 649.9, 601.0], parent = 0 },
+  { cls = "blind", box = [551.6, 664.0, 575.5, 772.0], parent = 1 },
+  { cls = "blind", box = [627.4, 664.0, 651.4, 772.0], parent = 1 },
+]
+
+[[sides]]
+view = "NORTH ELEVATION (REAR)"
+page = 5
+wall = [1030.9, 1308.4]
+floor = 799.1
+elements = [
+  { cls = "window", box = [1102.9, 519.3, 1146.4, 592.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1216.9, 519.3, 1260.4, 592.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1216.9, 667.8, 1260.4, 741.3], variant = { cols = 2, rows = 2 } },
+  { cls = "door", box = [1097.6, 673.1, 1151.6, 799.1] },
+  { cls = "blind", box = [1080.7, 520.0, 1101.7, 592.0], parent = 0 },
+  { cls = "blind", box = [1147.5, 520.0, 1168.5, 592.0], parent = 0 },
+  { cls = "blind", box = [1194.7, 520.0, 1215.7, 592.0], parent = 1 },
+  { cls = "blind", box = [1261.5, 520.0, 1282.5, 592.0], parent = 1 },
+  { cls = "blind", box = [1194.7, 669.0, 1215.7, 740.0], parent = 2 },
+  { cls = "blind", box = [1261.5, 669.0, 1282.5, 740.0], parent = 2 },
+]
+
+[[sides]]
+view = "EAST ELEVATION"
+page = 5
+wall = [259.1, 536.6]
+floor = 799.1
+elements = []

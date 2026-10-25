@@ -1,0 +1,80 @@
+# Carriage House 1 (the option with a 2-car garage) — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
+# archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#180 — та же лицензия.
+# Контур 16'x24' без выступов: внизу гараж на 1 машину, наверху жильё — фасады целиком, 2 этажа.
+# Вход в жильё — с левого бока (LEFT ELEVATION (FRONT OF RESIDENCE)), ворота — на торце.
+# Подпись SCALE у торцов — 1/8", но торцы начерчены в 1/4": стена 16' = 288 pt, как на плане.
+id = "ffh-carriage-1"
+pdf = "Carriage House 1 - Blueprints - Jay Osborne.pdf"
+roof = "двускатная 7.5/12, фальцевая кровля"
+pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36x80" = 54x120 pt, стена 24' = 432 pt
+material = "siding"       # FIBER CEMENT CLAPBOARD
+plinth_ft = 0.0           # SLAB +0'-0" у ворот — на уровне земли
+floor_heights_ft = [9.0, 8.25]   # 2ND FLOOR +9'-0", ROOF EAVE +17'-3"
+cut = ["front: вентиляционная решётка во фронтоне", "rear: вентиляционная решётка во фронтоне",
+       "front: фонари над воротами и дверью x3", "left: фонарь над дверью",
+       "left: площадка входа LANDING +0'-8\"",
+       "left/rear: козырьки соседних сторон в профиле"]
+
+[[sides]]
+view = "LEFT ELEVATION (FRONT OF RESIDENCE)"
+page = 4
+wall = [243.2, 675.2]
+floor = 847.1
+elements = [
+  { cls = "window", box = [320.5, 553.9, 370.0, 627.4], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [548.5, 553.9, 598.0, 627.4], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [548.5, 711.4, 598.0, 802.9], variant = { cols = 2, rows = 2 } },
+  { cls = "door", box = [318.2, 715.1, 372.2, 835.1], variant = { kind = "glazed" } },
+  { cls = "blind", box = [295.3, 555.0, 319.3, 626.0], parent = 0 },
+  { cls = "blind", box = [371.1, 555.0, 395.1, 626.0], parent = 0 },
+  { cls = "blind", box = [523.3, 555.0, 547.3, 626.0], parent = 1 },
+  { cls = "blind", box = [599.1, 555.0, 623.1, 626.0], parent = 1 },
+  { cls = "blind", box = [524.8, 712.0, 547.2, 802.0], parent = 2 },
+  { cls = "blind", box = [599.1, 712.0, 621.6, 802.0], parent = 2 },
+  { cls = "canopy", box = [302.8, 659.5, 387.6, 687.1] },
+]
+
+[[sides]]
+view = "REAR ELEVATION"
+page = 5
+wall = [1107.4, 1395.4]
+floor = 847.1
+elements = [
+  { cls = "window", box = [1226.7, 594.4, 1276.2, 685.9], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [1203.0, 595.0, 1225.5, 685.0], parent = 0 },
+  { cls = "blind", box = [1277.3, 595.0, 1299.8, 685.0], parent = 0 },
+]
+
+[[sides]]
+view = "RIGHT ELEVATION"
+page = 5
+wall = [243.4, 675.4]
+floor = 847.1
+elements = [
+  { cls = "window", box = [323.7, 558.4, 373.2, 649.9], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [545.7, 558.4, 595.2, 649.9], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [323.7, 711.4, 373.2, 802.9], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [545.7, 711.4, 595.2, 802.9], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [300.0, 559.0, 322.5, 649.0], parent = 0 },
+  { cls = "blind", box = [374.4, 559.0, 396.8, 649.0], parent = 0 },
+  { cls = "blind", box = [522.0, 559.0, 544.5, 649.0], parent = 1 },
+  { cls = "blind", box = [596.4, 559.0, 618.8, 649.0], parent = 1 },
+  { cls = "blind", box = [300.0, 712.0, 322.5, 802.0], parent = 2 },
+  { cls = "blind", box = [374.4, 712.0, 396.8, 802.0], parent = 2 },
+  { cls = "blind", box = [522.0, 712.0, 544.5, 802.0], parent = 3 },
+  { cls = "blind", box = [596.4, 712.0, 618.8, 802.0], parent = 3 },
+]
+
+[[sides]]
+view = "FRONT ELEVATION (GARAGE ENTRY)"
+page = 4
+wall = [999.4, 1287.4]
+floor = 847.1
+elements = [
+  { cls = "window", box = [1118.7, 549.4, 1168.2, 640.9], variant = { cols = 2, rows = 2 } },
+  { cls = "door", box = [1029.4, 721.1, 1083.4, 847.1] },
+  { cls = "garage_door", box = [1113.4, 721.1, 1257.4, 847.1] },
+  { cls = "blind", box = [1095.0, 550.0, 1117.5, 640.0], parent = 0 },
+  { cls = "blind", box = [1169.3, 550.0, 1191.8, 640.0], parent = 0 },
+  { cls = "canopy", box = [1012.0, 659.5, 1275.0, 687.1] },
+]

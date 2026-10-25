@@ -1,0 +1,49 @@
+# Thoreau Cabin (tiny house) — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
+# archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#180 — та же лицензия.
+# Лист Letter, но масштаб 1/4" = 1'-0" настоящий: шаг обшивки 9 pt = 6", дверь 80" = 120 pt.
+id = "ffh-thoreau"
+pdf = "Thoreau Blueprints 2024-11-24 By Jay Osborne.pdf"
+roof = "двускатная 10/12, спальный чердак; кирпичные столбы"
+pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"
+material = "wood"         # CEDAR BEVEL SIDING
+plinth_ft = 1.32          # земля у входа — FIN. FLOOR +0'-0"
+floor_heights_ft = [8.3333]   # EAVE +8'-4"
+cut = ["front: створчатое окно во фронтоне", "rear: створчатые окна во фронтоне x2",
+       "front: ступень", "rear: труба дымохода выше карниза"]
+
+[[sides]]
+view = "FRONT ELEVATION"
+page = 4
+wall = [96.6, 322.4]
+floor = 420.5
+elements = [
+  { cls = "door", box = [183.6, 299.8, 235.4, 419.8], variant = { kind = "glazed" } },
+  { cls = "canopy", box = [170.4, 276.4, 248.6, 298.7] },
+]
+
+[[sides]]
+view = "LEFT ELEVATION"
+page = 5
+wall = [425.5, 727.7]
+floor = 420.5
+elements = [
+  { cls = "window", box = [525.2, 288.0, 580.0, 384.0], variant = { cols = 3, rows = 4 } },
+]
+
+[[sides]]
+view = "REAR ELEVATION"
+page = 5
+wall = [96.6, 322.4]
+floor = 420.5
+elements = [
+  { cls = "chimney", box = [205.4, 166.7, 215.0, 397.0] },
+]
+
+[[sides]]
+view = "RIGHT ELEVATION"
+page = 4
+wall = [425.5, 727.7]
+floor = 420.5
+elements = [
+  { cls = "window", box = [573.2, 288.0, 628.0, 384.0], variant = { cols = 3, rows = 4 } },
+]

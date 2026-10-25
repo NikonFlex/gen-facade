@@ -1,0 +1,101 @@
+# Georgia's Farmhouse (four starter farmhouses) — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
+# archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#180 — та же лицензия.
+# Контур 24'x26' (по наружным угловым доскам), два этажа; спереди двухъярусная веранда во всю
+# ширину (столбы, перила, балкон) — вне стены, окна за перилами размечены целиком по раме.
+# Подпись SCALE у видов — 1/8", но начерчены в 1/4": стена 24' = 432 pt, как на плане.
+id = "ffh-georgia"
+pdf = "Georgia - Blueprints.pdf"
+roof = "двускатная 7.5/12 с поперечным фронтоном сзади, фальцевая кровля; навесной скат у угла"
+pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36x80" = 54x120 pt, FF1–FF2 9' = 162 pt
+material = "siding"       # FIBER CEMENT CLAPBOARD SIDING
+plinth_ft = 2.08          # FF1 +0'-0" над низом кирпичного цоколя (земля у стены), по листу
+floor_heights_ft = [9.0, 8.25]   # FF2 +9'-0", EAVE +17'-3"
+cut = ["south: двухъярусная веранда во всю ширину — столбы, перила, балкон 2-го этажа, ступени",
+       "south: фонарь у двери", "west: вентиляционная решётка во фронтоне",
+       "east: вентиляционная решётка во фронтоне", "north: вентиляционная решётка во фронтоне",
+       "north/west: навесной скат (pent roof) у угла на уровне 2-го этажа",
+       "west: верх металлической трубы выше карниза", "north: ступени заднего входа",
+       "west/east/north: веранда и козырьки соседних сторон в профиле"]
+
+[[sides]]
+view = "SOUTH ELEVATION (FRONT)"
+page = 4
+wall = [970.5, 1402.5]
+floor = 799.1
+elements = [
+  { cls = "window", box = [1026.7, 519.3, 1076.2, 610.8], variant = { cols = 2, rows = 2 } },
+  { cls = "door", box = [1160.6, 520.0, 1212.4, 637.1], variant = { kind = "glazed" } },
+  { cls = "window", box = [1296.7, 519.3, 1346.2, 610.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1026.7, 663.3, 1076.2, 772.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1160.6, 663.3, 1212.4, 772.8], variant = { cols = 2, rows = 2 } },
+  { cls = "door", box = [1295.2, 678.3, 1347.7, 799.1], variant = { kind = "glazed" } },
+  { cls = "blind", box = [1003.1, 520.0, 1025.5, 610.8], parent = 0 },
+  { cls = "blind", box = [1077.4, 520.0, 1099.9, 610.8], parent = 0 },
+  { cls = "blind", box = [1273.1, 520.0, 1295.5, 610.8], parent = 2 },
+  { cls = "blind", box = [1347.4, 520.0, 1369.9, 610.8], parent = 2 },
+  { cls = "blind", box = [1003.1, 664.0, 1025.5, 772.8], parent = 3 },
+  { cls = "blind", box = [1077.4, 664.0, 1099.9, 772.8], parent = 3 },
+  { cls = "blind", box = [1138.1, 664.0, 1160.5, 772.8], parent = 4 },
+  { cls = "blind", box = [1212.4, 664.0, 1234.9, 772.8], parent = 4 },
+]
+
+[[sides]]
+view = "WEST ELEVATION"
+page = 4
+wall = [199.9, 667.9]
+floor = 799.1
+elements = [
+  { cls = "window", box = [293.6, 510.3, 331.1, 574.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [499.1, 510.3, 548.6, 601.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [271.1, 672.3, 320.6, 763.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [499.1, 672.3, 548.6, 763.8], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [269.9, 511.0, 292.4, 574.0], parent = 0 },
+  { cls = "blind", box = [332.3, 511.0, 354.8, 574.0], parent = 0 },
+  { cls = "blind", box = [475.4, 511.0, 497.9, 601.0], parent = 1 },
+  { cls = "blind", box = [549.8, 511.0, 572.3, 601.0], parent = 1 },
+  { cls = "blind", box = [247.4, 673.0, 269.9, 763.0], parent = 2 },
+  { cls = "blind", box = [321.8, 673.0, 344.3, 763.0], parent = 2 },
+  { cls = "blind", box = [475.4, 673.0, 497.9, 763.0], parent = 3 },
+  { cls = "blind", box = [549.8, 673.0, 572.3, 763.0], parent = 3 },
+  { cls = "chimney", box = [433.9, 480.0, 442.9, 760.0] },
+]
+
+[[sides]]
+view = "NORTH ELEVATION (REAR)"
+page = 5
+wall = [953.6, 1385.6]
+floor = 799.1
+elements = [
+  { cls = "window", box = [1069.9, 510.3, 1119.4, 601.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1252.9, 510.3, 1302.4, 601.8], variant = { cols = 2, rows = 2 } },
+  { cls = "door", box = [1016.6, 679.1, 1070.6, 799.1], variant = { kind = "glazed" } },
+  { cls = "window", box = [1159.9, 672.3, 1197.4, 736.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1279.9, 672.3, 1329.4, 763.8], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [1046.2, 511.0, 1068.7, 601.0], parent = 0 },
+  { cls = "blind", box = [1120.5, 511.0, 1143.0, 601.0], parent = 0 },
+  { cls = "blind", box = [1136.2, 673.0, 1158.7, 736.0], parent = 3 },
+  { cls = "blind", box = [1198.5, 673.0, 1221.0, 736.0], parent = 3 },
+  { cls = "blind", box = [1256.2, 673.0, 1278.7, 763.0], parent = 4 },
+  { cls = "blind", box = [1330.5, 673.0, 1353.0, 763.0], parent = 4 },
+  { cls = "canopy", box = [1003.5, 646.8, 1083.7, 669.4] },
+]
+
+[[sides]]
+view = "EAST ELEVATION"
+page = 5
+wall = [307.9, 775.9]
+floor = 799.1
+elements = [
+  { cls = "window", box = [532.1, 510.3, 569.6, 574.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [631.1, 510.3, 668.6, 574.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [364.1, 672.3, 413.6, 763.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [631.1, 672.3, 668.6, 736.8], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [508.4, 511.0, 530.9, 574.0], parent = 0 },
+  { cls = "blind", box = [570.8, 511.0, 593.3, 574.0], parent = 0 },
+  { cls = "blind", box = [607.4, 511.0, 629.9, 574.0], parent = 1 },
+  { cls = "blind", box = [669.8, 511.0, 692.3, 574.0], parent = 1 },
+  { cls = "blind", box = [340.4, 673.0, 362.9, 763.0], parent = 2 },
+  { cls = "blind", box = [414.8, 673.0, 437.3, 763.0], parent = 2 },
+  { cls = "blind", box = [607.4, 673.0, 629.9, 736.0], parent = 3 },
+  { cls = "blind", box = [669.8, 673.0, 692.3, 736.0], parent = 3 },
+]

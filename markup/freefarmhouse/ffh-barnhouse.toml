@@ -1,0 +1,56 @@
+# The Barnhouse (carriage house) — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
+# archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#180 — та же лицензия.
+# Контур 24'x24' с нишей входа 8'x6' под крышей: дверь спроецирована на плоскость фасада.
+id = "ffh-barnhouse"
+pdf = "Barnhouse - Blueprints - Jay Osborne.pdf"
+roof = "гамбрел (ломаная двускатная), купол; второй этаж под крышей"
+pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"
+material = "siding"       # CLAPBOARD SIDING
+plinth_ft = 0.0           # SLAB +0'-0" у ворот — на уровне земли
+floor_heights_ft = [8.9167]   # EAVE +8'-11"
+cut = ["rear: окно 2-го этажа во фронтоне", "rear: ставни окна 2-го этажа x2",
+       "rear: фонари у двери x2",
+       "front: окно 2-го этажа во фронтоне", "front: ставни окна 2-го этажа x2",
+       "front: фонарь над воротами", "front: козырёк сена (hay hood)",
+       "left: фонарь", "крыша: купол с флюгером"]
+
+[[sides]]
+view = "REAR ELEVATION (RESIDENCE FRONT ENTRY)"
+page = 5
+wall = [986.0, 1418.8]
+floor = 923.5
+elements = [
+  { cls = "door", box = [1175.4, 784.0, 1229.4, 910.0], variant = { kind = "glazed" } },
+  { cls = "canopy", box = [1161.9, 753.7, 1242.9, 772.0] },
+]
+
+[[sides]]
+view = "RIGHT SIDE ELEVATION"
+page = 5
+wall = [274.0, 706.8]
+floor = 923.5
+elements = [
+  { cls = "window", box = [337.4, 788.5, 391.4, 824.5], variant = { cols = 2 } },
+  { cls = "window", box = [463.4, 788.5, 517.4, 824.5], variant = { cols = 2 } },
+  { cls = "window", box = [589.4, 788.5, 643.4, 824.5], variant = { cols = 2 } },
+]
+
+[[sides]]
+view = "GARAGE FRONT ELEVATION (1-CAR OPTION)"
+page = 4
+wall = [986.0, 1418.8]
+floor = 923.5
+elements = [
+  { cls = "garage_door", box = [1130.4, 779.6, 1274.4, 923.5] },
+]
+
+[[sides]]
+view = "LEFT SIDE ELEVATION"
+page = 4
+wall = [274.0, 706.8]
+floor = 923.5
+elements = [
+  { cls = "window", box = [462.6, 778.7, 518.1, 888.2], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [434.5, 780.0, 461.5, 887.0], parent = 0 },
+  { cls = "blind", box = [519.4, 780.0, 546.3, 887.0], parent = 0 },
+]

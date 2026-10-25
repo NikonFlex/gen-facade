@@ -1,0 +1,58 @@
+# Lone Star Farmhouse ("the tiniest 2-story farmhouse") — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
+# archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#180 — та же лицензия.
+# Контур 20'x12', пол по плите; спереди (торец) крыльцо 5' во всю ширину под своей крышей на
+# столбах, сзади патио и козырёк над дверью. Второй этаж — мансарда с коленом стены 3'-9" (пол
+# +7'-11", карниз +11'-8"): по правилу разметки не этаж, как спальный чердак Thoreau; окна
+# мансарды в торцах — во фронтонах. Стены — по наружным угловым доскам (1x4).
+id = "ffh-lone-star"
+pdf = "Lone Star Farmhouse - Blueprints - Jay Osborne-2.pdf"
+roof = "двускатная 12/12, фальцевая; крыша крыльца 3/12, козырёк над задней дверью"
+pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"; дверь 80" = 120 pt, торец 12' = 216 pt, бок 20' = 360 pt
+material = "siding"       # 6" FIBER CEMENT OR WOOD CLAPBOARDS
+plinth_ft = 0.75          # FLOOR +0'-0" на 13,5 pt над линией земли/фундамента у стены
+floor_heights_ft = [11.6667]   # GABLE EAVE +11'-8"; FLOOR 2 +7'-11" — мансарда, не этаж
+cut = ["front: окно 6/6 во фронтоне (заходит за карниз)", "rear: окно 2/2 во фронтоне (заходит за карниз)",
+       "front: столбы с кронштейнами и низкие перила крыльца",
+       "right: звезда-стяжка (декор) на стене", "right, left: крыльцо и козырёк задней двери за углами",
+       "right, left: скат кровли"]
+
+[[sides]]
+view = "FRONT ELEVATION"
+page = 2
+wall = [369.4, 585.4]
+floor = 537.8
+elements = [
+  { cls = "window", box = [391.2, 417.1, 427.4, 490.6], variant = { cols = 2, rows = 2 } },
+  { cls = "door", box = [450.4, 418.0, 504.4, 537.8] },
+  { cls = "window", box = [527.5, 417.1, 563.7, 490.6], variant = { cols = 2, rows = 2 } },
+  { cls = "canopy", box = [369.4, 362.6, 585.4, 395.8] },
+  { cls = "porch", box = [369.4, 541.0, 585.4, 549.0] },
+]
+
+[[sides]]
+view = "LEFT ELEVATION"
+page = 2
+wall = [927.4, 1287.4]
+floor = 987.8
+elements = [
+  { cls = "window", box = [1079.7, 798.1, 1117.2, 871.6], variant = { cols = 2, rows = 2 } },
+]
+
+[[sides]]
+view = "REAR ELEVATION"
+page = 2
+wall = [1035.4, 1251.4]
+floor = 537.8
+elements = [
+  { cls = "door", box = [1115.7, 417.1, 1171.2, 537.8], variant = { kind = "glazed" } },
+  { cls = "canopy", box = [1103.6, 377.1, 1183.9, 397.4] },
+]
+
+[[sides]]
+view = "RIGHT ELEVATION"
+page = 2
+wall = [333.4, 693.4]
+floor = 987.8
+elements = [
+  { cls = "window", box = [497.7, 867.1, 547.2, 958.6], variant = { cols = 3, rows = 4 } },
+]
