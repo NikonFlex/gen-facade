@@ -1,0 +1,144 @@
+# Eastern Farmhouse — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
+# archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#180, gf#199 — та же лицензия.
+# Лист 22x17", масштаб 1/4" = 1'-0" (18 pt/фут): дверь 36x80 = 54x120 pt (стр. 7, 9), стена
+# по наружным угловым доскам 647.3 pt = 35'-11.6" и 431.2 pt = 23'-11.6" — план 36'x24' (стр. 2).
+# Два этажа: 2ND FLOOR +9'-11", ROOF EAVE / ATTIC FLOOR +19'-11"; чердак под скатом — не этаж.
+# Контур — прямоугольник: эркер столовой на восточной стене (18x72 SIDE BAY WINDOW, выступ
+# ~2'-0" ≈ 0,6 м, своя низкая крыша) по правилам gf#199 — элемент на плоскости фасада, не стороны.
+# Наружные кирпичные трубы у западной и восточной стен; крыльцо во всю южную стену, портик у
+# северной двери.
+id = "ffh-eastern"
+pdf = "Eastern Farmhouse - Architectural Plans.pdf"
+roof = "двускатная 10/12, коньком вдоль длинной стороны, фальцевая; навес крыльца 3/12, портик с фронтоном, крыша эркера 3/12"
+pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"
+material = "siding"       # CLAPBOARD SIDING
+plinth_ft = 1.85          # FINISH GRADE у стены ~1'-10" под 1ST FLOOR (кирпичный цоколь)
+floor_heights_ft = [9.917, 10.0]   # 2ND FLOOR +9'-11", ROOF EAVE +19'-11"
+cut = ["west, east: фронтон с вентрешётками (attic vent), трубы выше карниза",
+       "south, north: кирпичные трубы в профиль — за углом стены",
+       "south: эркер в профиль — за углом стены",
+       "west, east: крыльцо и портик в профиль — за углом стены",
+       "south: кирпичные ступени крыльца; north: столбы портика (стоят перед стеной)",
+       "east: эркер — выступ ~2'-0\", размечен окнами и козырьком на плоскости стены",
+       "south: боковые фрамуги над окнами-сайдлайтами — одной фрамугой двери"]
+
+[[sides]]
+view = "SOUTH ELEVATION (FRONT)"
+page = 7
+wall = [488.0, 1135.3]
+floor = 829.5
+elements = [
+  { cls = "window", box = [543.9, 680.0, 593.4, 790.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [654.9, 680.0, 704.4, 790.0], variant = { cols = 2, rows = 2 } },
+  { cls = "door", box = [784.7, 678.7, 838.7, 829.5], variant = { kind = "transom" } },
+  { cls = "window", box = [759.9, 708.7, 779.4, 820.5], variant = { cols = 1, rows = 3 } },  # сайдлайт
+  { cls = "window", box = [843.9, 708.7, 863.4, 820.5], variant = { cols = 1, rows = 3 } },  # сайдлайт
+  { cls = "window", box = [918.9, 680.0, 968.4, 790.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1029.9, 680.0, 1079.4, 790.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [543.9, 517.0, 593.4, 608.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [654.9, 517.0, 704.4, 608.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [786.9, 517.0, 836.4, 608.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [918.9, 517.0, 968.4, 608.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1029.9, 517.0, 1079.4, 608.0], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [518.8, 681.0, 542.8, 789.0], parent = 0 },
+  { cls = "blind", box = [594.6, 681.0, 618.6, 789.0], parent = 0 },
+  { cls = "blind", box = [629.8, 681.0, 653.8, 789.0], parent = 1 },
+  { cls = "blind", box = [705.6, 681.0, 729.6, 789.0], parent = 1 },
+  { cls = "blind", box = [893.8, 681.0, 917.8, 789.0], parent = 5 },
+  { cls = "blind", box = [969.6, 681.0, 993.6, 789.0], parent = 5 },
+  { cls = "blind", box = [1004.8, 681.0, 1028.8, 789.0], parent = 6 },
+  { cls = "blind", box = [1080.6, 681.0, 1104.6, 789.0], parent = 6 },
+  { cls = "blind", box = [518.8, 518.0, 542.8, 607.0], parent = 7 },
+  { cls = "blind", box = [594.6, 518.0, 618.6, 607.0], parent = 7 },
+  { cls = "blind", box = [629.8, 518.0, 653.8, 607.0], parent = 8 },
+  { cls = "blind", box = [705.6, 518.0, 729.6, 607.0], parent = 8 },
+  { cls = "blind", box = [761.8, 518.0, 785.7, 607.0], parent = 9 },
+  { cls = "blind", box = [837.6, 518.0, 861.6, 607.0], parent = 9 },
+  { cls = "blind", box = [893.8, 518.0, 917.8, 607.0], parent = 10 },
+  { cls = "blind", box = [969.6, 518.0, 993.6, 607.0], parent = 10 },
+  { cls = "blind", box = [1004.8, 518.0, 1028.8, 607.0], parent = 11 },
+  { cls = "blind", box = [1080.6, 518.0, 1104.6, 607.0], parent = 11 },
+  { cls = "canopy", box = [498.6, 613.6, 1124.8, 663.0] },   # крыша крыльца до балки
+  { cls = "porch", box = [498.6, 829.5, 1124.8, 862.5] },    # настил: от чистого пола до земли
+]
+
+[[sides]]
+view = "WEST ELEVATION"
+page = 8
+wall = [502.7, 933.9]
+floor = 829.5
+elements = [
+  { cls = "window", box = [585.6, 680.0, 635.1, 790.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [801.6, 680.0, 851.1, 790.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [585.6, 517.0, 635.1, 608.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [801.6, 517.0, 851.1, 608.0], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [560.4, 681.0, 584.4, 789.0], parent = 0 },
+  { cls = "blind", box = [636.2, 681.0, 660.2, 789.0], parent = 0 },
+  { cls = "blind", box = [776.4, 681.0, 800.4, 789.0], parent = 1 },
+  { cls = "blind", box = [852.2, 681.0, 876.2, 789.0], parent = 1 },
+  { cls = "blind", box = [560.4, 518.0, 584.4, 607.0], parent = 2 },
+  { cls = "blind", box = [636.2, 518.0, 660.2, 607.0], parent = 2 },
+  { cls = "blind", box = [776.4, 518.0, 800.4, 607.0], parent = 3 },
+  { cls = "blind", box = [852.2, 518.0, 876.2, 607.0], parent = 3 },
+  { cls = "chimney", box = [676.3, 693.0, 760.3, 862.5] },   # основание трубы до земли
+  { cls = "chimney", box = [700.3, 349.0, 736.3, 693.0] },
+]
+
+[[sides]]
+view = "NORTH ELEVATION"
+page = 9
+wall = [483.9, 1131.1]
+floor = 829.5
+elements = [
+  { cls = "window", box = [539.7, 680.0, 589.2, 790.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [650.7, 680.0, 700.2, 790.0], variant = { cols = 2, rows = 2 } },
+  { cls = "door", box = [780.5, 676.5, 834.5, 829.5], variant = { kind = "transom" } },
+  { cls = "window", box = [914.7, 680.0, 964.2, 790.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1025.7, 680.0, 1075.2, 790.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [539.7, 517.0, 589.2, 608.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [650.7, 517.0, 700.2, 608.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [782.7, 517.0, 832.2, 608.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [914.7, 517.0, 964.2, 608.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1025.7, 517.0, 1075.2, 608.0], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [514.6, 681.0, 538.6, 789.0], parent = 0 },
+  { cls = "blind", box = [590.4, 681.0, 614.4, 789.0], parent = 0 },
+  { cls = "blind", box = [625.6, 681.0, 649.6, 789.0], parent = 1 },
+  { cls = "blind", box = [701.4, 681.0, 725.4, 789.0], parent = 1 },
+  { cls = "blind", box = [889.6, 681.0, 913.6, 789.0], parent = 3 },
+  { cls = "blind", box = [965.4, 681.0, 989.4, 789.0], parent = 3 },
+  { cls = "blind", box = [1000.6, 681.0, 1024.6, 789.0], parent = 4 },
+  { cls = "blind", box = [1076.4, 681.0, 1100.4, 789.0], parent = 4 },
+  { cls = "blind", box = [514.6, 518.0, 538.6, 607.0], parent = 5 },
+  { cls = "blind", box = [590.4, 518.0, 614.4, 607.0], parent = 5 },
+  { cls = "blind", box = [625.6, 518.0, 649.6, 607.0], parent = 6 },
+  { cls = "blind", box = [701.4, 518.0, 725.4, 607.0], parent = 6 },
+  { cls = "blind", box = [757.6, 518.0, 781.6, 607.0], parent = 7 },
+  { cls = "blind", box = [833.4, 518.0, 857.4, 607.0], parent = 7 },
+  { cls = "blind", box = [889.6, 518.0, 913.6, 607.0], parent = 8 },
+  { cls = "blind", box = [965.4, 518.0, 989.4, 607.0], parent = 8 },
+  { cls = "blind", box = [1000.6, 518.0, 1024.6, 607.0], parent = 9 },
+  { cls = "blind", box = [1076.4, 518.0, 1100.4, 607.0], parent = 9 },
+  { cls = "canopy", box = [744.9, 616.5, 870.1, 666.0] },   # портик с фронтоном до балки
+  { cls = "porch", box = [760.0, 829.5, 855.0, 862.5] },    # площадка портика и ступени
+]
+
+[[sides]]
+view = "EAST ELEVATION"
+page = 10
+wall = [671.5, 1102.7]
+floor = 829.5
+elements = [
+  { cls = "window", box = [727.3, 680.3, 776.8, 789.8], variant = { cols = 2, rows = 2 } },  # эркер
+  { cls = "window", box = [781.3, 680.3, 830.8, 789.8], variant = { cols = 2, rows = 2 } },  # эркер
+  { cls = "window", box = [946.3, 680.0, 995.8, 772.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [754.3, 517.0, 803.8, 608.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [946.3, 517.0, 995.8, 608.0], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [921.2, 681.0, 945.2, 771.0], parent = 2 },
+  { cls = "blind", box = [997.0, 681.0, 1021.0, 771.0], parent = 2 },
+  { cls = "blind", box = [729.2, 518.0, 753.2, 607.0], parent = 3 },
+  { cls = "blind", box = [805.0, 518.0, 829.0, 607.0], parent = 3 },
+  { cls = "blind", box = [921.2, 518.0, 945.2, 607.0], parent = 4 },
+  { cls = "blind", box = [997.0, 518.0, 1021.0, 607.0], parent = 4 },
+  { cls = "canopy", box = [710.8, 626.6, 848.8, 667.5] },   # крыша эркера
+  { cls = "chimney", box = [869.1, 349.0, 905.1, 870.6] },
+]

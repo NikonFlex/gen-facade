@@ -7,7 +7,6 @@ from simple_house import L_SHAPE, SIMPLE, WALL_INTO_WINDOW, before_leaf, top_rig
 
 from genfacade import cli, pipeline
 from genfacade.models import stub
-from genfacade.plan.genplan_svg import PlanError
 from genfacade.render.parse import parse_sheet_svg
 from genfacade.schema import FacadeSheet, HouseSpec, Mode, Plan, Rule
 
@@ -150,10 +149,11 @@ def test_spec_step_svg_has_palette_and_levels(cfg, tmp_path):
 
 REFUSED = {
     "shifted": ((top_right_shifted(6),), "план отклонён: разрыв 200 px"),
-    "shifted-8-sides": ((top_right_shifted(9),), "план отклонён: развёртка пока только для "
-                                                "прямоугольного контура, сторон: 8"),
-    "l-shape": (L_SHAPE, "план отклонён: развёртка пока только для прямоугольного контура, "
-                         "сторон: 6"),
+    # непрямоугольный контур развёртка принимает (gf#199), отказывает стаб шага 4
+    "shifted-8-sides": ((top_right_shifted(9),), "модель не ответила: стаб знает только простой "
+                                                "дом из 4 стен, а у плана их 8"),
+    "l-shape": (L_SHAPE, "модель не ответила: стаб знает только простой дом из 4 стен, а у плана "
+                         "их 6"),
 }
 
 
@@ -171,7 +171,7 @@ def test_refused_run_explained_and_traced(cfg, tmp_path, simple_svg, name):
     assert meta["refusal"].startswith(reason)
     assert (meta["sheet_json"], meta["preview"]) == (None, None)
     done = [s["n"] for s in meta["steps"] if s["file"]]
-    assert done == ([1] if name == "shifted" else [1, 2])
+    assert done == ([1] if name == "shifted" else [1, 2, 3])
     assert all((out / s["file"]).exists() for s in meta["steps"] if s["file"])
     # шаг, на котором отказ, не оставляет половины выхода: ни JSON, ни SVG
     assert all(s["json"] is s["svg"] is None for s in meta["steps"] if not s["file"])
@@ -193,7 +193,7 @@ def test_model_refusal_written_to_meta(cfg, tmp_path, monkeypatch):
 def test_rerun_into_same_folder_drops_old_steps(cfg, tmp_path, simple_svg):
     """Папка задана руками и в ней прошлый прогон: шаги, до которых новый не дошёл, — не его."""
     out = _generate(cfg, tmp_path / "run")
-    with pytest.raises(PlanError):
+    with pytest.raises(stub.ModelError):  # Г-контур развёртка принимает, стаб шага 4 — нет (gf#199)
         _generate(cfg, out, svg=simple_svg(*L_SHAPE))
     assert not (out / pipeline.SHEET).exists()
-    assert [s["n"] for s in _meta(out)["steps"] if s["file"]] == [1, 2]
+    assert [s["n"] for s in _meta(out)["steps"] if s["file"]] == [1, 2, 3]

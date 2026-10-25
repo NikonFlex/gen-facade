@@ -60,7 +60,7 @@ def house(model: str, parts: list[Component], cfg: BuildingNet,
           split: Split = Split.TEST) -> Sample:
     parts = _upright(_turned(parts), cfg)
     lo, hi = _footprint(parts, cfg)
-    fp = rect_house.Footprint(lo, hi, cfg.wall_m)
+    fp = rect_house.rectangle(lo, hi, cfg.wall_m)
     # Второй снизу верх стен: у двускатной крыши два верха — карниз, два — конёк, а одна
     # низкая стена (пристройка, веранда) не опускает карниз всего дома.
     eaves = sorted(_wall_top(w, parts, cfg) for w in fp.walls)[1]
