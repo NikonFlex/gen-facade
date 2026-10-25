@@ -56,6 +56,13 @@ def sample():
     return extract.house("RESIDENTIALhouse_mesh0001", turned(HOUSE, 20), RULES)
 
 
+def test_split_comes_from_the_official_list():
+    """Часть примера — из официального разбиения BuildingNet (`data: Разбиение без утечек`):
+    дом train в тест не попадает (gf#198)."""
+    got = extract.house("RESIDENTIALhouse_mesh0001", turned(HOUSE, 20), RULES, Split.TRAIN)
+    assert got.split is Split.TRAIN
+
+
 def test_scale_by_door(sample):
     """Масштаб по двери: стороны дома в метрах, дверь — 2,1 м."""
     lengths = sorted(round(f.side.length_m, 2) for f in sample.sheet.facades)

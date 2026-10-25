@@ -9,7 +9,11 @@ samples_dir = "data/samples"   # примеры: <источник>/<id>.json и
 [buildingnet.paths]
 models_dir = "data/buildingnet/v1/OBJ_MODELS"                     # <модель>.obj из OBJ_MODELS.zip
 component_labels = "data/buildingnet/probe/v1/component_labels.zip"  # метка каждого компонента
-test_split = "data/buildingnet/probe/v1/test_split.txt"            # официальный тест
+
+[buildingnet.paths.splits]   # официальное разбиение BuildingNet (Drive, папка splits v1), gf#198
+train = "data/buildingnet/probe/v1/train_split.txt"
+val = "data/buildingnet/probe/v1/val_split.txt"
+test = "data/buildingnet/probe/v1/test_split.txt"
 
 [buildingnet]
 categories = ["RESIDENTIALhouse", "RESIDENTIALvilla"]   # коттеджи — префиксы имён моделей

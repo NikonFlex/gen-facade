@@ -56,7 +56,8 @@ class Rejected(Exception):
         self.reason = reason
 
 
-def house(model: str, parts: list[Component], cfg: BuildingNet) -> Sample:
+def house(model: str, parts: list[Component], cfg: BuildingNet,
+          split: Split = Split.TEST) -> Sample:
     parts = _upright(_turned(parts), cfg)
     lo, hi = _footprint(parts, cfg)
     fp = rect_house.rectangle(lo, hi, cfg.wall_m)
@@ -69,7 +70,7 @@ def house(model: str, parts: list[Component], cfg: BuildingNet) -> Sample:
     first = max(range(4), key=lambda i: (_doors(facades[i]), fp.walls[i].length))
     laid = [((first + k) % 4, facades[(first + k) % 4]) for k in range(4)]
     plan, sheet = rect_house.assemble(spec, fp, laid, Source.BUILDINGNET)
-    return Sample(id=model, source=Source.BUILDINGNET, split=Split.TEST, plan=plan, sheet=sheet)
+    return Sample(id=model, source=Source.BUILDINGNET, split=split, plan=plan, sheet=sheet)
 
 
 def _turned(parts: list[Component]) -> list[Component]:

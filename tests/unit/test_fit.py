@@ -124,3 +124,36 @@ def test_probe_does_not_change_training(at, houses, tmp_path):
     off = _history(at, PROBE.replace("every = 1", "every = 0"), tmp_path, "off")
     assert [(h["train"], h["val"]) for h in on] == [(h["train"], h["val"]) for h in off]
     assert all("probe" not in h for h in off)
+
+
+def _with_fit(cfg, **update):
+    fit_cfg = cfg.train.fit.model_copy(update=update)
+    return cfg.model_copy(update={"train": cfg.train.model_copy(update={"fit": fit_cfg})})
+
+
+def test_finetune_starts_from_checkpoint(tiny, tmp_path):
+    """Дообучение (gf#198): веса — с чекпойнта, а не случайные."""
+    out = tmp_path / "run"
+    fit.run(Source.SYNTHETIC, tiny, out)
+    saved = torch.load(out / fit.MODEL, weights_only=True)["model"]
+    trainer = fit.Trainer(fit.load(Source.SYNTHETIC, tiny), _with_fit(tiny, init=out / fit.MODEL))
+    assert all(torch.equal(saved[k], v) for k, v in trainer.model.state_dict().items())
+    fresh = fit.Trainer(fit.load(Source.SYNTHETIC, tiny), tiny)
+    assert not all(torch.equal(saved[k], v) for k, v in fresh.model.state_dict().items())
+
+
+def test_mix_adds_train_sequences_of_other_sources(tiny):
+    """`[fit.mix]`: к train источника — столько последовательностей train другого; val — свой."""
+    own = fit.load(Source.SYNTHETIC, tiny)
+    data = fit.mixed(Source.SYNTHETIC, _with_fit(tiny, mix={Source.SYNTHETIC: 2}))
+    assert len(data.parts[Split.TRAIN].ids) == len(own.parts[Split.TRAIN].ids) + 2
+    assert len(data.parts[Split.VAL].ids) == len(own.parts[Split.VAL].ids)
+
+
+def test_skip_longer_drops_what_the_window_cannot_hold(at, houses):
+    """Дообучение: окно чекпойнта не растёт — длинные последовательности отброшены явно, а не
+    отказом всего обучения (`[fit] skip_longer`, gf#198)."""
+    cfg = at("data", VAL_HALF, TINY.replace("[model]", "[model]\nblock = 8"))
+    data = fit.mixed(Source.SYNTHETIC, _with_fit(cfg, skip_longer=True))
+    assert all(len(ids) <= 8 for part in data.parts.values() for ids in part.ids)
+    assert data.longest <= 8
