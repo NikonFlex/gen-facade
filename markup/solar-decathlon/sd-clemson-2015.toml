@@ -1,0 +1,68 @@
+# Indigo Pine — Team Clemson (Clemson University), 2015. U.S. DOE Solar Decathlon; штамп
+# «COPYRIGHT: NONE: PROJECT IS PUBLIC DOMAIN»; разметка gf#180.
+# Листы A-211 (стр. 43: NORTH, EAST) и A-212 (стр. 44: WEST, SOUTH), 1/4" = 1'-0": стена юг/север
+# 655 pt = 36'-5", восток/запад 492 pt = 27'-4" (план A-111, стр. 39: 36'-0" x 27'-0" + обшивка);
+# дверь 36" = 54 pt; TOP OF SUBFLOOR 1'-7 3/4" над GRADE — 29,6 pt; SOLAR ENVELOPE 18'-0" — 324 pt.
+# Односкатная крыша, низ на юге: карниз — капельник южной стены (11'-3" от пола), на севере
+# 13'-1" — лишние 1'-10" в `cut`. Вход — с запада, две двери из-под крыши веранды.
+id = "sd-clemson-2015"
+pdf = "2015/clemson-drawings.pdf"
+roof = "односкатная, низ на юге, панели на стойках; веранда на западе под своей односкатной крышей"
+pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36" = 54 pt
+material = "metal"        # 1/8" CNC CUT POLYMETAL PANEL SIDING
+plinth_ft = 1.6458        # TOP OF SUBFLOOR 1'-7 3/4" над GRADE LEVEL
+floor_heights_ft = [11.228]   # капельник южной стены — 202 pt над полом
+cut = ["north, east, west: стена выше южного карниза (односкатная крыша, на севере +1'-10\")",
+       "west: перфорированные металлические экраны веранды перед стеной — закрывают дверь 103 и низ стены",
+       "west: крыша веранды на балках и стойках, перила",
+       "west: дверь 103 (спальня) за экраном — положение снято с плана A-111, не с фасада",
+       "north: короб водяного бака (PLUMBING TANK ENCLOSURE) у восточного края стены",
+       "north: теплообменник, электрощитки, зарядка электромобиля",
+       "east: короб бака у северного края; south, north, east: веранда и короб бака за углами",
+       "all: солнечные панели на крыше, металлические козырьки-обрамления окон (по раме)"]
+
+[[sides]]
+view = "WEST ELEVATION"
+page = 44
+wall = [677.3, 1169.5]
+floor = 537.1
+elements = [
+  { cls = "door", box = [763.6, 415.6, 820.6, 537.1], variant = { kind = "glazed" } },   # 103, по плану
+  { cls = "door", box = [960.8, 415.6, 1017.8, 537.1], variant = { kind = "glazed" } },  # 102
+  { cls = "door", box = [1028.3, 415.6, 1085.3, 537.1], variant = { kind = "glazed" } }, # 101
+  { cls = "porch", box = [677.3, 537.1, 1169.5, 566.6] },    # настил веранды: пол — земля
+]
+
+[[sides]]
+view = "NORTH ELEVATION"
+page = 43
+wall = [394.4, 1049.0]
+floor = 507.2
+elements = [
+  { cls = "window", box = [586.0, 380.7, 641.1, 453.8], variant = { cols = 1, rows = 2 } },
+  { cls = "window", box = [837.9, 380.7, 893.0, 453.8], variant = { cols = 1, rows = 2 } },
+  { cls = "window", box = [945.8, 380.7, 1001.0, 453.8], variant = { cols = 1, rows = 2 } },
+]
+
+[[sides]]
+view = "EAST ELEVATION"
+page = 43
+wall = [905.2, 1397.0]
+floor = 1123.8
+elements = [
+  { cls = "window", box = [1024.5, 997.0, 1079.6, 1106.0], variant = { cols = 1, rows = 2 } },
+  { cls = "window", box = [1222.4, 997.0, 1277.5, 1106.0], variant = { cols = 1, rows = 2 } },
+]
+
+[[sides]]
+view = "SOUTH ELEVATION"
+page = 44
+wall = [890.5, 1545.4]
+floor = 1216.5
+elements = [
+  { cls = "window", box = [974.8, 1090.0, 1029.9, 1199.0], variant = { cols = 1, rows = 2 } },
+  { cls = "window", box = [1046.8, 1090.0, 1101.9, 1199.0], variant = { cols = 1, rows = 2 } },
+  { cls = "window", box = [1118.8, 1090.0, 1173.9, 1199.0], variant = { cols = 1, rows = 2 } },
+  { cls = "window", box = [1190.8, 1090.0, 1245.8, 1199.0], variant = { cols = 1, rows = 2 } },
+  { cls = "window", box = [1262.7, 1090.0, 1317.8, 1199.0], variant = { cols = 1, rows = 2 } },
+]

@@ -37,11 +37,14 @@ balcony_patio = "balcony"
 awning = "canopy"
 
 # Ручная разметка реальных коттеджей (`data: Реальные коттеджи — тест`, gf#180): TOML на дом,
-# координаты — в pt листа PDF, отметки уровней — в футах с листа. Разметка — в git, под лицензией
-# источника (FreeFarmhouse — CC BY-SA 4.0, `markup/freefarmhouse/LICENSE.md`); листы — вне git.
+# координаты — в pt листа PDF, отметки уровней — в футах с листа. Разметка — в git, папка на
+# источник, под его лицензией (`markup/<источник>/LICENSE.md`); листы — вне git.
 [manual.paths]
-markup_dir = "markup/freefarmhouse"        # <дом>.toml
-pdf_dir = "data/freefarmhouse/pdf"         # листы с archive.org: имя — поле pdf разметки
+markup_dir = "markup"                      # <источник>/<дом>.toml
+
+[manual.paths.pdf_dirs]                    # поле pdf разметки — путь от этой папки
+freefarmhouse = "data/freefarmhouse/pdf"   # archive.org
+solar-decathlon = "data/solar-decathlon"   # <год>/<комплект>.pdf, tools/fetch_solar_decathlon.py
 
 [manual]
 length_tol_m = 0.1        # противоположные стороны расходятся больше — контур не прямоугольник

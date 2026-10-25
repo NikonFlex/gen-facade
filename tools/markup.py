@@ -73,11 +73,11 @@ def draw(img: Image.Image, box: tuple, e: manual.Elevation, m: manual.Markup, dp
     d.text((4, 4), f"{e.view} (стр. {e.page})", fill="black", font=font(14))
 
 
-def sheet(path: Path, pdf_dir: Path, dpi: int) -> Image.Image:
+def sheet(path: Path, pdf_dirs: dict[str, Path], dpi: int) -> Image.Image:
     m = manual.read(path)
     tiles = []
     for e in m.sides:
-        img, box = frame(pdf_dir / m.pdf, e, m, dpi)
+        img, box = frame(pdf_dirs[path.parent.name] / m.pdf, e, m, dpi)
         draw(img, box, e, m, dpi)
         tiles.append(img)
     w, h = max(t.width for t in tiles), max(t.height for t in tiles)
@@ -104,11 +104,11 @@ def main() -> None:
     if a.command == "hint":
         print(hint(a.pdf, a.page, tuple(map(float, a.box.split(","))), a.pt_per_ft))
         return
-    pdf_dir = load().data.manual.paths.pdf_dir
+    pdf_dirs = load().data.manual.paths.pdf_dirs
     a.out.mkdir(parents=True, exist_ok=True)
     for path in a.markup:
         target = a.out / f"{path.stem}.png"
-        sheet(path, pdf_dir, a.dpi).save(target)
+        sheet(path, pdf_dirs, a.dpi).save(target)
         print(target)
 
 
