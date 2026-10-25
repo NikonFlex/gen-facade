@@ -59,22 +59,68 @@ def test_window_width_stops_at_next_busy_span_and_is_remembered(guard, vocab):
     assert not set(range(52, 72)) & _allowed(g, vocab)   # поставленное окно 52–72 занято
 
 
-def test_box_takes_only_numbers_and_nothing_is_banned_outside_it(guard, vocab):
+@pytest.fixture
+def keep(cfg):
+    """Слова, которые страж оставил следующим."""
+    words = tokens.vocabulary(cfg)
+    return lambda g: {w for i, w in enumerate(words) if i not in set(g.banned())}
+
+
+def test_box_takes_only_numbers(guard, vocab):
     numbers = set(vocab.token)
-    assert guard(WINDOW).banned() == []                                   # до первой стены
     assert _allowed(guard(Mark.WALL, WINDOW, 52), vocab) == numbers       # y — любое число
     assert _allowed(guard(Mark.WALL, DOOR), vocab) == numbers             # x двери — из плана
     assert _allowed(guard(Mark.WALL, DOOR, 30, 10), vocab) == numbers - {0}   # ширина > 0
     assert _allowed(guard(Mark.WALL, WINDOW, 52, 10, 20), vocab) == numbers - {0}  # высота > 0
-    # рамка дописана: следующим — не число (лишнее число ломает ответ, gf#177), дальше — свободно
-    assert set(guard(Mark.WALL, WINDOW, 52, 10, 20, 30).banned()) == set(vocab.number)
-    assert guard(Mark.WALL, WINDOW, 52, 10, 20, 30, Mark.FLOOR).banned() == []
-    assert guard(Mark.WALL, WINDOW, 52, 10, 20, 30, ZONE).banned() == []  # числа зоны
 
 
-def test_guard_only_in_blind_mode(cfg, lay_out, vocab):
+def test_answer_follows_grammar(guard, keep):
+    """Следующим — только то, что разберёт `tokens.decode`: сбитая модель писала токен условия,
+    поле не по порядку, лишнее число зоны (план GenPlan, глухой режим, gf#177)."""
+    window = (Mark.WALL, WINDOW, 52, 10, 20, 30)
+    assert keep(guard()) == {Mark.WALL}                                  # ответ — со стены
+    after_box = keep(guard(*window))
+    assert {Mark.FLOOR, Mark.PARENT, Mark.END, WINDOW, ZONE, "var:regular", "fix:w_m"} \
+        <= after_box                                                      # поля, элемент, конец
+    assert not after_box & {"50", Mark.HOUSE, Mark.WALL, "kind:brick"}    # «12 32 10 36 50»
+    assert "var:regular" not in keep(guard(*window, "fix:w_m"))          # поля — по порядку
+    door = keep(guard(Mark.WALL, DOOR, 30, 0, 18, 42))
+    assert "var:transom" not in after_box and "var:transom" in door      # вид — по классу
+    assert Mark.FLOOR not in keep(guard(*window, Mark.FLOOR, 1))
+    zone = (Mark.WALL, ZONE)
+    assert keep(guard(*zone)) == {tokens.tok(r) for r in schema.PaletteRole}
+    assert "0" not in keep(guard(*zone, "mat:accent"))                  # точек больше нуля
+    points = keep(guard(*zone, "mat:accent", 2, 0, 10, 8, 10))
+    assert not {str(n) for n in range(200)} & points and WINDOW not in points  # 2 точки, зоны
+    assert guard(*window, Mark.END).banned() == []                        # ответ кончился
+
+
+def test_wall_count_decides_end(cfg, vocab, keep):
+    ids = {w: i for i, w in enumerate(tokens.vocabulary(cfg))}
+    g = constraints.WallGeometry([WALL, WALL], vocab, NARROWEST)
+    for w in (Mark.WALL, ZONE, "mat:main", 1, 0, 0):
+        g.step(ids[str(w)])
+    keep = keep(g)
+    assert Mark.WALL in keep and Mark.END not in keep                     # стен ещё две
+
+
+def test_plan_windows_keep_box_format_but_take_any_place(cfg, lay_out, vocab):
+    """«Окна из плана»: место окну ставит план — x и w любые, а рамку страж держит: у двери
+    GenPlan в 0,519 м от угла модель писала `<floor>` на месте числа (gf#177)."""
+    g = constraints.guard(tokens.bare(lay_out(Mode.WITH_OPENINGS)), Mode.WITH_OPENINGS, vocab, cfg)
+    ids = {w: i for i, w in enumerate(tokens.vocabulary(cfg))}
+    for w in (Mark.WALL, WINDOW):
+        g.step(ids[w])
+    assert _allowed(g, vocab) == set(vocab.token)                  # x — любой, даже у края
+    for w in ("10", "18", "42"):
+        g.step(ids[w])
+    assert _allowed(g, vocab) == set(vocab.token) - {0}            # высота — число, не `<floor>`
+    g.step(ids["30"])
+    assert not set(vocab.number) - set(g.banned())                 # рамка дописана
+
+
+def test_guard_walls_in_blind_mode(cfg, lay_out, vocab):
     bare = tokens.bare(lay_out(Mode.BLIND))
-    assert constraints.guard(bare, Mode.WITH_OPENINGS, vocab, cfg) is None
     walls = constraints.guard(bare, Mode.BLIND, vocab, cfg).walls
     front = bare.facades[0].side
     door = next(o for o in front.openings if tokens.given(o.kind, Mode.BLIND))
@@ -119,8 +165,9 @@ def test_two_storey_wall_keeps_floors_apart(cfg, vocab):
     assert _allowed(_two_storey(vocab, ids, Mark.WALL, WINDOW, 70, 70), vocab) == set(range(1, 91))
     # w окна второго этажа над окном первого: до края стены
     assert _allowed(_two_storey(vocab, ids, *first, WINDOW, 100, 70), vocab) == set(range(1, 61))
-    # на первом этаже то же x уже занято — годной ширины нет, страж не запрещает ничего
-    assert _two_storey(vocab, ids, *first, WINDOW, 100, 20).banned() == []
+    # на первом этаже то же x уже занято — годной ширины нет: только грамматика, брак — валидатору
+    taken = _two_storey(vocab, ids, *first, WINDOW, 100, 20)
+    assert _allowed(taken, vocab) == set(vocab.token) - {0}
     # x годен только на втором этаже (зона первого) — y только на втором: от 60 шагов
     in_zone = _allowed(_two_storey(vocab, ids, Mark.WALL, WINDOW, 79), vocab)
     assert in_zone == {n for n in vocab.token if n >= 60}

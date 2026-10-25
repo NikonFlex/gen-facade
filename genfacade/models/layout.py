@@ -53,7 +53,8 @@ class Layout:
     def answer(self, prompt: Condition, bare: FacadeSheet, seed: int,
                cfg: Config) -> FacadeSheet:
         """Стены после развёртки → стены с элементами и зонами; ответ не разобран — TokenError.
-        С `constrain` в глухом режиме окна не заходят в запретные зоны и на проёмы (gf#132)."""
+        С `constrain` рамка элемента не ломается (gf#177), а в глухом режиме окна не заходят в
+        запретные зоны и на проёмы (gf#132)."""
         on = cfg.models.layout.constrain
         guard = constraints.guard(bare, prompt.mode, self.vocab, cfg) if on else None
         torch.manual_seed(seed)
