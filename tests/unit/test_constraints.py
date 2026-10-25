@@ -1,6 +1,7 @@
 """Запрет при генерации (gf#132): страж читает ответ модели и запрещает x и w окна, при которых
 оно заходит в запретную зону, на проём или за край стены. torch не нужен — идёт и в CI."""
 
+import numpy
 import pytest
 from simple_house import WALL_INTO_WINDOW, before_leaf
 
@@ -66,12 +67,22 @@ def keep(cfg):
     return lambda g: {w for i, w in enumerate(words) if i not in set(g.banned())}
 
 
-def test_box_takes_only_numbers(guard, vocab):
+def test_box_takes_only_numbers_inside_the_wall(guard, vocab, cfg):
+    """Рамка — числа в пределах стены: на реальных домах карниз выходил выше стены на 1,7 м
+    (gf#197); карниз стены неизвестен — по высоте предела нет."""
     numbers = set(vocab.token)
     assert _allowed(guard(Mark.WALL, WINDOW, 52), vocab) == numbers       # y — любое число
-    assert _allowed(guard(Mark.WALL, DOOR), vocab) == numbers             # x двери — из плана
-    assert _allowed(guard(Mark.WALL, DOOR, 30, 10), vocab) == numbers - {0}   # ширина > 0
+    assert _allowed(guard(Mark.WALL, DOOR), vocab) == set(range(160))     # x — на стене
+    assert _allowed(guard(Mark.WALL, DOOR, 30, 10), vocab) == set(range(1, 131))  # до конца
     assert _allowed(guard(Mark.WALL, WINDOW, 52, 10, 20), vocab) == numbers - {0}  # высота > 0
+    ids = {w: i for i, w in enumerate(tokens.vocabulary(cfg))}
+    g = constraints.WallGeometry([WALL._replace(height=60)], vocab, NARROWEST)
+    for w in (Mark.WALL, tokens.tok(ElementClass.CORNICE), 0):
+        g.step(ids[str(w)])
+    assert _allowed(g, vocab) == set(range(60))                           # y — ниже карниза
+    for w in (50, 160):
+        g.step(ids[str(w)])
+    assert _allowed(g, vocab) == set(range(1, 11))                        # верх — не выше
 
 
 def test_answer_follows_grammar(guard, keep):
@@ -80,8 +91,9 @@ def test_answer_follows_grammar(guard, keep):
     window = (Mark.WALL, WINDOW, 52, 10, 20, 30)
     assert keep(guard()) == {Mark.WALL}                                  # ответ — со стены
     after_box = keep(guard(*window))
-    assert {Mark.FLOOR, Mark.PARENT, Mark.END, WINDOW, ZONE, "var:regular", "fix:w_m"} \
+    assert {Mark.FLOOR, Mark.END, WINDOW, ZONE, "var:regular"} \
         <= after_box                                                      # поля, элемент, конец
+    assert "fix:x_m" not in after_box                                     # `fix:` — у проёма плана
     assert not after_box & {"50", Mark.HOUSE, Mark.WALL, "kind:brick"}    # «12 32 10 36 50»
     assert "var:regular" not in keep(guard(*window, "fix:w_m"))          # поля — по порядку
     door = keep(guard(Mark.WALL, DOOR, 30, 0, 18, 42))
@@ -104,19 +116,86 @@ def test_wall_count_decides_end(cfg, vocab, keep):
     assert Mark.WALL in keep and Mark.END not in keep                     # стен ещё две
 
 
-def test_plan_windows_keep_box_format_but_take_any_place(cfg, lay_out, vocab):
-    """«Окна из плана»: место окну ставит план — x и w любые, а рамку страж держит: у двери
-    GenPlan в 0,519 м от угла модель писала `<floor>` на месте числа (gf#177)."""
-    g = constraints.guard(tokens.bare(lay_out(Mode.WITH_OPENINGS)), Mode.WITH_OPENINGS, vocab, cfg)
+def _read(g, cfg, *words):
     ids = {w: i for i, w in enumerate(tokens.vocabulary(cfg))}
-    for w in (Mark.WALL, WINDOW):
-        g.step(ids[w])
-    assert _allowed(g, vocab) == set(vocab.token)                  # x — любой, даже у края
-    for w in ("10", "18", "42"):
-        g.step(ids[w])
-    assert _allowed(g, vocab) == set(vocab.token) - {0}            # высота — число, не `<floor>`
-    g.step(ids["30"])
-    assert not set(vocab.number) - set(g.banned())                 # рамка дописана
+    for w in words:
+        g.step(ids[str(w)])
+    return g
+
+
+def test_plan_openings_are_written_by_the_condition(cfg, lay_out, vocab, keep):
+    """Проём плана — числами условия: x и ширина проёма, `fix:x_m fix:w_m`, и стену не кончить,
+    пока он не поставлен; на реальных домах он пропадал или смещался (gf#197)."""
+    bare = tokens.bare(lay_out(Mode.WITH_OPENINGS))
+    g = constraints.guard(bare, Mode.WITH_OPENINGS, vocab, cfg)
+    plan = g.walls[0].plan
+    first = next(p for p in plan if p.cls is ElementClass.WINDOW)
+    start = keep(_read(g, cfg, Mark.WALL))
+    assert not start & {ZONE, Mark.WALL, Mark.END, tokens.tok(ElementClass.CORNICE)}  # сперва план
+    assert _allowed(_read(g, cfg, WINDOW), vocab) == {first.x}
+    assert _allowed(_read(g, cfg, first.x, 0), vocab) == {first.w}
+    assert keep(_read(g, cfg, first.w, 30)) == {Mark.FLOOR}                 # этаж — обязательно
+    assert _allowed(_read(g, cfg, Mark.FLOOR), vocab) == {1}                # первый
+    tail = keep(_read(g, cfg, 1))
+    assert "fix:x_m" in tail and not tail & {"fix:w_m", WINDOW, ZONE, Mark.END}  # поля по порядку
+    assert keep(_read(g, cfg, "fix:x_m")) & {"fix:w_m", WINDOW} == {"fix:w_m"}
+    rest = [p for p in plan if p is not first]
+    assert not rest or ZONE not in keep(_read(g, cfg, "fix:w_m"))           # остальные — следом
+
+
+def test_floor_and_parent_are_ones_the_wall_has(guard, cfg, vocab, keep):
+    """Этаж — из этажей дома, родитель — уже написанный элемент стены: на реальном доме модель
+    писала «родитель 28», и ответ не разбирался (gf#197)."""
+    first = (Mark.WALL, WINDOW, 52, 10, 20, 30)
+    assert Mark.PARENT not in keep(guard(*first))                        # родителя ещё нет
+    assert _allowed(guard(*first, Mark.FLOOR), vocab) == {1}             # стена в один этаж
+    sill = (*first, tokens.tok(ElementClass.SILL), 52, 8, 20, 2, Mark.PARENT)
+    assert _allowed(guard(*sill), vocab) == {0}
+
+
+def test_own_window_does_not_cover_a_plan_opening(cfg, vocab):
+    """«Окна из плана»: своё окно модели — не на проёме плана: у широкого окна GenPlan модель
+    ставила рядом своё, и они пересекались (14 из 20 на двух этажах, gf#197)."""
+    plan = constraints.Planned(ElementClass.WINDOW, 33, 15)
+    wall = constraints.Wall(160, [], [(33, 48)], plan=(plan,))
+    g = _read(constraints.WallGeometry([wall], vocab, NARROWEST), cfg,
+              Mark.WALL, WINDOW, 33, 10, 15, 30, Mark.FLOOR, 1, "fix:x_m", "fix:w_m", WINDOW)
+    assert not set(range(22, 48)) & _allowed(g, vocab)                    # не налезть на 33–48
+    assert {0, 48, 148} <= _allowed(g, vocab)
+
+
+def test_materials_only_from_the_house_palette(cfg, vocab, keep):
+    """Материал — из палитры дома: у реального дома она одна (main), лист с цоколем из `plinth`
+    схема не принимает (gf#197)."""
+    g = constraints.WallGeometry([WALL], vocab, NARROWEST, {schema.PaletteRole.MAIN})
+    assert keep(_read(g, cfg, Mark.WALL, ZONE)) == {"mat:main"}
+    window = keep(_read(constraints.WallGeometry([WALL], vocab, NARROWEST,
+                                                 {schema.PaletteRole.MAIN}), cfg,
+                        Mark.WALL, WINDOW, 52, 10, 20, 30))
+    assert "mat:main" in window and "mat:trim" not in window
+
+
+def test_zone_is_a_rectangle_on_the_wall(cfg, vocab):
+    """Зона — прямоугольник на стене, как все зоны корпуса: (x0 y0) (x1 y0) (x1 y1) (x0 y1), x до
+    длины, y до карниза; зоны модели торчали за стену треугольниками (gf#197)."""
+    g = _read(constraints.WallGeometry([WALL._replace(height=60)], vocab, NARROWEST), cfg,
+              Mark.WALL, ZONE, "mat:main")
+    assert _allowed(g, vocab) == {4}                                      # четыре точки
+    steps = [(4, set(range(160))), (10, set(range(60))), (20, set(range(11, 161))), (90, {20}),
+             (20, {90}), (90, set(range(21, 61))), (50, {10}), (10, {50})]
+    for word, allowed in steps:
+        assert _allowed(_read(g, cfg, word), vocab) == allowed
+    edge = _read(constraints.WallGeometry([WALL._replace(height=60)], vocab, NARROWEST), cfg,
+                 Mark.WALL, ZONE, "mat:main", 4)
+    assert 160 not in _allowed(edge, vocab)    # угол на краю — правее места нет, всё запрещено
+
+
+def test_plan_entrance_is_kept_in_blind_mode(cfg, lay_out, vocab):
+    bare = tokens.bare(lay_out(Mode.BLIND))
+    g = constraints.guard(bare, Mode.BLIND, vocab, cfg)
+    door = next(p for p in g.walls[0].plan if p.cls is ElementClass.DOOR)
+    assert _allowed(_read(g, cfg, Mark.WALL, DOOR), vocab) == {door.x}       # вход — по условию
+    assert all(p.cls is ElementClass.DOOR for w in g.walls for p in w.plan)  # окна — модели
 
 
 def test_guard_walls_in_blind_mode(cfg, lay_out, vocab):
@@ -165,9 +244,9 @@ def test_two_storey_wall_keeps_floors_apart(cfg, vocab):
     assert _allowed(_two_storey(vocab, ids, Mark.WALL, WINDOW, 70, 70), vocab) == set(range(1, 91))
     # w окна второго этажа над окном первого: до края стены
     assert _allowed(_two_storey(vocab, ids, *first, WINDOW, 100, 70), vocab) == set(range(1, 61))
-    # на первом этаже то же x уже занято — годной ширины нет: только грамматика, брак — валидатору
+    # на первом этаже то же x уже занято — годной ширины нет: только предел стены, брак — валидатору
     taken = _two_storey(vocab, ids, *first, WINDOW, 100, 20)
-    assert _allowed(taken, vocab) == set(vocab.token) - {0}
+    assert _allowed(taken, vocab) == set(range(1, 61))
     # x годен только на втором этаже (зона первого) — y только на втором: от 60 шагов
     in_zone = _allowed(_two_storey(vocab, ids, Mark.WALL, WINDOW, 79), vocab)
     assert in_zone == {n for n in vocab.token if n >= 60}
@@ -193,3 +272,20 @@ def test_zone_on_grid_covers_real_zone(cfg, lay_out, vocab, x0, x1, span):
     facades[1] = facades[1].model_copy(update={"side": side})
     walls = constraints.walls(bare.model_copy(update={"facades": facades}), Mode.BLIND, cfg)
     assert walls[1].ground == [span]
+
+
+@pytest.mark.parametrize("mode", list(Mode))
+def test_guard_never_bans_every_token(cfg, lay_out, vocab, mode):
+    """Случайный ответ, которому страж не мешает: на каждом шаге есть что выбрать — иначе сэмплер
+    получает NaN (план GenPlan: угол зоны на краю стены, gf#197)."""
+    bare = tokens.bare(lay_out(mode))
+    for seed in range(20):
+        rng, g = numpy.random.default_rng(seed), constraints.guard(bare, mode, vocab, cfg)
+        for _ in range(400):
+            banned = set(g.banned())
+            free = [i for i in range(vocab.size) if i not in banned]
+            assert free
+            token = int(rng.choice(free))
+            if token == vocab.end:
+                break
+            g.step(token)
