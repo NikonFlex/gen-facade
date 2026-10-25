@@ -9,7 +9,7 @@ from genfacade import config, pipeline
 from genfacade.baselines import Baseline
 from genfacade.datasets.synthetic import batch
 from genfacade.models.stub import ModelError
-from genfacade.schema import Mode, Source
+from genfacade.schema import Mode, Source, Split
 from genfacade.train import corpus
 
 
@@ -28,10 +28,11 @@ def synth(args: argparse.Namespace) -> Path:
 
 
 def buildingnet(args: argparse.Namespace) -> Path:
-    """Коттеджи официального теста BuildingNet → примеры и опись с отказами (gf#154)."""
+    """Коттеджи BuildingNet частей официального разбиения → примеры и опись с отказами (gf#154,
+    gf#198)."""
     from genfacade.datasets.buildingnet import build
 
-    return build.run(config.load(args.config), args.count)
+    return build.run(config.load(args.config), args.count, tuple(args.splits))
 
 
 def markup(args: argparse.Namespace) -> Path:
@@ -125,8 +126,10 @@ def _parser() -> argparse.ArgumentParser:
     s.add_argument("--first-seed", type=int, default=0, help="seed первого дома; дальше подряд")
     s.add_argument("--overwrite", action="store_true",
                    help="удалить собранные дома и собрать заново (после правки настроек или кода)")
-    n = sub.add_parser("buildingnet", help="коттеджи теста BuildingNet → примеры датасета и опись")
-    n.add_argument("-n", "--count", type=int, default=0, help="сколько домов теста; 0 — все")
+    n = sub.add_parser("buildingnet", help="коттеджи BuildingNet → примеры датасета и опись")
+    n.add_argument("-n", "--count", type=int, default=0, help="сколько домов; 0 — все")
+    n.add_argument("--splits", nargs="+", type=Split, default=[Split.TEST],
+                   help="части официального разбиения: train val test (по умолчанию test)")
     sub.add_parser("manual", help="ручная разметка реальных коттеджей → примеры теста и опись")
     t = sub.add_parser("tokens", help="дома источника → корпус для обучения: номера токенов")
     _source(t)

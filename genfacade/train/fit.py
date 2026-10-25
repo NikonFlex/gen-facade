@@ -70,6 +70,30 @@ def load(source: Source, cfg: Config) -> Corpus:
     return Corpus(parts, words, max(len(s) for s in seqs))
 
 
+def mixed(source: Source, cfg: Config) -> Corpus:
+    """Корпус источника и подмешанные к его train последовательности других (`[fit.mix]`),
+    случайные с seed обучения; val и test — только источника."""
+    data, rng = load(source, cfg), numpy.random.default_rng(cfg.train.fit.seed)
+    parts, longest = dict(data.parts), data.longest
+    for extra, count in cfg.train.fit.mix.items():
+        more = load(extra, cfg)
+        add, own = more.parts[Split.TRAIN], parts[Split.TRAIN]
+        rows = sorted(rng.choice(len(add.ids), min(count, len(add.ids)), replace=False).tolist())
+        parts[Split.TRAIN] = Sequences(*(mine + [theirs[i] for i in rows]
+                                         for mine, theirs in zip(own, add, strict=True)))
+        longest = max(longest, *(len(add.ids[i]) for i in rows))
+    if cfg.train.fit.skip_longer:
+        parts = {split: _within(part, cfg.train.model.block) for split, part in parts.items()}
+        longest = min(longest, cfg.train.model.block)
+    return Corpus(parts, data.words, longest)
+
+
+def _within(part: Sequences, block: int) -> Sequences:
+    """Последовательности не длиннее окна модели."""
+    rows = [i for i, ids in enumerate(part.ids) if len(ids) <= block]
+    return Sequences(*([column[i] for i in rows] for column in part))
+
+
 def batch(part: Sequences, rows: list[int], pad: int) -> tuple[torch.Tensor, torch.Tensor]:
     """Вход и метки: метка позиции j — токен j+1; условие и паддинг в loss не идут."""
     width = max(len(part.ids[i]) for i in rows) - 1
@@ -101,7 +125,10 @@ class Trainer:
                                      f"последовательности корпуса ({data.longest})")
         self.device = sampling.device(fit.device)
         self.cuda = self.device.type == Device.CUDA
-        self.model = sampling.build_model(cfg.train.model, len(data.words)).to(self.device)
+        self.model = sampling.build_model(cfg.train.model, len(data.words))
+        if fit.init is not None:
+            _start_from(self.model, fit.init, data.words)
+        self.model.to(self.device)
         self.opt = self.model.configure_optimizers(fit.weight_decay, fit.lr, fit.betas, self.cuda)
         self.forward = torch.compile(self.model) if fit.compile else self.model
         self.pad = data.words.index(Mark.END)
@@ -145,12 +172,20 @@ class Trainer:
         return total / count
 
 
+def _start_from(model: torch.nn.Module, path: Path, words: list[str]) -> None:
+    """Дообучение: веса чекпойнта; другой словарь — другая запись токенов, веса не подходят."""
+    checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+    if list(checkpoint["vocabulary"]) != words:
+        raise corpus.CorpusError(f"словарь {path} не совпадает с корпусом: дообучать нельзя")
+    model.load_state_dict(checkpoint["model"])
+
+
 def run(source: Source, cfg: Config, out: Path) -> Path:
     """Обучить, сохранить, сэмплировать; вернуть путь к model.json."""
     fit = cfg.train.fit
     torch.manual_seed(fit.seed)
     rng = numpy.random.default_rng(fit.seed)
-    data = load(source, cfg)
+    data = mixed(source, cfg)
     trainer = Trainer(data, cfg)
     out.mkdir(parents=True, exist_ok=True)
     probe = _probe(data, source, cfg)
@@ -167,8 +202,9 @@ def run(source: Source, cfg: Config, out: Path) -> Path:
     samples = sample(trainer, source, cfg, rng)
     (out / SAMPLES).write_text(json.dumps(samples, ensure_ascii=False, indent=1))
     summary = {k: v for k, v in samples.items() if k != "rows"}
-    return _settings(trainer, cfg, {"source": source, "history": history, "samples": summary},
-                     out)
+    counts = {split.value: len(part.ids) for split, part in data.parts.items()}
+    return _settings(trainer, cfg, {"source": source, "sequences": counts, "history": history,
+                                    "samples": summary}, out)
 
 
 def _save(trainer: Trainer, data: Corpus, cfg: Config, path: Path) -> None:

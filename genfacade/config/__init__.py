@@ -14,7 +14,16 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from genfacade.datasets.buildingnet.mesh import Label
-from genfacade.schema import Device, ElementClass, Mode, PaletteRole, VariantKind, ZoneRole
+from genfacade.schema import (
+    Device,
+    ElementClass,
+    Mode,
+    PaletteRole,
+    Source,
+    Split,
+    VariantKind,
+    ZoneRole,
+)
 
 DEFAULTS = files(__package__)
 
@@ -181,7 +190,7 @@ class DataPaths(Section):
 class BuildingNetPaths(Section):
     models_dir: Path
     component_labels: Path
-    test_split: Path
+    splits: dict[Split, Path]  # часть официального разбиения → список моделей
 
 
 class BuildingNet(Section):
@@ -393,6 +402,9 @@ class Fit(Section):
     bf16: bool
     compile: bool
     save_every: int
+    init: Path | None = None        # дообучение: веса с этого чекпойнта (gf#198)
+    mix: dict[Source, int] = {}     # источник → сколько его последовательностей train подмешать
+    skip_longer: bool = False       # длиннее окна модели — не учить (окно чекпойнта не растёт)
 
 
 class Sampling(Section):
