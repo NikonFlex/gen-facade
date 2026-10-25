@@ -1,0 +1,51 @@
+# 12x24 Shotgun House — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
+# archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#180 — та же лицензия.
+id = "ffh-shotgun-12x24"
+pdf = "Shotgun 12x24 Blueprints 2024-02-01.pdf"
+roof = "двускатная, 7.5/12; навесы над дверями"
+pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"
+material = "siding"       # CLAPBOARD SIDING
+plinth_ft = 0.75          # низ обшивки — FIN. FLOOR +0'-0"
+floor_heights_ft = [8.1667]   # EAVE +8'-2"
+cut = ["front: фронтон с вентрешёткой", "rear: фронтон с вентрешёткой",
+       "left, right: скат кровли", "front, rear: бетонная ступень 42\""]
+
+[[sides]]
+view = "FRONT ELEVATION (option C)"
+page = 5
+wall = [813.9, 1029.9]
+floor = 306.0
+elements = [
+  { cls = "window", box = [844.6, 170.7, 891.1, 271.2], variant = { cols = 2, rows = 2 } },
+  { cls = "door", box = [935.4, 186.5, 989.4, 306.0] },
+  { cls = "canopy", box = [918.0, 158.0, 999.0, 182.0] },
+]
+
+[[sides]]
+view = "LEFT SIDE"
+page = 6
+wall = [474.7, 906.7]
+floor = 647.9
+elements = [
+  { cls = "window", box = [672.0, 521.1, 709.5, 585.6], variant = { cols = 2, rows = 2 } },
+]
+
+[[sides]]
+view = "REAR ELEVATION"
+page = 6
+wall = [924.7, 1140.7]
+floor = 298.0
+elements = [
+  { cls = "door", box = [968.2, 178.0, 1016.2, 298.0], variant = { kind = "glazed" } },
+  { cls = "window", box = [1063.5, 162.3, 1110.0, 262.8], variant = { cols = 2, rows = 2 } },
+  { cls = "canopy", box = [951.7, 155.0, 1032.7, 179.0] },
+]
+
+[[sides]]
+view = "RIGHT SIDE ELEVATION"
+page = 6
+wall = [257.3, 689.3]
+floor = 298.0
+elements = [
+  { cls = "window", box = [454.6, 171.3, 492.1, 235.8], variant = { cols = 2, rows = 2 } },
+]

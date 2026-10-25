@@ -1,0 +1,69 @@
+# Delaware Farmhouse (50 starter farmhouses), фаза 1 — ядро-модуль — Jay Osborne, FreeFarmhouse;
+# CC BY-SA 4.0; archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#180 — та же лицензия.
+# Контур 18'x24' (по наружным угловым доскам на листе — 18'-4" x 24'-4"), без выступов; площадка
+# входа (сторона 1) и задний ступ (сторона 3) — вне стены. Лист — черновик «format test», 1/16".
+# Второй этаж — мансарда под скатом: 2ND FLOOR +10'-0", карниз +13'-8" (подкосная стенка 3'-8"),
+# поэтому этаж до карниза один; окна мансарды — во фронтонах, срезаны.
+id = "ffh-delaware"
+pdf = "Delaware Farmhouse Plans - by Jay Osborne.pdf"
+roof = "двускатная, мансарда под скатом"
+pt_per_ft = 4.5           # SCALE: 1/16" = 1'-0"; дверь 36x80" = 13.5x30 pt
+material = "siding"       # обшивка по виду листа (отделка на листе не подписана)
+plinth_ft = 2.2           # чистый пол над низом опор (земля у стены), по листу
+floor_heights_ft = [13.6667]   # ROOF EAVE +13'-8" (мансарда — не этаж)
+cut = ["side 1: окно мансарды со ставнями во фронтоне", "side 3: окно мансарды со ставнями во фронтоне",
+       "side 1: ступени и площадка входа", "side 3: ступени заднего ступа",
+       "side 1: фонари у двери x2", "side 2/4: козырёк и фонарь соседних сторон в профиле"]
+
+[[sides]]
+view = "SIDE 1 ELEVATION"
+page = 3
+wall = [217.6, 300.1]
+floor = 194.6
+elements = [
+  { cls = "door", box = [230.7, 158.6, 244.2, 194.6], variant = { kind = "transom" } },
+  { cls = "window", box = [274.4, 158.4, 286.8, 185.8], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [268.2, 158.4, 274.2, 185.2], parent = 1 },
+  { cls = "blind", box = [287.0, 158.4, 293.0, 185.2], parent = 1 },
+  { cls = "canopy", box = [224.2, 149.4, 251.1, 157.0] },
+  { cls = "pillar", box = [226.6, 162.0, 229.2, 190.0] },
+  { cls = "pillar", box = [245.7, 162.0, 248.3, 190.0] },
+]
+
+[[sides]]
+view = "SIDE 4 ELEVATION"
+page = 3
+wall = [535.5, 645.0]
+floor = 454.6
+elements = [
+  { cls = "window", box = [573.5, 418.4, 582.9, 436.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [602.0, 416.0, 614.5, 439.0], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [568.8, 419.0, 573.3, 436.0], parent = 0 },
+  { cls = "blind", box = [583.1, 419.0, 587.6, 436.0], parent = 0 },
+  { cls = "blind", box = [595.9, 416.0, 601.9, 439.0], parent = 1 },
+  { cls = "blind", box = [614.5, 416.0, 620.5, 439.0], parent = 1 },
+]
+
+[[sides]]
+view = "SIDE 3 ELEVATION"
+page = 3
+wall = [167.8, 250.3]
+floor = 454.5
+elements = [
+  { cls = "door", box = [177.3, 418.3, 191.2, 454.5], variant = { kind = "transom" } },
+  { cls = "canopy", box = [174.2, 408.5, 194.5, 415.6] },
+]
+
+[[sides]]
+view = "SIDE 2 ELEVATION"
+page = 3
+wall = [535.2, 644.7]
+floor = 194.4
+elements = [
+  { cls = "window", box = [556.8, 158.2, 569.2, 185.6], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [610.8, 158.2, 623.2, 185.6], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [550.6, 158.2, 556.6, 185.2], parent = 0 },
+  { cls = "blind", box = [569.4, 158.2, 575.4, 185.2], parent = 0 },
+  { cls = "blind", box = [604.6, 158.2, 610.6, 185.2], parent = 1 },
+  { cls = "blind", box = [623.4, 158.2, 629.4, 185.2], parent = 1 },
+]

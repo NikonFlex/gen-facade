@@ -1,0 +1,86 @@
+# Backyard Farmhouse, original version (large 16'x32') — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
+# archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#180 — та же лицензия.
+# Лист «messy draft» 22x17", масштаб 1/2" = 1'-0": стена 32'-0" = 1152 pt, дверь 36x84 = 108x252 pt,
+# окно 32x60 = 96x180 pt, верх окон HEAD +7'-0" = 252 pt над чистым полом — сходится.
+# Полутораэтажный: 2-й этаж (+8'-4") под скатом, стена до карниза +11'-6" — один этаж до карниза,
+# окна мансарды — во фронтонах и дормере, срезаны. Крыльцо во всю южную стену.
+id = "ffh-large-backyard"
+pdf = "Large Backyard Farmhouse - Blueprints - messy draft.pdf"
+roof = "двускатная 10/12 с фронтоном 14/12 над входом, дормер на севере; мансарда; навес крыльца 3/12"
+pt_per_ft = 36.0          # SCALE: 1/2" = 1'-0"
+material = "siding"       # CLAPBOARD SIDING
+plinth_ft = 0.8333        # земля у стены ~10" ниже 1ST FLOOR +0'-0" (линия 921.8 pt на северном фасаде)
+floor_heights_ft = [11.5]     # ROOF EAVE +11'-6"; мансарда (2ND FLOOR +8'-4") — не этаж
+cut = ["south: окно мансарды во фронтоне со ставнями и подоконником",
+       "west: окно мансарды во фронтоне со ставнями и подоконником",
+       "east: окно мансарды во фронтоне со ставнями и подоконником",
+       "north: дормер с окном",
+       "west: ступень боковой двери (side stoop)",
+       "west, east: крыльцо в профиль — за углом стены",
+       "north: козырёк боковой двери в профиль — за углом стены",
+       "south: водосточные трубы"]
+
+[[sides]]
+view = "SOUTH ELEVATION"
+page = 6
+wall = [234.0, 1386.0]
+floor = 891.8
+elements = [
+  { cls = "window", box = [348.0, 639.8, 444.0, 819.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [564.0, 639.8, 660.0, 819.8], variant = { cols = 2, rows = 2 } },
+  { cls = "door", box = [756.0, 639.8, 864.0, 891.8], variant = { kind = "glazed" } },
+  { cls = "window", box = [960.0, 639.8, 1056.0, 819.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1176.0, 639.8, 1272.0, 819.8], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [299.2, 640.5, 347.1, 819.0], parent = 0 },
+  { cls = "blind", box = [444.9, 640.5, 492.8, 819.0], parent = 0 },
+  { cls = "blind", box = [515.2, 640.5, 563.1, 819.0], parent = 1 },
+  { cls = "blind", box = [660.9, 640.5, 708.8, 819.0], parent = 1 },
+  { cls = "blind", box = [911.2, 640.5, 959.1, 819.0], parent = 3 },
+  { cls = "blind", box = [1056.9, 640.5, 1104.8, 819.0], parent = 3 },
+  { cls = "blind", box = [1127.2, 640.5, 1175.1, 819.0], parent = 4 },
+  { cls = "blind", box = [1272.9, 640.5, 1320.8, 819.0], parent = 4 },
+  { cls = "sill", box = [330.0, 821.3, 462.0, 842.3], parent = 0 },
+  { cls = "sill", box = [546.0, 821.3, 678.0, 842.3], parent = 1 },
+  { cls = "sill", box = [942.0, 821.3, 1074.0, 842.3], parent = 3 },
+  { cls = "sill", box = [1158.0, 821.3, 1290.0, 842.3], parent = 4 },
+  { cls = "canopy", box = [267.7, 528.0, 1352.2, 609.9] },  # крыша крыльца до свеса
+  { cls = "porch", box = [267.7, 891.8, 1352.2, 921.8] },   # настил: от чистого пола до земли
+]
+
+[[sides]]
+view = "WEST ELEVATION"
+page = 7
+wall = [385.3, 961.3]
+floor = 889.9
+elements = [
+  { cls = "door", box = [487.3, 637.9, 595.3, 889.9], variant = { kind = "glazed" } },
+  { cls = "window", box = [751.3, 637.9, 847.3, 817.9], variant = { cols = 2, rows = 2 } },
+  { cls = "canopy", box = [456.5, 550.8, 626.0, 622.9] },
+  { cls = "blind", box = [702.4, 638.7, 750.4, 817.2], parent = 1 },
+  { cls = "blind", box = [848.2, 638.7, 896.1, 817.2], parent = 1 },
+  { cls = "sill", box = [733.3, 819.4, 865.3, 840.4], parent = 1 },
+]
+
+[[sides]]
+view = "NORTH ELEVATION"
+page = 8
+wall = [234.0, 1386.0]
+floor = 891.8
+elements = [
+  { cls = "window", box = [486.0, 633.8, 558.0, 777.8], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1062.0, 630.8, 1134.0, 774.8], variant = { cols = 2, rows = 2 } },
+  { cls = "sill", box = [468.0, 779.3, 576.0, 800.3], parent = 0 },
+  { cls = "sill", box = [1044.0, 776.3, 1152.0, 797.3], parent = 1 },
+]
+
+[[sides]]
+view = "EAST ELEVATION"
+page = 9
+wall = [543.6, 1119.6]
+floor = 890.1
+elements = [
+  { cls = "window", box = [783.6, 638.1, 879.6, 818.1], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [734.7, 638.8, 782.7, 817.3], parent = 0 },
+  { cls = "blind", box = [880.5, 638.8, 928.4, 817.3], parent = 0 },
+  { cls = "sill", box = [765.6, 819.6, 897.6, 840.6], parent = 0 },
+]
