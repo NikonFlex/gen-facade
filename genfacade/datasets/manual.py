@@ -2,8 +2,9 @@
 
 Разметка — TOML на дом. Координаты элементов — прямоугольники в pt листа PDF (x вправо, y вниз),
 как их снимает разметчик с векторного листа фасада; отметки — в футах с листа (цоколь, этажи до
-карниза). Перевод в метры — здесь, по масштабу листа `pt_per_ft`. Стороны — четыре, по часовой
-стрелке от стороны входа; у каждой — левый и правый край стены и отметка чистого пола в pt.
+карниза). Перевод в метры — здесь, по масштабу листа `pt_per_ft`. Стороны — по часовой стрелке от
+стороны входа, контур ортогональный: у каждой — левый и правый край стены и отметка чистого пола в
+pt, и внутренний ли угол после неё (Г-, Т-контур, gf#199).
 
 Что выше карниза и чего формат не держит (скаты, фронтоны, мансарды), разметчик не размечает, а
 перечисляет в `cut` — это идёт в опись (`data: Стена до карниза в данных`); элемент, заходящий
@@ -38,11 +39,11 @@ from genfacade.validate import errors, validate
 
 M_PER_FT = 0.3048  # международный фут — определение единицы, не настройка
 
-SIDES = 4  # прямоугольник; сторона k разметки — стена k в rect_house.NORMALS: вход смотрит в +y
+FIRST_NORMAL = (0.0, 1.0)  # сторона входа смотрит в +y плана (rect_house.NORMALS[0])
 
 
-class NotRectangle(Exception):
-    """Разметка не прямоугольного дома: развёртка его не примет (дом — на потом)."""
+class BadContour(Exception):
+    """Стороны разметки не складываются в замкнутый ортогональный контур по часовой."""
 
 
 class Mark(Model):
@@ -60,6 +61,7 @@ class Elevation(Model):
     wall: tuple[float, float]  # левый и правый край стены, pt
     floor: float         # отметка чистого пола первого этажа, pt
     elements: list[Mark] = []
+    inner_corner: bool = False  # угол после этой стороны — внутренний (Г-, Т-контур, gf#199)
 
 
 class Markup(Model):
@@ -80,9 +82,9 @@ def read(path: Path) -> Markup:
 
 def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
     """Пример дома и сколько элементов обрезано целиком (за карнизом или углом)."""
-    lengths = _lengths(m, cfg)
+    fp = _outline(m, cfg)
+    lengths = [w.length for w in fp.walls]
     spec = _spec(m)
-    fp = rect_house.Footprint(numpy.zeros(2), numpy.array(lengths[:2]), cfg.wall_m)
     laid, dropped = [], 0
     for k, e in enumerate(m.sides):
         elements = _side_elements(e, m, spec)
@@ -93,15 +95,29 @@ def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
     return Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet), dropped
 
 
-def _lengths(m: Markup, cfg: Manual) -> list[float]:
-    if len(m.sides) != SIDES:
-        raise NotRectangle(f"{m.id}: сторон {len(m.sides)}, нужно {SIDES}")
+def _outline(m: Markup, cfg: Manual) -> rect_house.Footprint:
+    """Контур по сторонам разметки: длины — с листов, повороты — внешний угол (−90°) или
+    внутренний (+90°). Невязка обхода в пределах length_tol_m снимается с последних сторон вдоль
+    x и вдоль y: листы фасадов меряют стену с точностью обшивки, а не каркаса."""
+    normals, n = [], FIRST_NORMAL
+    for e in m.sides:
+        normals.append(n)
+        n = (-n[1] + 0.0, n[0] + 0.0) if e.inner_corner else (n[1] + 0.0, -n[0] + 0.0)
+    if n != FIRST_NORMAL or len(m.sides) < 4:
+        raise BadContour(f"{m.id}: повороты сторон не замыкают обход по часовой")
     lengths = [(e.wall[1] - e.wall[0]) / m.pt_per_ft * M_PER_FT for e in m.sides]
-    for k in range(2):
-        if abs(lengths[k] - lengths[k + 2]) > cfg.length_tol_m:
-            raise NotRectangle(f"{m.id}: стороны {k} и {k + 2} — {lengths[k]:.2f} и "
-                               f"{lengths[k + 2]:.2f} м")
-    return lengths
+    steps = [numpy.array((ny, -nx)) for nx, ny in normals]  # по часовой: нормаль на −90°
+    gap = sum(d * length for d, length in zip(steps, lengths, strict=True))
+    if numpy.hypot(*gap) > cfg.length_tol_m:
+        raise BadContour(f"{m.id}: контур не замкнулся — невязка {numpy.hypot(*gap):.2f} м")
+    for axis in (0, 1):
+        k = max(i for i, d in enumerate(steps) if d[axis])
+        lengths[k] -= gap[axis] / steps[k][axis]
+    corners = [numpy.zeros(2)]
+    for d, length in zip(steps[:-1], lengths[:-1], strict=True):
+        corners.append(corners[-1] + d * length)
+    low = numpy.min(corners, axis=0)  # план — от (0, 0), как у прямоугольника прежде
+    return rect_house.Footprint([c - low for c in corners], normals, cfg.wall_m)
 
 
 def _spec(m: Markup) -> HouseSpec:
@@ -148,7 +164,7 @@ def run(cfg: Config) -> Path:
         m = read(path)
         try:
             sample, dropped = house(m, rules)
-        except NotRectangle as e:
+        except BadContour as e:
             rejected[m.id] = str(e)
             continue
         cut[m.id], roofs[m.id] = len(m.cut) + dropped, m.roof
