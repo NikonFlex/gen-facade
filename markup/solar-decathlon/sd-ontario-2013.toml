@@ -1,0 +1,67 @@
+# ECHO — Team Ontario (Queen's, Carleton, Algonquin), 2013. U.S. DOE Solar Decathlon; штамп
+# «COPYRIGHT: NONE: PROJECT IS PUBLIC DOMAIN»; разметка gf#180.
+# Листы A-211 (стр. 59: EAST, WEST) и A-212 (стр. 60: NORTH, SOUTH), SCALE 1/4" = 1'-0" — 18 pt
+# на фут; проверка: T/O SUBFLOOR 2'-5 1/2" над GRADE 0" = 44,3 pt на листе (44,25 по масштабу),
+# торцы 412,6 pt = 22'-11" при оси 21'-10 1/4" плюс стены и обшивка. План A-111 (стр. 53) —
+# прямоугольник по осям 1–11 × A–C; вокруг настилы: пергола с настилом на севере, BACK DECK на
+# юге, пандусы с запада и востока — на фасадах настилы не нарисованы, площадки сняты с плана.
+# Кровля низкоуклонная за фасциями: T/O ROOF PEAK 13'-0 3/4" = верх фасции; карниз — низ фасции.
+id = "sd-ontario-2013"
+pdf = "2013/ont_cd.pdf"
+roof = 'плоская низкоуклонная за фасцией (T/O ROOF PEAK 13 ft 0 3/4 in), пергола на севере'
+pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"
+material = "wood"         # DRIFTWOOD / CLEAR COAT STAIN WHITE PINE CLADDING
+plinth_ft = 2.4583        # T/O SUBFLOOR +2'-5 1/2" над GRADE LEVEL 0"; дом на временных опорах
+floor_heights_ft = [9.756]    # от чистого пола до низа фасции: 175,6 pt
+cut = ["north: пергола над настилом у входа", "west, east: пандусы",
+       "south: электросчётчик на углу стены", "west: водосток и светильник у углового окна",
+       "north: светильник у двери", "all: временные опоры под домом",
+       "north, south: площадки сняты с плана A-111 — на фасадах настилов нет"]
+
+[[sides]]
+view = "NORTH ELEVATION (D1, A-212)"
+page = 60
+wall = [547.3, 1286.5]
+floor = 505.3
+elements = [
+  { cls = "window", box = [569.4, 378.1, 623.3, 439.9], variant = { cols = 2, rows = 1 } },   # 07
+  { cls = "window", box = [740.2, 378.1, 769.7, 408.4], variant = { cols = 1, rows = 1 } },   # 08
+  { cls = "door", box = [918.4, 375.2, 981.4, 505.3] },                                       # D001
+  { cls = "window", box = [993.4, 377.8, 1023.0, 501.5], variant = { cols = 1, rows = 1 } },  # 01
+  { cls = "window", box = [1205.5, 377.8, 1286.5, 484.1], variant = { kind = "corner", cols = 1, rows = 2 } }, # 02 угловое
+  { cls = "porch", box = [835.0, 505.3, 1286.5, 549.5] },   # настил под перголой: по плану до оси ~7
+]
+
+[[sides]]
+view = "EAST ELEVATION (D1, A-211)"
+page = 59
+wall = [762.4, 1175.0]
+floor = 503.0
+elements = [
+  { cls = "window", box = [785.0, 375.8, 806.4, 461.6], variant = { cols = 1, rows = 1 } },   # 05
+  { cls = "window", box = [819.5, 375.8, 884.7, 403.5], variant = { cols = 1, rows = 1 } },   # 06
+  { cls = "window", box = [1054.1, 375.8, 1119.3, 403.5], variant = { cols = 1, rows = 1 } }, # 06
+]
+
+[[sides]]
+view = "SOUTH ELEVATION (A1, A-212)"
+page = 60
+wall = [421.1, 1160.2]
+floor = 1282.3
+elements = [
+  { cls = "window", box = [442.1, 1155.1, 534.3, 1201.2], variant = { cols = 1, rows = 1 } }, # 04
+  { cls = "window", box = [545.9, 1155.1, 638.1, 1201.2], variant = { cols = 1, rows = 1 } }, # 04
+  { cls = "door", box = [683.5, 1153.4, 796.0, 1282.3], variant = { kind = "glazed" } },      # D002A, двустворчатая
+  { cls = "door", box = [966.1, 1153.4, 1035.0, 1282.3] },                                    # D002B
+  { cls = "porch", box = [421.1, 1282.3, 1160.2, 1326.7] },  # BACK DECK во всю стену
+]
+
+[[sides]]
+view = "WEST ELEVATION (A1, A-211)"
+page = 59
+wall = [663.2, 1075.9]
+floor = 1168.7
+elements = [
+  { cls = "window", box = [663.2, 1041.3, 744.1, 1147.4], variant = { kind = "corner", cols = 1, rows = 2 } }, # 02 угловое
+  { cls = "window", box = [997.6, 1041.5, 1054.3, 1087.6], variant = { cols = 2, rows = 1 } }, # 03
+]

@@ -1,0 +1,64 @@
+# 4D Home — Team Massachusetts (UMass Lowell и др.), 2011. U.S. DOE Solar Decathlon; штамп
+# «COPYRIGHT: NONE: PROJECT IS PUBLIC DOMAIN»; разметка gf#180.
+# Листы A-211 (стр. 52: EAST, WEST) и A-212 (стр. 53: NORTH, SOUTH), SCALE 1/4" = 1'-0": двери
+# 36" = 55 pt, отметки FFL LEVEL 01 0" → T.O. WALLS 7'-7" через 136,5 pt, GRADE -1'-6" — 27 pt.
+# Контур — прямоугольник (план A-102, стр. 47). Стена по наружным краям обшивки и угловых
+# стоек: 757 pt = 42'-1" и 417,5 pt = 23'-2" (на плане по осям 40'-3 7/8" — без обшивки?).
+# Вход — с юга: дверь на кухню с террасы под перголой с панелями; вторая дверь — с запада.
+id = "sd-mass-2011"
+pdf = "2011/mass_cd.pdf"
+roof = "двускатная, фальцевая, конёк вдоль; щипцы на востоке и западе; южная пергола-рама с панелями"
+pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36" = 55 pt
+material = "siding"       # горизонтальная обшивка доской
+plinth_ft = 1.5           # GRADE LEVEL -1'-6" от FFL
+floor_heights_ft = [7.5833]   # T.O. WALLS 7'-7"
+cut = ["east, west: щипцы выше T.O. WALLS (с вентрешёткой на востоке)",
+       "south: пергола-рама с солнечными панелями перед стеной; на east, west — её портал в профиль",
+       "east, west: портальные рамы-стойки по углам стены (серые) — по краю стены",
+       "north: щитки, счётчики, вентиляция на стене", "north, south: пандусы вдоль стен",
+       "east: скамья-ящик и настил за углом", "south, north: солнечные панели на скате"]
+
+[[sides]]
+view = "BUILDING SOUTH ELEVATION"
+page = 53
+wall = [578.0, 1335.0]
+floor = 1232.8
+elements = [
+  { cls = "window", box = [610.4, 1102.2, 768.8, 1228.0], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [839.0, 1102.2, 1008.1, 1172.0], variant = { cols = 2, rows = 1 } },
+  { cls = "door", box = [1008.1, 1102.2, 1071.5, 1232.8], variant = { kind = "glazed" } },
+  { cls = "window", box = [1141.0, 1102.2, 1302.7, 1228.0], variant = { cols = 2, rows = 2 } },
+  { cls = "porch", box = [578.0, 1232.8, 1335.0, 1259.8] },   # настил террасы вдоль стены
+]
+
+[[sides]]
+view = "BUILDING WEST ELEVATION"
+page = 52
+wall = [731.4, 1149.0]
+floor = 1244.0
+elements = [
+  { cls = "window", box = [859.3, 1119.6, 916.9, 1188.0], variant = { cols = 1, rows = 1 } },
+  { cls = "door", box = [963.8, 1111.0, 1029.1, 1244.0], variant = { kind = "glazed" } },
+  { cls = "porch", box = [731.4, 1244.0, 1149.0, 1271.0] },   # настил у западной двери
+]
+
+[[sides]]
+view = "BUILDING NORTH ELEVATION"
+page = 53
+wall = [578.0, 1335.0]
+floor = 585.0
+elements = [
+  { cls = "window", box = [763.3, 454.3, 827.4, 486.8], variant = { cols = 1, rows = 1 } },
+  { cls = "window", box = [1036.7, 454.3, 1100.6, 486.8], variant = { cols = 1, rows = 1 } },
+  { cls = "window", box = [1204.9, 454.3, 1269.0, 486.8], variant = { cols = 1, rows = 1 } },
+]
+
+[[sides]]
+view = "BUILDING EAST ELEVATION"
+page = 52
+wall = [732.5, 1150.0]
+floor = 582.4
+elements = [
+  { cls = "window", box = [767.3, 457.6, 854.9, 544.0], variant = { cols = 1, rows = 1 } },
+  { cls = "window", box = [1024.4, 457.6, 1118.0, 526.0], variant = { cols = 2, rows = 1 } },
+]

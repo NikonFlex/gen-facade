@@ -144,7 +144,7 @@ def run(cfg: Config) -> Path:
     for old in store.ids(root, Source.MANUAL):
         store.path(root, Source.MANUAL, old).unlink()
     rejected, cut, roofs, invalid = {}, {}, {}, Counter()
-    for path in sorted(rules.paths.markup_dir.glob("*.toml")):
+    for path in sorted(rules.paths.markup_dir.glob("*/*.toml")):
         m = read(path)
         try:
             sample, dropped = house(m, rules)

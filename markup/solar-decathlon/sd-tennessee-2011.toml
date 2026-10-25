@@ -1,0 +1,54 @@
+# Living Light — University of Tennessee, U.S. DOE Solar Decathlon 2011; штамп PUBLIC DOMAIN;
+# разметка gf#180. Комплект tenn_cd.pdf: A-201 (North/South), A-202 (East/West), план A-101.
+# Модуль-коробка 49'-10" x 14'-10" на опорах, плоская кровля, PV на раме выше кровли. Длинные
+# стороны — 40' витража (08 43 13, двойная оболочка, жалюзи внутри — лист A1 «interior facade»)
+# и 9'-10" глухой обшивки (07 42 23 wood wall panels); в торцах по остеклённой двери.
+# Вход — западный торец (ENTRY VESTIBULE 101 на плане), восток — EXIT VESTIBULE.
+# Масштаб 1/4" = 1'-0": шаг 5'-0" в цепочке = 90 pt, 49'-10" = 897 pt, 14'-10" = 267 pt — сходится.
+id = "sd-tennessee-2011"
+pdf = "2011/tenn_cd.pdf"
+roof = "плоская, PV на раме над кровлей (T.O. PV 13'-7 1/2\")"
+pt_per_ft = 18.0          # SCALE 1/4" = 1'-0"
+material = "wood"         # 07 42 23 WOOD WALL PANELS
+plinth_ft = 2.5           # FINISHED FLOOR 2'-6" (MAX.) над GRADE 0"
+floor_heights_ft = [9.875]    # T.O. STRUCTURE 12'-4 1/2" - FF 2'-6"
+cut = ["все: PV-панели на раме выше карниза",
+       "west, east: настилы и пандус у торцов — за углами стены, в профиль",
+       "north: лестница к настилу у восточного угла — вне стены",
+       "north, south: жалюзи внутренней оболочки за витражом (лист A1) — не фасад"]
+
+[[sides]]
+view = "WEST ELEVATION"
+page = 43
+wall = [873.1, 1140.1]
+floor = 1325.3
+elements = [
+  { cls = "door", box = [901.7, 1182.8, 966.8, 1325.3], variant = { kind = "glazed" } },
+]
+
+[[sides]]
+view = "NORTH ELEVATION"
+page = 42
+wall = [469.8, 1366.2]
+floor = 379.0
+elements = [
+  { cls = "window", box = [647.3, 205.0, 1361.9, 375.0], variant = { kind = "panoramic", cols = 8 } },
+]
+
+[[sides]]
+view = "EAST ELEVATION"
+page = 43
+wall = [852.0, 1119.0]
+floor = 476.4
+elements = [
+  { cls = "door", box = [880.6, 334.0, 945.8, 476.4], variant = { kind = "glazed" } },
+]
+
+[[sides]]
+view = "SOUTH ELEVATION"
+page = 42
+wall = [546.6, 1442.8]
+floor = 855.2
+elements = [
+  { cls = "window", box = [723.8, 681.0, 1438.4, 851.0], variant = { kind = "panoramic", cols = 8 } },
+]

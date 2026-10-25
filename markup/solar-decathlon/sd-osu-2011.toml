@@ -1,0 +1,71 @@
+# enCORE — The Ohio State University, 2011. U.S. DOE Solar Decathlon; штамп «COPYRIGHT: NONE:
+# PROJECT IS PUBLIC DOMAIN»; разметка gf#180.
+# Листы A-211 (стр. 25: NORTH, SOUTH w/o SCREEN) и A-212 (стр. 26: EAST, WEST w/o SCREEN), SCALE
+# 1/4" = 1'-0" — 18 pt на фут; проверка: FINISH FLOOR 0'-0" — GRADE -2'-4" = 42 pt, T.O. SCREEN
+# 15'-3" = 274,3 pt; стены 540 pt = 30'-0" и 600 pt = 33'-4" — как на плане A-102 (стр. 19:
+# 30'-0 1/2" x 33'-4 1/8"). С востока открытое крыльцо 12'-3" под общей крышей на столбах, с юга
+# полоса 2'-2" за стеной (в профиль на E/W, не стена).
+# Кровля — низкоуклонная «бабочка» с фонарями из поликарбоната: верх стен по сторонам разный —
+# S 8'-4", N 9'-1", W 9'-5" (низ фасции над стеной); карниз — нижний (S), остальное — в cut.
+id = "sd-osu-2011"
+pdf = "2011/osu_cd.pdf"
+roof = "низкоуклонная бабочка с фонарями из поликарбоната, коллекторы на кровле"
+pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"
+material = "wood"         # WOOD SIDING TYPE 1/2; на юге — металл (гофра)
+plinth_ft = 2.3333        # FINISH FLOOR 0'-0", GRADE -2'-4"; дом на настиле с юбкой
+floor_heights_ft = [8.361]    # южная стена: 150,5 pt до низа фасции — самая низкая
+cut = ["north, west: верх стены выше карниза (до 9'-1\" на севере, 9'-5\" на западе)",
+       "all: фонари из поликарбоната, коллекторы и панели над кровлей",
+       "east: столбы крыльца (4)", "north, south: открытое крыльцо за углом стены (OPEN)",
+       "north: пандус вдоль стены", "south: воздушный солнечный коллектор на стене (HOT AIR COLLECTOR)",
+       "west: наружный блок кондиционера", "east, west: полоса 2'-2\" за южной стеной в профиль",
+       "all: деревянные экраны (виды w/ SCREEN) не размечены"]
+
+[[sides]]
+view = "EAST ELEVATION w/o SCREEN (C1, A-212)"
+page = 26
+wall = [299.9, 899.9]
+floor = 603.5
+elements = [
+  { cls = "window", box = [329.9, 477.6, 365.9, 595.3], variant = { cols = 1, rows = 2 } },  # 10 над 9
+  { cls = "window", box = [380.5, 477.6, 416.5, 595.3], variant = { cols = 1, rows = 2 } },  # 10 над 9
+  { cls = "door", box = [436.2, 474.1, 490.9, 603.5], variant = { kind = "glazed" } },       # A, ENTRY FULL LITE
+  { cls = "window", box = [596.4, 477.6, 680.3, 585.5], variant = { cols = 1, rows = 2 } },  # 4 над 3
+  { cls = "window", box = [825.7, 477.6, 861.6, 549.5], variant = { cols = 1, rows = 1 } },  # 2
+  { cls = "canopy", box = [299.9, 429.6, 899.9, 466.4] },   # балка и край крыши крыльца
+  { cls = "porch", box = [299.9, 603.5, 899.9, 645.5] },    # настил крыльца, от пола до земли
+]
+
+[[sides]]
+view = "SOUTH ELEVATION w/o SCREEN (C5, A-211)"
+page = 25
+wall = [1216.2, 1757.0]
+floor = 618.5
+elements = [
+  { cls = "window", box = [1276.9, 476.0, 1330.9, 615.5], variant = { kind = "panoramic", cols = 1, rows = 2 } },  # 8 над 7
+  { cls = "window", box = [1358.0, 476.0, 1412.0, 615.5], variant = { kind = "panoramic", cols = 1, rows = 2 } },
+  { cls = "window", box = [1438.8, 476.0, 1492.8, 615.5], variant = { kind = "panoramic", cols = 1, rows = 2 } },
+]
+
+[[sides]]
+view = "WEST ELEVATION w/o SCREEN (C5, A-212)"
+page = 26
+wall = [1332.1, 1932.1]
+floor = 603.5
+elements = [
+  { cls = "window", box = [1479.5, 477.6, 1515.5, 548.4], variant = { cols = 1, rows = 2 } },  # 5
+  { cls = "window", box = [1545.5, 477.6, 1581.5, 548.4], variant = { cols = 1, rows = 2 } },  # 5
+  { cls = "window", box = [1665.4, 477.6, 1701.4, 548.4], variant = { cols = 1, rows = 2 } },  # 5
+  { cls = "window", box = [1731.4, 477.6, 1767.4, 596.4], variant = { cols = 1, rows = 2 } },  # 6
+  { cls = "door", box = [1860.1, 477.4, 1915.4, 600.4] },   # электрощитовая (ELECTRICAL CLOSET)
+]
+
+[[sides]]
+view = "NORTH ELEVATION w/o SCREEN (C1, A-211)"
+page = 25
+wall = [469.0, 1009.0]
+floor = 618.5
+elements = [
+  { cls = "door", box = [685.8, 492.2, 740.5, 618.5], variant = { kind = "glazed" } },       # B, ENTRY FULL LITE
+  { cls = "window", box = [906.0, 492.6, 947.9, 564.6], variant = { cols = 1, rows = 1 } },  # 1
+]

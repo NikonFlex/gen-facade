@@ -206,8 +206,8 @@ class BuildingNet(Section):
 
 
 class ManualPaths(Section):
-    markup_dir: Path
-    pdf_dir: Path
+    markup_dir: Path               # <источник>/<дом>.toml
+    pdf_dirs: dict[str, Path]      # источник (папка разметки) → где его листы PDF
 
 
 class Manual(Section):

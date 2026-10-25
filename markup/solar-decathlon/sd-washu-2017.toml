@@ -1,0 +1,68 @@
+# CRETE House — Washington University in St. Louis, U.S. DOE Solar Decathlon 2017; штамп PUBLIC
+# DOMAIN; разметка gf#180. Комплект wash-u-st-louis-drawings.pdf: A201 (North/South, стр. 24),
+# A202 (East/West, стр. 25), план A113 (стр. 13), ведомости окон и дверей A601 (стр. 45).
+# Прямоугольная коробка из сборных бетонных панелей, плоская кровля с парапетом 11'-1", PV над
+# кровлей до 12'-0". Окна A1–A6 (2'-11 1/4" x 8'-11 1/4", во всю высоту) — в швах между панелями
+# по осям 2, 3, 4 на северной и южной стенах; B1–B3 (2'-1 1/2") — в торцах (2 восток, 1 запад).
+# Двери: 100A (двустворчатая, юг — главный вход), 100B и 109C (север), 108E (юг, ось 5).
+# Лист 11x17 — половина формата: подпись 1/4" = 1'-0", фактически 1/8" = 1'-0" (9 pt на фут):
+# парапет 11'-1" над чистым полом = 100 pt, двери 8'-11 1/4" = 80,4 pt, GRADE -1'-10" = 16,5 pt.
+# Стены по наружной грани: 409 pt = 45,4' и 198 pt = 22,0' (на плане 45'-0 1/4" x 21'-0 1/2"
+# по осям/каркасу — облицовка панелей сверху).
+id = "sd-washu-2017"
+pdf = "2017/wash-u-st-louis-drawings.pdf"
+roof = "плоская с парапетом 11'-1\"; PV на кровле до 12'-0\"; бетонные водостоки-консоли над кровлей"
+pt_per_ft = 9.0           # подпись 1/4" = 1'-0" на листе половинного формата → 1/8" = 1'-0"
+material = "concrete"     # STRUCTURAL PRECAST CONCRETE WALL PANELS
+plinth_ft = 1.8333        # FINISH FLOOR 0" над GRADE -1'-10"
+floor_heights_ft = [11.0833]  # T.O. PARAPET 11'-1"
+cut = ["все: PV-панели над кровлей (T.O. SOLAR ARRAY 12'-0\") и бетонные водостоки-консоли (PRECAST CONCRETE GUTTER, ABOVE)",
+       "east, west: бетонные рамы водостоков за углами стены (оси A, D–G) — вне стены",
+       "east, west: низ окон закрыт ящиками-клумбами (PLANTER BOX) и настилом — рамки окон до чистого пола по ведомости",
+       "south: ступень у двери 100A, клумбы и скамья перед стеной",
+       "north: ящики-клумбы у углов"]
+
+[[sides]]
+view = "SOUTH ELEVATION"
+page = 24
+wall = [318.2, 726.2]
+floor = 665.9
+elements = [
+  { cls = "window", box = [343.3, 585.5, 368.9, 665.9], variant = { kind = "panoramic" } },
+  { cls = "door", box = [391.4, 585.5, 448.6, 665.9], variant = { kind = "glazed" } },
+  { cls = "window", box = [471.0, 585.5, 496.6, 665.9], variant = { kind = "panoramic" } },
+  { cls = "window", box = [565.0, 585.5, 590.5, 665.9], variant = { kind = "panoramic" } },
+  { cls = "door", box = [675.4, 585.5, 700.9, 665.9] },
+]
+
+[[sides]]
+view = "WEST ELEVATION"
+page = 25
+wall = [231.2, 429.1]
+floor = 652.8
+elements = [
+  { cls = "window", box = [376.3, 572.4, 394.4, 652.8], variant = { kind = "panoramic" } },
+]
+
+[[sides]]
+view = "NORTH ELEVATION"
+page = 24
+wall = [193.9, 603.0]
+floor = 338.4
+elements = [
+  { cls = "door", box = [220.2, 258.0, 245.9, 338.4], variant = { kind = "glazed" } },
+  { cls = "window", box = [330.7, 258.0, 356.2, 338.4], variant = { kind = "panoramic" } },
+  { cls = "window", box = [424.6, 258.0, 450.1, 338.4], variant = { kind = "panoramic" } },
+  { cls = "door", box = [472.5, 258.0, 501.2, 338.4], variant = { kind = "glazed" } },
+  { cls = "window", box = [552.2, 258.0, 577.8, 338.4], variant = { kind = "panoramic" } },
+]
+
+[[sides]]
+view = "EAST ELEVATION"
+page = 25
+wall = [392.6, 590.5]
+floor = 329.9
+elements = [
+  { cls = "window", box = [427.3, 249.4, 445.3, 329.9], variant = { kind = "panoramic" } },
+  { cls = "window", box = [537.7, 249.4, 555.7, 329.9], variant = { kind = "panoramic" } },
+]

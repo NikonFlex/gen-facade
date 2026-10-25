@@ -84,10 +84,11 @@ def test_opposite_sides_must_match():
 
 def test_run_writes_samples_and_manifest(tmp_path):
     marks = tmp_path / "markup"
-    marks.mkdir()
-    (marks / "ffh-test.toml").write_text(_toml(markup()))
+    ffh = marks / "freefarmhouse"  # папка на источник
+    ffh.mkdir(parents=True)
+    (ffh / "ffh-test.toml").write_text(_toml(markup()))
     three = markup().model_dump()["sides"][:3]
-    (marks / "ffh-crooked.toml").write_text(_toml(markup(id="ffh-crooked", sides=three)))
+    (ffh / "ffh-crooked.toml").write_text(_toml(markup(id="ffh-crooked", sides=three)))
     data = CFG.data.model_copy(update={
         "paths": CFG.data.paths.model_copy(update={"samples_dir": tmp_path / "samples"}),
         "manual": CFG.data.manual.model_copy(update={
