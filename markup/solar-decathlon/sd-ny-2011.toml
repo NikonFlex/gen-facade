@@ -1,0 +1,69 @@
+# Solar Roof Pod — Team New York (The City College of New York), 2011. U.S. DOE Solar Decathlon;
+# без штампа PD — по разрешению научрукам в учебных целях (хозяин, 26.10); разметка gf#180, gf#199.
+# Листы A-201.01 SOUTH (стр. 66), A-202.01 EAST (стр. 67), A-203.01 NORTH (стр. 68), A-204.01 WEST
+# (стр. 69), 1/2" = 1'-0" (36 pt на фут). Проверка масштаба: GRADE 0" → DECK LEVEL 1'-9" = 63 pt,
+# оси блоков через 2'-0" = 72 pt, TOP OF ROOF 12'-7" = 453 pt над GRADE.
+# Прямоугольный короб из модульных «блоков» 2' высотой на раме-ростверке, плоская кровля;
+# над кровлей — трельяж с PV до 16'-9". Стены по краю кровельного карниза: 1201 pt = 33'-4"
+# (юг, север) и 816.6 pt = 22'-8" (восток, запад).
+# Пол — низ окна-фрамуги (south «3»), ~3'-2" над землёй; дверь-стекло стоит на 3'-3".
+id = "sd-ny-2011"
+pdf = "2011/ny_cd.pdf"
+roof = "плоская (TOP OF ROOF 12'-7\"); трельяж с PV над кровлей до 16'-9\""
+pt_per_ft = 36.0          # 1/2" = 1'-0"
+material = "metal"        # модульные панели-блоки (08 51 13 / 06 40 13), без обшивки доской
+plinth_ft = 3.1417        # пол короба над GRADE по низу окна south «3»
+floor_heights_ft = [9.4417]   # до TOP OF ROOF 12'-7"
+cut = ["все: трельяж (FINISHED TRELLIS 16'-9\") с PV и его стойки над кровлей",
+       "все: настил (DECK LEVEL 1'-9\"), пандусы, перила, скамьи и кадки у стен; ростверк под коробом",
+       "все: глухие панели-блоки 1–16 — плоскость стены, не проёмы",
+       "south, east, west: панели со штриховкой (08 88 49) — размечены окнами, вид стекла не ясен"]
+
+[[sides]]
+view = "SOUTH ELEVATION"
+page = 66
+wall = [294.0, 1495.0]
+floor = 1111.6
+elements = [
+  { cls = "window", box = [547.8, 858.5, 632.8, 1107.8], variant = { kind = "panoramic" } },
+  { cls = "window", box = [658.3, 858.5, 745.1, 1107.8], variant = { kind = "panoramic" } },
+  { cls = "door", box = [770.5, 858.5, 857.3, 1107.8], variant = { kind = "glazed" } },
+  { cls = "window", box = [899.0, 833.4, 1082.0, 896.4] },
+  { cls = "window", box = [1090.9, 833.4, 1274.0, 896.4] },
+  { cls = "window", box = [1282.8, 833.4, 1465.9, 1040.3], variant = { rows = 2 } },
+  { cls = "window", box = [1091.9, 1050.6, 1273.1, 1111.6] },
+]
+
+[[sides]]
+view = "WEST ELEVATION"
+page = 69
+wall = [521.0, 1337.6]
+floor = 1105.4
+elements = [
+  { cls = "window", box = [550.0, 827.0, 733.0, 962.0], variant = { rows = 2 } },
+  { cls = "window", box = [1125.7, 827.0, 1308.7, 890.0] },
+  { cls = "window", box = [1126.6, 1044.5, 1307.9, 1105.3] },
+]
+
+[[sides]]
+view = "NORTH ELEVATION"
+page = 68
+wall = [265.3, 1466.0]
+floor = 1100.9
+elements = [
+  { cls = "window", box = [485.9, 822.7, 669.1, 957.7] },
+  { cls = "window", box = [902.8, 847.8, 989.5, 1097.0], variant = { kind = "panoramic" } },
+  { cls = "window", box = [1015.1, 847.8, 1101.8, 1097.0], variant = { kind = "panoramic" } },
+  { cls = "door", box = [1127.3, 847.8, 1212.2, 1097.0], variant = { kind = "glazed" } },
+  { cls = "window", box = [1254.5, 823.4, 1438.3, 884.2] },
+]
+
+[[sides]]
+view = "EAST ELEVATION"
+page = 67
+wall = [437.6, 1254.2]
+floor = 1104.2
+elements = [
+  { cls = "window", box = [466.4, 825.6, 649.6, 1032.8], variant = { rows = 2 } },
+  { cls = "window", box = [1042.8, 826.6, 1224.7, 887.4] },
+]
