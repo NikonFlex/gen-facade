@@ -236,8 +236,12 @@ def _facing(w: Wall, parts: list[Component], cfg: BuildingNet) -> numpy.ndarray:
 
 
 def _wall_top(w: Wall, parts: list[Component], cfg: BuildingNet) -> float:
-    """Верх стены стороны: у фронтона он — конёк, поэтому карниз — нижний из четырёх."""
-    return float(_facing(w, parts, cfg)[:, :, 2].max())
+    """Верх стены стороны: у фронтона он — конёк, поэтому карниз — нижний из четырёх. Сторона
+    контура без стены у своей плоскости (сглаживание сдвинуло её дальше facing_m) — не сторона."""
+    face = _facing(w, parts, cfg)
+    if not len(face):
+        raise Rejected(Reason.NOT_ORTHOGONAL, f"у стороны {w.normal} нет стены у её плоскости")
+    return float(face[:, :, 2].max())
 
 
 def _covered(spans: list[tuple[float, float]]) -> float:

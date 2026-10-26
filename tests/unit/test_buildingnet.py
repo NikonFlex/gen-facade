@@ -142,6 +142,16 @@ def test_two_volumes_rejected():
     assert e.value.reason is extract.Reason.NOT_ORTHOGONAL
 
 
+def test_side_without_wall_rejected(monkeypatch):
+    """Сторона контура, у плоскости которой нет стены, — отказ с причиной, а не падение сборки."""
+    facing = extract._facing
+    monkeypatch.setattr(extract, "_facing", lambda w, parts, cfg: facing(w, parts, cfg)[:0]
+                        if w.normal[0] < 0 else facing(w, parts, cfg))
+    with pytest.raises(extract.Rejected) as e:
+        extract.house("m", L_BLOCKS + [L_DOOR], RULES)
+    assert e.value.reason is extract.Reason.NOT_ORTHOGONAL
+
+
 def test_no_door():
     with pytest.raises(extract.Rejected) as e:
         extract.house("m", WALLS + PANES, RULES)
