@@ -1,0 +1,62 @@
+# Delta T-90 — Norwich University, 2013. U.S. DOE Solar Decathlon; без штампа PD — по разрешению
+# научрукам в учебных целях (хозяин, 26.10); разметка gf#180, gf#199.
+# Листы A-211 (стр. 43: SOUTH, WEST CARDINAL) и A-212 (стр. 44: NORTH, EAST CARDINAL), «AS BUILT»,
+# 1/2" = 1'-0" (36 pt на фут); план A-111 (стр. 37).
+# Прямоугольная коробка из двух модулей, почти плоская кровля, обшивка горизонтальной доской.
+# Отметки: T.O. SUBFLOOR 0'-0", T.O. WALL 8'-10", GRADE -1'-6 3/8". Проверка масштаба: GRADE →
+# SUBFLOOR 55 pt = 1'-6 3/8"; коробка двери 33" x 84.7" по путям листа. Стены по обшивке:
+# 990.6 pt = 27'-6" (юг) и 1290.6 pt = 35'-10" (запад); север 987.7 pt, восток 1289.9 pt.
+# Вход — западная дверь с площадкой у плана (A-111); вторая дверь — на юге.
+id = "sd-norwich-2013"
+pdf = "2013/nu_cd.pdf"
+roof = "плоская с малым уклоном; PV и окно-фонарь (ROOF WINDOW) на кровле"
+pt_per_ft = 36.0          # 1/2" = 1'-0"
+material = "siding"       # горизонтальная обшивка
+plinth_ft = 1.5313        # GRADE -1'-6 3/8"
+floor_heights_ft = [8.8333]   # T.O. WALL 8'-10"
+cut = ["все: PV-панели, фонарь (ROOF WINDOW), вентиляционная труба над кровлей; край кровли чуть выше T.O. WALL",
+       "north: инженерные коробки на стене (щиток, инвертор, тепловой насос, розетки)",
+       "east: щиток и вынос теплового насоса у правого угла",
+       "все: настил и фундамент (WOOD DECKING AND FOUNDATION) не показаны на листе",
+       "south, west: наличники дверей — по коробке с наличником"]
+
+[[sides]]
+view = "WEST CARDINAL ELEVATION"
+page = 43
+wall = [360.2, 1650.8]
+floor = 1301.9
+elements = [
+  { cls = "door", box = [659.8, 1026.0, 782.8, 1301.0], variant = { kind = "glazed" } },
+  { cls = "window", box = [873.5, 1032.4, 1082.0, 1174.8] },
+  { cls = "window", box = [1468.0, 1032.4, 1568.4, 1174.8] },
+]
+
+[[sides]]
+view = "NORTH CARDINAL ELEVATION"
+page = 44
+wall = [537.5, 1525.2]
+floor = 564.7
+elements = [
+  { cls = "window", box = [1063.0, 291.0, 1163.2, 440.9] },
+]
+
+[[sides]]
+view = "EAST CARDINAL ELEVATION"
+page = 44
+wall = [357.2, 1647.1]
+floor = 1276.9
+elements = [
+  { cls = "window", box = [612.6, 1048.6, 888.5, 1122.1] },
+  { cls = "window", box = [929.4, 1006.6, 1124.3, 1053.1] },
+  { cls = "window", box = [1474.9, 1006.6, 1575.1, 1149.1] },
+]
+
+[[sides]]
+view = "SOUTH CARDINAL ELEVATION"
+page = 43
+wall = [345.2, 1335.8]
+floor = 584.9
+elements = [
+  { cls = "window", box = [432.8, 317.6, 783.7, 549.7] },
+  { cls = "door", box = [987.6, 323.5, 1110.5, 584.9], variant = { kind = "glazed" } },
+]
