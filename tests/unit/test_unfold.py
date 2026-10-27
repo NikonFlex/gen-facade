@@ -6,6 +6,11 @@ from genfacade.schema import Side
 from genfacade.unfold import plan_corners
 
 
+def assert_corners(corners, expected) -> None:
+    # pytest 9.2 не сравнивает approx со списком пар: сравниваем по углу.
+    assert corners == [pytest.approx(c) for c in expected]
+
+
 def test_unfold_is_walls_only(lay_out):
     """У каждой стороны — прямоугольник: длина из плана, высота до карниза из HouseSpec."""
     sheet = lay_out()
@@ -17,7 +22,7 @@ def test_unfold_is_walls_only(lay_out):
 def test_corners_of_rectangle(lay_out):
     sheet = lay_out()
     corners = plan_corners([f.side for f in sheet.facades])
-    assert corners == pytest.approx([(0.0, 0.0), (-10.0, 0.0), (-10.0, 5.0), (0.0, 5.0)])
+    assert_corners(corners, [(0.0, 0.0), (-10.0, 0.0), (-10.0, 5.0), (0.0, 5.0)])
 
 
 def test_counterclockwise_sides_rejected():
@@ -43,7 +48,7 @@ def sides_of(spec) -> list[Side]:
 def test_corners_of_l_shape():
     """Ортогональный контур с внутренним углом — шесть углов по часовой (`data: Ступени данных`)."""
     corners = plan_corners(sides_of(L_SIDES))
-    assert corners == pytest.approx([(0, 0), (-10, 0), (-10, 8), (-6, 8), (-6, 4), (0, 4)])
+    assert_corners(corners, [(0, 0), (-10, 0), (-10, 8), (-6, 8), (-6, 4), (0, 4)])
 
 
 @pytest.mark.parametrize(("spec", "reason"), [
