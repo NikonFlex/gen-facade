@@ -9,7 +9,7 @@ import numpy
 import pytest
 
 from genfacade import config
-from genfacade.datasets.buildingnet import extract, mesh
+from genfacade.datasets.buildingnet import extract, mesh, outline
 from genfacade.datasets.buildingnet.mesh import Component, Label
 from genfacade.schema import ElementClass, OpeningKind, Source, Split
 from genfacade.validate import errors, validate
@@ -150,6 +150,13 @@ def test_side_without_wall_rejected(monkeypatch):
     with pytest.raises(extract.Rejected) as e:
         extract.house("m", L_BLOCKS + [L_DOOR], RULES)
     assert e.value.reason is extract.Reason.NOT_ORTHOGONAL
+
+
+def test_cells_touching_by_corner_rejected():
+    """Две клетки касаются только углом — обход границы не зацикливается, а отказывает."""
+    inside = numpy.array([[True, False], [False, True]])
+    with pytest.raises(ValueError):
+        outline.polygon(inside, numpy.zeros(2), 1.0)
 
 
 def test_no_door():

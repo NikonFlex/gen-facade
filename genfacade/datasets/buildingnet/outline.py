@@ -127,6 +127,8 @@ def polygon(inside: numpy.ndarray, origin: numpy.ndarray,
         at, walked = nxt, walked + 1
         if at == start:
             break
+        if walked > len(edges):  # клетки касаются углом: обход ушёл в петлю мимо начала
+            raise ValueError("контур касается себя углом")
     if walked != len(edges):
         raise ValueError(f"не один объём: обойдено {walked} рёбер из {len(edges)}")
     return corners, [_normal(d) for d in directions]
