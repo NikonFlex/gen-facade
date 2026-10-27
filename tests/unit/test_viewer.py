@@ -169,3 +169,12 @@ def test_sample_that_cannot_be_tokenized_opens_without_tokens(sample, opened):
 def test_unknown_sample_and_source(client):
     assert client.post("/api/samples/synthetic/nope").status_code == 404
     assert client.post("/api/samples/nope/simple_house").status_code == 422
+
+
+def test_run_house_in_3d(client):
+    """Дом объёмом по листу прогона: стена на сторону, у стены — SVG фасада."""
+    run_id = client.post("/api/runs", json={"plan_run": PLAN_RUN}).json()["id"]
+    house = client.get(f"/api/runs/{run_id}/house3d").json()
+    assert len(house["walls"]) == 4 and all("data-cls" in w["svg"] for w in house["walls"])
+    assert client.get("/api/options").json()["house3d"]["three_url"].startswith("https://")
+    assert client.get("/api/runs/nope/house3d").status_code == 404

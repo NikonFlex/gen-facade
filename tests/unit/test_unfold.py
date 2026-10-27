@@ -36,13 +36,13 @@ def test_counterclockwise_sides_rejected():
 L_SIDES = [((0, -1), 10), ((-1, 0), 8), ((0, 1), 4), ((1, 0), 4), ((0, 1), 6), ((1, 0), 4)]
 
 
-def _sides(spec) -> list[Side]:
+def sides_of(spec) -> list[Side]:
     return [Side(index=k, length_m=n, orientation=o) for k, (o, n) in enumerate(spec)]
 
 
 def test_corners_of_l_shape():
     """Ортогональный контур с внутренним углом — шесть углов по часовой (`data: Ступени данных`)."""
-    corners = plan_corners(_sides(L_SIDES))
+    corners = plan_corners(sides_of(L_SIDES))
     assert corners == pytest.approx([(0, 0), (-10, 0), (-10, 8), (-6, 8), (-6, 4), (0, 4)])
 
 
@@ -52,4 +52,4 @@ def test_corners_of_l_shape():
 ])
 def test_broken_contour_rejected(spec, reason):
     with pytest.raises(ValueError, match=reason):
-        plan_corners(_sides(spec))
+        plan_corners(sides_of(spec))
