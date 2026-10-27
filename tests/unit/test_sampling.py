@@ -65,8 +65,23 @@ def test_layout_prompt_ends_with_answer_mark(checkpoint, cfg, lay_out):
     prompt = model.prompt(bare, Mode.WITH_OPENINGS, cfg).ids
     assert [model.words[i] for i in prompt] == [
         *tokens.condition(bare, Mode.WITH_OPENINGS, cfg), Mark.ANSWER]
-    with pytest.raises(TokenError):  # необученная модель отвечает мусором
-        model.answer(model.prompt(bare, Mode.WITH_OPENINGS, cfg), bare, 0, cfg)
+
+
+@pytest.mark.parametrize("constrain", [False, True])
+def test_guard_makes_untrained_answer_readable(checkpoint, cfg, lay_out, constrain):
+    """Необученная модель без стража отвечает мусором; страж (gf#177, gf#197) держит грамматику
+    ответа — тот же ответ разбирается в лист (gf#208)."""
+    settings = _settings(cfg, checkpoint).model_copy(update={"constrain": constrain})
+    run = cfg.model_copy(update={"models": cfg.models.model_copy(update={"layout": settings})})
+    model = layout.load(settings)
+    bare = tokens.bare(lay_out())
+    prompt = model.prompt(bare, Mode.WITH_OPENINGS, run)
+    if not constrain:
+        with pytest.raises(TokenError):
+            model.answer(prompt, bare, 0, run)
+    else:
+        sheet = model.answer(prompt, bare, 0, run)
+        assert len(sheet.facades) == len(bare.facades)
 
 
 def test_layout_refuses_model_with_other_vocabulary(checkpoint, cfg, lay_out):
