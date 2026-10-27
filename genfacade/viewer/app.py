@@ -16,8 +16,10 @@ from pydantic import BaseModel
 from genfacade import pipeline
 from genfacade.config import Config
 from genfacade.datasets import preview, store
+from genfacade.plan.genplan_svg import PlanError
+from genfacade.render.house3d import house_3d
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import Mode, Sample, Source
+from genfacade.schema import FacadeSheet, Mode, Sample, Source
 
 STATIC = files(__package__).joinpath("static")
 
@@ -64,6 +66,10 @@ def _api(app: FastAPI, cfg: Config, runs_dir: Path) -> None:
     @app.get("/api/runs/{run_id}")
     def run_meta(run_id: str) -> dict:
         return json.loads((_run_dir(runs_dir, run_id) / pipeline.META).read_text())
+
+    @app.get("/api/runs/{run_id}/house3d")
+    def run_house(run_id: str) -> dict:
+        return _house(_run_dir(runs_dir, run_id), cfg)
 
     @app.get("/api/options")
     def options() -> dict:
@@ -120,7 +126,20 @@ def _options(cfg: Config) -> dict:
     labels = cfg.viewer.labels
     modes = [{"value": m, **labels.mode[m].model_dump()} for m in Mode]
     return {"modes": modes, "default_mode": pipeline.PlanRun.model_fields["mode"].default,
+            "house3d": cfg.viewer.house3d.model_dump(),
             **labels.model_dump(mode="json", exclude={"mode"})}
+
+
+def _house(folder: Path, cfg: Config) -> dict:
+    """Дом объёмом по листу прогона; нет листа или контур не ортогональный — 404 с причиной."""
+    meta = json.loads((folder / pipeline.META).read_text())
+    if not meta.get("sheet_json"):
+        raise HTTPException(404, "у прогона нет листа фасадов")
+    sheet = FacadeSheet.model_validate_json((folder / meta["sheet_json"]).read_text())
+    try:
+        return house_3d(sheet, cfg)
+    except PlanError as e:
+        raise HTTPException(404, f"дом не собрать по контуру: {e}") from e
 
 
 def _plans(cfg: Config) -> dict[str, Path]:

@@ -2,6 +2,7 @@
 // на весь экран (шаги конвейера, чертёж). Открытый прогон — в адресе (#run=…&step=…):
 // перезагрузка и ссылка его сохраняют, «назад» в браузере возвращает на главную.
 
+import { HouseStage } from "/static/house3d.js";
 import { SvgStage, metres } from "/static/stage.js";
 
 const ROOF = { flat: "плоская" };  // пока только плоская (хозяин 01.10)
@@ -15,6 +16,8 @@ const WALL_LAYERS = ["zones", "elements", "mullions"];
 const STEP_LAYERS = {
   4: [...WALL_LAYERS, "forbidden"], 5: [...WALL_LAYERS, "forbidden", "violations"], 6: SHEET_LAYERS,
 };
+// После листа — дом объёмом по нему же: не шаг конвейера, а другой взгляд на шаг 6.
+const HOUSE_STEP = { key: "3d", n: "3D", title: "Дом в 3D" };
 const ICON = {
   back: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',
   play: '<svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>',
@@ -325,7 +328,8 @@ async function runBody(input) {
 
 function renderStepper() {
   const input = state.meta.input ? [{ key: "input", n: "", title: "Вход", file: state.meta.input }] : [];
-  const steps = input.concat(state.meta.steps.map((s) => ({ ...s, key: String(s.n) })));
+  const house = state.meta.sheet_json ? [{ ...HOUSE_STEP, file: state.meta.sheet_json }] : [];
+  const steps = input.concat(state.meta.steps.map((s) => ({ ...s, key: String(s.n) })), house);
   const nodes = steps.flatMap((s, i) => {
     const btn = el("button", {
       className: `step${s.key === state.step ? " active" : ""}`, disabled: !s.file,
@@ -340,6 +344,7 @@ function renderStepper() {
 }
 
 function showStep(wanted) {
+  if (wanted === HOUSE_STEP.key && state.meta.sheet_json) return showHouse();
   const done = state.meta.steps.filter((s) => s.file);
   // Нет такого шага — «Вход»; у примера датасета входа нет — его последний шаг.
   const step = done.find((s) => String(s.n) === wanted) ?? (state.meta.input ? null : done.at(-1));
@@ -350,6 +355,31 @@ function showStep(wanted) {
   if (!step) return renderInput();
   if (step.file === state.meta.tokens) return renderTokensStep(step);
   return step.file.endsWith(".json") ? renderJsonStep(step) : renderSvgStep(step);
+}
+
+function showHouse() {
+  state.step = HOUSE_STEP.key;
+  history.replaceState(history.state, "", `#run=${encodeURIComponent(state.runId)}&step=${HOUSE_STEP.key}`);
+  renderStepper();
+  return renderHouse();
+}
+
+async function renderHouse() {
+  const wrap = el("div", { className: "canvas-wrap house-wrap" });
+  const fit = el("button", { className: "icon-btn", title: "Вписать (F)", ariaLabel: "Вписать" }, ICON.fit);
+  const bar = el("div", { className: "toolbar" });
+  bar.append(el("div", { className: "tool-group" }), el("span", { className: "hint" },
+    "тянуть — повернуть · колесо — ближе/дальше · двойной щелчок или <kbd>F</kbd> — вписать · крыша плоская"));
+  bar.firstChild.append(fit);
+  $("stage").replaceChildren(bar, wrap);
+  state.stage = new HouseStage(wrap, state.options.house3d);
+  fit.addEventListener("click", () => state.stage.fit());
+  try {
+    await state.stage.load(`/api/runs/${encodeURIComponent(state.runId)}/house3d`);
+  } catch (err) {
+    wrap.replaceChildren(el("p", { className: "empty-note", textContent: err.message }));
+    state.stage = null;
+  }
 }
 
 // JSON шага без чертежа: холста у такого шага нет.
@@ -523,8 +553,8 @@ function onKey(e) {
   if (e.key === "ArrowRight" && i < keys.length - 1) showStep(keys[i + 1]);
   else if (e.key === "ArrowLeft" && i > 0) showStep(keys[i - 1]);
   else if (state.stage && (e.key === "f" || e.key === "а" || e.key === "0")) state.stage.fit();
-  else if (state.stage && (e.key === "+" || e.key === "=")) state.stage.zoomBy(0.8);
-  else if (state.stage && e.key === "-") state.stage.zoomBy(1.25);
+  else if (state.stage?.zoomBy && (e.key === "+" || e.key === "=")) state.stage.zoomBy(0.8);
+  else if (state.stage?.zoomBy && e.key === "-") state.stage.zoomBy(1.25);
 }
 
 async function init() {
