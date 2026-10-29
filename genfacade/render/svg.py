@@ -102,6 +102,15 @@ def sheet_svg(sheet: FacadeSheet, cfg: Config, violations: list[Violation] | Non
     return ElementTree.tostring(root, encoding="unicode")
 
 
+def facade_svg(facade: SideFacade, pen: Pen) -> str:
+    """Одна стена без подписей: SVG ровно по стене (длина × верх силуэта), левый край — x = 0.
+    Для текстуры дома объёмом (render/house3d.py)."""
+    top = _top(facade)
+    root = canvas(facade.side.length_m, top, pen.cfg.css)
+    _facade_geometry(root, facade, (0.0, top), pen)
+    return ElementTree.tostring(root, encoding="unicode")
+
+
 def palette_colors(spec: HouseSpec, cfg: Config) -> dict[str, str]:
     """id материала палитры → цвет: свой или цвет вида из библиотеки."""
     kinds = cfg.library.kinds

@@ -176,10 +176,22 @@ class SamplesView(Section):
     shown: int
 
 
+class House3d(Section):
+    """Дом объёмом в смотрелке: откуда three.js, разрешение текстур фасадов, цвета сцены."""
+
+    three_url: str
+    px_per_m: int
+    roof: str
+    ground: str
+    background: str
+    edges: str
+
+
 class Viewer(Section):
     server: Server
     paths: ViewerPaths
     samples: SamplesView
+    house3d: House3d
     labels: Labels
 
 

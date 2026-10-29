@@ -6,6 +6,11 @@ from genfacade.schema import Side
 from genfacade.unfold import plan_corners
 
 
+def assert_corners(corners, expected) -> None:
+    # pytest 9.2 не сравнивает approx со списком пар: сравниваем по углу.
+    assert corners == [pytest.approx(c) for c in expected]
+
+
 def test_unfold_is_walls_only(lay_out):
     """У каждой стороны — прямоугольник: длина из плана, высота до карниза из HouseSpec."""
     sheet = lay_out()
@@ -17,7 +22,7 @@ def test_unfold_is_walls_only(lay_out):
 def test_corners_of_rectangle(lay_out):
     sheet = lay_out()
     corners = plan_corners([f.side for f in sheet.facades])
-    assert corners == pytest.approx([(0.0, 0.0), (-10.0, 0.0), (-10.0, 5.0), (0.0, 5.0)])
+    assert_corners(corners, [(0.0, 0.0), (-10.0, 0.0), (-10.0, 5.0), (0.0, 5.0)])
 
 
 def test_counterclockwise_sides_rejected():
@@ -36,14 +41,14 @@ def test_counterclockwise_sides_rejected():
 L_SIDES = [((0, -1), 10), ((-1, 0), 8), ((0, 1), 4), ((1, 0), 4), ((0, 1), 6), ((1, 0), 4)]
 
 
-def _sides(spec) -> list[Side]:
+def sides_of(spec) -> list[Side]:
     return [Side(index=k, length_m=n, orientation=o) for k, (o, n) in enumerate(spec)]
 
 
 def test_corners_of_l_shape():
     """Ортогональный контур с внутренним углом — шесть углов по часовой (`data: Ступени данных`)."""
-    corners = plan_corners(_sides(L_SIDES))
-    assert corners == pytest.approx([(0, 0), (-10, 0), (-10, 8), (-6, 8), (-6, 4), (0, 4)])
+    corners = plan_corners(sides_of(L_SIDES))
+    assert_corners(corners, [(0, 0), (-10, 0), (-10, 8), (-6, 8), (-6, 4), (0, 4)])
 
 
 @pytest.mark.parametrize(("spec", "reason"), [
@@ -52,4 +57,4 @@ def test_corners_of_l_shape():
 ])
 def test_broken_contour_rejected(spec, reason):
     with pytest.raises(ValueError, match=reason):
-        plan_corners(_sides(spec))
+        plan_corners(sides_of(spec))
