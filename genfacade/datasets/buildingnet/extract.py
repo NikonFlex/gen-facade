@@ -19,6 +19,7 @@ import numpy
 
 from genfacade.config import BuildingNet
 from genfacade.datasets import rect_house
+from genfacade.datasets.buildingnet import outline
 from genfacade.datasets.buildingnet.mesh import Component, Label
 from genfacade.datasets.rect_house import NORMALS, Wall
 from genfacade.schema import (
@@ -46,7 +47,8 @@ class Reason(StrEnum):
 
     NO_DOOR = "no_door"            # нет дверей — не по чему взять масштаб
     NO_WALLS = "no_walls"          # нет стен выше min_wall_m
-    NOT_RECTANGLE = "not_rectangle"
+    NOT_RECTANGLE = "not_rectangle"   # промежуточная: прямоугольника нет — пробуется контур
+    NOT_ORTHOGONAL = "not_orthogonal"  # и ортогонального контура нет
     LOW = "low"                    # карниз ниже цоколя и одного этажа
 
 
@@ -59,16 +61,16 @@ class Rejected(Exception):
 def house(model: str, parts: list[Component], cfg: BuildingNet,
           split: Split = Split.TEST) -> Sample:
     parts = _upright(_turned(parts), cfg)
-    lo, hi = _footprint(parts, cfg)
-    fp = rect_house.rectangle(lo, hi, cfg.wall_m)
+    fp = _contour(parts, cfg)
     # Второй снизу верх стен: у двускатной крыши два верха — карниз, два — конёк, а одна
     # низкая стена (пристройка, веранда) не опускает карниз всего дома.
     eaves = sorted(_wall_top(w, parts, cfg) for w in fp.walls)[1]
     plinth = _plinth(parts, cfg)
     spec = _spec(plinth, eaves, cfg)
     facades = [_facade(w, parts, spec, cfg) for w in fp.walls]
-    first = max(range(4), key=lambda i: (_doors(facades[i]), fp.walls[i].length))
-    laid = [((first + k) % 4, facades[(first + k) % 4]) for k in range(4)]
+    n = len(fp.walls)
+    first = max(range(n), key=lambda i: (_doors(facades[i]), fp.walls[i].length))
+    laid = [((first + k) % n, facades[(first + k) % n]) for k in range(n)]
     plan, sheet = rect_house.assemble(spec, fp, laid, Source.BUILDINGNET)
     return Sample(id=model, source=Source.BUILDINGNET, split=split, plan=plan, sheet=sheet)
 
@@ -136,6 +138,42 @@ def _wall_tris(parts: list[Component], cfg: BuildingNet) -> numpy.ndarray:
     return numpy.concatenate([c.vertices[c.faces] for c in _main_walls(parts, cfg)])
 
 
+def _contour(parts: list[Component], cfg: BuildingNet) -> rect_house.Footprint:
+    """Прямоугольник, если он есть (у каждой стороны — одна линия стен); иначе ортогональный
+    контур по внешним профилям стен (Г-, Т-, Z-дом, gf#198)."""
+    try:
+        return rect_house.rectangle(*_footprint(parts, cfg), cfg.wall_m)
+    except Rejected as e:
+        if e.reason is not Reason.NOT_RECTANGLE:
+            raise
+    return _orthogonal(parts, cfg)
+
+
+def _orthogonal(parts: list[Component], cfg: BuildingNet) -> rect_house.Footprint:
+    tris, step = _wall_tris(parts, cfg), cfg.profile_step_m
+    profiles = []
+    for n in NORMALS:
+        face = _toward(tris, numpy.array(n))
+        if not len(face):
+            raise Rejected(Reason.NOT_ORTHOGONAL, f"нет стен со стороны {n}")
+        first, depth = _profile_from(face, numpy.array(n), step)
+        profiles.append((first, outline.steps(depth, step, cfg.min_jog_m)))
+    inside, origin = outline.region(profiles, step)
+    inside = outline.smoothed(inside, max(1, round(cfg.min_jog_m / step)))
+    if not inside.any():
+        raise Rejected(Reason.NOT_ORTHOGONAL, "профили стен не задают области")
+    try:
+        corners, _ = outline.polygon(inside, origin, step)
+    except ValueError as e:
+        raise Rejected(Reason.NOT_ORTHOGONAL, str(e)) from None
+    corners, normals = outline.simplified(corners, cfg.min_jog_m)
+    fp = rect_house.Footprint(corners, normals, cfg.wall_m)
+    short = min(w.length for w in fp.walls)
+    if len(fp.walls) > cfg.max_sides or short < cfg.min_jog_m:
+        raise Rejected(Reason.NOT_ORTHOGONAL, f"сторон {len(fp.walls)}, короткая {short:.2f} м")
+    return fp
+
+
 def _footprint(parts: list[Component], cfg: BuildingNet) -> tuple[numpy.ndarray, numpy.ndarray]:
     """Прямоугольник главного дома: у каждой стороны — самая наружная линия стен, которая
     закрывает min_coverage охвата стен вдоль стороны; выступ (крыльцо, эркер) её не сдвигает."""
@@ -172,6 +210,12 @@ def _plane(tris: numpy.ndarray, normal: numpy.ndarray, cfg: BuildingNet) -> floa
 
 def _profile(face: numpy.ndarray, normal: numpy.ndarray, step: float) -> numpy.ndarray:
     """Глубина самой наружной стены в каждом отрезке step вдоль стороны; −inf — стены нет."""
+    return _profile_from(face, normal, step)[1]
+
+
+def _profile_from(face: numpy.ndarray, normal: numpy.ndarray,
+                  step: float) -> tuple[float, numpy.ndarray]:
+    """Профиль и его начало вдоль «правой» оси стороны (нормаль, повёрнутая на +90°)."""
     right = numpy.array((-normal[1], normal[0]))
     depth = (face[:, :, :2] @ normal).max(axis=1)
     across = face[:, :, :2] @ right
@@ -181,7 +225,7 @@ def _profile(face: numpy.ndarray, normal: numpy.ndarray, step: float) -> numpy.n
     out = numpy.full(hi.max(), -numpy.inf)
     for a, b, d in zip(lo, hi, depth, strict=True):
         out[a:b] = numpy.maximum(out[a:b], d)
-    return out
+    return float(first), out
 
 
 def _facing(w: Wall, parts: list[Component], cfg: BuildingNet) -> numpy.ndarray:
@@ -192,8 +236,12 @@ def _facing(w: Wall, parts: list[Component], cfg: BuildingNet) -> numpy.ndarray:
 
 
 def _wall_top(w: Wall, parts: list[Component], cfg: BuildingNet) -> float:
-    """Верх стены стороны: у фронтона он — конёк, поэтому карниз — нижний из четырёх."""
-    return float(_facing(w, parts, cfg)[:, :, 2].max())
+    """Верх стены стороны: у фронтона он — конёк, поэтому карниз — нижний из четырёх. Сторона
+    контура без стены у своей плоскости (сглаживание сдвинуло её дальше facing_m) — не сторона."""
+    face = _facing(w, parts, cfg)
+    if not len(face):
+        raise Rejected(Reason.NOT_ORTHOGONAL, f"у стороны {w.normal} нет стены у её плоскости")
+    return float(face[:, :, 2].max())
 
 
 def _covered(spans: list[tuple[float, float]]) -> float:

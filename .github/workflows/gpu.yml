@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       job:
-        description: "probe — проверить GPU; train — обучить модель шага 4; eval — оценить её на val; visual — таблица метрик с FID и KID"
+        description: "probe — проверить GPU; train — обучить модель шага 4; finetune — дообучить её на коттеджах BuildingNet; eval — оценить на val; visual — таблица метрик с FID и KID"
         type: choice
-        options: [probe, train, eval, visual]
+        options: [probe, train, finetune, eval, visual]
         default: probe
       houses:
         description: "train: сколько синтетических домов в корпусе (собранные раньше не пересобираются)"
@@ -25,6 +25,18 @@ on:
         description: "train: пересобрать дома заново — нужно, если код генератора поменялся с прошлой сборки"
         type: boolean
         default: false
+      init_run:
+        description: "finetune: номер запуска train, чью модель дообучать (артефакт train-<номер>); 39586817099 — gf#155"
+        type: string
+        default: "39586817099"
+      mix:
+        description: "finetune: сколько последовательностей train синтетики подмешать к BuildingNet"
+        type: number
+        default: 1500
+      lr:
+        description: "finetune: шаг обучения после разгона"
+        type: string
+        default: "1e-4"
       model_run:
         description: "eval: номер запуска train, чью модель оценивать (артефакт train-<номер>)"
         type: string
@@ -53,13 +65,16 @@ env:
   # Дома и корпус переживают запуски: checkout чистит рабочую папку, а сборка 10 000 домов — минуты.
   DATA_CONFIG: /home/runner/genfacade-config
   SAMPLES: /home/runner/data/samples
+  # BuildingNet — только на этой машине: качается с Drive по секрету, в артефакты не попадает (gf#198)
+  BUILDINGNET: /home/runner/data/buildingnet
   OUT: outputs/train/gpu-${{ github.run_id }}
 
 jobs:
   gpu:
     runs-on: [self-hosted, gpu]
-    # 24 эпохи на 10 000 домах в 1–3 этажа — около часа (gf#186); оценка и метрики — до часа
-    timeout-minutes: 120
+    # 24 эпохи на 10 000 домах в 1–3 этажа — около часа (gf#186); оценка и метрики — до часа;
+    # finetune в первый раз качает и извлекает BuildingNet — часа два до обучения
+    timeout-minutes: 480
     steps:
       - uses: actions/checkout@v7
 
@@ -109,6 +124,52 @@ jobs:
           genfacade -c "$DATA_CONFIG" tokens
           head -30 "$SAMPLES/synthetic/_tokens.json"
 
+      - name: Коттеджи BuildingNet на этой машине
+        if: inputs.job == 'finetune'
+        env:
+          BUILDINGNET_DRIVE: ${{ secrets.BUILDINGNET_DRIVE }}
+        run: |
+          python tools/fetch_buildingnet.py "$BUILDINGNET"
+          mkdir -p "$DATA_CONFIG"
+          printf '[paths]\nsamples_dir = "%s"\n' "$SAMPLES" > "$DATA_CONFIG/data.toml"
+          cfg="$RUNNER_TEMP/bn-config"
+          mkdir -p "$cfg"
+          cp "$DATA_CONFIG/data.toml" "$cfg/"
+          printf '\n[buildingnet.paths]\nmodels_dir = "%s"\ncomponent_labels = "%s"\n' \
+            "$BUILDINGNET/v1/OBJ_MODELS" "$BUILDINGNET/probe/v1/component_labels.zip" >> "$cfg/data.toml"
+          printf '\n[buildingnet.paths.splits]\ntrain = "%s"\nval = "%s"\ntest = "%s"\n' \
+            "$BUILDINGNET/probe/v1/train_split.txt" "$BUILDINGNET/probe/v1/val_split.txt" \
+            "$BUILDINGNET/probe/v1/test_split.txt" >> "$cfg/data.toml"
+          genfacade -c "$cfg" buildingnet --splits train val test
+          genfacade -c "$cfg" tokens -s buildingnet
+          genfacade -c "$cfg" tokens
+          head -40 "$SAMPLES/buildingnet/_manifest.json"
+          head -20 "$SAMPLES/buildingnet/_tokens.json"
+
+      - name: Модель-основа
+        if: inputs.job == 'finetune'
+        uses: actions/download-artifact@v8
+        with:
+          name: train-${{ inputs.init_run }}
+          path: init
+          run-id: ${{ inputs.init_run }}
+          github-token: ${{ github.token }}
+
+      - name: Дообучение
+        if: inputs.job == 'finetune'
+        run: |
+          mkdir -p "$OUT"
+          /usr/lib/wsl/lib/nvidia-smi --query-gpu=timestamp,utilization.gpu,memory.used,memory.total \
+            --format=csv -l 10 > "$OUT/gpu.csv" &
+          monitor=$!
+          cfg="$RUNNER_TEMP/finetune-config"
+          mkdir -p "$cfg"
+          cp "$DATA_CONFIG/data.toml" "$cfg/"
+          printf '[fit]\nepochs = %s\nlr = %s\nwarmup_steps = 50\nsave_every = 1\ninit = "%s"\nskip_longer = true\n\n[fit.mix]\nsynthetic = %s\n\n[probe]\nevery = 1\n' \
+            "${{ inputs.epochs }}" "${{ inputs.lr }}" "$PWD/init/model.pt" "${{ inputs.mix }}" > "$cfg/train.toml"
+          genfacade -c "$cfg" train -s buildingnet -o "$OUT"
+          kill "$monitor"
+
       - name: Обучение
         if: inputs.job == 'train'
         # Загрузка GPU и видеопамять — раз в 10 с рядом с моделью: PyTorch сам их не меряет.
@@ -125,7 +186,7 @@ jobs:
           kill "$monitor"
 
       - name: Результат обучения
-        if: always() && inputs.job == 'train'
+        if: always() && (inputs.job == 'train' || inputs.job == 'finetune')
         uses: actions/upload-artifact@v7
         with:
           name: train-${{ github.run_id }}

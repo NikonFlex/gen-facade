@@ -9,7 +9,7 @@ import numpy
 import pytest
 
 from genfacade import config
-from genfacade.datasets.buildingnet import extract, mesh
+from genfacade.datasets.buildingnet import extract, mesh, outline
 from genfacade.datasets.buildingnet.mesh import Component, Label
 from genfacade.schema import ElementClass, OpeningKind, Source, Split
 from genfacade.validate import errors, validate
@@ -118,13 +118,45 @@ def test_window_in_door_is_door_glass():
     assert classes == [ElementClass.DOOR]
 
 
-def test_not_rectangle():
-    """Г-образный дом: на одной стороне наружная стена в двух плоскостях — отказ с причиной."""
-    blocks = [box(Label.WALL, (0, 0, 0), (0.5, 0.3, 0.15)),
-              box(Label.WALL, (0, 0, 0.15), (0.2, 0.3, 0.3))]
+L_BLOCKS = [box(Label.WALL, (0, 0, 0), (0.5, 0.3, 0.15)),   # Г-дом: крыло 0,5 × 0,15
+            box(Label.WALL, (0, 0, 0.15), (0.2, 0.3, 0.3))]  # и крыло 0,2 × 0,15 к нему
+L_DOOR = box(Label.DOOR, (0.05, 0, 0.295), (0.1, 0.1, 0.305))
+
+
+def test_l_shaped_house():
+    """Г-образный дом (gf#198): у стороны две плоскости стен — контур в шесть сторон, план и лист
+    собираются, валидатор доволен."""
+    sample = extract.house("m", L_BLOCKS + [L_DOOR], RULES)
+    assert len(sample.sheet.facades) == len(sample.plan.outline) == 6
+    lengths = sorted(round(f.side.length_m / M_PER_UNIT, 2) for f in sample.sheet.facades)
+    assert lengths == pytest.approx([0.15, 0.15, 0.2, 0.3, 0.3, 0.5], abs=0.01)
+    assert errors(validate(sample.sheet, CFG.checks)) == []
+
+
+def test_two_volumes_rejected():
+    """Два отдельных объёма — не один дом: отказ с причиной."""
+    apart = [box(Label.WALL, (0, 0, 0), (0.2, 0.3, 0.3)),
+             box(Label.WALL, (0.4, 0, 0), (0.6, 0.3, 0.3))]
     with pytest.raises(extract.Rejected) as e:
-        extract.house("m", blocks + [DOOR], RULES)
-    assert e.value.reason is extract.Reason.NOT_RECTANGLE
+        extract.house("m", apart + [L_DOOR], RULES)
+    assert e.value.reason is extract.Reason.NOT_ORTHOGONAL
+
+
+def test_side_without_wall_rejected(monkeypatch):
+    """Сторона контура, у плоскости которой нет стены, — отказ с причиной, а не падение сборки."""
+    facing = extract._facing
+    monkeypatch.setattr(extract, "_facing", lambda w, parts, cfg: facing(w, parts, cfg)[:0]
+                        if w.normal[0] < 0 else facing(w, parts, cfg))
+    with pytest.raises(extract.Rejected) as e:
+        extract.house("m", L_BLOCKS + [L_DOOR], RULES)
+    assert e.value.reason is extract.Reason.NOT_ORTHOGONAL
+
+
+def test_cells_touching_by_corner_rejected():
+    """Две клетки касаются только углом — обход границы не зацикливается, а отказывает."""
+    inside = numpy.array([[True, False], [False, True]])
+    with pytest.raises(ValueError):
+        outline.polygon(inside, numpy.zeros(2), 1.0)
 
 
 def test_no_door():

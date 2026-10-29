@@ -217,6 +217,8 @@ class BuildingNet(Section):
     min_wall_m: float
     min_coverage: float
     min_side_m: float
+    min_jog_m: float
+    max_sides: int
     floor_height_m: float
     max_plinth_m: float
     min_element_m: float
