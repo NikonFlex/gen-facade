@@ -1,0 +1,2532 @@
+# Свод правил фасада (gf#209): нормы РФ и США, pattern books, руководства по облику частных домов,
+# книги и методички — одно правило со всеми источниками. Проверка — genfacade/guidelines.py
+# (`genfacade guidelines` — доля домов, выполняющих правило); таблица для чтения —
+# docs/facade-rules.md, собирается из этого файла. Числа — в метрах.
+# use — куда правило включено (metric, synthetic, derive, guard, train); по умолчанию никуда:
+# включает хозяин после замера. Тексты источников — tmp/facade-rules/ (вне git).
+
+[[guideline]]
+id = "window_gost_size_row"
+text = "Окна ru: размеры оконного блока близки к типоразмерам ГОСТ 23166 (модуль 100 мм, табл. 2; ряд «рекомендуемый», проект вправе назначить другой — проверка мягкая, как доля типовых окон)"
+check = "size_row"
+params = { cls = "window", widths = [0.57, 0.72, 0.87, 1.17, 1.32, 1.47, 1.77, 2.07, 2.37, 2.67], heights = [0.58, 0.86, 1.16, 1.32, 1.46, 1.76, 2.06, 2.175, 2.375, 2.755], tol_m = 0.05 }
+applies = ["ru-izhs", "ru-mkd"]
+note = "Ряд ширин в тексте п. 4.9 включает 11М, в табл. 2 его нет; пары (W,H) допустимы не все (табл. А в extract-norms.md); габарит ≠ модуль (6М → 570/580)."
+[[guideline.source]]
+doc = "ГОСТ 23166-99"
+file = "norms/g23166.txt"
+where = "п. 4.9"
+quote = "по ширине - 6М; 7М; 9М; 11М; 12М; 13М; 15М; 18М; 21М; 24М; 27М"
+checked = true
+[[guideline.source]]
+doc = "ГОСТ 23166-99"
+file = "norms/g23166.txt"
+where = "п. 4.9, табл. 2"
+quote = "Рекомендуемые габаритные размеры, мм, оконных блоков, а также их обозначения приведены в таблице 2."
+checked = true
+[[guideline.source]]
+doc = "ГОСТ 23166-99"
+file = "norms/g23166.txt"
+where = "п. 4.9"
+quote = "Габаритные размеры оконных и балконных дверных блоков и стеновых проемов для их монтажа устанавливают в проектной"
+checked = true
+
+[[guideline]]
+id = "window_block_max_area"
+text = "Окна ru: площадь оконного блока не более 6,0 м2 (открывающихся элементов не более 2,5 м2); больший проём разбивается импостами на несколько блоков"
+check = "none"
+applies = ["ru-izhs", "ru-mkd"]
+note = "нужна проверка: w·h окна ≤ 6,0 м2 (площадь створок на фасаде известна только если они нарисованы); числа правила: cls = 'window', max_area_m2 = 6.0"
+[[guideline.source]]
+doc = "ГОСТ 23166-99"
+file = "norms/g23166.txt"
+where = "п. 5.1.4"
+quote = "изготовление оконных блоков с площадью, не превышающей 6,0 м2, при этом площадь открывающихся элементов не должна превышать 2,5 м2."
+checked = true
+[[guideline.source]]
+doc = "ГОСТ 30674-99 (ПВХ-окна)"
+file = "ru/g30674.txt"
+where = "п. 5.1.4"
+quote = "при максимальной площади каждого открывающегося элемента 2,5 м 2 для изделий белого цвета и 2,2 м 2 – для изделий других цветов"
+checked = true
+
+[[guideline]]
+id = "window_sash_max"
+text = "Окна ru: створка деревянного окна не более 1200×1800 мм, дверное полотно не более 900×2300 мм (больше — импост, фрамуга или двупольная дверь)"
+check = "none"
+applies = ["ru-izhs", "ru-mkd"]
+note = "Створки в модели элементов не заданы; нужна проверка: число створок окна n ≥ ceil(w/1,2), при h > 1,8 м — горизонтальная перемычка; дверь шире 1,3 м — двупольная (ГОСТ 475 п. 4.5).; числа правила: sash_w = 1.2, sash_h = 1.8, leaf_w = 0.9, leaf_h = 2.3"
+[[guideline.source]]
+doc = "ГОСТ 24700-99"
+file = "ru/g24700.txt"
+where = "п. 5.1.4"
+quote = "створки - по ширине 1200 мм, по высоте 1800 мм; дверные полотна - по ширине 900 мм, по высоте 2300 мм"
+checked = true
+[[guideline.source]]
+doc = "ГОСТ 475-2016"
+file = "norms/4293749722.txt"
+where = "п. 4.5"
+quote = "дверные блоки для проемов шириной 1300 мм и более должны быть двупольными, качающиеся — остекленными"
+checked = true
+
+[[guideline]]
+id = "window_module_100mm"
+text = "Окна ru: ширина и высота окон кратны модулю М = 100 мм (ГОСТ 28984; шаг 0,05 м, например 1,375, — нарушение)"
+check = "module"
+params = { cls = "window", module_m = 0.1, tol_m = 0.01 }
+applies = ["ru-izhs", "ru-mkd"]
+note = "Мягкая проверка («следует»). Высоты GenPlan при 2,75 м (1,375 / 1,925 / 2,475) не кратны 0,1."
+[[guideline.source]]
+doc = "ГОСТ 28984-2011"
+file = "norms/4293789429.txt"
+where = "п. 6.6 (окончание)"
+quote = "за исключением малых проемов, окон, дверей, кратных М"
+checked = true
+[[guideline.source]]
+doc = "ГОСТ 28984-2011"
+file = "norms/4293789429.txt"
+where = "п. 5.1"
+quote = "Значение основного модуля для координации размеров принимают равным 100 мм и обозначают буквой «М»."
+checked = true
+
+[[guideline]]
+id = "door_module_100mm"
+text = "Двери ru: ширина и высота дверных проёмов кратны модулю М = 100 мм (ГОСТ 28984)"
+check = "module"
+params = { cls = "door", module_m = 0.1, tol_m = 0.01 }
+applies = ["ru-izhs", "ru-mkd"]
+note = "Ряд проёмов наружных дверей по ГОСТ 475 (710…1910 × 1870/2070/2370) не всегда кратен 0,1 (например, 1910)."
+[[guideline.source]]
+doc = "ГОСТ 28984-2011"
+file = "norms/4293789429.txt"
+where = "п. 6.6 (окончание)"
+quote = "за исключением малых проемов, окон, дверей, кратных М"
+checked = true
+
+[[guideline]]
+id = "pier_module_300mm"
+text = "Простенки и размеры проёмов наружных стен предпочтительно кратны 3М/6М (300/600 мм); члены фасадов — М или 1/2М"
+check = "none"
+applies = ["ru-izhs", "ru-mkd"]
+note = "нужна проверка: ширина простенка между соседними окнами и отступ от угла ≈ n·0,3 м (мягко); высоты поясов и карниза кратны 0,05 м.; числа правила: module_m = 0.3"
+[[guideline.source]]
+doc = "ГОСТ 28984-2011"
+file = "norms/4293789429.txt"
+where = "п. 5.12"
+quote = "Мультимодули ЗМ, 6М предназначены предпочтительно для членения конструктивных элементов для размеров проемов и простенков наружных стен"
+checked = true
+[[guideline.source]]
+doc = "ГОСТ 28984-2011"
+file = "norms/4293789429.txt"
+where = "п. 5.13"
+quote = "Основной модуль М и субмодуль 1/2М следует применять в качестве предпочтительных"
+checked = true
+[[guideline.source]]
+doc = "Кузнецова и др., Индивидуальный жилой дом из мелкоразмерных элементов, 2011"
+file = "books2/ru/tstu_kuznecova_2011.txt"
+where = "стр. 19 (PDF)"
+quote = "следует использовать укрупнённый модуль 3М (300 мм)"
+checked = true
+[[guideline.source]]
+doc = "Кузнецова и др., Индивидуальный жилой дом из мелкоразмерных элементов, 2011"
+file = "books2/ru/tstu_kuznecova_2011.txt"
+where = "стр. 19 (PDF)"
+quote = "ширина узких (до 1030 мм) простенков (в том числе угловых) должна приниматься по формуле: n130 – 10"
+checked = true
+
+[[guideline]]
+id = "vertical_module_3m"
+text = "Вертикальная сетка ru: высота этажа, верх цоколя и низ карниза/фриза, перепады высот кратны 3М (300 мм), при перепаде выше 2400 мм — 6М (600 мм)"
+check = "none"
+applies = ["ru-izhs", "ru-mkd"]
+note = "нужна проверка: кратность floor_heights_m, plinth_m, eaves_m шагу 0,3 м (допуск ±0,05). Конфликт: шаг этажей GenPlan 2,75 м не кратен 0,3 (кратны 2,7 и 3,0). Критерий «предпочтительно» — предупреждение, не ошибка.; числа правила: module_m = 0.3"
+[[guideline.source]]
+doc = "ГОСТ 28984-2011"
+file = "norms/4293789429.txt"
+where = "п. 6.6"
+quote = "Модульные (координационные) высоты этажа во всех зданиях"
+checked = true
+[[guideline.source]]
+doc = "ГОСТ 28984-2011"
+file = "norms/4293789429.txt"
+where = "п. 7.13"
+quote = "чтобы координационные размеры нижних и верхних элементов стен были кратными модулю"
+checked = true
+[[guideline.source]]
+doc = "ГОСТ 28984-2011"
+file = "norms/4293789429.txt"
+where = "п. 6.9"
+quote = "от 300 до 2400 мм следует использовать мультимодуль"
+checked = true
+
+[[guideline]]
+id = "door_size_ru"
+text = "Входная дверь ru: проём наружной двери (ДН) шириной не менее 0,91 м (ГОСТ 475, ряд 910…1910) и высотой не менее 2,07 м; эвакуационный выход — свет не менее 1,9×0,8 м"
+check = "door_size"
+params = { min_w = 0.91, min_h = 2.07, max_w = 1.95, max_h = 2.4 }
+applies = ["ru-izhs", "ru-mkd"]
+note = "Проём 1870 мм высотой даёт свет менее 1,9 м, как эвакуационный не годится. Размеры в нормах «в свету» (допуск 5 %), на фасаде — проём в стене; нужен параметр «коробка». Двери шириной 1,3 м и более — двупольные."
+[[guideline.source]]
+doc = "ГОСТ 475-2016"
+file = "norms/4293749722.txt"
+where = "прил. Б, рис. Б.1"
+quote = "Размеры проемов в скобках указаны для качающихся дверей."
+checked = true
+[[guideline.source]]
+doc = "СП 1.13130.2020"
+file = "norms/4293722520.txt"
+where = "п. 4.2.18"
+quote = "Высота эвакуационных выходов в свету должна быть, как правило, не менее 1,9 м."
+checked = true
+[[guideline.source]]
+doc = "СП 1.13130.2020"
+file = "norms/4293722520.txt"
+where = "п. 4.2.19"
+quote = "Ширина эвакуационных выходов должна быть, как правило, не менее 0,8 м."
+checked = true
+[[guideline.source]]
+doc = "БНТУ, Платонова, Гражданские здания из мелкоразмерных элементов"
+file = "ru/bntu.txt"
+where = "стр. 69 (PDF)"
+quote = "Высота дверей в жилых зданиях принимается 2,1 м."
+checked = true
+[[guideline.source]]
+doc = "СП 59.13330.2020 (копия tiflocentre.ru, не ИЖС)"
+file = "ru/norms2/sp59_tiflo.txt"
+where = "п. 6.1.5"
+quote = "ширину в свету не менее 0,9 м"
+checked = true
+[[guideline.source]]
+doc = "Казань, ТД ИРГ (типовые решения ИЖС), 2025"
+file = "ru/irg/TD1.txt"
+where = "стр. 48, рисунок «Дверь Д1» (1100×2100)"
+quote = ""
+checked = false
+[[guideline.source]]
+doc = "Кузнецова и др., Индивидуальный жилой дом из мелкоразмерных элементов, 2011"
+file = "books2/ru/tstu_kuznecova_2011.txt"
+where = "стр. 19 (PDF)"
+quote = "входных и тамбурных дверей – 1010×2000"
+checked = true
+[[guideline.source]]
+doc = "ВГТУ, Черных, Конструкции и материалы, 2021"
+file = "books2/ru/cchgeu_mu.txt"
+where = "стр. 29 (PDF)"
+quote = "входной дверной проем Ш и В – 1000х2100мм"
+checked = true
+
+[[guideline]]
+id = "floor_height_ru"
+text = "Высота помещений ru: жилые комнаты и кухня не ниже 2,5 м (2,7 м в подрайонах IА, IБ, IГ, IД, IVА), мансарда с наклонными потолками — не ниже 2,3 м; шаг этажей = чистая высота + перекрытие"
+check = "floor_height"
+params = { min = 2.5 }
+applies = ["ru-izhs", "ru-mkd"]
+note = "min относится к чистой высоте; шаг этажей на фасаде ≈ min + перекрытие (≈ 0,25 м, [не проверено]), то есть около 2,75 м. Что означает 2,75 м в GenPlan (шаг или чистая высота) — вопрос хозяину/Егору. В СП 54 допускается уменьшение потолка до 50 % площади в мансарде."
+[[guideline.source]]
+doc = "СП 55.13330.2016"
+file = "norms/sp55.txt"
+where = "п. 6.2"
+quote = "расположенных в мансарде или имеющих наклонные потоки или стены, допускается принимать не менее 2,3 м"
+checked = true
+[[guideline.source]]
+doc = "СП 54.13330.2022"
+file = "norms/sp54.txt"
+where = "п. 5.12"
+quote = "допускается уменьшение высоты потолка относительно нормируемой на площади, не превышающей 50%"
+checked = true
+[[guideline.source]]
+doc = "СП 55.13330.2016"
+file = "norms/sp55.txt"
+where = "п. 3.19"
+quote = "Часть дома между высотными отметками верха перекрытия"
+checked = true
+[[guideline.source]]
+doc = "СП 55.13330.2016, Изм. 2 (2023)"
+file = "ru/norms2/sp55_izm2.txt"
+where = "п. 6.2 (новая редакция)"
+quote = "не менее 2,7 м, а в других климатических районах строительства - не менее 2,5 м"
+checked = true
+
+[[guideline]]
+id = "light_ratio_ru_izhs"
+text = "Свет ru-ИЖС: отношение площади световых проёмов к площади пола жилых комнат и кухонь не менее 1:8 (0,125); для мансардных этажей не менее 1:10"
+check = "light_ratio"
+params = { min = 0.125 }
+applies = ["ru-izhs"]
+note = "Строгая версия — по каждой комнате (привязка окна к комнате, план); агрегат по дому — слабая проверка. Для мансарды min = 0,10. Верхней границы для ИЖС нет."
+[[guideline.source]]
+doc = "СП 55.13330.2016"
+file = "norms/sp55.txt"
+where = "п. 9.18"
+quote = "Отношение площади световых проемов к площади пола жилых помещений и кухонь должно быть не менее 1:8."
+checked = true
+
+[[guideline]]
+id = "light_ratio_ru_mkd"
+text = "Свет ru-МКД: отношение площади световых проёмов к площади пола жилых комнат и кухни не более 1:5,5 и не менее 1:8"
+check = "light_ratio"
+params = { min = 0.125, max = 0.182 }
+applies = ["ru-mkd"]
+note = "Верхний предел 1:5,5 (энергопотери) для ИЖС не действует; верхние этажи с окнами в наклонных конструкциях — не менее 1:10. Учебные пособия ИЖС (ТГТУ) тоже ограничивают сверху: 1/5,5…1/8 от площади пола; в СП 55 для ИЖС верхней границы нет."
+[[guideline.source]]
+doc = "СП 54.13330.2022"
+file = "norms/sp54.txt"
+where = "п. 7.13"
+quote = "Отношение площади световых проемов к площади пола жилых комнат и кухни принимают не более 1:5,5 и не менее 1:8"
+checked = true
+[[guideline.source]]
+doc = "ННГАСУ, Гоголева, Нуждов, Малоэтажное жилище"
+file = "ru/58d5d7.pdf"
+where = "стр. 82 (PDF)"
+quote = "не должно превышать 1:5,5. Минимальное отношение должно быть не менее 1:8"
+checked = true
+[[guideline.source]]
+doc = "Кузнецова и др., Индивидуальный жилой дом из мелкоразмерных элементов, 2011"
+file = "books2/ru/tstu_kuznecova_2011.txt"
+where = "стр. 19 (PDF)"
+quote = "Площадь окон принимается в пределах 1/5,5…1/8 от площади пола помещения"
+checked = true
+
+[[guideline]]
+id = "light_ratio_us"
+text = "Свет us: остекление жилых комнат не менее 8 % площади пола (IRC R303.1); открываемая часть не менее 4 %"
+check = "light_ratio"
+params = { min = 0.08 }
+applies = ["us"]
+note = "Справочно, по вторичной копии (IRC Code Handout); много мягче 1:8 РФ."
+[[guideline.source]]
+doc = "IRC 2021 R303.1 (копия Code Handout)"
+file = "norms/b.txt"
+where = "R303.1"
+quote = "Habitable rooms shall have an aggregate glazing area of not less than 8 percent of the floor area of such rooms."
+checked = false
+
+[[guideline]]
+id = "room_has_window"
+text = "Каждая жилая комната и кухня имеет естественное освещение (окно в наружной стене); для лестничной клетки ИЖС окна не обязательны"
+check = "none"
+applies = ["ru-izhs", "ru-mkd"]
+note = "нужна проверка: каждая жилая комната и кухня на плане выходит на наружную стену с окном (план + привязка окна к комнате). Вспомогательные помещения не нормируются."
+[[guideline.source]]
+doc = "СП 55.13330.2016"
+file = "norms/sp55.txt"
+where = "п. 9.18"
+quote = "В жилых комнатах и кухне должно быть обеспечено естественное освещение."
+checked = true
+[[guideline.source]]
+doc = "СП 55.13330.2016"
+file = "norms/sp55.txt"
+where = "п. 7.6"
+quote = "Лестничная клетка может не иметь световых проемов в стенах и освещаться верхним светом."
+checked = true
+
+[[guideline]]
+id = "balcony_railing_height"
+text = "Ограждение балкона, лоджии, террасы, лестницы на перепаде — не ниже 0,9 м (ИЖС, СП 55) и не ниже 1,2 м при перепаде 0,45 м и более (МКД, СП 54)"
+check = "none"
+applies = ["ru-izhs", "ru-mkd"]
+note = "нужна проверка: высота balcony (ограждения) ≥ 0,9 м для ИЖС, ≥ 1,2 м для МКД (балконы ниже 0,45 м от земли — 0,9 м). «Опасный перепад» в СП 55 числом не задан.; числа правила: cls = 'balcony', min = 0.9"
+[[guideline.source]]
+doc = "СП 55.13330.2016"
+file = "norms/sp55.txt"
+where = "п. 8.3"
+quote = "Высота ограждений лестниц, балконов, лоджий, террас, кровли и в других местах опасных перепадов высоты должна быть достаточной"
+checked = true
+[[guideline.source]]
+doc = "СП 54.13330.2022"
+file = "norms/sp54.txt"
+where = "п. 6.4.4"
+quote = "Высота ограждений наружных лестничных маршей и площадок, балконов, французских балконов, лоджий, террас"
+checked = true
+[[guideline.source]]
+doc = "СП 55.13330.2016, Изм. 2 (2023)"
+file = "ru/norms2/sp55_izm2.txt"
+where = "п. 8.3"
+quote = "не менее 0,9 м, а ограждения кровли - не менее 0,6 м"
+checked = true
+[[guideline.source]]
+doc = "БНТУ, Платонова, Гражданские здания из мелкоразмерных элементов"
+file = "ru/bntu.txt"
+where = "стр. 70 (PDF)"
+quote = "Глубина балконов (лоджий) должна быть не менее 0,9 м, высота ограждений"
+checked = true
+
+[[guideline]]
+id = "sill_height_ru_mkd"
+text = "Подоконник ru-МКД: нижний уровень светопрозрачного заполнения ниже 0,9 м от чистого пола требует мер безопасности (ограждение)"
+check = "sill_height"
+params = { min = 0.9, skip_below_m = 0.1 }
+applies = ["ru-mkd"]
+note = "Для ИЖС числового аналога нет (СП 55 п. 8.1 — общее требование). Окна ниже 0,9 м на фасаде — предупреждение, не ошибка, если нарисовано ограждение."
+[[guideline.source]]
+doc = "СП 54.13330.2022"
+file = "norms/sp54.txt"
+where = "п. 6.4.9"
+quote = "В случае расположения нижнего уровня светопрозрачного заполнения оконного блока на высоте менее 0,9 м от уровня чистого пола"
+checked = true
+
+[[guideline]]
+id = "egress_window_ru_izhs"
+text = "Аварийное окно ru-ИЖС (3 этажа): в каждом помещении для сна — окно с низом не выше 1,0 м от пола; окно и балкон — не выше 7 м над землёй"
+check = "none"
+applies = ["ru-izhs"]
+note = "нужна проверка: у спальни 3-го этажа (план) окно с sill ≤ 1,0 м и (2·H + sill + plinth_m) ≤ 7 м. Диапазон 0,9–1,0 м одновременно проходит СП 54 п. 6.4.9 и СП 55 п. 7.6; уровни GenPlan small (1,10) и standard (0,55) в него не попадают.; числа правила: sill_max = 1.0, height_above_ground_max = 7.0"
+[[guideline.source]]
+doc = "СП 55.13330.2016"
+file = "norms/sp55.txt"
+where = "п. 7.6"
+quote = "каждое помещение, которое может быть использовано для сна, должно иметь не менее одного окна, расположенного на высоте не более 1 м над уровнем пола"
+checked = true
+
+[[guideline]]
+id = "egress_window_us"
+text = "Аварийное окно us (IRC R310): чистое открытие не менее 5,7 кв. фута (0,53 м2), высота в свету 24 дюйма (0,61 м), ширина 20 дюймов (0,51 м), низ не выше 44 дюймов (1,12 м)"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: окно спальни (план); справочно по вторичной копии Tip Sheet 23, первоисточник IRC не получен.; числа правила: min_area_m2 = 0.53, min_clear_h = 0.61, min_clear_w = 0.51, sill_max = 1.118"
+[[guideline.source]]
+doc = "IRC 2021 R310.2 (копия Tip Sheet 23)"
+file = "norms/a.txt"
+where = "R310.2"
+quote = "Minimum clear opening size of 5.7 square feet (5 square feet on the grade level) with minimum clear height of 24 inches and minimum clear width of 20 inches."
+checked = true
+
+[[guideline]]
+id = "sill_height_us"
+text = "Падение из окна us (IRC R312.2): при наружном подоконнике выше 72 дюймов (1,83 м) над землёй и внутреннем ниже 24 дюймов (0,61 м) от пола нужен ограничитель открывания"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: только окна, у которых низ выше 1,83 м над землёй (sill_height проверяет все окна); числа правила: min 0.61. Относится к окнам этажей 2+ (y_пола + sill − y_земли > 1,83 м); для первого этажа не нужно. Справочно по вторичной копии Tip Sheet 23."
+[[guideline.source]]
+doc = "IRC 2021 R312.2 (копия Tip Sheet 23)"
+file = "norms/a.txt"
+where = "R312.2"
+quote = "sill height above the finished floor on the interior side of the operable window opening is less than 24 inches"
+checked = true
+
+[[guideline]]
+id = "house_has_entrance"
+text = "У дома есть хотя бы одна наружная входная дверь на уровне первого этажа (выход непосредственно наружу)"
+check = "none"
+applies = ["ru-izhs"]
+note = "нужна проверка: хотя бы одна стена с has_entrance и дверью (не garage_door, не окном) на первом этаже."
+[[guideline.source]]
+doc = "СП 1.13130.2020"
+file = "norms/4293722520.txt"
+where = "п. 6.2.1"
+quote = "Каждый дом (жилой блок) должен иметь не менее одного эвакуационного выхода непосредственно наружу"
+checked = true
+
+[[guideline]]
+id = "porch_wider_than_door"
+text = "Входная площадка перед наружной дверью — шириной не менее 1,5 ширины полотна двери"
+check = "none"
+applies = ["ru-izhs", "ru-mkd"]
+note = "нужна проверка: porch.w ≥ 1,5·door.w (в норме «шириной» трактуют как глубину, которой на фасаде нет; ширина вдоль фасада ≥ ширины проёма — минимум). Ориентиры других источников: площадка крыльца не менее 1,4×1,4 м (БНТУ, МКД РБ), 1,6×2,2 м без пандуса (СП 59, общественные здания; к одноквартирным домам СП 59 не применяется, п. 1.3).; числа правила: ratio = 1.5"
+[[guideline.source]]
+doc = "СП 1.13130.2020"
+file = "norms/4293722520.txt"
+where = "п. 4.2.21"
+quote = "Перед наружной дверью (эвакуационным выходом) должна быть предусмотрена горизонтальная входная площадка с шириной не менее 1,5 ширины полотна наружной двери."
+checked = true
+[[guideline.source]]
+doc = "БНТУ, Платонова, Гражданские здания из мелкоразмерных элементов"
+file = "ru/bntu.txt"
+where = "стр. 69 (PDF)"
+quote = "должна быть защищена от атмосферных осадков козырьком или другим устройством"
+checked = true
+[[guideline.source]]
+doc = "СП 59.13330.2020 (копия tiflocentre.ru, не ИЖС)"
+file = "ru/norms2/sp59_tiflo.txt"
+where = "п. 6.1.4"
+quote = "Размеры входной площадки (ширина x глубина) с пандусом должны быть не менее 2,2 x 2,2 м."
+checked = true
+[[guideline.source]]
+doc = "Кузнецова и др., Индивидуальный жилой дом из мелкоразмерных элементов, 2011"
+file = "books2/ru/tstu_kuznecova_2011.txt"
+where = "стр. 17 (PDF)"
+quote = "входную площадку (шириной не менее 1200 мм)"
+checked = true
+[[guideline.source]]
+doc = "БНТУ, Молокович, Типология жилых зданий, 2021"
+file = "books2/ru/bntu_f3491.txt"
+where = "раздел 4, стр. 70 (печ.)"
+quote = "предусматривать защищенную от атмосферных осадков площадку размерами"
+checked = true
+
+[[guideline]]
+id = "balcony_emergency_exit"
+text = "Балкон как аварийный выход (МКД): глухой простенок не менее 1,2 м от торца балкона до оконного проёма (не менее 1,6 м между остеклёнными проёмами), ширина балкона не менее 0,6 м"
+check = "none"
+applies = ["ru-mkd"]
+note = "нужна проверка: зазор от края balcony до ближайшего проёма ≥ 1,2 м. Для ИЖС не требуется.; числа правила: gap_min = 1.2, between_openings_min = 1.6, balcony_w_min = 0.6"
+[[guideline.source]]
+doc = "СП 1.13130.2020"
+file = "norms/4293722520.txt"
+where = "п. 4.2.4 а)"
+quote = "выход на балкон или лоджию с глухим простенком не менее 1,2 м от торца балкона (лоджии) до оконного проема"
+checked = true
+
+[[guideline]]
+id = "canopy_over_entrance"
+text = "Над входом есть козырёк или навес: в МКД обязателен над входной площадкой, наружными маршами и пандусами (СП 54); для ИЖС норма не требует, учебники и дизайн-коды рекомендуют"
+check = "canopy_over_entrance"
+applies = ["ru-izhs", "ru-mkd", "us", "eu"]
+note = "Размеров (вылет, высота) РФ-нормы не задают. Казань: навес по оси двери шириной 1,9 м (уже пристройки входа 2,1 м), цвет кровли. Roanoke: боковой вход закрыт навесом не менее 0,91 м. Европа: вход защищён скромным лёгким навесом на кронштейнах, без монументальных колонных портиков (Pfaffenhofen, Cotswold); вынос навеса ≥ его ширины (EDG), для Баварии Gret до 0,7 м — глубины в модели нет."
+[[guideline.source]]
+doc = "СП 54.13330.2022"
+file = "norms/sp54.txt"
+where = "п. 5.21"
+quote = "Для защиты от осадков над входной площадкой, наружными лестничными маршами и пандусами, расположенными вдоль фасада, предусматривают козырек."
+checked = true
+[[guideline.source]]
+doc = "Казань, ТД ИРГ (типовые решения ИЖС), 2025"
+file = "ru/irg/TD1.txt"
+where = "стр. 44-45"
+quote = "Навесы выполняются из деревянных конструкций с металлическими"
+checked = true
+[[guideline.source]]
+doc = "ННГАСУ, Тишков, Рыскулова, Архитектурные конструкции"
+file = "ru/nn4842.txt"
+where = "стр. 36"
+quote = "Входная площадка обычно защищается навесом от атмосферных осадков (козырьком)."
+checked = true
+[[guideline.source]]
+doc = "Аннинское городское поселение, Дизайн-код, 2023"
+file = "ru/annino.txt"
+where = "п. 2.3.1, стр. 37"
+quote = "входы в здания должны иметь навес в плоскости фасада"
+checked = true
+[[guideline.source]]
+doc = "КГАСУ, Сибгатуллина, Попов, Индивидуальный жилой дом"
+file = "ru/kgasu.txt"
+where = "п. 4.1, стр. 27"
+quote = "оконные и дверные проемы с оконными переплетами и дверными полотнами, ступени и козырьки входов, цоколь"
+checked = true
+[[guideline.source]]
+doc = "Residential Pattern Book Roanoke, 2008"
+file = "en/roanoke_full.pdf"
+where = "стр. 105 (PDF)"
+quote = "Side entries should be covered by a roof with a minimum width and depth of 36 inches."
+checked = true
+[[guideline.source]]
+doc = "Pfaffenhofen, Bauen ist Charaktersache, 2018"
+file = "books2/eu/de-pfaffenhofen-bauen-charaktersache.txt"
+where = "стр. 3"
+quote = "Vermeiden Sie bei der Hervorhebung des Eingangs Treppentürme oder protzige und daher unbeholfen wirkende Säulenportiken."
+checked = true
+[[guideline.source]]
+doc = "Cotswold Design Code, Local Plan App. D"
+file = "books2/eu/uk-cotswold-design-code-appendixD.txt"
+where = "стр. 4"
+quote = "many lightweight canopies, such as gables or flat hoods supported on brackets"
+checked = true
+[[guideline.source]]
+doc = "Essex Design Guide, 2018"
+file = "books2/eu/uk-edg-architectural-details.txt"
+where = "§1.55, стр. 19"
+quote = "pitched-roof porch should project from the building by at least the width of its span"
+checked = true
+[[guideline.source]]
+doc = "Дизайн-Капитал, Руководство по дизайну фасада v2.5, 2019"
+file = "ru/dk/designcapital.txt"
+where = "стр. 11 (PDF)"
+quote = "На дальнем видовом плане обращает на себя внимание фронтон или козырек дома."
+checked = true
+[[guideline.source]]
+doc = "Pfaffenhofen, Bauen ist Charaktersache, 2018"
+file = "books2/eu/de-pfaffenhofen-bauen-charaktersache.txt"
+where = "стр. 3"
+quote = "Eine großzügige Eingangsüberdachung ist z.B. der in unserem Landkreis ursprüngliche Gret"
+checked = true
+
+[[guideline]]
+id = "plinth_height_ru"
+text = "Цоколь ru: пол комнаты 1-го этажа и эвакуационный выход выше планировочной отметки земли (plinth_m строго больше нуля); высота цоколя не менее 0,5 м, у Казани 0,8–0,9 м"
+check = "plinth_height"
+params = { min = 0.5, max = 1.1 }
+applies = ["ru-izhs", "ru-mkd"]
+note = "Норма требует только plinth_m > 0 (СП 55 Изм. 2 п. 6.2.2; СП 54 прил. А); 0,5 м — ВолгГАСУ (Григоров п. 9.3.4); 0,5–1,1 м на рельефе и 0,8/0,9 м по типам — Казань, ТД ИРГ (высота измеряется по центру фасада). Верх цоколя примерно на уровне пола 1-го этажа (НГАСУ). Аннино: цоколь в одной плоскости со стеной, НГАСУ: цоколь слегка отступает — глубины в модели нет. Пол 1-го этажа выше земли на 0,15–0,20 м — минимум при полах по грунту (Басманов); ТГТУ: земля на 0,60 / 0,75 / 0,90 м ниже ±0.000 (4–6 ступеней по 150 мм)."
+[[guideline.source]]
+doc = "СП 55.13330.2016, Изм. 2 (2023)"
+file = "ru/norms2/sp55_izm2.txt"
+where = "п. 6.2.2 (новый)"
+quote = "Отметка пола комнаты, расположенной на первом этаже, должна быть выше планировочной отметки земли"
+checked = true
+[[guideline.source]]
+doc = "СП 54.13330.2022"
+file = "norms/sp54.txt"
+where = "прил. А"
+quote = "Эвакуационный выход с первого надземного этажа непосредственно наружу должен располагаться выше планировочной отметки земли в месте его устройства."
+checked = true
+[[guideline.source]]
+doc = "Казань, ТД ИРГ (типовые решения ИЖС), 2025"
+file = "ru/irg/TD1.txt"
+where = "стр. 10, 12"
+quote = "Высота цоколя измеряется по центру фасада."
+checked = true
+[[guideline.source]]
+doc = "Казань, ТД ИРГ (типовые решения ИЖС), 2025"
+file = "ru/irg/TD1.txt"
+where = "стр. 12"
+quote = "Допускается устройство ниш и окон на цоколе."
+checked = true
+[[guideline.source]]
+doc = "ВолгГАСУ, Григоров, Архитектурные конструкции"
+file = "ru/extra/vgasu_grigorov.txt"
+where = "п. 9.3.4, стр. 66"
+quote = "Высота цоколя принимается не менее 500 мм"
+checked = true
+[[guideline.source]]
+doc = "ННГАСУ, Тишков, Рыскулова, Архитектурные конструкции"
+file = "ru/nn4842.txt"
+where = "стр. 45 (PDF)"
+quote = "Верхний уступ («обрез») цоколя располагается, как правило, примерно на уровне приподнятого над поверхностью земли пола первого этажа"
+checked = true
+[[guideline.source]]
+doc = "Кузнецова и др., Индивидуальный жилой дом из мелкоразмерных элементов, 2011"
+file = "books2/ru/tstu_kuznecova_2011.txt"
+where = "стр. 20 (PDF)"
+quote = "Уровень земли принимается ниже нулевой отметки, как правило, на 600, 750, 900 мм"
+checked = true
+[[guideline.source]]
+doc = "Кузнецова и др., Индивидуальный жилой дом из мелкоразмерных элементов, 2011"
+file = "books2/ru/tstu_kuznecova_2011.txt"
+where = "стр. 13 (PDF)"
+quote = "Высота цоколя принимается, как правило, не менее 500 мм"
+checked = true
+[[guideline.source]]
+doc = "Басманов, Однокв. малоэтажный жилой дом, 2018"
+file = "books2/ru/rubinst_basmanov_2018.txt"
+where = "стр. 7 (PDF)"
+quote = "уровня поля первого этажа должна быть 0,150-0,200 выше уровня земли"
+checked = true
+
+[[guideline]]
+id = "panoramic_glazing_guard_ru"
+text = "Панорамное остекление (окно от пола): дополнительное защитное ограждение высотой 1,2 м, если перед окном нет балкона или лоджии"
+check = "none"
+applies = ["ru-izhs", "ru-mkd"]
+note = "нужна проверка: окно с sill < 0,1 м и вне balcony/porch — рядом ограждение высотой 1,2 м (для ИЖС Изм. 2 п. 8.8, для МКД п. 6.4.13).; числа правила: guard_h = 1.2"
+[[guideline.source]]
+doc = "СП 54.13330.2022"
+file = "norms/sp54.txt"
+where = "п. 6.4.13"
+quote = "при панорамном остеклении жилых помещений и кухонь, в местах, не примыкающих к балкону или лоджии"
+checked = true
+[[guideline.source]]
+doc = "СП 55.13330.2016, Изм. 2 (2023)"
+file = "ru/norms2/sp55_izm2.txt"
+where = "п. 8.8 (новый)"
+quote = "при панорамном остеклении жилых помещений и кухонь, в местах, не примыкающих к балкону или лоджии, следует принимать 1,2 м"
+checked = true
+
+[[guideline]]
+id = "sheet_level_marks"
+text = "Лист фасада: отметки уровней земли, входных площадок, верха стен, низа и верха проёмов и разноуровневых элементов; координационные оси в характерных местах (крайние, уступы, перепады)"
+check = "none"
+applies = ["ru-izhs", "ru-mkd"]
+note = "Оформление листа (шаг 6), геометрию стен не проверяет; нужна проверка: на листе есть отметки земли, пола этажей, карниза и оси стены."
+[[guideline.source]]
+doc = "ГОСТ Р 21.501-2018"
+file = "ru/g21501.txt"
+where = "п. 5.4.2"
+quote = "отметки уровней земли, входных площадок, верха стен, низа и верха проемов и расположенных на разных уровнях элементов фасадов"
+checked = true
+[[guideline.source]]
+doc = "ГОСТ Р 21.501-2018"
+file = "ru/g21501.txt"
+where = "п. 5.4.2"
+quote = "координационные оси здания (сооружения), проходящие в характерных местах фасадов"
+checked = true
+[[guideline.source]]
+doc = "КГАСУ, Сибгатуллина, Попов, Индивидуальный жилой дом"
+file = "ru/kgasu.txt"
+where = "п. 4.1, стр. 27"
+quote = "На фасадах показывают все архитектурные и конструктивные детали"
+checked = true
+[[guideline.source]]
+doc = "БНТУ, Платонова, Гражданские здания из мелкоразмерных элементов"
+file = "ru/bntu.txt"
+where = "стр. 71 (PDF)"
+quote = "на фасаде ставятся следующие отметки"
+checked = true
+[[guideline.source]]
+doc = "БНТУ, Телеш и др., Выполнение чертежей двухэтажного жилого дома, 2021"
+file = "books2/ru/bntu_chertezhi_2et.txt"
+where = "стр. 75 (PDF)"
+quote = "наносят высотные отметки уровня земли, цоколя, низа и верха проемов, карниза и верха крыши"
+checked = true
+
+[[guideline]]
+id = "sheet_window_marks"
+text = "Лист фасада: окна получают марки ОК1, ОК2… по числу различных типов заполнения проёмов; число марок не больше числа разных (w, h)"
+check = "none"
+applies = ["ru-izhs", "ru-mkd"]
+note = "Оформление листа; нужна проверка: у каждого уникального типа окна своя марка в JSON-спецификации."
+[[guideline.source]]
+doc = "ГОСТ Р 21.501-2018"
+file = "ru/g21501.txt"
+where = "п. 5.4.2"
+quote = "Обозначения типов заполнения оконных проемов составляют из буквенного обозначения ОК и порядкового номера в пределах этого обозначения"
+checked = true
+
+[[guideline]]
+id = "sheet_finish_schedule"
+text = "Лист фасада: отделка, отличающаяся от преобладающей, помечена номерами в кружках Ø6–8 мм с выносками; ведомость отделки по форме 9 (позиция, элемент фасада, материал, эталон цвета)"
+check = "none"
+applies = ["ru-izhs", "ru-mkd"]
+note = "Оформление листа: цвет из палитры параметров дома — строка ведомости. Эталон цвета (RAL/NCS) не по ГОСТ, [не проверено]."
+[[guideline.source]]
+doc = "ГОСТ Р 21.501-2018"
+file = "ru/g21501.txt"
+where = "п. 5.4.2, прил. А, п. А.13"
+quote = "за пределами изображения фасада в окружностях диаметром от 6 до 8 мм наносят номера типов отделки фасада"
+checked = true
+[[guideline.source]]
+doc = "ГОСТ Р 21.501-2018"
+file = "ru/g21501.txt"
+where = "прил. А, п. А.13"
+quote = "в графе «Наименование и номер эталона цвета или образец колера» — принятое по соответствующему стандарту или техническим условиям наименование цвета"
+checked = true
+
+[[guideline]]
+id = "sheet_view_names_scale"
+text = "Лист фасадов: подпись вида по крайним осям («Фасад 1-22») или главный/боковой/дворовый; масштаб 1:50, 1:100, 1:200"
+check = "none"
+applies = ["ru-izhs", "ru-mkd"]
+note = "Оформление листа, метаданные; для дома ИЖС 8–20 м на A3 подходит 1:100 [вывод, не из нормы]."
+[[guideline.source]]
+doc = "ГОСТ Р 21.501-2018"
+file = "ru/g21501.txt"
+where = "п. 3.4"
+quote = "Различают фасады главный, боковой, дворовый"
+checked = true
+[[guideline.source]]
+doc = "ГОСТ Р 21.501-2018"
+file = "ru/g21501.txt"
+where = "п. 4.9, табл. 1"
+quote = "Планы этажей (кроме технических), разрезы, фасады 1:50; 1:100; 1:200;1:400; 1:500"
+checked = true
+[[guideline.source]]
+doc = "КГАСУ, Сибгатуллина, Попов, Индивидуальный жилой дом"
+file = "ru/kgasu.txt"
+where = "стр. 27"
+quote = "Над фасадом дается соответствующая надпись"
+checked = true
+[[guideline.source]]
+doc = "УлГТУ, Индивидуальный однокв. жилой дом"
+file = "ru/ulstu.txt"
+where = "п. 7.2, стр. 53"
+quote = "В названиях фасадов здания указывают крайние оси"
+checked = true
+[[guideline.source]]
+doc = "БНТУ, Телеш и др., Выполнение чертежей двухэтажного жилого дома, 2021"
+file = "books2/ru/bntu_chertezhi_2et.txt"
+where = "стр. 75 (PDF)"
+quote = "указывают обозначения крайних координационных осей здания слева направо"
+checked = true
+
+[[guideline]]
+id = "window_head_height_us"
+text = "Окна us: верх окон (head) 1-го этажа — 8 ft (2,44 м) над полом, 2-го этажа — 7–8 ft (2,13–2,44 м); у всех окон этажа одинаковый"
+check = "head_height"
+params = { min = 2.1, max = 2.45 }
+applies = ["us"]
+note = "1-й этаж 2,44 м, 2-й этаж 2,13 м (Acadian, Classical до 2,44); у Arts & Crafts на 1-м этаже 7–8 ft. Для окон «до пола» и dormer не применять."
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 31 (PDF)"
+quote = "Window head heights should be 8 feet above the floor for first floor windows"
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 37 (PDF)"
+quote = "Window head heights should be 8 feet for the first floor and 7 feet for the second floor."
+checked = true
+[[guideline.source]]
+doc = "Louisiana Speaks Pattern Book, UDA 2006"
+file = "en/la_speaks_cpex.txt"
+where = "стр. 41 (PDF)"
+quote = "Typical opening head heights are 8 feet."
+checked = true
+
+[[guideline]]
+id = "window_head_line"
+text = "Окна: верхние кромки (head) или подоконники всех окон одного этажа лежат на общей линии (regulating line), кроме окон особой формы"
+check = "head_line"
+params = { tol_m = 0.05, doors = 0 }
+applies = ["us", "eu"]
+note = "У Grapevine допустима общая линия по head или по sill; Roanoke: ширина окон этажа может различаться не более чем на 6 дюймов (0,15 м)."
+[[guideline.source]]
+doc = "Grapevine Historic Township Pattern Book, 2025"
+file = "en/grapevine.txt"
+where = "стр. 47 (PDF)"
+quote = "there must be a common reference line that can be struck along the header"
+checked = true
+[[guideline.source]]
+doc = "Grapevine Historic Township Pattern Book, 2025"
+file = "en/grapevine.txt"
+where = "стр. 47-48 (PDF)"
+quote = "imposing a pattern of regulating lines across the elevation of the wall plane"
+checked = true
+[[guideline.source]]
+doc = "Residential Pattern Book Roanoke, 2008"
+file = "en/roanoke_full.txt"
+where = "стр. 106 (PDF)"
+quote = "Windows should be proportioned to be approximately twice as tall as they are wide."
+checked = true
+[[guideline.source]]
+doc = "Pattern Book for Neighborly Houses, 2007"
+file = "en/habitat_sh_arch.pdf"
+where = "стр. 8 (PDF)"
+quote = "Same window design throughout, with the exception of special windows"
+checked = true
+[[guideline.source]]
+doc = "Bodenheim, Gestaltfibel, 2013"
+file = "books2/eu/de-bodenheim-gestaltfibel.txt"
+where = "4.3.1, стр. 20"
+quote = "Gliederung der Fassade ergibt sich durch die Anordnung der Fensteröffnungen jeweils nebeneinanderliegend in auf gleicher Höhe"
+checked = true
+[[guideline.source]]
+doc = "Thouars, Cahier de recommandations, 2020"
+file = "books2/eu/fr-thouars-cahier.txt"
+where = "стр. 8"
+quote = "fenêtres plus hautes au rez-de-chaussée qu’à l’étage, linteaux alignés, fenêtres axées verticalement"
+checked = true
+[[guideline.source]]
+doc = "Thouars, Cahier de recommandations, 2020"
+file = "books2/eu/fr-thouars-cahier.pdf"
+where = "стр. 24"
+quote = "hauteur des linteaux, rapport hauteur / largeur des ouvertures"
+checked = true
+
+[[guideline]]
+id = "door_head_line"
+text = "Верх входной двери (вместе с транцем) на одной линии с верхами окон 1-го этажа"
+check = "door_head_line"
+params = { tol_m = 0.05 }
+applies = ["us"]
+note = "Дверь 6'-8\" (2,03 м) + transom 1'-4\" (0,41 м) = 8'-0\" = head окон 1-го этажа [вывод]."
+[[guideline.source]]
+doc = "Pattern Book for Neighborly Houses, 2007"
+file = "en/habitat_sh_arch.txt"
+where = "стр. 8 (PDF)"
+quote = "Align door head with window heads."
+checked = true
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 32 (PDF)"
+quote = "Entry doors are typically 4-, 6- or 8-paneled and include either a transom or a transom and sidelites."
+checked = true
+
+[[guideline]]
+id = "window_vertical_us"
+text = "Окна us: окно стоячее, высота примерно вдвое больше ширины (h/w около 1,7–2,3); панели переплёта квадратные или вертикальные"
+check = "aspect"
+params = { cls = "window", min = 1.5, max = 2.3 }
+applies = ["us"]
+note = "Roanoke: h ≈ 2w; Habitat: ширина 2'-4\"–3'-4\", высота 5'-0\"–6'-5\" (h/w 1,5–2,75); Louisiana Speaks: 2'-8\"–3'-8\" × 4'-4\"–6'-0\" (h/w от 1,18). Границы 1,5–2,3 — сводка extract-en (основные окна, не accent/dormer)."
+[[guideline.source]]
+doc = "Residential Pattern Book Roanoke, 2008"
+file = "en/roanoke_full.txt"
+where = "стр. 106 (PDF)"
+quote = "Windows should be proportioned to be approximately twice as tall as they are wide."
+checked = true
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 26 (PDF)"
+quote = "Windows are typically vertical in proportion with muntin patterns of 6 over 6 or 9 over 9."
+checked = true
+[[guideline.source]]
+doc = "Mississippi State University Architecture, Mouzon 2023"
+file = "en/msu.txt"
+where = "стр. 20"
+quote = "Window panes must be vertically proportioned or square."
+checked = true
+[[guideline.source]]
+doc = "Pattern Book for Neighborly Houses, 2007"
+file = "en/habitat_sh_arch.txt"
+where = "стр. 6 (PDF)"
+quote = "Standard window dimensions: Width: 2'-4\" to 3'-4\" Height: 5'-0\" to 6'-5\""
+checked = true
+[[guideline.source]]
+doc = "Louisiana Speaks Pattern Book, UDA 2006"
+file = "en/la_speaks_cpex.txt"
+where = "стр. 44 (PDF)"
+quote = "Range of sizes: Width: 2’-8” to 3’-8” Height: 4’-4” to 6’-0”"
+checked = true
+
+[[guideline]]
+id = "window_size_row_us"
+text = "Типовые окна us: ширина 2'-8\" / 3'-0\" / 3'-4\" (0,81 / 0,91 / 1,02 м), высота 5'-6\"…6'-6\" (1,68…1,98 м) для основных окон"
+check = "size_row"
+params = { cls = "window", widths = [0.81, 0.91, 1.02], heights = [1.68, 1.78, 1.88, 1.98], tol_m = 0.06 }
+applies = ["us"]
+note = "Ряд снят с чертежей книг (Mississippi, Norfolk) и зависит от стиля: Acadian 3'-0\"×5'-6\", Victorian 2'-8\"×5'-10\", Classical 3'-0\"×6'-6\"; размеры без наличника. Мягкая проверка."
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 26 (PDF)"
+quote = "Windows are typically vertical in proportion with muntin patterns of 6 over 6 or 9 over 9."
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 32 (PDF)"
+quote = "Two basic window muntin patterns are 9 over 9 or 6 over 6 on the first floor"
+checked = true
+[[guideline.source]]
+doc = "ASHSB, How to plan, finance and build your home, 1922"
+file = "books2/us/howtoplanfinance00arch.txt"
+where = "стр. 14 (PDF)"
+quote = "The ceiling heights are governed by stock sizes of studs"
+checked = true
+[[guideline.source]]
+doc = "USDA Farmers' Bulletin 1738, 1934"
+file = "books2/us/usda-fb1738-farmhouse-plans-1934.txt"
+where = "стр. 9 (PDF)"
+quote = "Sizes should be closely adhered to for best appearance."
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 38 (PDF)"
+quote = "Window muntin patterns are typically 6 over 1 or 6 over 6 on both floors"
+checked = true
+
+[[guideline]]
+id = "window_lower_not_smaller"
+text = "Окно 1-го этажа не ниже окон верхних этажей: размеры окон уменьшаются с каждым этажом (разница высот до 0,15–0,20 м)"
+check = "lower_not_smaller"
+applies = ["us", "eu"]
+note = "Roanoke: h1 = h2 + 6 дюймов (0,15 м) при той же ширине; Mississippi/Norfolk: разница 0–8 дюймов."
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 44 (PDF)"
+quote = "The height of windows should diminish with each succeeding story."
+checked = true
+[[guideline.source]]
+doc = "Pattern Book for Neighborly Houses, 2007"
+file = "en/habitat_sh_arch.txt"
+where = "стр. 16 (PDF)"
+quote = "The size of windows should diminish with each succeeding story."
+checked = true
+[[guideline.source]]
+doc = "Thouars, Cahier de recommandations, 2020"
+file = "books2/eu/fr-thouars-cahier.txt"
+where = "стр. 8"
+quote = "fenêtres plus hautes au rez-de-chaussée qu'à l'étage"
+checked = true
+[[guideline.source]]
+doc = "Cotswold Design Code, Local Plan App. D"
+file = "books2/eu/uk-cotswold-design-code-appendixD.txt"
+where = "стр. 4"
+quote = "wider ground floor windows below smaller upper floor windows"
+checked = true
+
+[[guideline]]
+id = "window_vertical_axes"
+text = "Окна верхнего этажа стоят строго над окнами нижнего (центры совпадают), исключение — окно в фронтоне и двери"
+check = "vertical_axes"
+params = { tol_m = 0.05 }
+applies = ["us", "eu", "ru-izhs"]
+note = "Roanoke: окна 2-го этажа выровнены по вертикали с окнами 1-го. Конфликт: в английском стиле (Milwaukee, 1929) окна не обязаны стоять над окнами нижнего этажа — для английского стиля правило мягкое, для Georgian жёсткое."
+[[guideline.source]]
+doc = "Grapevine Historic Township Pattern Book, 2025"
+file = "en/grapevine.txt"
+where = "стр. 47 (PDF)"
+quote = "the center lines of each unit on the first floor are aligned with a center line of the unit above"
+checked = true
+[[guideline.source]]
+doc = "Residential Pattern Book Roanoke, 2008"
+file = "en/roanoke_full.txt"
+where = "стр. 106 (PDF)"
+quote = "Second floor windows should be aligned vertically with first floor windows."
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 31 (PDF)"
+quote = "Typical windows occur singly and align vertically from floor to floor."
+checked = true
+[[guideline.source]]
+doc = "Казань, ТД ИРГ (типовые решения ИЖС), 2025"
+file = "ru/irg/TD4.txt"
+where = "стр. 12, рисунок «Фасад в осях 1–3»"
+quote = ""
+checked = false
+[[guideline.source]]
+doc = "Bodenheim, Gestaltfibel, 2013"
+file = "books2/eu/de-bodenheim-gestaltfibel.txt"
+where = "4.3.1, стр. 20"
+quote = "stehen senkrecht über den Fensteröffnungen des darunter liegenden Geschosses"
+checked = true
+[[guideline.source]]
+doc = "Thouars, Cahier de recommandations, 2020"
+file = "books2/eu/fr-thouars-cahier.pdf"
+where = "I-3, стр. 8"
+quote = "les ouvertures sont alignées verticalement"
+checked = true
+[[guideline.source]]
+doc = "Regensburg, Gestaltungssatzung Ganghofersiedlung"
+file = "books2/eu/de-regensburg-gestaltungssatzung.txt"
+where = "§ 2 (2), стр. 2-3"
+quote = "Die Lage von Gauben muss sich an den Achsen der Hauptöffnungen der Fassaden orientieren."
+checked = true
+[[guideline.source]]
+doc = "Milwaukee Home Builders Plan Book, 1929"
+file = "books2/us/homebuildersplan00milw.txt"
+where = "стр. 65 (PDF)"
+quote = "do not always come over the windows below"
+checked = true
+[[guideline.source]]
+doc = "Куппфер, Жилой дом, 1914"
+file = "books2/ru/kupffer.txt"
+where = "стр. 58 (PDF)"
+quote = "и совпадаютъ по этажамъ"
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 61 (PDF)"
+quote = "Second-story windows located in a gable are usually centered above first floor windows."
+checked = true
+[[guideline.source]]
+doc = "Villecresnes, charte architecturale, 2024"
+file = "books2/eu/fr-villecresnes-charte-2024.txt"
+where = "стр. 47"
+quote = "combles sont centrés et situés sue la façade rue"
+checked = true
+
+[[guideline]]
+id = "window_corner_distance"
+text = "Расстояние от окна и двери до угла стены не менее 1,0 м (Schleching, Spiekeroog; Казань: боковой простенок 1,0–1,2 м); меньше допускают Regensburg (0,8 м) и Grapevine (1,5 ft = 0,457 м)"
+check = "corner_distance"
+params = { cls = "window", min = 1.0 }
+applies = ["us", "eu", "ru-izhs"]
+note = "Отступ от угла: 1,0 м (Schleching, Spiekeroog, Казань), 0,8 м (Regensburg), 0,457 м (Grapevine, 1,5 ft); EDG — «как можно дальше от углов», числа нет. Исключения: зимние сады, эркеры, окна в общей раме. В ТД Казани значения фиксированы по типу (1,0–1,2 м), допуск ±0,3 м."
+[[guideline.source]]
+doc = "Grapevine Historic Township Pattern Book, 2025"
+file = "en/grapevine.txt"
+where = "стр. 50 (PDF)"
+quote = "the distance of any window to the edge of a form element is 1.5 ft."
+checked = true
+[[guideline.source]]
+doc = "Казань, ТД ИРГ (типовые решения ИЖС), 2025"
+file = "ru/irg/TD1.txt"
+where = "стр. 10"
+quote = "часть стены, расположенная между углом здания и ближайшим оконным проемом"
+checked = true
+[[guideline.source]]
+doc = "Schleching, Bebauungsplan Bichlfeld, 10. Änderung"
+file = "books2/eu/de-schleching-bichlfeld.txt"
+where = "п. 5, стр. 1"
+quote = "Fenster und Türen einen Eckabstand von mindestens 1 m wahren"
+checked = true
+[[guideline.source]]
+doc = "Spiekeroog, Gestaltungssatzung I, 2023"
+file = "books2/eu/de-spiekeroog-bgs-2023.txt"
+where = "§ 4 (3), стр. 3"
+quote = "Die Fenster müssen von der Gebäudekante mindestens einen Abstand von 1,00 m aufweisen."
+checked = true
+[[guideline.source]]
+doc = "Regensburg, Gestaltungssatzung Ganghofersiedlung"
+file = "books2/eu/de-regensburg-gestaltungssatzung.txt"
+where = "§ 3 (4), стр. 4"
+quote = "seitlicher Abstand der Fenster zu den Gebäudeecken von mindestens 80 cm"
+checked = true
+[[guideline.source]]
+doc = "Essex Design Guide, 2018"
+file = "books2/eu/uk-edg-architectural-details.txt"
+where = "§1.30, стр. 13"
+quote = "positioned as far as possible from the corners of the building to give an impression of solid corner buttressing"
+checked = true
+
+[[guideline]]
+id = "pier_min"
+text = "Простенок между соседними проёмами одного этажа не менее 0,5 м (Spiekeroog); у Grapevine 1,5 ft (0,457 м), у Казани 0,65–0,9 м"
+check = "pier_min"
+params = { min = 0.5 }
+applies = ["us", "eu", "ru-izhs"]
+note = "Значения: 0,5 м (Spiekeroog, строгий исторический остров), 0,457 м (Grapevine), 0,65–0,9 м (Казань, фиксированные размеры типов), 0,64 м (КГАСУ: уже — сплошная кладка). Не относится к окнам одной группы (mullion 0,10–0,15 м, см. window_group_gap_us)."
+[[guideline.source]]
+doc = "Grapevine Historic Township Pattern Book, 2025"
+file = "en/grapevine.txt"
+where = "стр. 50 (PDF)"
+quote = "the distance of any window to the edge of a form element is 1.5 ft."
+checked = true
+[[guideline.source]]
+doc = "КГАСУ, Сибгатуллина, Попов, Индивидуальный жилой дом"
+file = "ru/kgasu.txt"
+where = "стр. 18"
+quote = "простенков шириной менее 640 мм"
+checked = true
+[[guideline.source]]
+doc = "Казань, ТД ИРГ (типовые решения ИЖС), 2025"
+file = "ru/irg/TD2.txt"
+where = "стр. 12, рисунок «Фасад в осях 1–3»"
+quote = ""
+checked = false
+[[guideline.source]]
+doc = "Spiekeroog, Gestaltungssatzung I, 2023"
+file = "books2/eu/de-spiekeroog-bgs-2023.txt"
+where = "§ 4 (1), стр. 2"
+quote = "In jedem Vollgeschoss muss mindestens 1/3 der Gebäudebreite"
+checked = true
+
+[[guideline]]
+id = "window_group_gap_us"
+text = "Окна в группе (пары, тройки): зазор между рамами — mullion 4–6 дюймов (0,10–0,15 м), mullion casing не менее 4 дюймов"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: зазор между окнами одной группы 0,10–0,15 м (исключение из pier_min); пара не шире 1,22 м, тройка по ≤ 0,66 м (Norfolk, European Romantic).; числа правила: min = 0.10, max = 0.15"
+[[guideline.source]]
+doc = "Pattern Book for Neighborly Houses, 2007"
+file = "en/habitat_sh_arch.txt"
+where = "стр. 6 (PDF)"
+quote = "Standard windows are often paired with a 6\" mullion (trim) division."
+checked = true
+[[guideline.source]]
+doc = "Mississippi State University Architecture, Mouzon 2023"
+file = "en/msu.pdf"
+where = "стр. 20"
+quote = "All mullion casings between any opening elements (windows, doors, or transoms) shall be a minimum of 4” wide"
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 49 (PDF)"
+quote = "Typically, windows occur in pairs and multiples, or as sidelights for oversized ground floor windows."
+checked = true
+
+[[guideline]]
+id = "side_walls_not_blank"
+text = "Боковые и угловые стены не слепые: на каждом уровне дверь или окно в пределах 8 ft (2,44 м) от каждого переднего угла"
+check = "none"
+applies = ["us", "eu"]
+note = "нужна проверка: на каждом этаже ближайший проём не дальше 2,44 м от угла (максимум, а не минимум, см. window_corner_distance). Schleching: при более чем двух этажах глухие стороны недопустимы (минимум 1 окно на фасаде). Конфликт: у традиции Cotswold торцевые стены глухие или с редкими смещёнными окнами.; числа правила: max = 2.44"
+[[guideline.source]]
+doc = "Mississippi State University Architecture, Mouzon 2023"
+file = "en/msu.txt"
+where = "стр. 13"
+quote = "There should be a door or window within 8 feet of each front corner of each level of the building."
+checked = true
+[[guideline.source]]
+doc = "Residential Pattern Book Roanoke, 2008"
+file = "en/roanoke_full.txt"
+where = "стр. 107 (PDF)"
+quote = "special care should be given to developing that side elevation"
+checked = true
+[[guideline.source]]
+doc = "Schleching, Bebauungsplan Bichlfeld, 10. Änderung"
+file = "books2/eu/de-schleching-bichlfeld.txt"
+where = "п. 5, стр. 1"
+quote = "Bei Gebäuden mit mehr als zwei Vollgeschossen sind fensterlose Hausseiten unzulässig."
+checked = true
+
+[[guideline]]
+id = "opening_share"
+text = "Доля проёмов на фасаде: окна и двери занимают не менее 20 % площади стены между цоколем и карнизом (Roanoke) и не более 40 % (Regensburg; EDG — меньше 50 %, стена преобладает)"
+check = "opening_share"
+params = { min = 0.20, max = 0.40 }
+applies = ["us", "eu", "ru-mkd"]
+note = "Нижняя граница 0,20 — Roanoke (новая застройка, каждый фасад); верхние: 0,5 (EDG, кладка), 0,40 (Regensburg, реконструкция ансамбля), «заметно преобладает» без числа (Schleching, обязательно), 0,30 — историческая зона СПб (приказ № 1984); СП 50: определение f и пример f = 0,20, нормы нет. Знаменатель — стена от цоколя до карниза."
+[[guideline.source]]
+doc = "Residential Pattern Book Roanoke, 2008"
+file = "en/roanoke_full.txt"
+where = "стр. 107 (PDF)"
+quote = "A minimum of 20 percent of the wall surface between the eaves and the foundation"
+checked = true
+[[guideline.source]]
+doc = "Приказ Минкультуры СПб № 1984 (копия sudact.ru), 2022"
+file = "ru/extra/spb1984.txt"
+where = "п. 65.2.6"
+quote = "соотношение остекленных и глухих поверхностей лицевых фасадов в пределах 30% поверхности фасадов"
+checked = true
+[[guideline.source]]
+doc = "СП 50.13330.2012"
+file = "norms/4293799306.txt"
+where = "прил. Б, п. Б.9"
+quote = "коэффициент остекленности фасада здания: Отношение площадей светопроемов к суммарной площади наружных ограждающих конструкций фасада здания, включая светопроемы."
+checked = true
+[[guideline.source]]
+doc = "Essex Design Guide, 2018"
+file = "books2/eu/uk-edg-architectural-details.txt"
+where = "§1.30, стр. 13"
+quote = "total area of the window and door openings in any single elevation should be less than the total area of solid wall"
+checked = true
+[[guideline.source]]
+doc = "Schleching, Bebauungsplan Bichlfeld, 10. Änderung"
+file = "books2/eu/de-schleching-bichlfeld.pdf"
+where = "п. 4.4, стр. 1"
+quote = "Wandflächen deutlich überwiegen müssen"
+checked = true
+[[guideline.source]]
+doc = "Regensburg, Gestaltungssatzung Ganghofersiedlung"
+file = "books2/eu/de-regensburg-gestaltungssatzung.txt"
+where = "§ 3 (4), стр. 4"
+quote = "Anteil der Fensterfläche einer Fassade darf höchstens 40 % der jeweiligen Fassadenseite betragen."
+checked = true
+[[guideline.source]]
+doc = "Cotswold Design Code, Local Plan App. D"
+file = "books2/eu/uk-cotswold-design-code-appendixD.txt"
+where = "стр. 4"
+quote = "Window openings well-spaced and fairly small, with sizeable areas of wall in between."
+checked = true
+[[guideline.source]]
+doc = "Walsh, The Construction of the Small House, 1923"
+file = "books2/us/constructionofsm00walsrich.txt"
+where = "стр. 248 (PDF)"
+quote = "The fenestration cannot be too large or too small, and here is the problem."
+checked = true
+[[guideline.source]]
+doc = "Дизайн-Капитал, Руководство по дизайну фасада v2.5, 2019"
+file = "ru/dk/designcapital.txt"
+where = "стр. 7 (PDF)"
+quote = "Чем больше проем, тем меньше стена и наоборот."
+checked = true
+
+[[guideline]]
+id = "shutter_width_us"
+text = "Ставни: каждая створка шириной в половину окна, высота равна проёму, парой по обе стороны окна, крепятся как рабочие"
+check = "shutter_width"
+params = { min = 0.45, max = 0.55 }
+applies = ["us"]
+note = "Доля от ширины окна (1/2 sash width)."
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 26 (PDF)"
+quote = "They should be sized to match the window sash and mounted with hardware to appear operable."
+checked = true
+[[guideline.source]]
+doc = "Pattern Book for Neighborly Houses, 2007"
+file = "en/habitat_sh_arch.txt"
+where = "стр. 6 (PDF)"
+quote = "Shutters are typically paneled or louvered and should be half the width of the window."
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 32 (PDF)"
+quote = "Shutters should be sized and mounted to appear operable."
+checked = true
+[[guideline.source]]
+doc = "Louisiana Speaks Pattern Book, UDA 2006"
+file = "en/la_speaks_cpex.txt"
+where = "стр. 45 (PDF)"
+quote = "sized to match window sash or door frame and mounted with hardware so that they are operable"
+checked = true
+
+[[guideline]]
+id = "shutters_by_style"
+text = "Ставни зависят от стиля: не для Queen Anne, Foursquare, Bungalow и не на фахверковых (half-timbered) участках; только когда они соответствуют стилю дома"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: список blind пуст при стиле из запрещённых (параметр дома, шаг 1)."
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 44 (PDF)"
+quote = "Shutters are not permitted on half-timbered areas."
+checked = true
+[[guideline.source]]
+doc = "Residential Pattern Book Roanoke, 2008"
+file = "en/roanoke_full.pdf"
+where = "стр. 107 (PDF)"
+quote = "Shutters should only be included when they are in keeping with the style of house."
+checked = true
+[[guideline.source]]
+doc = "Residential Pattern Book Roanoke, 2008"
+file = "en/roanoke_full.txt"
+where = "стр. 59-62 (PDF)"
+quote = "Shutters are never used where half-timbering is present."
+checked = true
+[[guideline.source]]
+doc = "Residential Pattern Book Roanoke, 2008"
+file = "en/roanoke_full.txt"
+where = "стр. 52 (PDF)"
+quote = "Shutters were not used on the Bungalow."
+checked = true
+[[guideline.source]]
+doc = "Residential Pattern Book Roanoke, 2008"
+file = "en/roanoke_full.txt"
+where = "стр. 28 (PDF)"
+quote = "Shutters were rarely used on the Queen Anne."
+checked = true
+
+[[guideline]]
+id = "window_trim_width"
+text = "Наличник окон и дверей: 4 дюйма (0,10 м) или 6 дюймов (0,15 м); не уже 3,5 дюйма сбоку и 5,5 дюйма сверху"
+check = "none"
+applies = ["us", "eu", "ru-izhs"]
+note = "нужна проверка: ширина наличника вокруг проёма 0,10–0,15 м (молдинг у окна); наличник двери равен наличнику окна. Казань: наличник Н1 шире окна на 2×100 мм (900×1600 → 1100×1850), сандрик шире наличника на 2×150 мм; Куппфер: наличники двери 10–13 см с каждой стороны. Конфликт: стиль Akaa «Moderni» без наличников и угловых досок.; числа правила: min = 0.09, max = 0.15"
+[[guideline.source]]
+doc = "Pattern Book for Neighborly Houses, 2007"
+file = "en/habitat_sh_arch.txt"
+where = "стр. 6 (PDF)"
+quote = "Windows and doors have simple 4 to 6 inch trim."
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 32 (PDF)"
+quote = "Windows and doors typically have 4-inch-wide profiled trim."
+checked = true
+[[guideline.source]]
+doc = "Residential Pattern Book Roanoke, 2008"
+file = "en/roanoke_full.pdf"
+where = "стр. 108 (PDF)"
+quote = "Windows and doors should have a minimum 3 ½ inch jamb and 5 ½ inch head."
+checked = true
+[[guideline.source]]
+doc = "Куппфер, Жилой дом, 1914"
+file = "books2/ru/kupffer.txt"
+where = "стр. 35 (PDF)"
+quote = "по обЪимъ сторонамъ двери, а именно по 1 0 — 1 3 с т"
+checked = true
+[[guideline.source]]
+doc = "Казань, ТД ИРГ (типовые решения ИЖС), 2025"
+file = "ru/irg/TD1.txt"
+where = "стр. 40, рисунок «Наличник Н1»"
+quote = ""
+checked = false
+[[guideline.source]]
+doc = "Akaa, Uusikylä rakentamistapaohjeet, 2012"
+file = "books2/eu/fi-akaa.txt"
+where = "стр. 3"
+quote = "Ei ikkunanpieli- eikä nurkkalaudoitusta"
+checked = true
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 26 (PDF)"
+quote = "Windows and doors typically have 4-inch-wide trim with a backband."
+checked = true
+[[guideline.source]]
+doc = "Louisiana Speaks Pattern Book, UDA 2006"
+file = "en/la_speaks_cpex.txt"
+where = "стр. 45 (PDF)"
+quote = "Six-inch trim with a simple backband profile"
+checked = true
+
+[[guideline]]
+id = "door_size_us"
+text = "Двери us: проём одной двери 3'-0\" (0,91 м), до 3'-4\" (1,02 м), высота 6'-8\" (2,03 м), высокая до 8'-0\"; пара дверей до 4 ft (1,22 м), для дверей высотой от 8 ft — до 5 ft (1,52 м)"
+check = "door_size"
+params = { min_w = 0.91, min_h = 2.03, max_w = 1.52, max_h = 2.45 }
+applies = ["us"]
+note = "Размеры на чертежах книг без наличников; транец 1'-4\" (0,41 м) над дверью."
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 32 (PDF)"
+quote = "The maximum width of a pair of double doors is 5 feet for doors at least 8 feet tall"
+checked = true
+[[guideline.source]]
+doc = "Old South Baton Rouge Pattern Book, CPEX 2008"
+file = "en/osbr.txt"
+where = "стр. 25 (PDF)"
+quote = "The maximum width of a pair of double doors is 5 feet for doors at least 8 feet tall"
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 32 (PDF)"
+quote = "Doors include 6- and 8-panel patterns, typically with sidelights and transom surrounds."
+checked = true
+[[guideline.source]]
+doc = "Louisiana Speaks Pattern Book, UDA 2006"
+file = "en/la_speaks_cpex.txt"
+where = "стр. 45 (PDF)"
+quote = "Entry doors are typically 4-, or 6-paneled and include either a transom"
+checked = true
+
+[[guideline]]
+id = "transom_only_over_door"
+text = "Транец допустим только над дверью или над окном-sidelight рядом с дверью, но не над обычными окнами"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: рядом с каждым transom (deco/window над дверью) есть door; в модели класса transom нет."
+[[guideline.source]]
+doc = "Mississippi State University Architecture, Mouzon 2023"
+file = "en/msu.txt"
+where = "стр. 21"
+quote = "Transoms should be used only over doors or over windows acting as sidelites beside doors."
+checked = true
+
+[[guideline]]
+id = "plinth_height_us"
+text = "Цоколь us: пол 1-го этажа поднят над землёй на 2–4 ft (0,6–1,2 м) по стилю, Coastal/European Romantic — 12–18 дюймов (0,30–0,46 м), Ranch — на уровне земли"
+check = "plinth_height"
+params = { min = 0.0, max = 1.22 }
+applies = ["us"]
+note = "Диапазоны по стилям: Classical 2–3 ft, Colonial/Victorian/A&C 3 ft, Victorian (Mississippi) 3–4 ft, Louisiana — до 4 ft. Книги Mississippi при требованиях FEMA допускают подъём до 16 ft (4,88 м) комбинацией насыпи и нежилого нижнего этажа."
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 25 (PDF)"
+quote = "typically set three feet above the finished grade for a one-story house"
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 31 (PDF)"
+quote = "typically set 2 to 3 feet above the finished grade"
+checked = true
+[[guideline.source]]
+doc = "Louisiana Speaks Pattern Book, UDA 2006"
+file = "en/la_speaks_cpex.txt"
+where = "стр. 41 (PDF)"
+quote = "typically set up to four feet above the finished grade for a one-story house"
+checked = true
+[[guideline.source]]
+doc = "Old South Baton Rouge Pattern Book, CPEX 2008"
+file = "en/osbr.txt"
+where = "стр. 21 (PDF)"
+quote = "The first floor is typically set up between 2- and 4-feet above the finished grade."
+checked = true
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 16 (PDF)"
+quote = "Used in combination, they can reach up to 16 feet above original site grade."
+checked = true
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 31 (PDF)"
+quote = "typically set four feet above the finished grade"
+checked = true
+
+[[guideline]]
+id = "floor_height_us"
+text = "Высота этажа us: потолок 1-го этажа 9–10 ft (2,74–3,05 м), 2-го — 8–9 ft (2,44–2,74 м); шаг этажей = потолок + около 1 ft"
+check = "floor_height"
+params = { min = 2.7, max = 3.4 }
+applies = ["us"]
+note = "Шаг этажей = потолок + перекрытие около 1 ft (0,3 м) [вывод]. Roanoke образец: 10'/9' (3,05/2,74 м). Minimum floor-to-ceiling у Louisiana Vernacular 10 ft."
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 25 (PDF)"
+quote = "the minimum floor-to-ceiling height is 10 feet"
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 31 (PDF)"
+quote = "The floor-to-ceiling height on the first floor is typically 10 feet."
+checked = true
+[[guideline.source]]
+doc = "Louisiana Speaks Pattern Book, UDA 2006"
+file = "en/la_speaks_cpex.pdf"
+where = "стр. 65 (PDF)"
+quote = "Typical floor-to-ceiling heights are 9 feet for the first floor and 8 feet for the second floor."
+checked = true
+
+[[guideline]]
+id = "floor_length_openings_under_porch"
+text = "Под навесом порча допустимы остеклённые двери и окна до пола вместо обычных окон 1-го этажа (French doors)"
+check = "none"
+applies = ["us"]
+note = "Разрешение, не требование: sill = 0 допустим у стены под porch."
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 26 (PDF)"
+quote = "Multi-pane doors are often used in lieu of windows on the first floor under the porch."
+checked = true
+[[guideline.source]]
+doc = "Louisiana Speaks Pattern Book, UDA 2006"
+file = "en/la_speaks_cpex.txt"
+where = "стр. 36 (PDF)"
+quote = "tall windows which touch the floor, or French doors"
+checked = true
+
+[[guideline]]
+id = "facade_symmetry"
+text = "Симметрия зависит от стиля: Classical, Colonial, Foursquare — вход по центру и зеркальные окна; Arts & Crafts, Tudor, Ranch — асимметрия; в узких домах вход в углу"
+check = "symmetry"
+params = { tol_m = 0.05 }
+applies = ["us", "eu"]
+note = "Проверять только для симметричных стилей (параметр дома); для асимметричных стилей проверки нет. EDG: почти-симметрия плоха — либо зеркально с малым допуском, либо явно асимметрично; на широком фасаде допустима асимметрия, основа рисунка — входная дверь. Cotswold: торцы могут быть глухими."
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 31 (PDF)"
+quote = "Front doors are generally located in the corner of narrow houses and at the center of wide houses."
+checked = true
+[[guideline.source]]
+doc = "Residential Pattern Book Roanoke, 2008"
+file = "en/roanoke_full.txt"
+where = "стр. 69 (PDF)"
+quote = "The facade will feature either three or five-bays with a centered door and symmetrically balanced windows."
+checked = true
+[[guideline.source]]
+doc = "Residential Pattern Book Roanoke, 2008"
+file = "en/roanoke_full.pdf"
+where = "стр. 79 (PDF)"
+quote = "Windows and doors were placed without regard to symmetry."
+checked = true
+[[guideline.source]]
+doc = "Essex Design Guide, 2018"
+file = "books2/eu/uk-edg-architectural-details.txt"
+where = "§1.17, стр. 9"
+quote = "symmetrical pattern of openings arranged around an opening placed on the central axis"
+checked = true
+[[guideline.source]]
+doc = "Essex Design Guide, 2018"
+file = "books2/eu/uk-edg-architectural-details.txt"
+where = "§1.21, стр. 10"
+quote = "Unfavourable solutions are those which are almost symmetrical"
+checked = true
+[[guideline.source]]
+doc = "Schleching, Bebauungsplan Bichlfeld, 10. Änderung"
+file = "books2/eu/de-schleching-bichlfeld.txt"
+where = "п. 5, стр. 1"
+quote = "Bei Giebelflächen muss die symmetrische Anordnung von Fenstern und Türen erkennbar sein."
+checked = true
+[[guideline.source]]
+doc = "Cotswold Design Code, Local Plan App. D"
+file = "books2/eu/uk-cotswold-design-code-appendixD.txt"
+where = "стр. 4"
+quote = "Openings usually centrally placed within gables"
+checked = true
+[[guideline.source]]
+doc = "Kotka Mussalo, rakennustapaohje, 2019"
+file = "books2/eu/fi-kotka-mussalo.txt"
+where = "стр. 11"
+quote = "suhteellisen kapeat ja korkeat ikkunat on sijoitettu säännöllisesti ja symmetrisesti julkisivuun"
+checked = true
+[[guideline.source]]
+doc = "Thouars, Cahier de recommandations, 2020"
+file = "books2/eu/fr-thouars-cahier.txt"
+where = "стр. 8"
+quote = "en observant sa composition générale (axialité, symétrie"
+checked = true
+[[guideline.source]]
+doc = "Detroit Steel Products, Small House Entrances of Our Times, 1920"
+file = "books2/us/smallhouseentran00detr.txt"
+where = "стр. 2 (PDF)"
+quote = "of entrance is conditioned"
+checked = true
+[[guideline.source]]
+doc = "Residential Pattern Book Roanoke, 2008"
+file = "en/roanoke_full.txt"
+where = "стр. 39-41 (PDF)"
+quote = "Centered front entrance with equal groupings of windows on either side of both stories"
+checked = true
+[[guideline.source]]
+doc = "Essex Design Guide, 2018"
+file = "books2/eu/uk-edg-architectural-details.txt"
+where = "§1.22, стр. 10"
+quote = "front door remains the most important element and should form the basis of the pattern"
+checked = true
+[[guideline.source]]
+doc = "Anzing, Gestaltungsleitfaden, 2022"
+file = "books2/eu/de-anzing-gestaltungsleitfaden-2022.txt"
+where = "стр. 13"
+quote = "Die Giebel sind größtenteils durch eine symmetrische"
+checked = true
+
+[[guideline]]
+id = "openings_rhythm"
+text = "Ритм проёмов: повторяющийся и простой, равные интервалы между окнами и дверями, нечётное число пролётов (3 или 5); главный объём не шире 5 пролётов"
+check = "none"
+applies = ["us", "eu", "ru-izhs"]
+note = "нужна проверка: интервалы между соседними проёмами этажа почти равны (разброс ≤ 0,15 м), число пролётов нечётное. Шаг пролёта 8 ft (2,44 м) — только Mouzon (MSU).; числа правила: bays = [3, 5], bay_step_m = 2.44"
+[[guideline.source]]
+doc = "Pattern Book for Neighborly Houses, 2007"
+file = "en/habitat_sh_arch.txt"
+where = "стр. 4 (PDF)"
+quote = "Window patterns are generally repetitive and very simple with equal space between windows and doors."
+checked = true
+[[guideline.source]]
+doc = "Mississippi State University Architecture, Mouzon 2023"
+file = "en/msu.pdf"
+where = "стр. 13"
+quote = "The main body should ideally be no more than five bays wide"
+checked = true
+[[guideline.source]]
+doc = "Villecresnes, charte architecturale, 2024"
+file = "books2/eu/fr-villecresnes-charte-2024.txt"
+where = "стр. 48"
+quote = "le positionnement aléatoire des ouvertures en façades n'offre pas une composition de façade harmonieuse"
+checked = true
+[[guideline.source]]
+doc = "Thouars, Cahier de recommandations, 2020"
+file = "books2/eu/fr-thouars-cahier.txt"
+where = "стр. 8"
+quote = "composition générale (axialité, symétrie, type d’entourage de baie, etc.), - en respectant l’organisation et la répartition des ouvertures"
+checked = true
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 27 (PDF)"
+quote = "Houses 24 to 32 feet wide have three bays for the front facade length"
+checked = true
+
+[[guideline]]
+id = "window_types"
+text = "Число различных типоразмеров окон ограничено: не более трёх форматов на фасад и четырёх на здание (Schleching, обязательная норма); US-книги: один тип окна на фасад, кроме особых (accent) окон"
+check = "window_types"
+params = { per_facade = 3, per_house = 4, tol_m = 0.15 }
+applies = ["us", "eu"]
+note = "Числа 3 и 4 — Schleching (обязательно); американские книги чисел не дают («same window design throughout, with the exception of special windows»), строгое чтение — 1 основной + accent. Roanoke: ширина окон этажа может различаться не более чем на 6 дюймов (0,15 м) — tol_m. Accent: w ≤ 0,81 м, h ≤ 1,22 м (Mississippi), только когда мало места."
+[[guideline.source]]
+doc = "Pattern Book for Neighborly Houses, 2007"
+file = "en/habitat_sh_arch.pdf"
+where = "стр. 8 (PDF)"
+quote = "Same window design throughout, with the exception of special windows"
+checked = true
+[[guideline.source]]
+doc = "Pattern Book for Neighborly Houses, 2007"
+file = "en/habitat_sh_arch.txt"
+where = "стр. 6 (PDF)"
+quote = "Accent windows are typically used only when space is limited"
+checked = true
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 26 (PDF)"
+quote = "Special windows are typically small accent windows with 6 panes or in a 4 over 4 muntin pattern."
+checked = true
+[[guideline.source]]
+doc = "Schleching, Bebauungsplan Bichlfeld, 10. Änderung"
+file = "books2/eu/de-schleching-bichlfeld.txt"
+where = "п. 4.4, стр. 1"
+quote = "Pro Fassade sind maximal drei, je Gebäude maximal vier Fensterformate zulässig."
+checked = true
+[[guideline.source]]
+doc = "Oberstaufen, Ortsgestaltungssatzung, 2018"
+file = "books2/eu/de-oberstaufen-gestaltungssatzung-2018.txt"
+where = "§ 9 (2), стр. 7"
+quote = "Zu viele unterschiedliche Formatformen sind zu vermeiden"
+checked = true
+[[guideline.source]]
+doc = "Pfaffenhofen, Bauen ist Charaktersache, 2018"
+file = "books2/eu/de-pfaffenhofen-bauen-charaktersache.txt"
+where = "стр. 3"
+quote = "Unterschiedliche Fensterformen verändern den Gesamtausdruck der Fassade nachteilig."
+checked = true
+[[guideline.source]]
+doc = "Villecresnes, charte architecturale, 2024"
+file = "books2/eu/fr-villecresnes-charte-2024.txt"
+where = "стр. 48"
+quote = "on évitera la multiplication de baies de formes et d'orientations trop disparates"
+checked = true
+[[guideline.source]]
+doc = "Cotswold Design Code, Local Plan App. D"
+file = "books2/eu/uk-cotswold-design-code-appendixD.pdf"
+where = "стр. 17"
+quote = "Cluttered fenestration and over-scaled window openings should be avoided."
+checked = true
+[[guideline.source]]
+doc = "Куппфер, Жилой дом, 1914"
+file = "books2/ru/kupffer.txt"
+where = "стр. 58 (PDF)"
+quote = "а приходится подогнать ихъ къ какимъ-нибудь 2-мъ"
+checked = true
+[[guideline.source]]
+doc = "Grapevine Historic Township Pattern Book, 2025"
+file = "en/grapevine.txt"
+where = "стр. 50 (PDF)"
+quote = "must take on a more decorative shape"
+checked = true
+
+[[guideline]]
+id = "porch_depth_us"
+text = "Порч: глубина не менее 8 ft (2,44 м); у Roanoke не менее 6 ft (рекомендовано 8–10 ft); у малого входного крыльца Coastal — 4 ft"
+check = "none"
+applies = ["us"]
+note = "Глубины в модели нет — нужна проверка вне прямоугольников фасада (параметр дома).; числа правила: min_depth = 2.44"
+[[guideline.source]]
+doc = "Louisiana Speaks Pattern Book, UDA 2006"
+file = "en/la_speaks_cpex.txt"
+where = "стр. 42 (PDF)"
+quote = "Minimum recommended porch depth is 8 feet"
+checked = true
+[[guideline.source]]
+doc = "Pattern Book for Neighborly Houses, 2007"
+file = "en/habitat_sh_arch.txt"
+where = "стр. 5 (PDF)"
+quote = "Minimum recommended porch depth is 8 feet."
+checked = true
+[[guideline.source]]
+doc = "Residential Pattern Book Roanoke, 2008"
+file = "en/roanoke_full.txt"
+where = "стр. 104 (PDF)"
+quote = "at least half the width of the dwelling’s façade and have a depth of at least 6 feet"
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 63 (PDF)"
+quote = "Smaller, single-bay entry porches with a minimum porch depth of 4 feet are encouraged on Coastal Cottages."
+checked = true
+
+[[guideline]]
+id = "porch_width_share_us"
+text = "Порч занимает 1/5, 1/3, 3/5 или всю ширину фасада; Roanoke — не менее половины ширины; портик по центру"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: porch.w / длина стены ∈ {0,2; 0,33; 0,6; 1,0} (допуск ±0,05) или ≥ 0,5 (Roanoke).; числа правила: shares = [0.2, 0.33, 0.6, 1.0]"
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 31 (PDF)"
+quote = "they may also be three-fifths or the entire length of the front facade"
+checked = true
+[[guideline.source]]
+doc = "Residential Pattern Book Roanoke, 2008"
+file = "en/roanoke_full.txt"
+where = "стр. 104 (PDF)"
+quote = "at least half the width of the dwelling’s façade and have a depth of at least 6 feet"
+checked = true
+
+[[guideline]]
+id = "porch_column_spacing_us"
+text = "Колонны порча: шаг 8–12 ft (2,44–3,66 м) по осям; расстояние между колоннами не больше их высоты; пролёты уже, чем высота"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: расстояние между соседними pillar ∈ [2,44; 3,66] и ≤ высоты pillar; у Coastal shed-porch пролёты шире высоты.; числа правила: min = 2.44, max = 3.66"
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 27 (PDF)"
+quote = "Columns have a regular spacing of between 8 to 12 feet on center."
+checked = true
+[[guideline.source]]
+doc = "Mississippi State University Architecture, Mouzon 2023"
+file = "en/msu.pdf"
+where = "стр. 29"
+quote = "The space between columns (measured center to center) must be no greater than the height of the columns"
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.txt"
+where = "стр. 33 (PDF)"
+quote = "Porch column bays should be more narrow than wide."
+checked = true
+
+[[guideline]]
+id = "porch_column_height_us"
+text = "Колонны порча одноэтажного: высота 9–10 ft (2,74–3,05 м) на 1-м этаже, 8–9 ft (2,44–2,74 м) на 2-м"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: высота pillar в диапазоне (Habitat: 8–9 ft; Coastal: 7–8 ft).; числа правила: cls = 'pillar', min = 2.44, max = 3.05"
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.txt"
+where = "стр. 33 (PDF)"
+quote = "Single-story porches have 9-to 10-foot-tall columns"
+checked = true
+
+[[guideline]]
+id = "canopy_min_size_us"
+text = "Навес над боковым входом: ширина и глубина не менее 36 дюймов (0,91 м); hood Coastal Cottage выносится не более чем на 3 ft"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: canopy.w ≥ 0,91 (глубины в модели нет).; числа правила: cls = 'canopy', min_w = 0.91"
+[[guideline.source]]
+doc = "Residential Pattern Book Roanoke, 2008"
+file = "en/roanoke_full.pdf"
+where = "стр. 105 (PDF)"
+quote = "Side entries should be covered by a roof with a minimum width and depth of 36 inches."
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 63 (PDF)"
+quote = "projects no more than 3 feet from the facade"
+checked = true
+
+[[guideline]]
+id = "frieze_gap_us"
+text = "Фриз us: высота 8–16 дюймов (0,20–0,41 м), либо вплотную к наличнику верха окна, либо не менее чем на 8 дюймов (0,20 м) выше него"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: зазор между верхом окна 2-го этажа (с наличником) и низом cornice = 0 или ≥ 0,20 м (Victorian); у Arts & Crafts зазор 0–0,30 м; Louisiana Classical — фриз не менее 10 дюймов (0,25 м).; числа правила: gap_min = 0.20, frieze_h_min = 0.20, frieze_h_max = 0.41"
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 31 (PDF)"
+quote = "A 12- to 16-inch frieze board either touching or at least 8 inches above the window head trim"
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 37 (PDF)"
+quote = "Eave profiles have an 8- to 12-inch frieze board at least 8 inches above the window head trim."
+checked = true
+
+[[guideline]]
+id = "skirt_board_us"
+text = "Цокольная доска (skirt board) высотой 8 дюймов (0,20 м), 8–10 дюймов (0,20–0,25 м) у Arts & Crafts; вентотверстия фундамента по центру под окном"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: высота полосы у низа стены; vent.cx = window.cx.; числа правила: min = 0.20, max = 0.25"
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep_patternbook.pdf"
+where = "стр. 31 (PDF)"
+quote = "These houses have 8-inch-wide skirt boards. Foundation vents are centered under windows when used."
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 37 (PDF)"
+quote = "Clapboard houses should have an 8-inch skirt board."
+checked = true
+
+[[guideline]]
+id = "corner_board_us"
+text = "Угловые доски (corner boards) шириной не менее 6 дюймов (0,15 м), по Roanoke не менее 3,5 дюйма"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: ширина вертикальной полосы на углу стены.; числа правила: min = 0.15"
+[[guideline.source]]
+doc = "Louisiana Speaks Pattern Book, UDA 2006"
+file = "en/la_speaks_cpex.txt"
+where = "стр. 57 (PDF)"
+quote = "Corner boards are typically 6 inches wide at a minimum."
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.txt"
+where = "стр. 37 (PDF)"
+quote = "On clapboard houses, corner boards"
+checked = true
+
+[[guideline]]
+id = "belt_course"
+text = "Пояс между этажами: непрерывная горизонтальная полоса (belt course) на уровне пола 2-го этажа или по линии подоконников 2-го этажа (Arts & Crafts, Colonial Revival)"
+check = "none"
+applies = ["us", "eu"]
+note = "нужна проверка: molding на y = y_floor[1] или y = подоконник 2-го этажа, на всю длину стены."
+[[guideline.source]]
+doc = "Pattern Book for Neighborly Houses, 2007"
+file = "en/habitat_sh_arch.txt"
+where = "стр. 11 (PDF)"
+quote = "Continuous horizontal trim band or belt course at the second floor window sill line"
+checked = true
+[[guideline.source]]
+doc = "Essex Design Guide, 2018"
+file = "books2/eu/uk-edg-architectural-details.txt"
+where = "§1.47, стр. 18"
+quote = "form of the building may be emphasised by string courses, plinths and projections at the eaves"
+checked = true
+[[guideline.source]]
+doc = "Bodenheim, Gestaltfibel, 2013"
+file = "books2/eu/de-bodenheim-gestaltfibel.txt"
+where = "4.2, стр. 19"
+quote = "Eine Fassade lässt sich in folgende Bereiche horizontal unterteilen"
+checked = true
+
+[[guideline]]
+id = "heavy_material_below_light"
+text = "Материалы по слоям: тяжёлые снизу, лёгкие сверху (камень/кирпич под деревом и штукатуркой); сайдинг не ближе 8 дюймов (0,20 м) к земле"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: порядок цветовых зон снизу вверх; нижняя граница сайдинга не ниже 0,20 м над землёй (цоколь)."
+[[guideline.source]]
+doc = "Mississippi State University Architecture, Mouzon 2023"
+file = "en/msu.txt"
+where = "стр. 12"
+quote = "Heavier wall materials should always be below lighter wall materials."
+checked = true
+[[guideline.source]]
+doc = "Norfolk Pattern Book, UDA 2003"
+file = "en/norfolk.pdf"
+where = "стр. 43 (PDF)"
+quote = "Clapboard or shake cladding materials should never come within 8 inches of finished grade"
+checked = true
+
+[[guideline]]
+id = "opening_module_masonry_us"
+text = "Кирпичная облицовка: центры проёмов и углы на модуле 4 дюйма (0,10 м), кирпич по вертикали на модуле 16 дюймов, по горизонтали 8 дюймов"
+check = "module"
+params = { cls = "window", module_m = 0.1016, tol_m = 0.01 }
+applies = ["us"]
+note = "Только для кирпичной облицовки (MSU)."
+[[guideline.source]]
+doc = "Mississippi State University Architecture, Mouzon 2023"
+file = "en/msu.pdf"
+where = "стр. 12"
+quote = "Brick should course vertically to a 16” module and horizontally to an 8” module."
+checked = true
+
+[[guideline]]
+id = "raised_base_piers_us"
+text = "Нежилой нижний этаж на высоком цоколе (при plinth от 2,44 м): стены из жалюзи между квадратными каменными/кирпичными столбами"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: при plinth_m ≥ 2,44 под floor 1 отрисованы pillar и панели, а не сплошной цоколь.; числа правила: cls = 'pillar'"
+[[guideline.source]]
+doc = "Mississippi Renewal Pattern Book, UDA 2005"
+file = "en/ms_rep.txt"
+where = "стр. 17 (PDF)"
+quote = "Unoccupied ground floor exterior walls can be articulated as louvered panels inset between square, masonry piers."
+checked = true
+
+[[guideline]]
+id = "window_row_rhythm_ru"
+text = "Ритм проёмов ru (Казань, ТД ИРГ): окна одного ряда одной ширины и высоты, простенки между окнами одинаковые, боковой простенок (угол — первое окно) больше внутреннего; излишек по горизонтали уходит в боковые простенки"
+check = "none"
+applies = ["ru-izhs"]
+note = "нужна проверка: сумма цепочки «боковой + N окон + (N−1) простенков» = ширина стены; окна ряда равны; внутренние простенки равны. Типы Казани: 1200|900|900 (3 окна, 6,9 м), 1100|950|800 (4 окна, 8,4 м), 1000|800|650 (двухэтажный, 5,7 м). Исторический анализ даёт простенок ≈ 1,7·окно — диапазон 0,8–1,7. Региональный стиль, не общий ИЖС.; числа правила: pier_to_window = [0.8, 1.0], lateral_to_window = [1.16, 1.33], tol_lateral_m = 0.3"
+[[guideline.source]]
+doc = "Казань, ТД ИРГ (типовые решения ИЖС), 2025"
+file = "ru/irg/TD1.txt"
+where = "стр. 12"
+quote = "Ширина и высота оконных проемов, а также ширина простенков"
+checked = true
+[[guideline.source]]
+doc = "Казань, ТД ИРГ (типовые решения ИЖС), 2025"
+file = "ru/irg/TD1.txt"
+where = "стр. 10, 12"
+quote = "допустимое отступление горизонтальных размеров распределяется в боковые простенки"
+checked = true
+
+[[guideline]]
+id = "window_vertical_ru"
+text = "Окна ru: оконный проём стоячий, высота в 1,8–1,9 раза больше ширины (900×1600, 950×1700, 800×1500; историческая пропорция 1:1,9)"
+check = "aspect"
+params = { cls = "window", min = 1.7, max = 2.0 }
+applies = ["ru-izhs"]
+note = "Региональный стиль Казани (исторические дома XIX — начала XX века), не общий ИЖС. Створки + фрамуга около 1/3 высоты сверху. Числа сняты с чертежей, текстовых цитат нет. Куппфер (1914): ширина окна ≈ 0,5–0,7 высоты (h/w 1,43–2,2), высота окон жилых комнат 2,0–2,5 м (исторически высокие окна)."
+[[guideline.source]]
+doc = "Казань, ТД ИРГ (типовые решения ИЖС), 2025"
+file = "ru/irg/TD1.txt"
+where = "стр. 38, рисунок «Оконный проем» (900×1600)"
+quote = ""
+checked = false
+[[guideline.source]]
+doc = "Казань, обоснование ТД ИРГ, 2025"
+file = "ru/irg/obosnovanie.txt"
+where = "стр. 26, анализ застройки (ширина : высота окна = 1:1,9)"
+quote = ""
+checked = false
+[[guideline.source]]
+doc = "Куппфер, Жилой дом, 1914"
+file = "books2/ru/kupffer.txt"
+where = "стр. 58 (PDF)"
+quote = "Ширина обыкновенная окна принимается"
+checked = true
+
+[[guideline]]
+id = "entrance_annex_kazan"
+text = "Вход в Казани (ТД ИРГ): пристройка сбоку от основного объёма шириной 2,1 или 3,0 м, её свес ниже свеса дома на 0,1–0,8 м; дверь Д1 двустворчатая 1100×2100; аттик входной группы шириной с пристройку, высотой 0,75–0,9 м; навес 1,9 м по оси двери"
+check = "none"
+applies = ["ru-izhs"]
+note = "нужна проверка: пристройка входа примыкает к основному объёму, door внутри пристройки, canopy по оси двери и уже пристройки. Региональный стиль, числа сняты с чертежей.; числа правила: annex_w = [2.1, 3.0], door = [1.1, 2.1], attic_h = [0.75, 0.9], canopy_w = 1.9"
+[[guideline.source]]
+doc = "Казань, ТД ИРГ (типовые решения ИЖС), 2025"
+file = "ru/irg/TD1.txt"
+where = "стр. 44-45"
+quote = "Навесы выполняются из деревянных конструкций с металлическими"
+checked = true
+[[guideline.source]]
+doc = "Казань, ТД ИРГ (типовые решения ИЖС), 2025"
+file = "ru/irg/TD1.txt"
+where = "стр. 47, рисунок аттика"
+quote = ""
+checked = false
+
+[[guideline]]
+id = "building_limits_kazan"
+text = "Предельные габариты дома (Казань): длина уличного фасада основного объёма не более 18 м, высота от земли до конька не более 13 м"
+check = "none"
+applies = ["ru-izhs"]
+note = "нужна проверка: length_m ≤ 18,0 м (высота до конька — кровли в модели нет, проверка по eaves_m).; числа правила: max_wall_length_m = 18.0, max_ridge_m = 13.0"
+[[guideline.source]]
+doc = "Казань, обоснование ТД ИРГ, 2025"
+file = "ru/irg/obosnovanie.txt"
+where = "печ. 31"
+quote = "Максимальная длина уличного фасада основного объема – 18 м."
+checked = true
+
+[[guideline]]
+id = "color_roles_ru"
+text = "Цветовые роли ИЖС: основной цвет стен; детали (наличники, лопатки, пояски) светлые; оконные рамы и входная дверь одного цвета; цоколь отдельным цветом; кровля, водостоки и металл одного цвета; рамы всего здания одного цвета, двери фасада одного типа"
+check = "none"
+applies = ["ru-izhs", "ru-mkd"]
+note = "нужна проверка: цвета frame всех window совпадают и равны цвету door; цвет trim светлее wall (Дизайн-Капитал допускает и обратное: светлые обрамления на тёмном, и наоборот). Цвет в дипломе приходит из палитры параметров дома.; числа правила: roles = ['wall', 'trim', 'windows_door', 'plinth', 'roof_gutters']"
+[[guideline.source]]
+doc = "Казань, ТД ИРГ (типовые решения ИЖС), 2025"
+file = "ru/irg/TD1.txt"
+where = "стр. 11"
+quote = "Колористические решения, представленные в альбоме, являются"
+checked = true
+[[guideline.source]]
+doc = "Аннинское городское поселение, Дизайн-код, 2023"
+file = "ru/annino.txt"
+where = "п. 2.5.6, стр. 39"
+quote = "Оконные рамы и переплеты одного здания должны быть выполнены в одном цвете"
+checked = true
+[[guideline.source]]
+doc = "Аннинское городское поселение, Дизайн-код, 2023"
+file = "ru/annino.txt"
+where = "п. 2.6.3, стр. 40"
+quote = "Двери одного фасада должны иметь единообразный вид и быть одного типа"
+checked = true
+[[guideline.source]]
+doc = "Дизайн-Капитал, Руководство по дизайну фасада v2.5, 2019"
+file = "ru/dk/designcapital.pdf"
+where = "стр. 9 (PDF)"
+quote = "на темном в целом фасаде могут быть светлые обрамления и наоборот"
+checked = true
+
+[[guideline]]
+id = "porch_steps_ru"
+text = "Ступени крыльца: подъём около 0,15 м (0,13–0,175), проступь 0,30 м (0,27–0,35); число ступеней примерно plinth_m / 0,15; лестницу менее чем из трёх ступеней при подъёме от 0,12 м заменяют пандусом"
+check = "none"
+applies = ["ru-izhs"]
+note = "нужна проверка: число ступеней ≈ plinth_m/0,15, не менее 3 (при plinth_m около 0,36 м и выше); для крыльца ИЖС ориентир, нормы нет (СП 1.13130 п. 4.3.5 не нормирует число ступеней наружных крылец; СП 59 к ИЖС не применяется).; числа правила: riser = 0.15, tread = 0.30, min_steps = 3"
+[[guideline.source]]
+doc = "УлГТУ, Индивидуальный однокв. жилой дом"
+file = "ru/ulstu.txt"
+where = "стр. 46"
+quote = "Размер проступей лестниц должен быть – 0,3 м (допустимо от 0,27 до 0,35 м), а размер подступенка – 0,15 м"
+checked = true
+[[guideline.source]]
+doc = "УлГТУ, Индивидуальный однокв. жилой дом"
+file = "ru/ulstu.txt"
+where = "стр. 46"
+quote = "не допускаются использовать лестницы высотой менее трех ступеней"
+checked = true
+[[guideline.source]]
+doc = "СП 59.13330.2020 (копия tiflocentre.ru, не ИЖС)"
+file = "ru/norms2/sp59_tiflo.txt"
+where = "п. 5.1.12"
+quote = "высоту ступеней - от 0,12 до 0,15 м"
+checked = true
+[[guideline.source]]
+doc = "Кузнецова и др., Индивидуальный жилой дом из мелкоразмерных элементов, 2011"
+file = "books2/ru/tstu_kuznecova_2011.txt"
+where = "стр. 17 (PDF)"
+quote = "с числом ступеней не менее 3"
+checked = true
+[[guideline.source]]
+doc = "ВГТУ, Черных, Конструкции и материалы, 2021"
+file = "books2/ru/cchgeu_mu.txt"
+where = "стр. 18 (PDF)"
+quote = "ширину ступени делать не менее 260мм, а высоту не более 170мм"
+checked = true
+
+[[guideline]]
+id = "sheet_dimensions_policy"
+text = "Размеры на листе фасада: по вертикали отметки земли, цоколя, низа и верха проёмов, карниза, конька на расстоянии 15–20 мм от контура; горизонтальные размеры на фасаде не указывают (оси внизу без размеров) — у Казани под фасадом дана размерная цепочка"
+check = "none"
+applies = ["ru-izhs", "ru-mkd"]
+note = "Конфликт: КГАСУ и БНТУ запрещают горизонтальные размеры на фасаде, Казань и ГОСТ Р 21.501 п. 5.4.2 допускают размеры и привязки проёмов, не указанные на планах. Решение — в спеке, оформление листа (шаг 6).; числа правила: offset_mm = [15, 20]"
+[[guideline.source]]
+doc = "КГАСУ, Сибгатуллина, Попов, Индивидуальный жилой дом"
+file = "ru/kgasu.txt"
+where = "п. 4.1, стр. 27"
+quote = "Горизонтальные размеры на фасаде не указывают"
+checked = true
+[[guideline.source]]
+doc = "БНТУ, Платонова, Гражданские здания из мелкоразмерных элементов"
+file = "ru/bntu.txt"
+where = "стр. 71 (PDF)"
+quote = "Под фасадом выносятся необходимые оси без проставления размеров между ними."
+checked = true
+[[guideline.source]]
+doc = "ГОСТ Р 21.501-2018"
+file = "ru/g21501.txt"
+where = "п. 5.4.2"
+quote = "отметки уровней, размеры и привязки проемов и отверстий, не указанные на планах и разрезах"
+checked = true
+
+[[guideline]]
+id = "sheet_working_lines_only"
+text = "Рабочий лист фасада — чёрные линии разной толщины без теней и заливки; цветной лист — демонстрационный"
+check = "none"
+applies = ["ru-izhs", "ru-mkd"]
+note = "Оформление листа: цветной вывод шага 6 — демонстрационная версия, рабочая — линейная. Вторичный источник (слайды ЕКТУ по Георгиевскому, 2004). БНТУ: фасад вычерчивают тонкими линиями (S/2…S/3), линию земли утолщённой (S…1,5S): stroke-width земли не менее вдвое больше проёмов."
+[[guideline.source]]
+doc = "ЕКТУ, слайды по Георгиевскому О.В., 2004"
+file = "ru/ektu.txt"
+where = "слайд"
+quote = "Фасады зданий в рабочих чертежах выполняют в линиях без теней."
+checked = true
+[[guideline.source]]
+doc = "БНТУ, Телеш и др., Выполнение чертежей двухэтажного жилого дома, 2021"
+file = "books2/ru/bntu_chertezhi_2et.txt"
+where = "стр. 75 (PDF)"
+quote = "Фасад вычерчивают тонкими линиями"
+checked = true
+
+[[guideline]]
+id = "window_vertical_eu"
+text = "Окна eu: окно стоячее (высота больше ширины), в том числе у новостроек; горизонтальный фасад — вертикальные проёмы; квадратное окно допустимо только на верхнем этаже над стоячими"
+check = "aspect"
+params = { cls = "window", min = 1.0 }
+applies = ["eu"]
+note = "EDG §1.32: квадратные окна (h/w около 1) только на этаже выше стоячих. Горизонтальные форматы ограничены, см. window_horizontal_limit_eu. Регионы: Эссекс, Бавария, Рейнхессен, Финляндия, Франция."
+[[guideline.source]]
+doc = "Essex Design Guide, 2018"
+file = "books2/eu/uk-edg-architectural-details.txt"
+where = "§1.31, стр. 14"
+quote = "horizontally proportioned elevation should contain vertically proportioned window openings"
+checked = true
+[[guideline.source]]
+doc = "Essex Design Guide, 2018"
+file = "books2/eu/uk-edg-architectural-details.txt"
+where = "§1.32, стр. 14"
+quote = "Square windows may be used on an upper storey above vertically proportioned window openings"
+checked = true
+[[guideline.source]]
+doc = "Pfaffenhofen, Bauen ist Charaktersache, 2018"
+file = "books2/eu/de-pfaffenhofen-bauen-charaktersache.txt"
+where = "стр. 3"
+quote = "Stehende Fensterformate sind die konstruktiv richtige Lösung"
+checked = true
+[[guideline.source]]
+doc = "Bodenheim, Gestaltfibel, 2013"
+file = "books2/eu/de-bodenheim-gestaltfibel.txt"
+where = "4.3.1, стр. 20"
+quote = "Auch bei Neubaumaßnahmen sollen grundsätzlich aufrecht stehende Fensterformate (höher als breit) verwendet werden"
+checked = true
+[[guideline.source]]
+doc = "Anzing, Gestaltungsleitfaden, 2022"
+file = "books2/eu/de-anzing-gestaltungsleitfaden-2022.txt"
+where = "стр. 15"
+quote = "Ortstypisch sind Holzfenster mit stehenden Formaten"
+checked = true
+[[guideline.source]]
+doc = "Kotka Mussalo, rakennustapaohje, 2019"
+file = "books2/eu/fi-kotka-mussalo.txt"
+where = "стр. 11"
+quote = "suhteellisen kapeat ja korkeat ikkunat on sijoitettu säännöllisesti ja symmetrisesti julkisivuun"
+checked = true
+[[guideline.source]]
+doc = "Thouars, Cahier de recommandations, 2020"
+file = "books2/eu/fr-thouars-cahier.txt"
+where = "стр. 10"
+quote = "Les ouvertures traditionnelles sont plus hautes que larges."
+checked = true
+[[guideline.source]]
+doc = "Villecresnes, charte architecturale, 2024"
+file = "books2/eu/fr-villecresnes-charte-2024.txt"
+where = "стр. 48"
+quote = "Les ouvertures sont plus hautes que larges."
+checked = true
+
+[[guideline]]
+id = "window_horizontal_limit_eu"
+text = "Лежачие окна ограничены: ширина не более 1,5 высоты (h/w не менее 0,67), в том числе для суммы сгруппированных окон; горизонтальное окно допустимо в выступающей части (крыло, щипец)"
+check = "aspect"
+params = { cls = "window", min = 0.67 }
+applies = ["eu"]
+note = "Schleching — обязательная норма (Bebauungsplan), EDG — рекомендация."
+[[guideline.source]]
+doc = "Schleching, Bebauungsplan Bichlfeld, 10. Änderung"
+file = "books2/eu/de-schleching-bichlfeld.pdf"
+where = "п. 4.4, стр. 1"
+quote = "Liegende Fensterformate sind nur bis zu einer Breite der 1,5-fachen Höhe zulässig."
+checked = true
+[[guideline.source]]
+doc = "Essex Design Guide, 2018"
+file = "books2/eu/uk-edg-architectural-details.txt"
+where = "§1.33, стр. 14"
+quote = "may be placed in a projecting part of the facade, such as a wing or gable"
+checked = true
+
+[[guideline]]
+id = "no_ribbon_windows"
+text = "Ленточные окна недопустимы: окна этажа не сливаются в сплошную ленту по ширине фасада"
+check = "none"
+applies = ["eu"]
+note = "нужна проверка: просветы между соседними окнами этажа не меньше pier_min; нет окна шире 2,0 м (Spiekeroog, строгий исторический случай)."
+[[guideline.source]]
+doc = "Spiekeroog, Gestaltungssatzung I, 2023"
+file = "books2/eu/de-spiekeroog-bgs-2023.txt"
+where = "§ 4 (1), стр. 2"
+quote = "Fensterbänder sind unzulässig."
+checked = true
+
+[[guideline]]
+id = "floor_opening_width"
+text = "Доля ширины этажа: окна и двери на каждом этаже занимают не менее 1/3 ширины фасада; окно не шире 2,0 м; простенок не менее 0,5 м"
+check = "floor_opening_width"
+params = { min = 0.333 }
+applies = ["eu"]
+note = "Spiekeroog — строгий исторический остров; для обычного нового дома избыточно."
+[[guideline.source]]
+doc = "Spiekeroog, Gestaltungssatzung I, 2023"
+file = "books2/eu/de-spiekeroog-bgs-2023.txt"
+where = "§ 4 (1), стр. 2"
+quote = "In jedem Vollgeschoss muss mindestens 1/3 der Gebäudebreite"
+checked = true
+
+[[guideline]]
+id = "sill_under_window"
+text = "Под окном (не до пола) есть подоконник или подоконная плита (sub-sill, apron)"
+check = "sill_under_window"
+params = { skip_below_m = 0.1, tol_m = 0.05 }
+applies = ["us", "eu", "ru-izhs"]
+note = "У Roanoke (Tudor) кирпичный sill; у Habitat — apron под sill."
+[[guideline.source]]
+doc = "Essex Design Guide, 2018"
+file = "books2/eu/uk-edg-architectural-details.txt"
+where = "§1.45, стр. 18"
+quote = "insetting doors and windows within their openings by at least a half-brick depth, and by using sub-sills"
+checked = true
+[[guideline.source]]
+doc = "ВГТУ, Черных, Конструкции и материалы, 2021"
+file = "books2/ru/cchgeu_mu.txt"
+where = "стр. 25 (PDF)"
+quote = "Снаружи по нижней горизонтальной грани оконного проема устанавливается водоотлив"
+checked = true
+
+[[guideline]]
+id = "lintel_over_openings"
+text = "Над проёмом заметная перемычка или арка (в кирпиче) или полоса сандрика"
+check = "none"
+applies = ["us", "eu"]
+note = "нужна проверка: над каждым window/door в кирпичной или штукатурной стене есть deco/molding-полоса перемычки; у Казани — сандрик шире наличника на 2×150 мм."
+[[guideline.source]]
+doc = "Essex Design Guide, 2018"
+file = "books2/eu/uk-edg-architectural-details.txt"
+where = "§1.46, стр. 18"
+quote = "Openings should have an arch or lintel which appears adequate to carry the load"
+checked = true
+
+[[guideline]]
+id = "plinth_height_eu"
+text = "Цоколь eu: у каждого нового дома есть цоколь высотой не менее 30 см над землёй, но не выше половины высоты подоконника 1-го этажа"
+check = "plinth_height"
+params = { min = 0.3 }
+applies = ["eu"]
+note = "Верхняя граница Bodenheim: plinth_m ≤ 0,5 · подоконник окон 1-го этажа (нужна проверка со стороны окон). Regensburg: при реконструкции высота цоколя сохраняется."
+[[guideline.source]]
+doc = "Kotka Mussalo, rakennustapaohje, 2019"
+file = "books2/eu/fi-kotka-mussalo.txt"
+where = "стр. 9"
+quote = "riittävän korkealla maanpinnasta (vähintään 300mm)"
+checked = true
+[[guideline.source]]
+doc = "Kotka Mussalo, rakennustapaohje, 2019"
+file = "books2/eu/fi-kotka-mussalo.txt"
+where = "стр. 25"
+quote = "Sokkelissa tulee tavoitella vähintään 30cm korkeutta"
+checked = true
+[[guideline.source]]
+doc = "Bodenheim, Gestaltfibel, 2013"
+file = "books2/eu/de-bodenheim-gestaltfibel.txt"
+where = "4.6, стр. 26"
+quote = "Gebäudesockel sollten höchstens bis zur halben Höhe der Fensterbrüstung des Erdgeschosses reichen."
+checked = true
+[[guideline.source]]
+doc = "Bodenheim, Gestaltfibel, 2013"
+file = "books2/eu/de-bodenheim-gestaltfibel.txt"
+where = "стр. 26"
+quote = "Grundsätzlich sollten Neubauten und renovierte Gebäude mit Sockel versehen werden"
+checked = true
+
+[[guideline]]
+id = "balcony_max_length_eu"
+text = "Балкон: длина не более 5,0 м, вынос не более 1,5 м; балкон под защитой свеса крыши"
+check = "none"
+applies = ["eu"]
+note = "нужна проверка: balcony.w ≤ 5,0 м (вынос на фасаде не виден). Oberstaufen (Алльгой), Schleching — Бавария.; числа правила: cls = 'balcony', max_w = 5.0"
+[[guideline.source]]
+doc = "Oberstaufen, Ortsgestaltungssatzung, 2018"
+file = "books2/eu/de-oberstaufen-gestaltungssatzung-2018.txt"
+where = "§ 9 (3), стр. 7"
+quote = "max. 5,0 m lang sein und max. 1,50 m vor die Außenwand treten"
+checked = true
+[[guideline.source]]
+doc = "Schleching, Bebauungsplan Bichlfeld, 10. Änderung"
+file = "books2/eu/de-schleching-bichlfeld.txt"
+where = "п. 6.2, стр. 1"
+quote = "Balkone müssen in jedem Fall von Dachüberständen überragt werden."
+checked = true
+
+[[guideline]]
+id = "wall_length_max_eu"
+text = "Длинный фасад без членения не длиннее 16 м (щипец — 10 м); членение — выступ или уступ не менее 0,30 м"
+check = "none"
+applies = ["eu"]
+note = "нужна проверка: length_m ≤ 16 м либо стена членится; Spiekeroog, строгий исторический случай.; числа правила: max_wall_length_m = 16.0"
+[[guideline.source]]
+doc = "Spiekeroog, Gestaltungssatzung I, 2023"
+file = "books2/eu/de-spiekeroog-bgs-2023.txt"
+where = "§ 3 (1-2), стр. 2"
+quote = "ohne Untergliederung eine Länge von 16,00 m nicht überschreiten"
+checked = true
+
+[[guideline]]
+id = "plan_proportion_eu"
+text = "Пропорция дома: отношение длинной стены к короткой около 1,4 (не менее 1,2); план предпочтительно прямоугольный, конёк вдоль длинной стороны"
+check = "none"
+applies = ["eu"]
+note = "нужна проверка: максимум length_m / минимум length_m стен ∈ [1,2; 1,4+]. Pfaffenhofen (Бавария); глубина корпуса не более 9 м — Raahe (вида сбоку нет).; числа правила: ratio_min = 1.2, ratio_target = 1.4"
+[[guideline.source]]
+doc = "Pfaffenhofen, Bauen ist Charaktersache, 2018"
+file = "books2/eu/de-pfaffenhofen-bauen-charaktersache.txt"
+where = "стр. 2"
+quote = "Das Verhältnis von 1:1,4 oder minimal 1:1,2"
+checked = true
+[[guideline.source]]
+doc = "Oberstaufen, Ortsgestaltungssatzung, 2018"
+file = "books2/eu/de-oberstaufen-gestaltungssatzung-2018.txt"
+where = "§ 5 (1), стр. 2"
+quote = "Hauptgebäude sind vorzugsweise mit einem rechteckigen Grundriss auszubilden."
+checked = true
+[[guideline.source]]
+doc = "Raahe Pyhtilänkangas, rakennustapaohjeet IV, 2018"
+file = "books2/eu/fi-raahe-rakennustapaohjeet-IV.txt"
+where = "стр. 2"
+quote = "Rakennusten on oltava päämuodoltaan suorakaiteen muotoisia."
+checked = true
+
+[[guideline]]
+id = "kniestock_max_eu"
+text = "Колено (Kniestock) — высота стены над перекрытием верхнего этажа до подошвы стропил: не более 0,50 м (Pfaffenhofen) или 0,80 м (Oberstaufen)"
+check = "none"
+applies = ["eu"]
+note = "нужна проверка: eaves_m минус верх перекрытия последнего этажа ≤ 0,5 (0,8) м; значение зависит от региона.; числа правила: max = 0.5"
+[[guideline.source]]
+doc = "Pfaffenhofen, Bauen ist Charaktersache, 2018"
+file = "books2/eu/de-pfaffenhofen-bauen-charaktersache.txt"
+where = "стр. 2"
+quote = "Die Kniestockhöhe beträgt maximal 0,50 m."
+checked = true
+[[guideline.source]]
+doc = "Oberstaufen, Ortsgestaltungssatzung, 2018"
+file = "books2/eu/de-oberstaufen-gestaltungssatzung-2018.txt"
+where = "§ 5 (2), стр. 2"
+quote = "Kniestöcke bei zwei- und mehrgeschossigen Gebäuden dürfen von Oberkante Rohfußboden im Dachgeschoss, bis Oberkante Fuß-Pfette 0,80 m nicht überschreiten"
+checked = true
+
+[[guideline]]
+id = "all_sides_treated_equally"
+text = "Все четыре стороны дома обработаны одинаково: материал, пояса, карниз и цоколь общие для всех стен, а не только для парадного фасада («shirt-front» получает низкую оценку)"
+check = "none"
+applies = ["all"]
+note = "нужна проверка: параметры отделки, цоколя, карниза и палитры одинаковы на всех стенах (общие параметры дома, шаг 1)."
+[[guideline.source]]
+doc = "FHA Underwriting Manual, 1938"
+file = "books2/us/fha-um-1938.txt"
+where = "стр. 162 (PDF)"
+quote = "A structure of the so-called \"shirt-front\", or one sided treatment design, calls for a low rating"
+checked = true
+
+[[guideline]]
+id = "elevation_matches_plan"
+text = "Фасады прямо выражают план: проёмы на фасадах совпадают с проёмами плана по стене и положению"
+check = "none"
+applies = ["all"]
+note = "нужна проверка: каждый проём фасада соответствует проёму SVG-плана (x, стена) и наоборот."
+[[guideline.source]]
+doc = "FHA Underwriting Manual, 1938"
+file = "books2/us/fha-um-1938.txt"
+where = "стр. 162 (PDF)"
+quote = "Do the elevations express frankly the plan contained therein"
+checked = true
+[[guideline.source]]
+doc = "FHA Underwriting Manual, 1938"
+file = "books2/us/fha-um-1938.txt"
+where = "стр. 155 (PDF)"
+quote = "Windows should be spaced in relation to internal function as well as to exterior appearance."
+checked = true
+
+[[guideline]]
+id = "limit_motifs"
+text = "Не плодить материалы и мотивы на фасаде: башня, фахверк, эркер, дормеры, лишние материалы — недостаток; простота, пропорции и характер долговечно привлекательны"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: число различных типов декоративных элементов на стене не больше 2–3; порог — из конфига, в источнике числа нет.; числа правила: max_motifs = 3"
+[[guideline.source]]
+doc = "Milwaukee Home Builders Plan Book, 1929"
+file = "books2/us/homebuildersplan00milw.txt"
+where = "стр. 52 (PDF)"
+quote = "There are too many unrelated motifs on the front elevation."
+checked = true
+[[guideline.source]]
+doc = "FHA Underwriting Manual, 1938"
+file = "books2/us/fha-um-1938.txt"
+where = "стр. 162 (PDF)"
+quote = "the inclusion of an unnecessary variety of materials, and straining for the picturesque cannot increase the rating"
+checked = true
+[[guideline.source]]
+doc = "FHA Underwriting Manual, 1938"
+file = "books2/us/fha-um-1938.txt"
+where = "стр. 161 (PDF)"
+quote = "Simplicity, proportion, and character are qualities which are permanently attractive."
+checked = true
+
+[[guideline]]
+id = "flagg_module"
+text = "Модульная система Flagg: размеры и оси кратны модулю 3'-9\" (1,143 м) и его долям (около 0,29 м), высота этажа — 2 или 3 модуля (7'-6\" и 11'-3\"); проёмы центрируются на осях модуля"
+check = "module"
+params = { cls = "window", module_m = 0.286, tol_m = 0.03 }
+applies = ["us"]
+note = "Единственная числовая система в американской литературе 1900–1940; исторический пример, не норма. Подмодули деталей: 3, 5, 9, 15 дюймов."
+[[guideline.source]]
+doc = "Flagg, Small Houses, 1922"
+file = "books2/us/flagg.txt"
+where = "стр. 21 (PDF)"
+quote = "does for most story heights, while three modules"
+checked = true
+[[guideline.source]]
+doc = "Flagg, Small Houses, 1922"
+file = "books2/us/flagg.txt"
+where = "стр. 21 (PDF)"
+quote = "subdivision of the module, as 3\", 5\", 9\", or 15\""
+checked = true
+
+[[guideline]]
+id = "agreeable_ratios_us"
+text = "Приятные отношения размеров стены, фронтона и проёма: 2:3, 3:4, 4:5, 5:6, 6:7; квадрат, полтора квадрата, два квадрата"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: отношения W:H стены и проёмов близки к списку (допуск около 3 %); историческая рекомендация Flagg.; числа правила: ratios = [1.5, 1.333, 1.25, 1.2, 1.167]"
+[[guideline.source]]
+doc = "Flagg, Small Houses, 1922"
+file = "books2/us/flagg.txt"
+where = "стр. 78 (PDF)"
+quote = "agreeable results"
+checked = true
+
+[[guideline]]
+id = "window_head_to_eaves"
+text = "Окно не прижато к кровле: между верхом окна верхнего этажа и линией карниза есть зазор (фриз)"
+check = "head_to_eaves"
+params = { min = 0.2 }
+applies = ["us", "ru-izhs"]
+note = "Порог 0,2 м — нижняя граница зазора frieze из Mississippi/Norfolk (0 или не менее 8 дюймов), в Milwaukee замечание только качественное; Казань: расстояние от окна до свеса «не регламентируется» (исторический пример около 1,74 м)."
+[[guideline.source]]
+doc = "Milwaukee Home Builders Plan Book, 1929"
+file = "books2/us/homebuildersplan00milw.txt"
+where = "стр. 13 (PDF)"
+quote = "Bedroom window is crowded against roof."
+checked = true
+[[guideline.source]]
+doc = "Казань, ТД ИРГ (типовые решения ИЖС), 2025"
+file = "ru/irg/TD1.txt"
+where = "стр. 10, 12"
+quote = "от верхней точки окна до свеса крыши не регламентируется."
+checked = true
+
+[[guideline]]
+id = "service_door_not_prominent"
+text = "Служебный вход не выносится на фасад как главный мотив: служебная дверь на боковой или задней стене либо меньше главной"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: служебная door уже входной и не на главном фасаде."
+[[guideline.source]]
+doc = "Milwaukee Home Builders Plan Book, 1929"
+file = "books2/us/homebuildersplan00milw.txt"
+where = "стр. 50 (PDF)"
+quote = "The service entrance toward the front of the house gives this feature undue prominence."
+checked = true
+
+[[guideline]]
+id = "kitchen_sink_window_sill"
+text = "Окно над раковиной: подоконник выше задней кромки раковины"
+check = "none"
+applies = ["us"]
+note = "нужна проверка: окно кухни над раковиной (план) имеет sill не ниже около 0,9 м; число — вне источника (высота столешницы около 3 ft).; числа правила: min_sill = 0.9"
+[[guideline.source]]
+doc = "USDA Farmers' Bulletin 1738, 1934"
+file = "books2/us/usda-fb1738-farmhouse-plans-1934.txt"
+where = "стр. 5 (PDF)"
+quote = "Windows over the sink should have the sills higher than the back of the sink."
+checked = true
+
+[[guideline]]
+id = "sill_height_ru_izhs"
+text = "Подоконник ru-ИЖС: низ оконных проёмов жилых комнат на высоте 0,8–0,9 м над чистым полом этажа (не менее 0,75 м, лучше около 0,85 м)"
+check = "sill_height"
+params = { min = 0.75, max = 0.9, skip_below_m = 0.1 }
+applies = ["ru-izhs"]
+note = "Нормы для ИЖС нет (Казань: «не регламентируется»; единственный исторический пример — 0,665 м над 0.000). Значения — учебные пособия и Куппфер (1914). Окна до пола (балконные двери, панорамные) пропускаются. СП 54 п. 6.4.9 для МКД: ниже 0,9 м — меры безопасности."
+[[guideline.source]]
+doc = "Басманов, Однокв. малоэтажный жилой дом, 2018"
+file = "books2/ru/rubinst_basmanov_2018.txt"
+where = "стр. 8 (PDF)"
+quote = "Низ оконных проемов располагают на высоте 0,800-0,900 от пола этажа"
+checked = true
+[[guideline.source]]
+doc = "Кузнецова и др., Индивидуальный жилой дом из мелкоразмерных элементов, 2011"
+file = "books2/ru/tstu_kuznecova_2011.txt"
+where = "стр. 20 (PDF)"
+quote = "Низ оконных проёмов рекомендуется располагать выше уровня чистого пола этажа на 800 мм"
+checked = true
+[[guideline.source]]
+doc = "Куппфер, Жилой дом, 1914"
+file = "books2/ru/kupffer.txt"
+where = "стр. 58 (PDF)"
+quote = "подоконника отъ поверхности пола должно быть по крайней мЪрЪ 75 сш"
+checked = true
+
+[[guideline]]
+id = "strip_above_window_ru"
+text = "Полоса стены над окном до перекрытия — около 1/10 высоты комнаты, не менее 25–30 см"
+check = "none"
+applies = ["ru-izhs"]
+note = "нужна проверка: (уровень верха перекрытия) − (верх окна) ≥ 0,25–0,30 м на каждом этаже; Куппфер 1914, историческая рекомендация.; числа правила: min = 0.25"
+[[guideline.source]]
+doc = "Куппфер, Жилой дом, 1914"
+file = "books2/ru/kupffer.txt"
+where = "стр. 58 (PDF)"
+quote = "не менее 25—30 сш"
+checked = true
+
+[[guideline]]
+id = "window_axis_spacing_ru"
+text = "Шаг осей окон на фасаде жилого дома — в среднем 2–3 м (для более просторных зданий больше)"
+check = "none"
+applies = ["ru-izhs"]
+note = "нужна проверка: расстояние между осями соседних окон одного этажа 2,0–3,0 м (мягко); Куппфер 1914. Казань: 1,55–1,85 м между осями при окнах 0,8–0,95 м.; числа правила: min = 2.0, max = 3.0"
+[[guideline.source]]
+doc = "Куппфер, Жилой дом, 1914"
+file = "books2/ru/kupffer.txt"
+where = "стр. 39-40 (PDF)"
+quote = "разстояше осей колеблется въ сред"
+checked = true
+
+[[guideline]]
+id = "window_size_row_ru"
+text = "Окна ru-ИЖС из кирпича: высота проёма 1510 или 1810 мм, ширина 610 / 910 / 1210 / 1360 / 1510 / 1810 / 2110 мм (внутренний размер; наружный меньше на 130 мм)"
+check = "size_row"
+params = { cls = "window", widths = [0.61, 0.91, 1.21, 1.36, 1.51, 1.81, 2.11], heights = [1.51, 1.81], tol_m = 0.05 }
+applies = ["ru-izhs"]
+note = "Размеры кирпичного дома в модуле 130 мм (четверть 65×120); Казань использует 0,8–0,95 м, ГОСТ 23166 — свой ряд (window_gost_size_row). Проёмы — по проекту, мягкая проверка."
+[[guideline.source]]
+doc = "Кузнецова и др., Индивидуальный жилой дом из мелкоразмерных элементов, 2011"
+file = "books2/ru/tstu_kuznecova_2011.txt"
+where = "стр. 19 (PDF)"
+quote = "высота оконных проёмов принимается равной, как правило, 1510, 1810 мм"
+checked = true
+[[guideline.source]]
+doc = "Кузнецова и др., Индивидуальный жилой дом из мелкоразмерных элементов, 2011"
+file = "books2/ru/tstu_kuznecova_2011.txt"
+where = "стр. 19 (PDF)"
+quote = "ширина – ближайшему значению стандартной ширины – 610; 910; 1210; 1360; 1510; 1810; 2110 мм"
+checked = true
+
+[[guideline]]
+id = "window_module_300mm_study"
+text = "Учебное упрощение: высота и ширина оконных проёмов кратны 300 мм (3М)"
+check = "module"
+params = { cls = "window", module_m = 0.3, tol_m = 0.01 }
+applies = ["ru-izhs"]
+note = "Не стандарт; конфликт с window_module_100mm (ГОСТ 28984 допускает кратность М = 100 мм для окон). Учебный режим ВГТУ."
+[[guideline.source]]
+doc = "ВГТУ, Черных, Конструкции и материалы, 2021"
+file = "books2/ru/cchgeu_mu.txt"
+where = "стр. 26 (PDF)"
+quote = "высота и ширина оконных проемов принимаются кратно модулю 300 мм"
+checked = true

@@ -33,7 +33,8 @@ def floor_of(e: Element, spec: HouseSpec) -> int:
     return 1 + sum(e.y_m + EPS >= level for level in levels[1:])
 
 
-def _level(e: Element, spec: HouseSpec) -> float:
+def level_of(e: Element, spec: HouseSpec) -> float:
+    """Отметка пола этажа, на котором стоит элемент."""
     return spec.floor_levels()[min(floor_of(e, spec), spec.floors) - 1]
 
 
@@ -77,11 +78,11 @@ def gap_cv(f: SideFacade, spec: HouseSpec) -> list[float]:
 
 
 def sill_m(f: SideFacade, spec: HouseSpec) -> list[float]:
-    return [w.y_m - _level(w, spec) for w in windows(f)]
+    return [w.y_m - level_of(w, spec) for w in windows(f)]
 
 
 def head_m(f: SideFacade, spec: HouseSpec) -> list[float]:
-    return [w.y_m + w.h_m - _level(w, spec) for w in windows(f)]
+    return [w.y_m + w.h_m - level_of(w, spec) for w in windows(f)]
 
 
 def edge_share(f: SideFacade, spec: HouseSpec) -> list[float]:

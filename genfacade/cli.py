@@ -1,5 +1,5 @@
 """Командная строка: genfacade run <план.svg> --text …, serve, synth, buildingnet, manual, tokens,
-train, eval, metrics, calibrate, baseline."""
+train, eval, metrics, calibrate, baseline, guidelines."""
 
 import argparse
 import sys
@@ -92,6 +92,13 @@ def baseline(args: argparse.Namespace) -> Path:
     return baselines.run(args.name, args.source_dir, config.load(args.config), args.out)
 
 
+def guidelines_table(args: argparse.Namespace) -> Path:
+    """Свод правил фасада на домах реального теста → таблица для чтения (gf#209)."""
+    from genfacade import guidelines
+
+    return guidelines.run(config.load(args.config), args.out)
+
+
 def serve(config_dir: Path | None) -> None:
     # uvicorn и fastapi — в группе [viewer]: без смотрелки пакет их не тянет.
     import uvicorn
@@ -157,6 +164,9 @@ def _parser() -> argparse.ArgumentParser:
     b.add_argument("source_dir", type=Path,
                    help="папка листов <дом>.json: берутся стены, условие режима, параметры дома")
     b.add_argument("-o", "--out", type=Path, required=True, help="папка фасадов базового подхода")
+    r = sub.add_parser("guidelines", help="свод правил фасада на домах реального теста → таблица")
+    r.add_argument("-o", "--out", type=Path, default=Path("docs/facade-rules.md"),
+                   help="файл таблицы; по умолчанию docs/facade-rules.md")
     return parser
 
 
@@ -172,6 +182,7 @@ COMMANDS = {
     "metrics": (metrics_table, {}),
     "baseline": (baseline, {}),
     "calibrate": (metrics_calibrate, {}),
+    "guidelines": (guidelines_table, {}),
     "run": (run, pipeline.REFUSALS),
 }
 
