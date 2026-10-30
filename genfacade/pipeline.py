@@ -7,16 +7,21 @@
 """
 
 import json
+import math
 import re
 import subprocess  # noqa: S404 — только git rev-parse
+from collections.abc import Iterator
 from datetime import datetime
 from importlib.metadata import version
+from itertools import islice
 from pathlib import Path
 from typing import NamedTuple
 
+import numpy
 from pydantic import BaseModel
 
 from genfacade.config import Config, LayoutModel
+from genfacade.metrics import realism
 from genfacade.models import stub
 from genfacade.models.stub import ModelError
 from genfacade.plan.genplan_svg import PlanError
@@ -25,7 +30,7 @@ from genfacade.render.plan_svg import plan_svg
 from genfacade.render.preview import to_png
 from genfacade.render.spec_svg import spec_svg
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import FacadeSheet, HouseSpec, Mode, Plan, SideFacade, Violation
+from genfacade.schema import FacadeSheet, HouseSpec, Mode, Plan, Rule, SideFacade, Violation
 from genfacade.snap import snap
 from genfacade.train.tokens import TokenError
 from genfacade.unfold import unfold
@@ -143,27 +148,99 @@ class Checked(NamedTuple):
 def layout(bare: FacadeSheet, req: PlanRun, cfg: Config) -> Checked:
     """Шаги 4–5. Обученная модель (config/models.toml), если чекпойнт есть, иначе стаб.
     Брак модели — ответ не разобран или ошибка валидатора — генерация заново с новым seed
-    (`generation: Брак — заново`); стаб детерминирован, его не повторяем."""
+    (`generation: Брак — заново`), с `wall_retry` — только бракованной стены; из best_of годных
+    ответов берётся самый правдоподобный (gf#213). Стаб детерминирован, его не повторяем."""
     settings = cfg.models.layout
     model = trained_model(settings)
     if model is None:
         raw = stub.layout_all(bare, stub.LayoutContext(bare.spec, req.mode, req.text))
         return _check(raw, cfg, {"model": "stub", "attempts": []})
-    prompt = model.prompt(bare, req.mode, cfg)
-    attempts: list[dict] = []
-    trace = {"model": str(settings.checkpoint), "attempts": attempts}
+    trace = {"model": str(settings.checkpoint), "attempts": []}
+    good = list(islice(_good(model, model.prompt(bare, req.mode, cfg), bare, cfg, trace),
+                       settings.best_of))
+    if not good:
+        raise ModelError(f"за {len(trace['attempts'])} попыток нет годного ответа; последняя "
+                         f"причина — {trace['attempts'][-1]['error']}")
+    return good[0] if len(good) == 1 else _likeliest(good, Path(req.plan).stem, cfg)
+
+
+def _good(model, prompt, bare: FacadeSheet, cfg: Config, trace: dict) -> Iterator[Checked]:
+    """Годные ответы модели по очереди, до attempts раундов. Раунд k — seed + k: бракованные
+    стены прошлого раунда досэмплируются (`wall_retry`), недостающие до best_of ответы — одной
+    пачкой (`Layout.answers`). При best_of = 1 раунд — одна попытка, как до gf#213."""
+    settings, redo, found = cfg.models.layout, [], 0
     for seed in range(settings.seed, settings.seed + settings.attempts):
-        try:
-            result = _check(model.answer(prompt, bare, seed, cfg), cfg, trace)
-        except TokenError as e:
-            attempts.append({"seed": seed, "error": f"ответ не разобран: {e}"})
-            continue
-        bad = errors(result.violations)
-        attempts.append({"seed": seed, "error": _rejected(bad) if bad else None})
-        if not bad:
-            return result
-    raise ModelError(f"за {settings.attempts} попыток нет годного ответа; последняя причина — "
-                     f"{attempts[-1]['error']}")
+        got = [(_redone(model, prompt, bare, old, wall, seed, cfg), wall) for old, wall in redo]
+        need = settings.best_of - found - len(redo)
+        fresh = model.answers(prompt, bare, seed, cfg, need) if need > 0 else []
+        redo = []
+        for answer, wall in got + [(a, None) for a in fresh]:
+            result, bad = _attempt(answer, {"seed": seed, "wall": wall}, cfg, trace)
+            if result is not None and not bad:
+                found += 1
+                yield result
+            elif bad and settings.wall_retry and (at := _bad_wall(bad, answer.sheet)) is not None:
+                redo.append((answer, at))
+
+
+def _redone(model, prompt, bare: FacadeSheet, old, wall: int, seed: int, cfg: Config):
+    try:
+        return model.redo(prompt, bare, old, wall, seed, cfg)
+    except TokenError as e:
+        return e
+
+
+def _attempt(answer, attempt: dict, cfg: Config,
+             trace: dict) -> tuple[Checked | None, list[Violation]]:
+    """Попытка в трассу: ответ не разобран (TokenError) или ошибки валидатора — причина."""
+    if attempt["wall"] is None:
+        del attempt["wall"]
+    trace["attempts"].append(attempt)
+    if isinstance(answer, TokenError):
+        attempt["error"] = f"ответ не разобран: {answer}"
+        return None, []
+    result = _check(answer.sheet, cfg, trace)
+    bad = errors(result.violations)
+    attempt["error"] = _rejected(bad) if bad else None
+    return result, bad
+
+
+def _bad_wall(bad: list[Violation], sheet: FacadeSheet) -> int | None:
+    """Номер стены в ответе (порядок `sheet.facades`), на которой первая ошибка; ошибка не
+    на стене (угол) — None: досэмплировать надо весь дом."""
+    sides = [v.side for v in bad]
+    if None in sides or any(v.rule is Rule.CORNER for v in bad):
+        return None
+    order = [f.side.index for f in sheet.facades]
+    return min(order.index(s) for s in sides)
+
+
+def _likeliest(good: list[Checked], name: str, cfg: Config) -> Checked:
+    """Годный ответ с наибольшей density стен против домов эталона, кроме дома name
+    (`metrics.realism.house_density`, gf#210). Эталона нет — первый годный."""
+    ref = _reference(cfg, name)
+    scores = [realism.house_density(realism.walls([g.sheet]), ref, cfg.metrics.realism.k)
+              if len(ref) else None for g in good]
+    best = max(range(len(good)), key=lambda i: -math.inf if scores[i] is None else scores[i])
+    good[best].layout["density"] = scores
+    good[best].layout["chosen"] = best
+    return good[best]
+
+
+_houses: dict[tuple, dict[str, numpy.ndarray]] = {}
+
+
+def _reference(cfg: Config, without: str) -> numpy.ndarray:
+    """Стены домов [layout.reference], кроме дома without; дома читаются раз на процесс."""
+    from genfacade.metrics import calibrate  # он через store импортирует этот модуль
+
+    ref = cfg.models.layout.reference
+    key = (cfg.data.paths.samples_dir.resolve(), ref.source, ref.split)
+    if key not in _houses:
+        houses = calibrate.houses(ref.source, ref.split, 0, cfg)
+        _houses[key] = {n: realism.walls([s]) for n, s in houses.items()}
+    rest = [w for n, w in _houses[key].items() if n != without and len(w)]
+    return numpy.vstack(rest) if rest else numpy.empty((0, 0))
 
 
 def trained_model(settings: LayoutModel):

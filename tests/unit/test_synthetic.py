@@ -165,10 +165,15 @@ def test_genplan_profile_only_by_default(houses, cfg):
     assert cfg.synthetic.sizes.real_share == 0
     assert all(sizes.pick(s, cfg.synthetic) is cfg.synthetic.sizes.genplan for s in SEEDS)
     assert max(sketch.width_m for sketch, _ in houses) <= cfg.synthetic.sizes.genplan.width_m[1]
+    # ширины окна — из ряда (gf#211), и ряд — в пределах профиля: самое узкое окно берёт страж
+    gp = cfg.synthetic.sizes.genplan
+    used = {o.width_m for sketch, _ in houses for o in _holes(sketch, Hole.WINDOW)}
+    assert used == set(gp.window_widths_m)
+    assert gp.window_width_m[0] == min(used) and max(used) <= gp.window_width_m[1]
 
 
 def test_house_sizes_follow_their_profile(mixed):
-    """Профиль размеров по seed (gf#186): «как GenPlan» — прежние стороны и пять ширин окна, «как
+    """Профиль размеров по seed (gf#186): «как GenPlan» — прежние стороны и ряд ширин окна, «как
     реальные» — стороны до 24 м и ширина окна на сетке; бывают оба, реальных — около real_share."""
     cfg, houses = mixed
     mix, real, tight = cfg.synthetic.sizes, 0, False
@@ -176,7 +181,7 @@ def test_house_sizes_follow_their_profile(mixed):
         size = sizes.pick(seed, cfg.synthetic)
         real += size is mix.real
         assert size.width_m[0] - 1e-6 <= sketch.width_m <= size.width_m[1] + 1e-6
-        allowed = sizes.grid(size.window_width_m, size.window_step_m)
+        allowed = sizes.window_widths(size)
         assert all(o.width_m in allowed for o in _holes(sketch, Hole.WINDOW)), seed
         if size is mix.real:  # у реальных домов проёмы теснее, чем позволяет [openings]
             for side in house.plan.sides:

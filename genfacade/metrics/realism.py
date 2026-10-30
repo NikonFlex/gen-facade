@@ -18,8 +18,15 @@
 import numpy
 
 from genfacade.config import Realism
+from genfacade.metrics import measures
+from genfacade.schema import FacadeSheet
 
 BLOCK = 256  # строк за проход в _distances: память, не результат
+
+
+def walls(sheets: list[FacadeSheet]) -> numpy.ndarray:
+    """Признаки стен домов (`measures.realism_features`): строка — стена."""
+    return numpy.array([measures.realism_features(f, s.spec) for s in sheets for f in s.facades])
 
 
 def standardized(ours: numpy.ndarray, ref: numpy.ndarray) -> tuple[numpy.ndarray, numpy.ndarray]:

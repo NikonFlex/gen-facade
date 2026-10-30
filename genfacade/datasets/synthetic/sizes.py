@@ -22,6 +22,11 @@ def grid(span: Range, step: float) -> list[float]:
     return [round(low + i * step, 3) for i in range(round((high - low) / step) + 1)]
 
 
+def window_widths(size: Sizes) -> list[float]:
+    """Ширины окна профиля: его ряд, если он задан, иначе сетка от и до."""
+    return size.window_widths_m or grid(size.window_width_m, size.window_step_m)
+
+
 def rules(cfg: Synthetic, size: Sizes) -> Synthetic:
     """Правила генератора с отступом от угла и простенком профиля, если он их задаёт."""
     own = {k: v for k, v in (("corner_clear_m", size.corner_clear_m),

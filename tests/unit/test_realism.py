@@ -44,7 +44,7 @@ def test_c2st_over_subsets_steadier_than_single(cfg):
 def test_table_takes_subsets_from_config(house, cfg, tmp_path):
     """Строка таблицы: c2st_sd > 0 при подвыборках из настройки и 0 при одной — таблица не
     подменяет настройку своим числом. Эталон — стены дома с шумом, впятеро больше стен метода."""
-    walls = table._walls([house])
+    walls = realism.walls([house])
     noisy = numpy.repeat(walls, 5, axis=0)
     noisy += numpy.random.default_rng(2).normal(size=noisy.shape)
     ref = table.Reference({}, [], None, noisy)
