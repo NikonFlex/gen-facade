@@ -11,7 +11,7 @@ import tomllib
 from importlib.resources import files
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from genfacade.datasets.buildingnet.mesh import Label
 from genfacade.schema import (
@@ -286,6 +286,9 @@ class HouseSize(Section):
 class OpeningRules(Section):
     grid_m: float
     corner_clear_m: float
+    # окно — не ближе к углу стены: правило свода window_corner_distance, когда оно в страже
+    # (gf#213); в файле настроек его нет — ставит datasets/synthetic/build.rules (gf#212)
+    window_corner_m: float = 0.0
     between_m: float
     widths_per_house: int
     per_bay_weights: list[float]
@@ -409,7 +412,6 @@ class Tokens(Section):
 
     grid_m: float
     max_m: float
-    window_types: int
 
 
 class SillLook(Section):
@@ -511,13 +513,23 @@ class Train(Section):
     paths: TrainPaths
 
 
+class RealismReference(Section):
+    """С какими домами сравнивается правдоподобие ответа в «лучшем из N» (gf#213)."""
+
+    source: Source
+    split: Split
+
+
 class LayoutModel(Sampling):
     checkpoint: Path
     attempts: int
+    best_of: int = Field(ge=1)
+    wall_retry: bool
     seed: int
     device: Device
     bf16: bool
     constrain: bool
+    reference: RealismReference
 
 
 class SpecStub(Section):
@@ -555,6 +567,7 @@ class Visual(Section):
 
 class Realism(Section):
     k: int
+    subsets: int
 
 
 class Metrics(Section):

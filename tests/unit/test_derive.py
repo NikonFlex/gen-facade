@@ -102,7 +102,7 @@ def test_house_has_no_more_window_sizes_than_types(cfg):
     for seed in SEEDS:
         sheet = build.sample(seed, cfg).sheet
         sizes = {(w.w_m, w.h_m) for f in sheet.facades for w in _of(f, ElementClass.WINDOW)}
-        assert len(sizes) <= cfg.tokens.window_types, seed
+        assert len(sizes) <= tokens.window_types(cfg), seed
 
 
 def test_trims_follow_their_window_when_snapped(answers, cfg):

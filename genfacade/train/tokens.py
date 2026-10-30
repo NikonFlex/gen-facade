@@ -6,7 +6,7 @@
     <house> режим, параметры дома, палитра, виды выводимых элементов
     <side> длина [<entrance>] {<forbidden> x0 x1} {проём плана: вид x w}     — на каждую стену
     <answer>
-    <types> n {w h}                                       — типоразмеры окон дома, n ≤ window_types
+    <types> n {w h}                                  — типоразмеры окон дома, n ≤ window_types(cfg)
     <wall> {элемент} {зона}                                                  — на каждую стену
     <end>
 
@@ -45,6 +45,7 @@ from genfacade.schema import (
     ElementClass,
     FacadeSheet,
     FixedField,
+    GuidelineCheck,
     HouseSpec,
     MaterialZone,
     Mode,
@@ -60,6 +61,7 @@ from genfacade.schema import (
     VariantKind,
     ZoneRole,
 )
+from genfacade.snap import PLAN_CLASS
 
 
 class Mark(StrEnum):
@@ -81,6 +83,14 @@ class TokenError(ValueError):
     """Дом не записывается токенами или последовательность не разбирается; текст — причина."""
 
 
+class Answer(NamedTuple):
+    """Ответ модели шага 4: слова от `<answer>` до `<end>` и разобранный по ним дом. Слова нужны,
+    чтобы досэмплировать одну стену, сохранив остальные (gf#213)."""
+
+    words: list[str]
+    sheet: FacadeSheet
+
+
 # Значения разных enum пересекаются («window» — и класс, и вид проёма плана), поэтому токен
 # значения — с приставкой своего enum.
 ENUMS = {"mode": Mode, "type": BuildingType, "roof": RoofKind, "open": OpeningKind,
@@ -91,7 +101,7 @@ PREFIX = {enum: name for name, enum in ENUMS.items()}
 HALF_STEP_UP = 1e-6  # запас на хвост float при округлении полушага; допуск, не настройка
 KIND = "kind"    # вид материала из библиотеки — открытый набор из config/library.toml
 STYLE = "style"  # стиль дома — открытый набор из config/synthetic.toml
-SIZE = "size"    # номер типоразмера окна дома: от 0 до window_types − 1 (config/tokens.toml)
+SIZE = "size"    # номер типоразмера окна дома: от 0 до window_types(cfg) − 1
 
 
 def tok(value: StrEnum) -> str:
@@ -104,8 +114,16 @@ def vocabulary(cfg: Config) -> list[str]:
     values = [tok(v) for enum in ENUMS.values() for v in enum]
     kinds = [f"{KIND}:{k}" for k in cfg.library.kinds]
     styles = [f"{STYLE}:{s}" for s in ["", *cfg.synthetic.spec.styles]]
-    sizes = [size_tok(k) for k in range(cfg.tokens.window_types)]
+    sizes = [size_tok(k) for k in range(window_types(cfg))]
     return [*map(str, Mark), *values, *kinds, *styles, *sizes, *numbers]
+
+
+def window_types(cfg: Config) -> int:
+    """Сколько типоразмеров окон бывает у дома: правило свода window_types — не больше форматов
+    на фасад и на дом (config/guidelines.toml); у дома все окна — из одних типоразмеров, поэтому
+    годится меньшее из двух чисел (gf#212). Одно значение — в правиле, а не в записи токенов."""
+    rule = next(g for g in cfg.guidelines.guideline if g.check is GuidelineCheck.WINDOW_TYPES)
+    return int(min(rule.params["per_facade"], rule.params["per_house"]))
 
 
 def size_tok(k: int) -> str:
@@ -166,7 +184,7 @@ def answer(sheet: FacadeSheet, mode: Mode, cfg: Config) -> list[str]:
                       *(str(n) for size in sizes for n in size)]
     for f in sheet.facades:
         out.append(Mark.WALL)
-        written = derive.base(f.elements)
+        written = ordered(f, mode, cfg.tokens)
         writer = _Writer(mode, cfg.tokens, sizes, {e.id: i for i, e in enumerate(written)})
         marks = derive.flags(f.elements)
         for e in written:
@@ -174,6 +192,22 @@ def answer(sheet: FacadeSheet, mode: Mode, cfg: Config) -> list[str]:
         for z in f.zones:
             out += _zone(z, cfg.tokens)
     return _known([*out, Mark.END], cfg)
+
+
+def ordered(f: SideFacade, mode: Mode, cfg: Tokens) -> list[Element]:
+    """Элементы стены, которые пишет модель, в порядке ответа: сперва проёмы условия этого режима
+    в порядке условия (`_side`), потом остальные, как в листе. Тот же порядок держит страж
+    (constraints.WallGeometry: стена не продолжается, пока её проёмы плана не поставлены) — иначе
+    эталон корпуса страж обрывал на окне перед входом (gf#212: 11 и 15 домов из 20)."""
+    written = derive.base(f.elements)
+    first: list[Element] = []
+    for o in (o for o in f.side.openings if given(o.kind, mode)):
+        x = units(o.x_m, cfg)
+        found = next((e for e in written if e.cls is PLAN_CLASS[o.kind] and FixedField.X in e.fixed
+                      and units(e.x_m, cfg) == x and e not in first), None)
+        if found is not None:
+            first.append(found)
+    return first + [e for e in written if e not in first]
 
 
 Size = tuple[int, int]  # ширина и высота окна в шагах сетки
@@ -189,11 +223,11 @@ class _Writer(NamedTuple):
 
 
 def window_sizes(windows: list[Element], cfg: Config) -> list[Size]:
-    """Типоразмеры окон дома, не больше window_types: разных размеров не больше — они и есть,
+    """Типоразмеры окон дома, не больше window_types(cfg): разных размеров не больше — они и есть,
     иначе — центры групп: начало — самые частые размеры, окно — к ближнему, центр — медиана
     группы (у реальных домов окна разных размеров, gf#212)."""
     found = Counter(_size(w, cfg.tokens) for w in windows)
-    limit = cfg.tokens.window_types
+    limit = window_types(cfg)
     if len(found) <= limit:
         return sorted(found)
     centres = [size for size, _ in sorted(found.items(), key=lambda kv: (-kv[1], kv[0]))[:limit]]
@@ -350,7 +384,7 @@ def decode(tokens: list[str], walls: FacadeSheet, cfg: Config) -> FacadeSheet:
     Выводимые элементы ставит код (derive.py) по признакам проёмов и виду дома."""
     r = _Reader(tokens, cfg.tokens)
     r.expect(Mark.ANSWER)
-    r.sizes = _read_sizes(r, cfg.tokens.window_types)
+    r.sizes = _read_sizes(r, window_types(cfg))
     facades = []
     for f in walls.facades:
         wall, marks = _wall(r, f)

@@ -8,7 +8,17 @@ from genfacade.datasets import genplan_writer
 from genfacade.datasets.synthetic import decor, openings, plan, sizes, upper, zones
 from genfacade.datasets.synthetic.house import Look, house
 from genfacade.plan.preprocess import preprocess
-from genfacade.schema import FacadeSheet, HouseSpec, Mode, Sample, SideFacade, Source, Split
+from genfacade.schema import (
+    FacadeSheet,
+    GuidelineCheck,
+    GuidelineUse,
+    HouseSpec,
+    Mode,
+    Sample,
+    SideFacade,
+    Source,
+    Split,
+)
 
 
 def sample_id(seed: int) -> str:
@@ -21,17 +31,28 @@ def split(seed: int, rules: Synthetic) -> Split:
     return Split.VAL if draw < rules.build.val_share else Split.TRAIN
 
 
+def with_norms(cfg: Config) -> Config:
+    """Настройки генератора с нормами стража из свода (gf#212): эталон корпуса не нарушает норм,
+    которые страж держит при генерации, — иначе страж его обрывает. Число — в правиле свода."""
+    on = {g.check: g.params for g in cfg.guidelines.guideline if GuidelineUse.GUARD in g.use}
+    corner = on.get(GuidelineCheck.CORNER_DISTANCE, {}).get("min", 0.0)
+    syn = cfg.synthetic
+    openings = syn.openings.model_copy(update={"window_corner_m": corner})
+    return cfg.model_copy(update={"synthetic": syn.model_copy(update={"openings": openings})})
+
+
 def sample(seed: int, cfg: Config) -> Sample:
-    rules = cfg.synthetic
-    svg = genplan_writer.svg(plan.draft(seed, rules), rules.canvas)
+    cfg = with_norms(cfg)
+    syn = cfg.synthetic
+    svg = genplan_writer.svg(plan.draft(seed, syn), syn.canvas)
     floor = preprocess(svg, Mode.WITH_OPENINGS, cfg.plan).model_copy(
         update={"source": Source.SYNTHETIC})
     # Свой поток случайных чисел: правка правил плана не меняет параметры дома, и наоборот.
     spec, look = house(random.Random(f"house/{seed}"), cfg,  # noqa: S311 — не криптография
-                       sizes.pick(seed, rules))
+                       sizes.pick(seed, syn))
     sheet = lay_out(pipeline.walls(spec, floor), look, cfg,
                     random.Random(f"upper/{seed}"))  # noqa: S311 — не криптография
-    return Sample(id=sample_id(seed), source=Source.SYNTHETIC, split=split(seed, rules),
+    return Sample(id=sample_id(seed), source=Source.SYNTHETIC, split=split(seed, syn),
                   plan=floor, sheet=sheet)
 
 

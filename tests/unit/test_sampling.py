@@ -49,6 +49,18 @@ def test_answer_stops_at_end_or_window(model):
         assert 0 not in ids[:-1]
 
 
+def test_answer_stops_at_any_given_token(model):
+    """Стоп — любой из заданных токенов (`<wall>` — досэмплировать одну стену, gf#213): после
+    него страж токенов не видит; токен условия, на котором ответ начинается, — не стоп."""
+    sampler = sampling.Sampler(model, end=0, bf16=False)
+    torch.manual_seed(1)
+    stops, guards = frozenset({1, 2}), [_Ban([])]
+    prompt = torch.tensor([[3, 4, 5, 6, 1]])
+    ids = sampler.answer(prompt, Sampling(temperature=1.0, top_k=0), guards, stops)[0]
+    assert ids[-1] in stops and not stops & set(ids[1:-1])
+    assert guards[0].seen == ids[1:]                 # дальше стопа не сэмплировал
+
+
 @pytest.fixture
 def checkpoint(tmp_path, cfg):
     return tiny_model.save(tmp_path / "model.pt", cfg)
@@ -80,8 +92,37 @@ def test_guard_makes_untrained_answer_readable(checkpoint, cfg, lay_out, constra
         with pytest.raises(TokenError):
             model.answer(prompt, bare, 0, run)
     else:
-        sheet = model.answer(prompt, bare, 0, run)
+        sheet = model.answer(prompt, bare, 0, run).sheet
         assert len(sheet.facades) == len(bare.facades)
+
+
+@pytest.fixture
+def asked(checkpoint, cfg, lay_out):
+    """Крошечная модель, простой дом после развёртки и условие на него."""
+    model = layout.load(_settings(cfg, checkpoint))
+    bare = tokens.bare(lay_out())
+    return model, bare, model.prompt(bare, Mode.WITH_OPENINGS, cfg)
+
+
+def test_answers_in_one_batch_each_with_own_guard(asked, cfg):
+    """Пачка ответов для «лучшего из N» (gf#213): у каждого свой страж — каждый разбирается;
+    ответы разные; пачка из одного — тот же ответ, что `answer`."""
+    model, bare, prompt = asked
+    many = model.answers(prompt, bare, 0, cfg, 3)
+    assert all(len(a.sheet.facades) == len(bare.facades) for a in many)
+    assert len({tuple(a.words) for a in many}) == 3
+    assert model.answers(prompt, bare, 5, cfg, 1)[0] == model.answer(prompt, bare, 5, cfg)
+
+
+def test_redo_changes_only_its_wall(asked, cfg):
+    """Перегенерация одной стены (gf#213): слова до её `<wall>` и после неё — прежние, остальные
+    стены дома не меняются, а она — сэмплирована заново."""
+    model, bare, prompt = asked
+    old = model.answer(prompt, bare, 0, cfg)
+    for wall in range(len(bare.facades)):
+        new = model.redo(prompt, bare, old, wall, 1, cfg)
+        same = [a == b for a, b in zip(old.sheet.facades, new.sheet.facades, strict=True)]
+        assert same == [i != wall for i in range(len(same))]
 
 
 def test_layout_refuses_model_with_other_vocabulary(checkpoint, cfg, lay_out):

@@ -13,6 +13,7 @@
 
 Место окну модели страж выбирает в обоих режимах: в «окна из плана» проёмы плана первого этажа —
 занятые отрезки, своё окно модель туда не ставит (налезало на широкое окно плана GenPlan, gf#197).
+Так же — своей двери: модель ставила вторую дверь поверх двери плана (реальный тест, gf#213).
 
 Окно пишется не шириной и высотой, а номером типоразмера дома из начала ответа (`<types>`, gf#212):
 страж оставляет типоразмеры, с которыми окно встаёт на свободное место и под карниз, а x — где
@@ -24,11 +25,19 @@
 элемент его класса — в x и ширину проёма, на первом этаже, с `fix:x_m fix:w_m`; стену не
 закончить, пока проёмы плана не поставлены. Иначе на реальных домах элементы выходили за стену на
 метры, а проём плана пропадал или смещался (0 годных из 20, `docs/metrics-results.md`, 25.10).
+
+Правила свода фасада с `use = ["guard"]` (config/guidelines.toml, gf#213) — нормы стража (Norms):
+окно модели — не ближе нормы к углу стены и к проёмам своего этажа (простенок), верх окна — на
+линии верха окон своего этажа стены (у окна — выбором типоразмера). Число типоразмеров окон
+(window_types) держит формат ответа (gf#212): в заголовке `<types>` их не больше, чем допускает
+правило. Норму, которую на стене не выполнить, страж не держит: годного нет — как без неё.
 """
 
 import math
 from bisect import bisect_right
+from collections.abc import Iterator
 from enum import Enum, auto
+from functools import partial
 from typing import NamedTuple
 
 from genfacade.config import Config, Tokens
@@ -39,7 +48,8 @@ from genfacade.schema import (
     ElementClass,
     FacadeSheet,
     FixedField,
-    ForbiddenZone,
+    GuidelineCheck,
+    GuidelineUse,
     HouseTrim,
     Mode,
     Opening,
@@ -71,7 +81,8 @@ class Planned(NamedTuple):
 class Wall(NamedTuple):
     """Стена в шагах сетки: длина, занятые условием отрезки [a, b) — на всех этажах (busy) и
     только на первом (ground), — низ каждого этажа выше первого (floors), карниз (height; 0 —
-    без предела) и проёмы плана в порядке условия (plan)."""
+    без предела), проёмы плана в порядке условия (plan) и их отрезки на первом этаже (given) —
+    от них считается простенок."""
 
     length: int
     busy: list[Span]
@@ -79,6 +90,7 @@ class Wall(NamedTuple):
     floors: tuple[int, ...] = ()
     height: int = 0
     plan: tuple[Planned, ...] = ()
+    given: list[Span] = []
 
     def floor(self, y: int) -> int:
         """Этаж по высоте низа элемента: 1 — ниже низа второго этажа (и цоколь тоже)."""
@@ -88,6 +100,22 @@ class Wall(NamedTuple):
         """Занятое на этаже: условие и проёмы, уже поставленные моделью на этом этаже."""
         own = [span for span, at in placed if at == floor]
         return self.busy + (self.ground if floor == 1 else []) + own
+
+    def openings(self, floor: int, placed: list[tuple[Span, int]]) -> list[Span]:
+        """Проёмы этажа: плана (только первый этаж) и уже поставленные моделью."""
+        return (self.given if floor == 1 else []) + [span for span, at in placed if at == floor]
+
+
+class Norms(NamedTuple):
+    """Числа стража в шагах сетки: самое узкое окно корпуса — x, за которым оно не помещается,
+    не годен; правила свода (gf#213): отступ окна модели от угла, простенок, допуск линии верха
+    окон этажа (None — правило выключено). Типоразмеры окон (window_types) держит формат ответа:
+    у дома их не больше, чем допускает правило, окно — одного из них (gf#212)."""
+
+    narrowest: int
+    corner: int = 0
+    pier: int = 0
+    head: int | None = None
 
 
 class Vocab:
@@ -262,12 +290,12 @@ class WallGeometry:
     """Страж одного ответа: грамматика, рамка в пределах стены, проёмы плана по условию и место
     окна модели на стене."""
 
-    def __init__(self, walls: list[Wall], vocab: Vocab, narrowest: int,
+    def __init__(self, walls: list[Wall], vocab: Vocab, norms: Norms,
                  house: House | None = None):
-        # narrowest — самое узкое окно корпуса в шагах, пока у дома нет типоразмеров; house —
-        # материал элемента и зоны только из палитры дома, признаки — только видов, что у дома есть
-        # (None — любые)
-        self.walls, self.vocab, self.narrowest = walls, vocab, narrowest
+        # house — материал элемента и зоны только из палитры дома, признаки выводимых элементов —
+        # только видов, что у дома есть (None — любые)
+        self.walls, self.vocab, self.norms = walls, vocab, norms
+        self.narrowest = norms.narrowest
         self.foreign = {i for i, r in vocab.material.items() if house is not None
                         and r not in house.palette}
         self.foreign |= {i for i, t in vocab.trim.items() if house is not None
@@ -283,8 +311,11 @@ class WallGeometry:
         self.corners: list[int] = []      # числа точек зоны, что пишется
         self.cls: ElementClass | None = None
         self.box: list[int] = []
+        self.tops: dict[int, list[int]] = {}         # верх окон стены по этажам
 
     def step(self, token: int) -> None:
+        if self.grammar.done:  # в пачке ответ кончился, а соседние ещё пишутся — дальше мусор
+            return
         v = self.vocab
         in_box = self._in_box()
         in_points = (self.grammar.zones and self.grammar.need[:1] == [Need.NUMBER]
@@ -298,6 +329,7 @@ class WallGeometry:
             self.corners = []
         if token == v.wall:
             self.at, self.placed, self.cls, self.index = self.at + 1, [], None, -1
+            self.tops = {}
             self.pending = list(self.walls[self.at].plan) if self.at < len(self.walls) else []
         elif token in v.cls:
             self.cls, self.box, self.current, self.fixes = v.cls[token], [], None, 0
@@ -323,9 +355,11 @@ class WallGeometry:
     def _size(self, k: int) -> None:
         """Типоразмер окна: отрезок окна на этаже занят; у окна плана ширина — плана."""
         sizes = self.grammar.sizes
-        w = self.current.w if self.current is not None else sizes[k][0] if k < len(sizes) else 0
+        w, h = sizes[k] if k < len(sizes) else (0, 0)
+        w = self.current.w if self.current is not None else w
         floor = self.walls[self.at].floor(self.box[Y])
         self.placed.append(((self.box[X], self.box[X] + w), floor))
+        self.tops.setdefault(floor, []).append(self.box[Y] + h)
         self.box.append(k)  # рамка окна закончена: x y и типоразмер
 
     def _in_box(self) -> bool:
@@ -368,19 +402,25 @@ class WallGeometry:
         return [i for i in range(self.vocab.size) if i not in keep]
 
     def _sizes(self) -> set[int]:
-        """Типоразмеры, с которыми окно не выше карниза, а окно модели ещё и на стене и на
-        свободном месте своего этажа."""
+        """Типоразмеры, с которыми окно не выше карниза, а окно модели ещё и на стене, на
+        свободном месте своего этажа, с отступом от угла и простенком (нормы gf#213; с ними места
+        нет — без них); из них — с верхом на линии окон этажа, если такие есть."""
         wall, (x, y) = self.walls[self.at], self.box
-        busy = wall.taken(wall.floor(y), self.placed)
-        out = set()
-        for i, k in self.vocab.sizes.items():
-            if k >= len(self.grammar.sizes):
-                continue
-            w, h = self.grammar.sizes[k]
-            fits = self.current is not None or (x + w <= wall.length and _free(x, w, busy))
-            if fits and (not wall.height or y + h <= wall.height):
-                out.add(i)
-        return out
+        floor = wall.floor(y)
+        sizes = {i: self.grammar.sizes[k] for i, k in self.vocab.sizes.items()
+                 if k < len(self.grammar.sizes)
+                 and (not wall.height or y + self.grammar.sizes[k][1] <= wall.height)}
+
+        def placed(strict: bool) -> set[int]:
+            corner = self.norms.corner if strict else 0
+            return {i for i, (w, _) in sizes.items() if self.current is not None or (
+                corner <= x and x + w <= wall.length - corner
+                and self._clear(x, w, floor, strict))}
+
+        out = placed(strict=True) or placed(strict=False)
+        tops = self._tops()
+        lined = {i for i in out if tops is None or tops[0] <= y + sizes[i][1] <= tops[1]}
+        return lined or out
 
     def _size_numbers(self) -> set[int]:
         """Ширина типоразмера — не длиннее самой длинной стены, высота — не выше карниза: окно
@@ -398,9 +438,33 @@ class WallGeometry:
         if (plan := self._plan(wall, place)) is not None:
             allowed &= plan
         planned = self.current is not None or (place == X and self._head() is not None)
-        if self.cls is ElementClass.WINDOW and not planned and (geometry := self._allowed()):
-            allowed &= set(geometry)  # окно модели — на свободное место: проём плана уже занят
+        if self.cls not in OPENINGS:
+            return allowed
+        if not planned and (geometry := self._allowed()):
+            # свой проём модели — на свободное место: проём плана уже занят; дверь — тоже: модель
+            # ставила вторую дверь поверх двери плана (реальный тест, gf#213)
+            allowed &= set(geometry)
+        if self.cls not in OPENINGS:
+            return allowed
+        for rule in self._size_rules(place, planned):
+            allowed = (allowed & rule) or allowed  # норму не выполнить — как без неё
         return allowed
+
+    def _size_rules(self, place: int, planned: bool) -> Iterator[set[int]]:
+        """Правило свода на высоту проёма с рамкой x y w h: верх — на линии верха окон этажа.
+        У окна высота — типоразмера, правило держит выбор типоразмера (`_sizes`)."""
+        if place == H and (tops := self._tops()):
+            low, high = tops
+            yield {h for h in self.vocab.token if low <= self.box[Y] + h <= high}
+
+    def _tops(self) -> tuple[int, int] | None:
+        """Где может быть верх проёма этажа по линии верха окон (window_head_line); None — окон
+        на этаже ещё нет или правило выключено."""
+        n = self.norms
+        tops = self.tops.get(self.walls[self.at].floor(self.box[Y]))
+        if n.head is None or not tops:
+            return None
+        return max(tops) - n.head, min(tops) + n.head
 
     def _bounds(self, wall: Wall, place: int) -> set[int]:
         """Рамка в пределах стены по длине и, если карниз известен, по высоте."""
@@ -467,37 +531,48 @@ class WallGeometry:
         return keep
 
     def _allowed(self) -> list[int]:
-        """Годные числа рамки окна по занятым отрезкам стены; высоту — пусто: её держат грамматика
-        и предел карниза."""
-        numbers = list(self.vocab.token)
-        place = len(self.box)
-        if place == H:
+        """Годные числа рамки окна по занятым отрезкам стены, с отступом от угла и простенком;
+        с ними места нет — без них. Высоту — пусто: её держат грамматика и предел карниза."""
+        if len(self.box) == H:
             return []
+        return self._place(strict=True) or self._place(strict=False)
+
+    def _place(self, strict: bool) -> list[int]:
+        numbers, place = list(self.vocab.token), len(self.box)
         wall = self.walls[self.at]
+        corner = self.norms.corner if strict and self.cls is ElementClass.WINDOW else 0
         if place == X:
             # Окну нужно место: x, за которым до края или занятого отрезка уже самого узкого окна,
             # загоняет модель в ширину, какой она не видела, — и ответ ломается (gf#153: x 98 на
             # стене 109 шагов, ширина 4, дальше «ждали <wall>, пришло '32'»). Этажа ещё нет —
             # годен x, при котором окно помещается хотя бы на одном.
-            return [n for n in numbers if n + self._narrowest() <= wall.length and self._fits(n)]
+            return [n for n in numbers if corner <= n
+                    and n + self._narrowest() <= wall.length - corner and self._fits(n, strict)]
         if place == Y:
             # x годен не на всех этажах — y только там, где годен: иначе у окна первого этажа
             # в запретной зоне нет годной ширины (план GenPlan, 9 из 20 браков, gf#155).
-            fits = self._fits(self.box[X])
+            fits = self._fits(self.box[X], strict)
             return [n for n in numbers if wall.floor(n) in fits] if len(fits) <= len(
                 wall.floors) else numbers
-        x, busy = self.box[X], wall.taken(wall.floor(self.box[Y]), self.placed)
-        return [n for n in numbers if 0 < n and x + n <= wall.length and _free(x, n, busy)]
+        x, floor = self.box[X], wall.floor(self.box[Y])
+        return [n for n in numbers if 0 < n and x + n <= wall.length - corner
+                and self._clear(x, n, floor, strict)]
 
-    def _fits(self, x: int) -> set[int]:
+    def _fits(self, x: int, strict: bool = False) -> set[int]:
         """Этажи, где на x помещается самое узкое окно."""
         wall = self.walls[self.at]
         return {f for f in range(1, len(wall.floors) + 2)
-                if _free(x, self._narrowest(), wall.taken(f, self.placed))}
+                if self._clear(x, self._narrowest(), f, strict)}
 
     def _narrowest(self) -> int:
         """Самый узкий типоразмер дома; пока их нет — самое узкое окно корпуса."""
         return min((w for w, _ in self.grammar.sizes), default=self.narrowest)
+
+    def _clear(self, x: int, w: int, floor: int, strict: bool) -> bool:
+        """Окно x…x+w на этаже не заходит на занятое, а строго — и в простенок у проёмов."""
+        wall, pier = self.walls[self.at], self.norms.pier if strict else 0
+        return _free(x, w, wall.taken(floor, self.placed)) and _free(
+            x - pier, w + 2 * pier, wall.openings(floor, self.placed))
 
 
 def _free(x: int, w: int, busy: list[Span]) -> bool:
@@ -511,11 +586,16 @@ def walls(bare: FacadeSheet, mode: Mode, cfg: Config) -> list[Wall]:
     height = tokens.units(bare.spec.eaves_m, t)
     out = []
     for f in bare.facades:
-        zones = [_outward(z, cfg) for z in f.side.forbidden]
-        plan = tuple(_planned(o, t) for o in f.side.openings if tokens.given(o.kind, mode))
-        given = [(p.x, p.x + p.w) for p in plan]
+        zones = [_outward(z.x0_m, z.x1_m, cfg) for z in f.side.forbidden]
+        openings = [o for o in f.side.openings if tokens.given(o.kind, mode)]
+        plan = tuple(_planned(o, t) for o in openings)
+        # Проём плана занимает свои настоящие метры, а не числа условия: привязка (шаг 5) ставит
+        # его ровно на план — окно модели впритык к окну плана 0,915–3,073 м, записанному
+        # условием 0,90–3,05, заходило на него на 2,3 см (план GenPlan, gf#197, gf#213).
+        given = [_outward(o.x_m, o.x_m + o.width_m, cfg) for o in openings]
         # зоны и проёмы плана — первого этажа: у верхних плана нет
-        out.append(Wall(tokens.units(f.side.length_m, t), [], zones + given, floors, height, plan))
+        out.append(Wall(tokens.units(f.side.length_m, t), [], zones + given, floors, height, plan,
+                        given))
     return out
 
 
@@ -525,19 +605,29 @@ def _planned(o: Opening, t: Tokens) -> Planned:
     return Planned(PLAN_CLASS[o.kind], x, tokens.units(o.x_m + o.width_m, t) - x)
 
 
-def _outward(zone: ForbiddenZone, cfg: Config) -> Span:
-    """Зона на сетке — наружу, до узлов, которые её покрывают с допуском валидатора. Округление к
-    ближнему узлу ужимало зону 1,930–2,006 м до 1,95–2,00 м: окно, кончающееся на 1,95, страж
-    пропускал, а валидатор браковал — заход 2 см (план GenPlan, gf#155)."""
+def _outward(x0: float, x1: float, cfg: Config) -> Span:
+    """Отрезок стены на сетке — наружу, до узлов, которые его покрывают с допуском валидатора.
+    Округление к ближнему узлу ужимало зону 1,930–2,006 м до 1,95–2,00 м: окно, кончающееся на
+    1,95, страж пропускал, а валидатор браковал — заход 2 см (план GenPlan, gf#155)."""
     grid, eps = cfg.tokens.grid_m, cfg.checks.eps_m
-    return (math.floor((zone.x0_m + eps) / grid + EPS), math.ceil((zone.x1_m - eps) / grid - EPS))
+    return math.floor((x0 + eps) / grid + EPS), math.ceil((x1 - eps) / grid - EPS)
+
+
+def norms(cfg: Config) -> Norms:
+    """Числа стража: самое узкое окно корпуса и правила свода с `use = ["guard"]` в шагах сетки."""
+    mix = cfg.synthetic.sizes  # самое узкое окно — профилей, что в корпусе
+    used = [mix.genplan] + ([mix.real] if mix.real_share > 0 else [])
+    units = partial(tokens.units, cfg=cfg.tokens)
+    on = {g.check: g.params for g in cfg.guidelines.guideline if GuidelineUse.GUARD in g.use}
+    corner = on.get(GuidelineCheck.CORNER_DISTANCE, {}).get("min", 0.0)
+    pier = on.get(GuidelineCheck.PIER_MIN, {}).get("min", 0.0)
+    head = on.get(GuidelineCheck.HEAD_LINE)
+    return Norms(units(min(p.window_width_m[0] for p in used)), units(corner), units(pier),
+                 None if head is None else units(head["tol_m"]))
 
 
 def guard(bare: FacadeSheet, mode: Mode, vocab: Vocab, cfg: Config) -> WallGeometry | None:
     """Страж для ответа на этот дом в любом режиме: режимы различаются проёмами плана в условии.
     Включён ли запрет в конвейере — решает вызывающий (config/models.toml, `constrain`)."""
-    mix = cfg.synthetic.sizes  # самое узкое окно — профилей, что в корпусе
-    used = [mix.genplan] + ([mix.real] if mix.real_share > 0 else [])
-    narrowest = tokens.units(min(p.window_width_m[0] for p in used), cfg.tokens)
     palette = {PaletteRole(m.id) for m in bare.spec.materials if m.id in set(PaletteRole)}
-    return WallGeometry(walls(bare, mode, cfg), vocab, narrowest, House(palette, bare.spec.trim))
+    return WallGeometry(walls(bare, mode, cfg), vocab, norms(cfg), House(palette, bare.spec.trim))

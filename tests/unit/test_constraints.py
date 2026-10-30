@@ -6,6 +6,7 @@ import pytest
 from simple_house import WALL_INTO_WINDOW, before_leaf
 
 from genfacade import schema
+from genfacade.datasets.synthetic import build
 from genfacade.schema import ElementClass, Mode, ZoneRole
 from genfacade.train import constraints, tokens
 from genfacade.train.tokens import Mark
@@ -16,6 +17,9 @@ WALL = constraints.Wall(160, [(78, 82), (28, 46)])
 NARROWEST = 12
 TYPES = (Mark.TYPES, 3, 12, 30, 20, 30, 26, 30)
 SIZE = [tokens.size_tok(k) for k in range(3)]
+NORMS = constraints.Norms(NARROWEST)
+# все правила свода в страже (gf#213): угол 1 м, простенок 0,5 м, линия верха ±5 см
+STRICT = constraints.Norms(NARROWEST, corner=20, pier=10, head=1)
 
 
 @pytest.fixture
@@ -29,7 +33,7 @@ def guard(cfg, vocab):
     ids = {w: i for i, w in enumerate(tokens.vocabulary(cfg))}
 
     def read(*words):
-        g = constraints.WallGeometry([WALL], vocab, NARROWEST)
+        g = constraints.WallGeometry([WALL], vocab, NORMS)
         for w in (*TYPES, *words) if words else ():
             g.step(ids[str(w)])
         return g
@@ -80,23 +84,23 @@ def test_types_come_first_and_not_more_than_allowed(guard, keep, cfg):
     """Ответ начинается с типоразмеров окон дома (gf#212): их не больше window_types."""
     assert keep(guard()) == {Mark.TYPES}
     count = keep(_read(constraints.WallGeometry([WALL], constraints.Vocab(
-        tokens.vocabulary(cfg)), NARROWEST), cfg, Mark.TYPES))
-    assert count == {str(n) for n in range(cfg.tokens.window_types + 1)}
+        tokens.vocabulary(cfg)), NORMS), cfg, Mark.TYPES))
+    assert count == {str(n) for n in range(tokens.window_types(cfg) + 1)}
     assert keep(guard(Mark.WALL, WINDOW, 52, 10)) == set(SIZE)
     one = _read(constraints.WallGeometry([WALL], constraints.Vocab(tokens.vocabulary(cfg)),
-                                         NARROWEST), cfg, Mark.TYPES, 1, 12, 30, Mark.WALL,
+                                         NORMS), cfg, Mark.TYPES, 1, 12, 30, Mark.WALL,
                 WINDOW, 52, 10)
     assert keep(one) == {SIZE[0]}                                       # номер — из написанных
     planned = constraints.Wall(160, [], [(33, 48)], plan=(
         constraints.Planned(ElementClass.WINDOW, 33, 15),))
     some = keep(_read(constraints.WallGeometry([planned], constraints.Vocab(
-        tokens.vocabulary(cfg)), NARROWEST), cfg, Mark.TYPES))
+        tokens.vocabulary(cfg)), NORMS), cfg, Mark.TYPES))
     assert "0" not in some and "1" in some              # окно плана без типоразмера не поставить
     width = keep(_read(constraints.WallGeometry([WALL._replace(height=60)], constraints.Vocab(
-        tokens.vocabulary(cfg)), NARROWEST), cfg, Mark.TYPES, 1))
+        tokens.vocabulary(cfg)), NORMS), cfg, Mark.TYPES, 1))
     assert width == {str(n) for n in range(1, 161)}    # ширина — не длиннее стены
     height = keep(_read(constraints.WallGeometry([WALL._replace(height=60)], constraints.Vocab(
-        tokens.vocabulary(cfg)), NARROWEST), cfg, Mark.TYPES, 1, 12))
+        tokens.vocabulary(cfg)), NORMS), cfg, Mark.TYPES, 1, 12))
     assert height == {str(n) for n in range(1, 61)}    # высота — не выше карниза
 
 
@@ -112,18 +116,19 @@ def test_box_takes_only_numbers_inside_the_wall(guard, vocab, cfg, keep):
     (gf#197); карниз стены неизвестен — по высоте предела нет."""
     numbers = set(vocab.token)
     assert _allowed(guard(Mark.WALL, WINDOW, 52), vocab) == numbers       # y — любое число
-    assert _allowed(guard(Mark.WALL, DOOR), vocab) == set(range(160))     # x — на стене
+    cornice = tokens.tok(ElementClass.CORNICE)
+    assert _allowed(guard(Mark.WALL, cornice), vocab) == set(range(160))  # x — на стене
     assert _allowed(guard(Mark.WALL, DOOR, 30, 10), vocab) == set(range(1, 131))  # до конца
     assert _allowed(guard(Mark.WALL, DOOR, 30, 10, 20), vocab) == numbers - {0}  # высота > 0
     ids = {w: i for i, w in enumerate(tokens.vocabulary(cfg))}
-    g = constraints.WallGeometry([WALL._replace(height=60)], vocab, NARROWEST)
+    g = constraints.WallGeometry([WALL._replace(height=60)], vocab, NORMS)
     for w in (*TYPES, Mark.WALL, tokens.tok(ElementClass.CORNICE), 0):
         g.step(ids[str(w)])
     assert _allowed(g, vocab) == set(range(60))                           # y — ниже карниза
     for w in (50, 160):
         g.step(ids[str(w)])
     assert _allowed(g, vocab) == set(range(1, 11))                        # верх — не выше
-    low = _read(constraints.WallGeometry([WALL._replace(height=60)], vocab, NARROWEST), cfg,
+    low = _read(constraints.WallGeometry([WALL._replace(height=60)], vocab, NORMS), cfg,
                 Mark.TYPES, 2, 12, 30, 12, 20, Mark.WALL, WINDOW, 100, 35)
     assert keep(low) == {SIZE[1]}                                         # 35 + 30 — выше карниза
 
@@ -132,7 +137,7 @@ def test_answer_follows_grammar(guard, keep, cfg, vocab):
     """Следующим — только то, что разберёт `tokens.decode`: сбитая модель писала токен условия,
     поле не по порядку, лишнее число зоны (план GenPlan, глухой режим, gf#177)."""
     window = (Mark.WALL, WINDOW, 52, 10, SIZE[1])
-    head = _read(constraints.WallGeometry([WALL], vocab, NARROWEST), cfg, *TYPES)
+    head = _read(constraints.WallGeometry([WALL], vocab, NORMS), cfg, *TYPES)
     assert keep(head) == {Mark.WALL}                          # после типоразмеров — стена
     after_box = keep(guard(*window))
     assert {Mark.FLOOR, Mark.END, WINDOW, ZONE, "var:regular"} \
@@ -149,6 +154,8 @@ def test_answer_follows_grammar(guard, keep, cfg, vocab):
     points = keep(guard(*zone, "mat:accent", 2, 0, 10, 8, 10))
     assert not {str(n) for n in range(200)} & points and WINDOW not in points  # 2 точки, зоны
     assert guard(*window, Mark.END).banned() == []                        # ответ кончился
+    # в пачке соседние ответы ещё пишутся: токены после `<end>` страж не читает (gf#213)
+    assert guard(*window, Mark.END, Mark.WALL, WINDOW, 1).banned() == []
 
 
 def test_trims_only_on_their_opening_and_house_kinds(guard, keep, cfg, vocab):
@@ -166,14 +173,14 @@ def test_trims_only_on_their_opening_and_house_kinds(guard, keep, cfg, vocab):
     assert not derived & window and WINDOW in window
     house = constraints.House({schema.PaletteRole.MAIN},
                               schema.HouseTrim(shutters=schema.ShutterKind.PANEL))
-    own = keep(_read(constraints.WallGeometry([WALL], vocab, NARROWEST, house), cfg,
+    own = keep(_read(constraints.WallGeometry([WALL], vocab, NORMS, house), cfg,
                      *TYPES, Mark.WALL, WINDOW, 52, 10, SIZE[1]))
     assert shutters in own and not {sill, casing, canopy} & own
 
 
 def test_wall_count_decides_end(cfg, vocab, keep):
     ids = {w: i for i, w in enumerate(tokens.vocabulary(cfg))}
-    g = constraints.WallGeometry([WALL, WALL], vocab, NARROWEST)
+    g = constraints.WallGeometry([WALL, WALL], vocab, NORMS)
     for w in (*TYPES, Mark.WALL, ZONE, "mat:main", 1, 0, 0):
         g.step(ids[str(w)])
     keep = keep(g)
@@ -222,19 +229,30 @@ def test_own_window_does_not_cover_a_plan_opening(cfg, vocab):
     ставила рядом своё, и они пересекались (14 из 20 на двух этажах, gf#197)."""
     plan = constraints.Planned(ElementClass.WINDOW, 33, 15)
     wall = constraints.Wall(160, [], [(33, 48)], plan=(plan,))
-    g = _read(constraints.WallGeometry([wall], vocab, NARROWEST), cfg, *TYPES,
+    g = _read(constraints.WallGeometry([wall], vocab, NORMS), cfg, *TYPES,
               Mark.WALL, WINDOW, 33, 10, SIZE[2], Mark.FLOOR, 1, "fix:x_m", "fix:w_m", WINDOW)
     assert not set(range(22, 48)) & _allowed(g, vocab)                    # не налезть на 33–48
     assert {0, 48, 148} <= _allowed(g, vocab)
+
+
+def test_own_door_does_not_cover_a_plan_door(cfg, vocab):
+    """Своя дверь модели — тоже на свободное место: на реальном тесте модель ставила вторую дверь
+    поверх двери плана, и валидатор браковал «проёмы пересекаются» (gf#213)."""
+    plan = constraints.Planned(ElementClass.DOOR, 28, 18)
+    wall = constraints.Wall(160, [], [(28, 46)], plan=(plan,), given=[(28, 46)])
+    g = _read(constraints.WallGeometry([wall], vocab, NORMS), cfg, *TYPES,
+              Mark.WALL, DOOR, 28, 0, 18, 42, Mark.FLOOR, 1, "fix:x_m", "fix:w_m", DOOR)
+    assert not set(range(28 - NARROWEST + 1, 46)) & _allowed(g, vocab)
+    assert {0, 46, 148} <= _allowed(g, vocab)
 
 
 def test_materials_only_from_the_house_palette(cfg, vocab, keep):
     """Материал — из палитры дома: у реального дома она одна (main), лист с цоколем из `plinth`
     схема не принимает (gf#197)."""
     house = constraints.House({schema.PaletteRole.MAIN})
-    g = constraints.WallGeometry([WALL], vocab, NARROWEST, house)
+    g = constraints.WallGeometry([WALL], vocab, NORMS, house)
     assert keep(_read(g, cfg, *TYPES, Mark.WALL, ZONE)) == {"mat:main"}
-    window = keep(_read(constraints.WallGeometry([WALL], vocab, NARROWEST, house), cfg,
+    window = keep(_read(constraints.WallGeometry([WALL], vocab, NORMS, house), cfg,
                         *TYPES, Mark.WALL, WINDOW, 52, 10, SIZE[1]))
     assert "mat:main" in window and "mat:trim" not in window
 
@@ -242,14 +260,14 @@ def test_materials_only_from_the_house_palette(cfg, vocab, keep):
 def test_zone_is_a_rectangle_on_the_wall(cfg, vocab):
     """Зона — прямоугольник на стене, как все зоны корпуса: (x0 y0) (x1 y0) (x1 y1) (x0 y1), x до
     длины, y до карниза; зоны модели торчали за стену треугольниками (gf#197)."""
-    g = _read(constraints.WallGeometry([WALL._replace(height=60)], vocab, NARROWEST), cfg,
+    g = _read(constraints.WallGeometry([WALL._replace(height=60)], vocab, NORMS), cfg,
               *TYPES, Mark.WALL, ZONE, "mat:main")
     assert _allowed(g, vocab) == {4}                                      # четыре точки
     steps = [(4, set(range(160))), (10, set(range(60))), (20, set(range(11, 161))), (90, {20}),
              (20, {90}), (90, set(range(21, 61))), (50, {10}), (10, {50})]
     for word, allowed in steps:
         assert _allowed(_read(g, cfg, word), vocab) == allowed
-    edge = _read(constraints.WallGeometry([WALL._replace(height=60)], vocab, NARROWEST), cfg,
+    edge = _read(constraints.WallGeometry([WALL._replace(height=60)], vocab, NORMS), cfg,
                  *TYPES, Mark.WALL, ZONE, "mat:main", 4)
     assert 160 not in _allowed(edge, vocab)    # угол на краю — правее места нет, всё запрещено
 
@@ -289,7 +307,7 @@ TWO = constraints.Wall(160, [], [(78, 82), (28, 46)], (60,))
 
 
 def _two_storey(vocab, ids, *words):
-    g = constraints.WallGeometry([TWO], vocab, NARROWEST)
+    g = constraints.WallGeometry([TWO], vocab, NORMS)
     for w in (*TYPES, *words):
         g.step(ids[str(w)])
     return g
@@ -328,13 +346,16 @@ def test_two_storey_wall_keeps_floors_apart(cfg, vocab, sizes):
 def test_zone_on_grid_covers_real_zone(cfg, lay_out, vocab, x0, x1, span):
     """Окно, которое страж пускает впритык к зоне на сетке, валидатор не бракует: зона на сетке
     покрывает настоящую с допуском `eps_m`."""
-    bare = tokens.bare(lay_out(Mode.BLIND))
-    side = bare.facades[1].side.model_copy(update={"forbidden": [
-        schema.ForbiddenZone(x0_m=x0, x1_m=x1)]})
+    zone = schema.ForbiddenZone(x0_m=x0, x1_m=x1)
+    assert _second_wall(cfg, lay_out, Mode.BLIND, forbidden=[zone]).ground == [span]
+
+
+def _second_wall(cfg, lay_out, mode, **side):
+    """Вторая стена простого дома в шагах сетки, у стороны которой поля side заменены."""
+    bare = tokens.bare(lay_out(mode))
     facades = list(bare.facades)
-    facades[1] = facades[1].model_copy(update={"side": side})
-    walls = constraints.walls(bare.model_copy(update={"facades": facades}), Mode.BLIND, cfg)
-    assert walls[1].ground == [span]
+    facades[1] = facades[1].model_copy(update={"side": facades[1].side.model_copy(update=side)})
+    return constraints.walls(bare.model_copy(update={"facades": facades}), mode, cfg)[1]
 
 
 @pytest.mark.parametrize("mode", list(Mode))
@@ -344,6 +365,8 @@ def test_guard_never_bans_every_token(cfg, lay_out, vocab, mode):
     bare = tokens.bare(lay_out(mode))
     for seed in range(20):
         rng, g = numpy.random.default_rng(seed), constraints.guard(bare, mode, vocab, cfg)
+        if seed % 2:  # и со всеми правилами свода (gf#213)
+            g = constraints.WallGeometry(g.walls, vocab, STRICT)
         for _ in range(400):
             banned = set(g.banned())
             free = [i for i in range(vocab.size) if i not in banned]
@@ -352,3 +375,80 @@ def test_guard_never_bans_every_token(cfg, lay_out, vocab, mode):
             if token == vocab.end:
                 break
             g.step(token)
+
+
+def test_plan_opening_takes_its_real_metres(cfg, lay_out):
+    """Проём плана не на сетке занимает свои настоящие метры наружу, а не числа условия:
+    привязка ставит его ровно на план, и окно модели впритык к числам условия 0,90–3,05 м
+    заходило на окно плана 0,915–3,073 м на 2,3 см — страж пропускал, валидатор браковал
+    (план GenPlan, gf#197, gf#213)."""
+    window = schema.Opening(kind=schema.OpeningKind.WINDOW, x_m=0.915, width_m=2.158)
+    wall = _second_wall(cfg, lay_out, Mode.WITH_OPENINGS, openings=[window], forbidden=[])
+    assert (wall.plan[0].x, wall.plan[0].w) == (18, 43)   # условие — числа сетки
+    assert wall.ground == wall.given == [(18, 62)]        # занято — до 3,10 м
+
+
+def _strict(cfg, vocab, wall, *words, **rules):
+    """Страж с правилами свода rules (gf#213), прочитавший слова ответа."""
+    return _read(constraints.WallGeometry(wall, vocab, constraints.Norms(NARROWEST, **rules)),
+                 cfg, *(words if words[:1] == (Mark.TYPES,) else (*TYPES, *words)))
+
+
+def test_corner_distance_keeps_model_window_off_the_corners(cfg, vocab, sizes):
+    """Правило свода `window_corner_distance`: окно модели — не ближе нормы к углу стены."""
+    g = _strict(cfg, vocab, [WALL], Mark.WALL, WINDOW, corner=20)
+    assert _allowed(g, vocab) == set(range(46, 78 - NARROWEST + 1)) | set(
+        range(82, 160 - 20 - NARROWEST + 1))
+    assert sizes(_read(g, cfg, 120, 10)) == {0, 1}       # и правым краем: 120 + 20 ≤ 160 − 20
+    short = _strict(cfg, vocab, [constraints.Wall(30, [])], Mark.WALL, WINDOW, corner=20)
+    assert _allowed(short, vocab)                       # не выполнить — как без неё
+
+
+def test_pier_keeps_model_window_off_other_openings(cfg, vocab):
+    """Правило свода `pier_min`: между проёмами этажа — простенок не уже нормы, и от окна
+    модели, и от проёма плана."""
+    g = _strict(cfg, vocab, [WALL], Mark.WALL, WINDOW, 100, 10, SIZE[1], WINDOW, pier=10)
+    assert _allowed(g, vocab) == set(range(0, 28 - NARROWEST + 1)) | set(
+        range(46, 78 - NARROWEST + 1)) | set(range(130, 160 - NARROWEST + 1))
+    plan = constraints.Wall(160, [], [(28, 46)], given=[(28, 46)])
+    g = _strict(cfg, vocab, [plan], Mark.WALL, WINDOW, pier=10)
+    assert not set(range(28 - 10 - NARROWEST + 1, 46 + 10)) & _allowed(g, vocab)
+
+
+def test_head_line_puts_window_tops_of_a_floor_on_one_line(cfg, vocab, sizes):
+    """Правило свода `window_head_line`: верх окна — на линии верха окон своего этажа стены
+    (допуск — шаг сетки); у окна другого этажа своя линия. У окна высота — типоразмера: правило
+    выбирает типоразмер (gf#212)."""
+    head = (Mark.TYPES, 3, 20, 30, 20, 17, 20, 50)
+    first = (*head, Mark.WALL, WINDOW, 100, 10, SIZE[0], WINDOW)     # верх — 40, первый этаж
+    assert sizes(_strict(cfg, vocab, [TWO], *first, 0, 10, head=1)) == {0}
+    assert sizes(_strict(cfg, vocab, [TWO], *first, 0, 23, head=1)) == {1}   # 23 + 17 = 40
+    upper = sizes(_strict(cfg, vocab, [TWO], *first, 20, 70, head=1))
+    assert upper == {0, 1, 2}                                         # второй этаж — своя линия
+    door = _strict(cfg, vocab, [TWO], *first, 30, 10, SIZE[0], DOOR, 50, 0, 18, head=1)
+    assert _allowed(door, vocab) == {39, 40, 41}                       # дверь — тоже на линии
+
+
+def test_window_types_one_value(cfg):
+    """Типоразмеров окон у дома — не больше, чем допускает правило свода `window_types`: число
+    берётся из правила, а не из своей настройки (gf#212, gf#213)."""
+    rule = next(g for g in cfg.guidelines.guideline
+                if g.check is schema.GuidelineCheck.WINDOW_TYPES)
+    assert tokens.window_types(cfg) == min(rule.params["per_facade"], rule.params["per_house"])
+    assert tokens.size_tok(tokens.window_types(cfg) - 1) in tokens.vocabulary(cfg)
+    assert tokens.size_tok(tokens.window_types(cfg)) not in tokens.vocabulary(cfg)
+
+
+@pytest.mark.parametrize("mode", list(Mode))
+def test_reference_answer_passes_the_guard(cfg, vocab, mode):
+    """Эталон корпуса — ответ синтетики — страж пропускает целиком: порядок проёмов плана
+    (`tokens.ordered`) и нормы свода у корпуса и стража одни; иначе модель учится на ответах,
+    которые страж обрывает (gf#212: обрывал 11 и 15 домов из 20)."""
+    number = {w: i for i, w in enumerate(tokens.vocabulary(cfg))}
+    for seed in range(20):
+        sheet = build.sample(seed, cfg).sheet
+        g = constraints.guard(tokens.bare(sheet), mode, vocab, cfg)
+        for word in tokens.answer(sheet, mode, cfg)[1:]:
+            assert number[word] not in set(g.banned()), (seed, word)
+            g.step(number[word])
+

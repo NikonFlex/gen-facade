@@ -33,7 +33,7 @@ def _expected(sheet, mode, cfg):
     step = cfg.tokens.grid_m
     out = []
     for f in sheet.facades:
-        written = derive.base(f.elements)
+        written = tokens.ordered(f, mode, cfg.tokens)  # проёмы плана — первыми, как у стража
         names = {e.id: tokens.name(i) for i, e in enumerate(written)}
         elements = []
         for e in written:
@@ -49,6 +49,16 @@ def _expected(sheet, mode, cfg):
                  for z in f.zones]
         out.append(f.model_copy(update={"elements": derive.place(elements, marks, wall),
                                         "zones": zones}))
+    return sheet.model_copy(update={"facades": out})
+
+
+def _in_answer_order(sheet, mode, cfg):
+    """Тот же дом, элементы стен — в порядке ответа (`tokens.ordered`) и с выведенными по нему."""
+    out = []
+    for f in sheet.facades:
+        wall = derive.Wall(sheet.spec, f.side.length_m, cfg.derive)
+        placed = derive.place(tokens.ordered(f, mode, cfg.tokens), derive.flags(f.elements), wall)
+        out.append(f.model_copy(update={"elements": placed}))
     return sheet.model_copy(update={"facades": out})
 
 
@@ -73,7 +83,7 @@ def test_house_on_grid_still_valid_and_close(sheets, cfg, mode):
         rules = {v.rule for v in validate(back, cfg.checks)}
         # в режиме 1 окна в ответе не помечены заданными — на привязку к плану это не влияет
         assert rules == set(), rules
-        for was, now in zip(sheet.facades, back.facades, strict=True):
+        for was, now in zip(_in_answer_order(sheet, mode, cfg).facades, back.facades, strict=True):
             for a, b in zip(was.elements, now.elements, strict=True):
                 assert abs(a.x_m - b.x_m) <= cfg.tokens.grid_m / 2 + 1e-9
                 assert abs(a.y_m - b.y_m) <= cfg.tokens.grid_m / 2 + 1e-9
@@ -120,7 +130,7 @@ def test_windows_refer_to_house_sizes(sheets, cfg):
             count = int(answer[answer.index(Mark.TYPES) + 1])
             back = tokens.decode(answer, tokens.bare(sheet), cfg)
             sizes = {(round(w.w_m, 6), round(w.h_m, 6)) for w in _windows(back)}
-            assert len(sizes) <= count <= cfg.tokens.window_types
+            assert len(sizes) <= count <= tokens.window_types(cfg)
             assert not [t for t in answer if t.startswith(tokens.tok(ElementClass.SILL))]
 
 
@@ -138,7 +148,7 @@ def test_many_sizes_go_to_nearest_type(sheets, cfg):
         "elements": windows, "zones": []})]})
     back = tokens.decode(tokens.answer(one, Mode.BLIND, cfg), one, cfg)
     sizes = {(w.w_m, w.h_m) for w in _windows(back)}
-    assert len(sizes) == cfg.tokens.window_types < len(windows)
+    assert len(sizes) == tokens.window_types(cfg) < len(windows)
     assert all(abs(b.w_m - a.w_m) <= 0.1 + 1e-9 for a, b in zip(windows, _windows(back),
                                                                 strict=True))
 
@@ -265,7 +275,8 @@ def test_wall_edges_off_grid_are_real_edges(sheets, cfg):
     walls = unfold(sheet.model_copy(update={"facades": walls}))
     back = tokens.decode(tokens.answer(sheet, Mode.BLIND, cfg), walls, cfg)
     assert not [v for v in validate(back, cfg.checks) if v.rule is Rule.OUTSIDE]
-    for was, now in zip(sheet.facades, back.facades, strict=True):
+    for was, now in zip(_in_answer_order(sheet, Mode.BLIND, cfg).facades, back.facades,
+                        strict=True):
         length = now.side.length_m
         cornice = next(e for e in now.elements if e.cls is ElementClass.CORNICE)
         assert cornice.x_m + cornice.w_m == pytest.approx(length)

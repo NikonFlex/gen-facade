@@ -74,7 +74,7 @@ def _begin(folder: Path, cfg: Config, overwrite: bool) -> dict:
 
 def _settings(cfg: Config) -> dict:
     """Настройки, от которых зависят дома: генератор, препроцессор его плана, валидатор."""
-    return {"synthetic": cfg.synthetic.model_dump(mode="json"),
+    return {"synthetic": build.with_norms(cfg).synthetic.model_dump(mode="json"),
             "derive": cfg.derive.model_dump(mode="json"),
             "plan": cfg.plan.model_dump(mode="json"), "checks": cfg.checks.model_dump(mode="json")}
 
