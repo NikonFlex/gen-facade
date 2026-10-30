@@ -7,6 +7,7 @@
 
 import numpy
 
+from genfacade import config
 from genfacade.metrics import calibrate, measures, realism, table
 from genfacade.schema import ElementClass
 
@@ -27,10 +28,46 @@ def test_c2st_needs_two_points():
     assert realism.c2st(SAME[0][:1], SAME[1], numpy.random.default_rng(1)) is None
 
 
+def test_c2st_over_subsets_steadier_than_single(cfg):
+    """gf#235: среднее по подвыборкам ближе к 0,5, чем худшая одиночная, и разброс не нулевой.
+    Выборки разного размера (как 800 синтетических стен против 110 реальных): одиночные
+    подвыборки меньшей выборки шумят. Подвыборок — из настройки, иначе тест не видит её."""
+    subsets = cfg.metrics.realism.subsets
+    small = SAME[1][:40]
+    singles = [realism.c2st(SAME[0], small, numpy.random.default_rng(s)) for s in range(subsets)]
+    mean, sd = realism.c2st_subsets(SAME[0], small, numpy.random.default_rng(0), subsets)
+    assert abs(mean - 0.5) < max(abs(c - 0.5) for c in singles)
+    assert sd > 0
+    assert realism.c2st_subsets(SAME[0], small, numpy.random.default_rng(0), 1)[1] == 0
+
+
+def test_table_takes_subsets_from_config(house, cfg, tmp_path):
+    """Строка таблицы: c2st_sd > 0 при подвыборках из настройки и 0 при одной — таблица не
+    подменяет настройку своим числом. Эталон — стены дома с шумом, впятеро больше стен метода."""
+    walls = realism.walls([house])
+    noisy = numpy.repeat(walls, 5, axis=0)
+    noisy += numpy.random.default_rng(2).normal(size=noisy.shape)
+    ref = table.Reference({}, [], None, noisy)
+    (tmp_path / "metrics.toml").write_text("[realism]\nsubsets = 1\n")
+    many = table._realism([house], ref, cfg)
+    one = table._realism([house], ref, config.load(tmp_path))
+    assert many["c2st_sd"] > 0 and one["c2st_sd"] == 0
+
+
 def test_density_and_coverage_of_same_distribution_near_one():
     density, coverage = realism.density_coverage(*SAME, k=5)
     assert 0.7 < density < 1.3
     assert coverage > 0.9
+
+
+def test_coverage_of_larger_method_taken_at_reference_size(cfg):
+    """gf#235: coverage растёт с числом стен метода — метод впятеро больше эталона уравнивается
+    подвыборками, и coverage ниже, чем по всем стенам; метод не больше эталона — все стены."""
+    small, rng, settings = SAME[1][:40], numpy.random.default_rng(0), cfg.metrics.realism
+    full = realism.density_coverage(SAME[0], small, settings.k)
+    assert realism.density_coverage_subsets(SAME[0], small, settings, rng)[1] < full[1]
+    assert realism.density_coverage_subsets(small, SAME[0], settings, rng) == \
+        realism.density_coverage(small, SAME[0], settings.k)
 
 
 def test_density_and_coverage_of_shifted_distribution_zero():
