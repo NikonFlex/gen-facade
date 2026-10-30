@@ -134,6 +134,22 @@ def features(f: SideFacade, spec: HouseSpec) -> list[float]:
             mean(sill_m(f, spec)), glass]
 
 
+def realism_features(f: SideFacade, spec: HouseSpec) -> list[float]:
+    """Признаки стены для слоя «отличим ли от настоящего» (gf#210): окна на метр, их размеры и
+    высоты над полом, остекление, ровность верха, оси этажей, ритм, отступ от угла, двери на метр.
+    Нет величины на стене (одно окно, один этаж) — ноль, как у идеально ровной стены."""
+    ws = windows(f)
+    doors = [e for e in f.elements if e.cls is ElementClass.DOOR]
+    return [len(ws) / f.side.length_m, _avg(width_m(f, spec)), _avg(height_m(f, spec)),
+            _avg(sill_m(f, spec)), _avg(head_m(f, spec)), features(f, spec)[4],
+            _avg(top_spread(f, spec)), _avg(axis_offset(f, spec)), _avg(gap_cv(f, spec)),
+            min(edge_share(f, spec), default=0.0), len(doors) / f.side.length_m]
+
+
+def _avg(values: list[float]) -> float:
+    return mean(values) if values else 0.0
+
+
 # ——— соответствие описанию: требования текста, которые видны на чертеже ———
 
 def floors_kept(sheet: FacadeSheet) -> bool:

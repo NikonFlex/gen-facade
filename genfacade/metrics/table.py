@@ -16,7 +16,11 @@
 - description — доля выполненных требований описания, видных на чертеже;
 - fid, kid    — визуальное сходство растров стен с эталоном (visual.py, gf#143); меньше — ближе;
                 считаются по разобранным листам, без torch-fidelity — None;
-- svd         — SVD-метрика Beyond Segmentation, вспомогательная: рядом окна на стену.
+- svd         — SVD-метрика Beyond Segmentation, вспомогательная: рядом окна на стену;
+- rules       — метрика правдоподобия, слой правил (gf#210): средняя доля выполненных случаев
+                правил свода, включённых в метрику (`use = ["metric"]`, config/guidelines.toml);
+- c2st, density, coverage — слой «отличим ли от настоящего» против эталона (realism.py):
+                c2st 0,5 — не отличить, 1,0 — разделимы; density ≈ 1 и coverage ≈ 1 — как эталон.
 Доли — от всех домов папки: неразобранный дом не проходит ни одной проверки.
 """
 
@@ -29,17 +33,18 @@ from typing import NamedTuple
 import numpy
 from pydantic import ValidationError
 
+from genfacade import guidelines
 from genfacade.config import Config
-from genfacade.metrics import measures, visual
+from genfacade.metrics import measures, realism, visual
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import FacadeSheet, Rule, Violation
+from genfacade.schema import FacadeSheet, GuidelineUse, Rule, Violation
 from genfacade.validate import errors, validate_svg
 
 METRICS = "metrics.json"
 GEOMETRY = {Rule.SVG_PARSE, Rule.OUTSIDE, Rule.OVERLAP}
 PLAN = {Rule.PLAN_OPENING, Rule.FORBIDDEN, Rule.CORNER}
 COLUMNS = ("valid", "geometry", "plan", "structure", "diversity", "description", "fid", "kid",
-           "svd", "windows_per_wall")
+           "svd", "rules", "c2st", "density", "coverage", "windows_per_wall")
 
 
 class Item(NamedTuple):
@@ -51,12 +56,13 @@ class Item(NamedTuple):
 
 
 class Reference(NamedTuple):
-    """Эталон: значения величин структуры, разброс признаков стен и признаки Inception
-    растров стен (None — torch-fidelity не установлен)."""
+    """Эталон: значения величин структуры, разброс признаков стен, признаки Inception растров
+    стен (None — torch-fidelity не установлен) и признаки стен для слоя «отличим ли»."""
 
     structure: dict[str, list[float]]
     scale: list[float]
     inception: numpy.ndarray | None
+    realism: numpy.ndarray
 
 
 def load(folder: Path, cfg: Config) -> list[Item]:
@@ -77,7 +83,11 @@ def reference(items: list[Item], cfg: Config) -> Reference:
     sheets = _sheets(items)
     walls = [measures.features(f, s.spec) for s in sheets for f in s.facades]
     scale = [pstdev(col) or 1.0 for col in zip(*walls, strict=True)] if walls else [1.0] * 5
-    return Reference(measures.structure(sheets), scale, _inception(sheets, cfg))
+    return Reference(measures.structure(sheets), scale, _inception(sheets, cfg), _walls(sheets))
+
+
+def _walls(sheets: list[FacadeSheet]) -> numpy.ndarray:
+    return numpy.array([measures.realism_features(f, s.spec) for s in sheets for f in s.facades])
 
 
 def _inception(sheets: list[FacadeSheet], cfg: Config) -> numpy.ndarray | None:
@@ -97,6 +107,7 @@ def row(items: list[Item], ref: Reference, cfg: Config) -> dict:
     checks = {name: sum(check(s) for s in sheets) / n
               for name, check in measures.DESCRIPTION.items()} if n else {}
     distances = _structure(sheets, ref, cfg)
+    rules = _guidelines(sheets, cfg)
     return {
         "count": n,
         "valid": _share(sum(i.sheet is not None and Rule.SVG_PARSE not in _rules(i)
@@ -109,10 +120,36 @@ def row(items: list[Item], ref: Reference, cfg: Config) -> dict:
         "description": _mean(list(checks.values())),
         **_visual(sheets, ref, cfg),
         "svd": _mean([measures.svd_score(f, spec, cfg.metrics.svd) for f, spec in walls]),
+        "rules": _mean(list(rules.values())),
+        **_realism(sheets, ref, cfg),
         "windows_per_wall": _mean([len(measures.windows(f)) for f, _ in walls]),
-        "details": {"structure": distances, "description": checks,
+        "details": {"structure": distances, "description": checks, "rules": rules,
                     "errors": _counts(items)},
     }
+
+
+def _guidelines(sheets: list[FacadeSheet], cfg: Config) -> dict[str, float]:
+    """Правила свода, включённые в метрику: доля выполненных случаев по всем домам папки."""
+    out = {}
+    for g in cfg.guidelines.guideline:
+        cases = [ok for s in sheets for ok in guidelines.cases(g, s, None)]
+        if GuidelineUse.METRIC in g.use and cases:
+            out[g.id] = round(mean(cases), 4)
+    return out
+
+
+def _realism(sheets: list[FacadeSheet], ref: Reference, cfg: Config) -> dict:
+    ours = _walls(sheets)
+    if not len(ours) or not len(ref.realism):
+        return {"c2st": None, "density": None, "coverage": None}
+    a, b = realism.standardized(ours, ref.realism)
+    dc = realism.density_coverage(a, b, cfg.metrics.realism.k) or (None, None)
+    c = realism.c2st(a, b, numpy.random.default_rng(cfg.metrics.seed))
+    return {"c2st": _round(c), "density": _round(dc[0]), "coverage": _round(dc[1])}
+
+
+def _round(v: float | None) -> float | None:
+    return None if v is None else round(v, 4)
 
 
 def _visual(sheets: list[FacadeSheet], ref: Reference, cfg: Config) -> dict:
