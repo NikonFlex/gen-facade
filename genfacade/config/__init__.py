@@ -504,6 +504,7 @@ class Visual(Section):
 
 class Realism(Section):
     k: int
+    subsets: int
 
 
 class Metrics(Section):
