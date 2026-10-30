@@ -1,5 +1,5 @@
 """Командная строка: genfacade run <план.svg> --text …, serve, synth, buildingnet, manual, tokens,
-train, eval, metrics, calibrate, baseline, guidelines."""
+train, eval, metrics, calibrate, baseline, guidelines, realtest."""
 
 import argparse
 import sys
@@ -92,6 +92,15 @@ def baseline(args: argparse.Namespace) -> Path:
     return baselines.run(args.name, args.source_dir, config.load(args.config), args.out)
 
 
+def realtest(args: argparse.Namespace) -> Path:
+    """Таблица метрик против реального теста: модель, правило GenPlan, синтетика, подмены."""
+    from genfacade.metrics import realtest
+
+    cfg = config.load(args.config)
+    out = args.out or pipeline.new_run_dir(cfg.train.paths.runs_dir, "realtest")
+    return realtest.run(cfg, out, args.synthetic)
+
+
 def guidelines_table(args: argparse.Namespace) -> Path:
     """Свод правил фасада на домах реального теста → таблица для чтения (gf#209)."""
     from genfacade import guidelines
@@ -164,6 +173,10 @@ def _parser() -> argparse.ArgumentParser:
     b.add_argument("source_dir", type=Path,
                    help="папка листов <дом>.json: берутся стены, условие режима, параметры дома")
     b.add_argument("-o", "--out", type=Path, required=True, help="папка фасадов базового подхода")
+    q = sub.add_parser("realtest", help="таблица метрик против реального теста")
+    q.add_argument("-n", "--synthetic", type=int, default=0, help="домов синтетики val; 0 — все")
+    q.add_argument("-o", "--out", type=Path,
+                   help="папка листов и таблиц; по умолчанию runs_dir/<время>-realtest")
     r = sub.add_parser("guidelines", help="свод правил фасада на домах реального теста → таблица")
     r.add_argument("-o", "--out", type=Path, default=Path("docs/facade-rules.md"),
                    help="файл таблицы; по умолчанию docs/facade-rules.md")
@@ -183,6 +196,7 @@ COMMANDS = {
     "baseline": (baseline, {}),
     "calibrate": (metrics_calibrate, {}),
     "guidelines": (guidelines_table, {}),
+    "realtest": (realtest, {}),
     "run": (run, pipeline.REFUSALS),
 }
 
