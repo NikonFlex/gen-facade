@@ -22,6 +22,7 @@
 | [journal/](journal/JOURNAL.md) | Журнал эпизодов и уроки ([INSIGHTS](journal/INSIGHTS.md)) |
 | [statement.md](statement.md) | Постановка до 28.09 — история, актуальное в openspec/ |
 | [datasets.md](datasets.md) | Датасеты фасадов: что есть, в каком формате, пригодность |
+| [facade-rules.md](facade-rules.md) | Свод правил фасада: нормы, pattern books, руководства — с источником и долей реальных домов, которые их выполняют (собирается `genfacade guidelines`) |
 | [methods.md](methods.md) | Подходы к генерации и векторизации, их плюсы/минусы |
 | [papers.md](papers.md) | Литература с аннотациями и статусом прочтения |
 | [lab-repos.md](lab-repos.md) | Что уже есть в CTLab-ITMO и что из этого переиспользуем |

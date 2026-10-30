@@ -17,8 +17,11 @@ from genfacade.datasets.buildingnet.mesh import Label
 from genfacade.schema import (
     Device,
     ElementClass,
+    GuidelineCheck,
+    GuidelineUse,
     Mode,
     PaletteRole,
+    Region,
     Source,
     Split,
     VariantKind,
@@ -520,6 +523,33 @@ class Baselines(Section):
     genplan: GenPlanRule
 
 
+class GuidelineSource(Section):
+    doc: str      # документ и год
+    file: str     # текст источника, путь от tmp/facade-rules/ (вне git)
+    where: str    # страница или пункт
+    quote: str    # дословно, на языке источника
+    checked: bool  # цитата найдена в тексте источника
+
+
+class Guideline(Section):
+    """Правило фасада из свода (gf#209): что утверждает, чем проверяется, откуда взято."""
+
+    id: str
+    text: str
+    check: GuidelineCheck
+    params: dict[str, ElementClass | float | list[float]] = {}
+    applies: list[Region]
+    use: list[GuidelineUse] = []
+    note: str = ""
+    source: list[GuidelineSource]
+
+
+class Guidelines(Section):
+    """Свод правил фасада (config/guidelines.toml): нормы, pattern books, руководства, книги."""
+
+    guideline: list[Guideline]
+
+
 class Config(Section):
     library: Library
     sheet: Sheet
@@ -533,6 +563,7 @@ class Config(Section):
     models: Models
     metrics: Metrics
     baselines: Baselines
+    guidelines: Guidelines
     css: str
 
 
@@ -554,6 +585,7 @@ def load(user_dir: Path | None = None) -> Config:
         models=Models(**_toml("models.toml", user_dir)),
         metrics=Metrics(**_toml("metrics.toml", user_dir)),
         baselines=Baselines(**_toml("baselines.toml", user_dir)),
+        guidelines=Guidelines(**_toml("guidelines.toml", user_dir)),
         css=css,
     )
 

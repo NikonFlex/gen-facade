@@ -154,6 +154,56 @@ class Rule(StrEnum):
     AXIS_ALIGN = "axis_align"
 
 
+class GuidelineCheck(StrEnum):
+    """Вид проверки правила фасада из свода (config/guidelines.toml, gf#209); что считает каждый —
+    guidelines.py. none — правило по прямоугольникам фасада не проверяется."""
+
+    NONE = "none"
+    ASPECT = "aspect"
+    SIZE_ROW = "size_row"
+    MODULE = "module"
+    SILL_HEIGHT = "sill_height"
+    HEAD_HEIGHT = "head_height"
+    HEAD_LINE = "head_line"
+    VERTICAL_AXES = "vertical_axes"
+    CORNER_DISTANCE = "corner_distance"
+    PIER_MIN = "pier_min"
+    OPENING_SHARE = "opening_share"
+    FLOOR_OPENING_WIDTH = "floor_opening_width"
+    WINDOW_TYPES = "window_types"
+    DOOR_SIZE = "door_size"
+    DOOR_HEAD_LINE = "door_head_line"
+    SILL_UNDER_WINDOW = "sill_under_window"
+    CANOPY_OVER_ENTRANCE = "canopy_over_entrance"
+    SHUTTER_WIDTH = "shutter_width"
+    PLINTH_HEIGHT = "plinth_height"
+    FLOOR_HEIGHT = "floor_height"
+    LIGHT_RATIO = "light_ratio"
+    HEAD_TO_EAVES = "head_to_eaves"
+    LOWER_NOT_SMALLER = "lower_not_smaller"
+    SYMMETRY = "symmetry"
+
+
+class Region(StrEnum):
+    """К каким домам применимо правило свода: ИЖС и МКД России, США, Европа, все."""
+
+    RU_IZHS = "ru-izhs"
+    RU_MKD = "ru-mkd"
+    US = "us"
+    EU = "eu"
+    ALL = "all"
+
+
+class GuidelineUse(StrEnum):
+    """Куда включено правило свода; включает хозяин после замера (gf#209)."""
+
+    METRIC = "metric"        # метрика правдоподобия, gf#210
+    SYNTHETIC = "synthetic"  # генератор синтетики, gf#211
+    DERIVE = "derive"        # вывод зависимых элементов кодом, gf#212
+    GUARD = "guard"          # страж при генерации, gf#213
+    TRAIN = "train"          # обучение
+
+
 class Model(BaseModel):
     # Опечатка в имени поля в JSON, написанном руками, должна падать, а не теряться молча.
     model_config = ConfigDict(extra="forbid")
