@@ -7,7 +7,7 @@
 
 import numpy
 
-from genfacade.metrics import measures, realism, table
+from genfacade.metrics import calibrate, measures, realism, table
 from genfacade.schema import ElementClass
 
 RNG = numpy.random.default_rng(0)
@@ -64,3 +64,18 @@ def test_rules_layer_prefers_aligned_windows(house, cfg):
     scattered = table._guidelines([_with_twins(house, 0.3)], cfg)
     assert aligned["window_head_line"] == 1.0
     assert scattered["window_head_line"] < 1.0
+
+
+def test_house_density_prefers_house_from_reference_distribution():
+    assert realism.house_density(SAME[0][:4], SAME[1], k=5) > 0.5
+    assert realism.house_density(FAR[:4], SAME[1], k=5) == 0.0
+    assert realism.house_density(SAME[0][:0], SAME[1], k=5) is None
+
+
+def test_real_house_beats_its_random_substitute_on_rules(house, cfg):
+    """Тот же дом с подменой `random` (окна раскиданы по стене) проходит правила метрики хуже."""
+    real = _with_twins(house, 0.0)
+    fake = calibrate.ROWS["random"]([real], numpy.random.default_rng(0))[0]
+    score = {name: numpy.mean(list(table._guidelines([s], cfg).values()))
+             for name, s in (("real", real), ("fake", fake))}
+    assert score["real"] > score["fake"]

@@ -43,3 +43,15 @@ def density_coverage(ours: numpy.ndarray, ref: numpy.ndarray, k: int) -> tuple[f
 
 def _distances(a: numpy.ndarray, b: numpy.ndarray) -> numpy.ndarray:
     return numpy.linalg.norm(a[:, None, :] - b[None, :, :], axis=2)
+
+
+def house_density(house: numpy.ndarray, ref: numpy.ndarray, k: int) -> float | None:
+    """Оценка правдоподобия одного дома (gf#210, для «лучшего из N» gf#213): density его стен
+    против эталона, признаки — в долях разброса дома и эталона вместе. С оценкой хозяина на 24
+    парах согласна в 23 (docs/metrics-results.md, 30.10). Дом из эталона из ref убирает
+    вызывающий: иначе стена находит в эталоне саму себя."""
+    if not len(house):
+        return None
+    a, b = standardized(house, ref)
+    found = density_coverage(a, b, k)
+    return None if found is None else found[0]
