@@ -502,13 +502,18 @@ class Visual(Section):
     colors: dict[ElementClass, str]  # опечатка в классе элемента — ошибка загрузки
 
 
+class Realism(Section):
+    k: int
+
+
 class Metrics(Section):
-    """Метрики оценки (config/metrics.toml, gf#16, gf#143)."""
+    """Метрики оценки (config/metrics.toml, gf#16, gf#143, gf#210)."""
 
     seed: int
     pairs: int
     quantile_points: int
     svd: Svd
+    realism: Realism
     calibrate: Calibrate
     visual: Visual
 

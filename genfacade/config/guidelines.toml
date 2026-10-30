@@ -759,6 +759,7 @@ text = "Окна: верхние кромки (head) или подоконник
 check = "head_line"
 params = { tol_m = 0.05, doors = 0 }
 applies = ["us", "eu"]
+use = ["metric"]
 note = "У Grapevine допустима общая линия по head или по sill; Roanoke: ширина окон этажа может различаться не более чем на 6 дюймов (0,15 м)."
 [[guideline.source]]
 doc = "Grapevine Historic Township Pattern Book, 2025"
@@ -904,6 +905,7 @@ id = "window_lower_not_smaller"
 text = "Окно 1-го этажа не ниже окон верхних этажей: размеры окон уменьшаются с каждым этажом (разница высот до 0,15–0,20 м)"
 check = "lower_not_smaller"
 applies = ["us", "eu"]
+use = ["metric"]
 note = "Roanoke: h1 = h2 + 6 дюймов (0,15 м) при той же ширине; Mississippi/Norfolk: разница 0–8 дюймов."
 [[guideline.source]]
 doc = "Norfolk Pattern Book, UDA 2003"
@@ -936,6 +938,7 @@ text = "Окна верхнего этажа стоят строго над ок
 check = "vertical_axes"
 params = { tol_m = 0.05 }
 applies = ["us", "eu", "ru-izhs"]
+use = ["metric"]
 note = "Roanoke: окна 2-го этажа выровнены по вертикали с окнами 1-го. Конфликт: в английском стиле (Milwaukee, 1929) окна не обязаны стоять над окнами нижнего этажа — для английского стиля правило мягкое, для Georgian жёсткое."
 [[guideline.source]]
 doc = "Grapevine Historic Township Pattern Book, 2025"
@@ -1054,6 +1057,7 @@ text = "Простенок между соседними проёмами одн
 check = "pier_min"
 params = { min = 0.5 }
 applies = ["us", "eu", "ru-izhs"]
+use = ["metric"]
 note = "Значения: 0,5 м (Spiekeroog, строгий исторический остров), 0,457 м (Grapevine), 0,65–0,9 м (Казань, фиксированные размеры типов), 0,64 м (КГАСУ: уже — сплошная кладка). Не относится к окнам одной группы (mullion 0,10–0,15 м, см. window_group_gap_us)."
 [[guideline.source]]
 doc = "Grapevine Historic Township Pattern Book, 2025"
@@ -2071,6 +2075,7 @@ text = "Окна eu: окно стоячее (высота больше шири
 check = "aspect"
 params = { cls = "window", min = 1.0 }
 applies = ["eu"]
+use = ["metric"]
 note = "EDG §1.32: квадратные окна (h/w около 1) только на этаже выше стоячих. Горизонтальные форматы ограничены, см. window_horizontal_limit_eu. Регионы: Эссекс, Бавария, Рейнхессен, Финляндия, Франция."
 [[guideline.source]]
 doc = "Essex Design Guide, 2018"
@@ -2405,6 +2410,7 @@ text = "Окно не прижато к кровле: между верхом о
 check = "head_to_eaves"
 params = { min = 0.2 }
 applies = ["us", "ru-izhs"]
+use = ["metric"]
 note = "Порог 0,2 м — нижняя граница зазора frieze из Mississippi/Norfolk (0 или не менее 8 дюймов), в Milwaukee замечание только качественное; Казань: расстояние от окна до свеса «не регламентируется» (исторический пример около 1,74 м)."
 [[guideline.source]]
 doc = "Milwaukee Home Builders Plan Book, 1929"
