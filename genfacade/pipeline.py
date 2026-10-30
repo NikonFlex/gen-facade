@@ -103,7 +103,7 @@ def generate(req: PlanRun, svg: str, out: Path, cfg: Config) -> Path:
     base = {"source": req.plan, "input": REQUEST, "plan_input": INPUT_PLAN,
             "request": req.model_dump()}
     try:
-        raw, sheet, violations, layout = _layout(_prepare(req, svg, out, cfg), req, cfg)
+        raw, sheet, violations, trace = layout(_prepare(req, svg, out, cfg), req, cfg)
     except tuple(REFUSALS) as e:
         write_meta(out, cfg, {**base, "refusal": f"{REFUSALS[type(e)]}: {e}"})
         raise
@@ -112,7 +112,7 @@ def generate(req: PlanRun, svg: str, out: Path, cfg: Config) -> Path:
     (out / VIOLATIONS).write_text(json.dumps(
         [v.model_dump() for v in violations], ensure_ascii=False, indent=2))
     extra = {
-        **base, "violations": VIOLATIONS, "layout": layout,
+        **base, "violations": VIOLATIONS, "layout": trace,
         "errors": len(errors(violations)), "warnings": len(violations) - len(errors(violations)),
     }
     return finish(sheet, out, cfg, extra)
@@ -140,7 +140,7 @@ class Checked(NamedTuple):
     layout: dict
 
 
-def _layout(bare: FacadeSheet, req: PlanRun, cfg: Config) -> Checked:
+def layout(bare: FacadeSheet, req: PlanRun, cfg: Config) -> Checked:
     """Шаги 4–5. Обученная модель (config/models.toml), если чекпойнт есть, иначе стаб.
     Брак модели — ответ не разобран или ошибка валидатора — генерация заново с новым seed
     (`generation: Брак — заново`); стаб детерминирован, его не повторяем."""

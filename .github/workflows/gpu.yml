@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       job:
-        description: "probe — проверить GPU; train — обучить модель шага 4; finetune — дообучить её на коттеджах BuildingNet; eval — оценить на val; visual — таблица метрик с FID и KID"
+        description: "probe — проверить GPU; train — обучить модель шага 4; finetune — дообучить её на коттеджах BuildingNet; eval — оценить на val; visual — таблица метрик с FID и KID; realtest — таблица против реального теста с FID и KID"
         type: choice
-        options: [probe, train, finetune, eval, visual]
+        options: [probe, train, finetune, eval, visual, realtest]
         default: probe
       houses:
         description: "train: сколько синтетических домов в корпусе (собранные раньше не пересобираются)"
@@ -38,7 +38,7 @@ on:
         type: string
         default: "1e-4"
       model_run:
-        description: "eval: номер запуска train, чью модель оценивать (артефакт train-<номер>)"
+        description: "eval, realtest: номер запуска train, чью модель оценивать (артефакт train-<номер>); 39586817099 — gf#155"
         type: string
         default: "38560937357"
       eval_run:
@@ -242,6 +242,35 @@ jobs:
             genfacade metrics eval/sheets/{reference,model,constrained,constrained_raw,independent,untrained}/$mode \
               "$OUT/genplan/$mode" -r "$OUT/calibrate/$mode/reference" -o "$OUT/rows/$mode"
           done
+
+      - name: Модель для реального теста
+        if: inputs.job == 'realtest'
+        uses: actions/download-artifact@v8
+        with:
+          name: train-${{ inputs.model_run }}
+          path: model
+          run-id: ${{ inputs.model_run }}
+          github-token: ${{ github.token }}
+
+      - name: Реальный тест с FID и KID
+        if: inputs.job == 'realtest'
+        # 27 домов ручной разметки (markup/ в git) — эталон; строки — модель на шагах 4–5 со стражем,
+        # правило GenPlan, синтетика val, подмены; половина реальных против другой (gf#210).
+        run: |
+          cfg="$RUNNER_TEMP/realtest-config"
+          mkdir -p "$cfg" "$OUT"
+          cp "$DATA_CONFIG/data.toml" "$cfg/"
+          printf '[layout]\ncheckpoint = "%s"\n' "$GITHUB_WORKSPACE/model/model.pt" > "$cfg/models.toml"
+          genfacade -c "$cfg" manual
+          genfacade -c "$cfg" realtest -o "$OUT"
+
+      - name: Результат реального теста
+        if: always() && inputs.job == 'realtest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: realtest-${{ github.run_id }}
+          path: ${{ env.OUT }}
+          if-no-files-found: ignore
 
       - name: Результат метрик
         if: always() && inputs.job == 'visual'
