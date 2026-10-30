@@ -92,6 +92,18 @@ def test_layout_refuses_model_with_other_vocabulary(checkpoint, cfg, lay_out):
         model.prompt(tokens.bare(lay_out()), Mode.WITH_OPENINGS, cfg)
 
 
+def test_layout_refuses_prompt_longer_than_window(checkpoint, cfg, lay_out):
+    """Условие дома не помещается в окно модели — отказ с причиной, а не падение прохода
+    модели посреди прогона и не обрезанный ответ (новая запись токенов длиннее, gf#212)."""
+    data = torch.load(checkpoint, weights_only=True)
+    short = TINY.model_copy(update={"block": 8})
+    model = sampling.build_model(short, len(data["vocabulary"]))
+    torch.save(data | {"model": model.state_dict(), "size": short.model_dump()}, checkpoint)
+    with pytest.raises(ModelError, match="окно модели — 8"):
+        layout.load(_settings(cfg, checkpoint)).prompt(tokens.bare(lay_out()),
+                                                       Mode.WITH_OPENINGS, cfg)
+
+
 class _Ban:
     """Страж, запрещающий одни и те же токены на каждом шаге."""
 
