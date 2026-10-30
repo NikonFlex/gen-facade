@@ -15,6 +15,19 @@ def test_user_toml_overrides_one_key(tmp_path, cfg):
     assert user.library == cfg.library
 
 
+def test_later_user_folder_overrides_earlier(tmp_path, cfg):
+    """Папка машины и поверх — настройки этапа (tools/retrain.sh): ключ второй перекрывает
+    первую, остальные ключи первой остаются."""
+    machine, stage = tmp_path / "machine", tmp_path / "stage"
+    machine.mkdir()
+    stage.mkdir()
+    (machine / "train.toml").write_text("[model]\nlayers = 1\n\n[fit]\nepochs = 7\nbatch = 4\n")
+    (stage / "train.toml").write_text("[fit]\nepochs = 2\n")
+    train = config.load(machine, stage).train
+    assert (train.model.layers, train.fit.epochs, train.fit.batch) == (1, 2, 4)
+    assert train.model.width == cfg.train.model.width
+
+
 def test_typo_in_user_toml_rejected(tmp_path):
     (tmp_path / "sheet.toml").write_text("[levels]\nofset_m = 3.0\n")
     with pytest.raises(ValidationError, match="ofset_m"):

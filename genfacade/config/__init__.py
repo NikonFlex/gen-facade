@@ -506,6 +506,10 @@ class Realism(Section):
     k: int
 
 
+class Realtest(Section):
+    summary: list[str]   # колонки таблицы метрик (metrics/table.py, COLUMNS) в summary.md
+
+
 class Metrics(Section):
     """Метрики оценки (config/metrics.toml, gf#16, gf#143, gf#210)."""
 
@@ -516,6 +520,7 @@ class Metrics(Section):
     realism: Realism
     calibrate: Calibrate
     visual: Visual
+    realtest: Realtest
 
 
 class GenPlanRule(Section):
@@ -572,33 +577,36 @@ class Config(Section):
     css: str
 
 
-def load(user_dir: Path | None = None) -> Config:
-    """Умолчания пакета, поверх — файлы из user_dir, если она задана."""
+def load(*user_dirs: Path) -> Config:
+    """Умолчания пакета, поверх — файлы из user_dirs по порядку: следующая папка перекрывает
+    предыдущую (своя папка машины, поверх — настройки одного этапа, tools/retrain.sh)."""
     css = DEFAULTS.joinpath("sheet.css").read_text()
-    if user_dir is not None and (user_dir / "sheet.css").exists():
-        css += "\n" + (user_dir / "sheet.css").read_text()
+    for folder in user_dirs:
+        if (folder / "sheet.css").exists():
+            css += "\n" + (folder / "sheet.css").read_text()
     return Config(
-        library=Library(**_toml("library.toml", user_dir)),
-        sheet=Sheet(**_toml("sheet.toml", user_dir)),
-        viewer=Viewer(**_toml("viewer.toml", user_dir)),
-        plan=PlanConfig(**_toml("plan.toml", user_dir)),
-        checks=Checks(**_toml("checks.toml", user_dir)),
-        data=Data(**_toml("data.toml", user_dir)),
-        synthetic=Synthetic(**_toml("synthetic.toml", user_dir)),
-        tokens=Tokens(**_toml("tokens.toml", user_dir)),
-        train=Train(**_toml("train.toml", user_dir)),
-        models=Models(**_toml("models.toml", user_dir)),
-        metrics=Metrics(**_toml("metrics.toml", user_dir)),
-        baselines=Baselines(**_toml("baselines.toml", user_dir)),
-        guidelines=Guidelines(**_toml("guidelines.toml", user_dir)),
+        library=Library(**_toml("library.toml", user_dirs)),
+        sheet=Sheet(**_toml("sheet.toml", user_dirs)),
+        viewer=Viewer(**_toml("viewer.toml", user_dirs)),
+        plan=PlanConfig(**_toml("plan.toml", user_dirs)),
+        checks=Checks(**_toml("checks.toml", user_dirs)),
+        data=Data(**_toml("data.toml", user_dirs)),
+        synthetic=Synthetic(**_toml("synthetic.toml", user_dirs)),
+        tokens=Tokens(**_toml("tokens.toml", user_dirs)),
+        train=Train(**_toml("train.toml", user_dirs)),
+        models=Models(**_toml("models.toml", user_dirs)),
+        metrics=Metrics(**_toml("metrics.toml", user_dirs)),
+        baselines=Baselines(**_toml("baselines.toml", user_dirs)),
+        guidelines=Guidelines(**_toml("guidelines.toml", user_dirs)),
         css=css,
     )
 
 
-def _toml(name: str, user_dir: Path | None) -> dict:
+def _toml(name: str, user_dirs: tuple[Path, ...]) -> dict:
     data = tomllib.loads(DEFAULTS.joinpath(name).read_text())
-    if user_dir is not None and (user_dir / name).exists():
-        _merge(data, tomllib.loads((user_dir / name).read_text()))
+    for folder in user_dirs:
+        if (folder / name).exists():
+            _merge(data, tomllib.loads((folder / name).read_text()))
     return data
 
 
