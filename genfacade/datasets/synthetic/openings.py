@@ -1,11 +1,12 @@
 """Проёмы стены — из плана: место и ширина заданы (`fixed`), высоты ставит правило.
 
-Высоты окон — доли высоты этажа (config/synthetic.toml, как WindowSizeType GenPlan).
+Высоты — по своду правил фасада (gf#211, config/synthetic.toml): верх окон этажа и двери — одна
+линия на дом, высота окна — из рядов.
 """
 
 import math
 
-from genfacade.config import FacadeRules, Range, Windows
+from genfacade.config import FacadeRules, Windows
 from genfacade.datasets.synthetic.house import Look
 from genfacade.schema import (
     EPS,
@@ -26,61 +27,56 @@ FROM_PLAN = [FixedField.X, FixedField.W]
 def doors(side: Side, spec: HouseSpec, look: Look, rules: FacadeRules) -> list[Element]:
     """Вход — из плана, от пола первого этажа; вид двери — один на дом."""
     found = [o for o in side.openings if o.kind is not OpeningKind.WINDOW]
-    variant, height = _door(spec, look, rules)
+    variant = _door(look, rules)
     return [
         Element(id=f"d{i}", cls=ElementClass.DOOR, x_m=o.x_m, y_m=spec.plinth_m, w_m=o.width_m,
-                h_m=height, floor=1, fixed=FROM_PLAN, variant=variant)
+                h_m=look.head_m, floor=1, fixed=FROM_PLAN, variant=variant)
         for i, o in enumerate(found, start=1)
     ]
 
 
-def _door(spec: HouseSpec, look: Look, rules: FacadeRules) -> tuple[OpeningVariant | None, float]:
-    """Вид и высота двери. Фрамуга (с козырьком, если он есть) не влезает под карниз —
-    дверь со стеклом."""
-    door, entry = rules.door, rules.entry
+def _door(look: Look, rules: FacadeRules) -> OpeningVariant | None:
+    """Вид двери. Верх двери — на линии окон (look.head_m); фрамуга над полотном туда не
+    влезает — дверь со стеклом."""
+    door = rules.door
     if look.door is None:
-        return None, door.height_m
-    tall = door.height_m + door.transom_m
-    above = entry.canopy_gap_m + entry.canopy_m if look.canopy else 0.0
-    room = spec.floor_heights_m[0] - rules.cornice.height_m
-    if look.door is VariantKind.TRANSOM and tall + above <= room + EPS:
-        return OpeningVariant(kind=VariantKind.TRANSOM), tall
+        return None
+    if look.door is VariantKind.TRANSOM and door.height_m + door.transom_m <= look.head_m + EPS:
+        return OpeningVariant(kind=VariantKind.TRANSOM)
     cols, rows = door.glazed_panes
-    return OpeningVariant(kind=VariantKind.GLAZED, cols=cols, rows=rows), door.height_m
+    return OpeningVariant(kind=VariantKind.GLAZED, cols=cols, rows=rows)
 
 
 def windows(rows: list[list[Opening]], spec: HouseSpec, look: Look, cfg: Windows) -> list[Element]:
     """Окна по этажам (rows — снизу вверх): на этаже верх у всех один, низ — по ширине окна
-    (`sill_level`). Место и ширина задает план только на первом этаже."""
+    (`window_height`). Место и ширину задаёт план только на первом этаже."""
     out = []
     for floor, (row, base) in enumerate(zip(rows, spec.floor_levels(), strict=False), start=1):
-        out += _row(row, floor, (base, spec.floor_heights_m[floor - 1]), look, cfg)
+        out += _row(row, floor, base, look, cfg)
     return out
 
 
-def _row(row: list[Opening], floor: int, level: Range, look: Look, cfg: Windows) -> list[Element]:
-    """Окна одного этажа; level — низ этажа и его высота."""
-    base, height = level
-    top = round(min(base + look.window_span[1] * height, base + height - cfg.lintel_m), 3)
+def _row(row: list[Opening], floor: int, base: float, look: Look, cfg: Windows) -> list[Element]:
+    """Окна одного этажа; base — отметка его пола."""
+    top = round(base + look.head_m, 3)  # на миллиметрах: верх окон этажа — один
     out = []
     for i, o in enumerate(row, start=1):
-        low = sill_level(o.width_m, look, cfg)
-        y = round(base + low * height, 3)  # низ и верх на миллиметрах: верх окон этажа — один
+        h = window_height(o.width_m, look, cfg)
         out.append(Element(
-            id=f"w{floor}_{i}", cls=ElementClass.WINDOW, x_m=o.x_m, y_m=y,
-            w_m=o.width_m, h_m=round(top - y, 3), floor=floor,
-            fixed=FROM_PLAN if floor == 1 else [], variant=_variant(o.width_m, top - y, low, cfg)))
+            id=f"w{floor}_{i}", cls=ElementClass.WINDOW, x_m=o.x_m, y_m=round(top - h, 3),
+            w_m=o.width_m, h_m=h, floor=floor, fixed=FROM_PLAN if floor == 1 else [],
+            variant=_variant(o.width_m, h, look.head_m - h, cfg)))
     return out
 
 
-def sill_level(width_m: float, look: Look, cfg: Windows) -> float:
-    """Низ окна в долях высоты этажа: узкое — высоко, большое — в пол (если так у дома),
-    остальные — по уровню дома."""
+def window_height(width_m: float, look: Look, cfg: Windows) -> float:
+    """Высота окна по ширине: большое — в пол (если так у дома), узкое — маленькое, остальные —
+    высота дома."""
     if width_m >= cfg.wide_min_w_m - EPS and look.wide_to_floor:
-        return 0.0
+        return look.head_m
     if width_m <= cfg.narrow_max_w_m + EPS:
-        return max(cfg.narrow_low, look.window_span[0])
-    return look.window_span[0]
+        return look.narrow_h_m
+    return look.window_h_m
 
 
 def _variant(w: float, h: float, low: float, cfg: Windows) -> OpeningVariant:

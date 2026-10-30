@@ -4,11 +4,12 @@ import random
 from dataclasses import dataclass
 from enum import Enum
 
-from genfacade.config import Range, Sizes, Synthetic
+from genfacade.config import Sizes, Synthetic, Windows
 from genfacade.datasets.synthetic.plan import on_grid
 from genfacade.datasets.synthetic.sizes import grid
 from genfacade.schema import (
     DOOR_KINDS,
+    EPS,
     BuildingType,
     HouseSpec,
     Material,
@@ -33,9 +34,12 @@ class Scheme(Enum):
 class Look:
     """Чего нет в HouseSpec, но у дома одно на все стены (`generation: Условие модели шага 4`)."""
 
-    window_span: Range   # низ и верх обычного окна в долях высоты этажа
+    head_m: float        # верх окон каждого этажа и двери над полом этажа
+    window_h_m: float    # высота обычного окна
+    narrow_h_m: float    # высота узкого окна
     wide_to_floor: bool  # большие окна — в пол
     casing: bool         # наличники у окон
+    shutters: bool       # ставни у окон
     scheme: Scheme
     wainscot_m: float    # высота нижнего пояса отделки над цоколем (для схемы WAINSCOT)
     porch: bool
@@ -56,7 +60,7 @@ def house(rng: random.Random, cfg: Synthetic, size: Sizes) -> tuple[HouseSpec, L
         roof=Roof(kind=RoofKind.FLAT, material=PaletteRole.ROOF), style=style,
         materials=[Material(id=role, kind=kind) for role, kind in _palette(rng, cfg).items()],
     )
-    return spec, _look(rng, style, cfg)
+    return spec, _look(rng, spec, cfg)
 
 
 def _palette(rng: random.Random, cfg: Synthetic) -> dict[PaletteRole, str]:
@@ -69,19 +73,29 @@ def _palette(rng: random.Random, cfg: Synthetic) -> dict[PaletteRole, str]:
     return kinds
 
 
-def _look(rng: random.Random, style: str, cfg: Synthetic) -> Look:
+def _look(rng: random.Random, spec: HouseSpec, cfg: Synthetic) -> Look:
     windows, finish, entry = cfg.facade.windows, cfg.facade.finish, cfg.facade.entry
-    level = _weighted(rng, windows.weights)
+    head = round(min(on_grid(rng, windows.head_m, cfg.spec.grid_m),
+                     spec.floor_heights_m[0] - windows.lintel_m), 3)
     return Look(
-        window_span=windows.size[level],
+        head_m=head,
+        window_h_m=rng.choice(_heights(head, windows)),
+        narrow_h_m=rng.choice(windows.narrow_heights_m),
         wide_to_floor=rng.random() < windows.wide_floor_p,
-        casing=style in cfg.facade.casing.styles,
+        casing=spec.style in cfg.facade.casing.styles,
         scheme=Scheme(_weighted(rng, finish.weights)),
         wainscot_m=on_grid(rng, finish.wainscot_m, cfg.spec.grid_m),
         porch=rng.random() < entry.porch_p,
         canopy=rng.random() < entry.canopy_p,
         door=_door_kind(_weighted(rng, cfg.facade.door.weights)),
+        shutters=rng.random() < cfg.facade.shutter.p,
     )
+
+
+def _heights(head: float, rules: Windows) -> list[float]:
+    """Высоты окна из рядов, при которых подоконник под этим верхом — в пределах sill_m."""
+    low, high = rules.sill_m
+    return [h for h in rules.heights_m if low - EPS <= head - h <= high + EPS]
 
 
 def _door_kind(key: str) -> VariantKind | None:
