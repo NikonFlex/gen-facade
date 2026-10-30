@@ -14,7 +14,7 @@ from genfacade.config import Config, GPTSize, LayoutModel
 from genfacade.models.stub import ModelError
 from genfacade.schema import FacadeSheet, Mode
 from genfacade.train import constraints, sampling, tokens
-from genfacade.train.tokens import Mark, TokenError
+from genfacade.train.tokens import Answer, Mark, TokenError
 
 
 class Condition(NamedTuple):
@@ -50,17 +50,43 @@ class Layout:
         except TokenError as e:
             raise ModelError(f"дом не записывается условием модели: {e}") from e
 
-    def answer(self, prompt: Condition, bare: FacadeSheet, seed: int,
-               cfg: Config) -> FacadeSheet:
+    def answer(self, prompt: Condition, bare: FacadeSheet, seed: int, cfg: Config) -> Answer:
         """Стены после развёртки → стены с элементами и зонами; ответ не разобран — TokenError.
         С `constrain` рамка элемента не ломается (gf#177), а в глухом режиме окна не заходят в
         запретные зоны и на проёмы (gf#132)."""
-        on = cfg.models.layout.constrain
-        guard = constraints.guard(bare, prompt.mode, self.vocab, cfg) if on else None
+        guard = self._guard(bare, prompt.mode, cfg)
         torch.manual_seed(seed)
         ids = sampling.answer_all(self.sampler, [sampling.Prompt(prompt.ids, guard)],
                                   cfg.models.layout, batch=1)[0]
-        return tokens.decode([self.words[i] for i in ids], bare, cfg)
+        return self._decoded(ids, bare, cfg)
+
+    def redo(self, prompt: Condition, bare: FacadeSheet, old: Answer, wall: int,
+             seed: int, cfg: Config) -> Answer:
+        """Тот же ответ, но стена номер wall — заново (gf#213): слова до её `<wall>` и после
+        следующего `<wall>` (у последней стены — `<end>`) не меняются, страж читает префикс и
+        знает уже поставленное."""
+        ids = [self.number[w] for w in old.words]
+        walls = [i for i, t in enumerate(ids) if t == self.vocab.wall]
+        head = walls[wall] + 1  # с `<wall>` плохой стены: дальше — только её элементы
+        tail = walls[wall + 1] if wall + 1 < len(walls) else ids.index(self.vocab.end)
+        guard = self._guard(bare, prompt.mode, cfg)
+        for t in ids[1:head] if guard is not None else []:
+            guard.step(t)
+        torch.manual_seed(seed)
+        prefix = torch.tensor([prompt.ids[:-1] + ids[:head]], dtype=torch.long)
+        stops = frozenset({self.vocab.wall, self.vocab.end})
+        new = self.sampler.answer(prefix, cfg.models.layout, [guard], stops)[0][1:]
+        if new and new[-1] in stops:  # стена кончилась — дальше прежние; иначе оборвана окном
+            new = new[:-1] + ids[tail:]
+        return self._decoded(ids[:head] + new, bare, cfg)
+
+    def _guard(self, bare: FacadeSheet, mode: Mode, cfg: Config):
+        on = cfg.models.layout.constrain
+        return constraints.guard(bare, mode, self.vocab, cfg) if on else None
+
+    def _decoded(self, ids: list[int], bare: FacadeSheet, cfg: Config) -> Answer:
+        words = [self.words[i] for i in ids]
+        return Answer(words, tokens.decode(words, bare, cfg))
 
 
 _loaded: dict[tuple, Layout] = {}

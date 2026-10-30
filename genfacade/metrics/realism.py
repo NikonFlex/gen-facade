@@ -13,6 +13,14 @@
 
 import numpy
 
+from genfacade.metrics import measures
+from genfacade.schema import FacadeSheet
+
+
+def walls(sheets: list[FacadeSheet]) -> numpy.ndarray:
+    """Признаки стен домов (`measures.realism_features`): строка — стена."""
+    return numpy.array([measures.realism_features(f, s.spec) for s in sheets for f in s.facades])
+
 
 def standardized(ours: numpy.ndarray, ref: numpy.ndarray) -> tuple[numpy.ndarray, numpy.ndarray]:
     both = numpy.vstack([ours, ref])
