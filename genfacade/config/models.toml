@@ -10,6 +10,22 @@
 3 = ["three-storey", "three-story", "3-storey", "3-story", "трёхэтажн", "трехэтажн",
      "в три этажа", "3 этажа"]
 
+# Стиль из текста (gf#212): по слову, которое встретилось раньше других; слова нет — стиль заготовки.
+# Стили — те, что знает модель шага 4 (config/synthetic.toml, [spec] styles).
+[spec.style_words]
+modern = ["modern", "contemporary", "minimalist", "современн", "минимализм", "хай-тек"]
+scandinavian = ["scandinavian", "nordic", "скандинав", "барнхаус", "barnhouse"]
+chalet = ["chalet", "alpine", "шале", "альпийск"]
+classic = ["classic", "colonial", "traditional", "классическ", "классик", "колониальн"]
+
+# Виды выводимых элементов дома по стилю (gf#212, config/derive.toml): одни на все стены. Подоконник —
+# у каждого стиля: заготовка стаба шага 4 (models/stub_data/facades.json) ставит плоский подоконник.
+[spec.trim]
+modern = { sill = "flat", casing = "none", shutters = "none", canopy = "flat" }
+scandinavian = { sill = "flat", casing = "flat", shutters = "none", canopy = "gable" }
+chalet = { sill = "sloped", casing = "wide", shutters = "board", canopy = "bracket" }
+classic = { sill = "sloped", casing = "flat", shutters = "panel", canopy = "gable" }
+
 [layout]             # шаг 4: обученный GPT (genfacade/models/layout.py)
 # Чекпойнт genfacade train (model.pt). Файла нет — стаб (genfacade/models/stub.py).
 # Скачать обученную модель: gh run download <run_id> -n train-<run_id> -D data/models/layout

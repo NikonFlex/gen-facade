@@ -3,14 +3,23 @@
 
 Последовательность — условие и ответ:
 
-    <house> режим, параметры дома, палитра
+    <house> режим, параметры дома, палитра, виды выводимых элементов
     <side> длина [<entrance>] {<forbidden> x0 x1} {проём плана: вид x w}     — на каждую стену
     <answer>
+    <types> n {w h}                                       — типоразмеры окон дома, n ≤ window_types
     <wall> {элемент} {зона}                                                  — на каждую стену
     <end>
 
-    элемент: класс x y w h [<floor> n] [вид cols rows] [материал] [<parent> n] [заданные поля]
+    окно:    cls:window x y size:k [<floor> n] [вид cols rows] [материал] [<parent> n] {признак}
+             [заданные поля]
+    элемент: класс x y w h [<floor> n] [вид cols rows] [материал] [<parent> n] {признак}
+             [заданные поля]
     зона:    роль материал число_точек {x y}
+
+Окно ссылается на типоразмер дома (gf#212): его ширина и высота — типоразмера; в «окна из плана»
+ширину окна плана потом ставит привязка (snap.py), типоразмер задаёт высоту. Подоконник, наличник,
+ставни и козырёк в ответе — не элементы, а признаки проёма (`trim:`): прямоугольники по виду дома
+считает код (derive.py) при разборе.
 
 Стены идут по обходу контура от стороны входа — как стороны плана
 (спека plan-input, «Сторона», номер).
@@ -20,12 +29,18 @@
 """
 
 import math
+from collections import Counter
 from enum import StrEnum
+from typing import NamedTuple
 
+from genfacade import derive
 from genfacade.config import Config, Tokens
+from genfacade.derive import Flags
 from genfacade.schema import (
     EPS,
     BuildingType,
+    CanopyKind,
+    CasingKind,
     Element,
     ElementClass,
     FacadeSheet,
@@ -37,8 +52,11 @@ from genfacade.schema import (
     OpeningVariant,
     PaletteRole,
     RoofKind,
+    ShutterKind,
     Side,
     SideFacade,
+    SillKind,
+    Trim,
     VariantKind,
     ZoneRole,
 )
@@ -52,6 +70,7 @@ class Mark(StrEnum):
     ENTRANCE = "<entrance>"
     FORBIDDEN = "<forbidden>"
     ANSWER = "<answer>"
+    TYPES = "<types>"
     WALL = "<wall>"
     FLOOR = "<floor>"
     PARENT = "<parent>"
@@ -66,11 +85,13 @@ class TokenError(ValueError):
 # значения — с приставкой своего enum.
 ENUMS = {"mode": Mode, "type": BuildingType, "roof": RoofKind, "open": OpeningKind,
          "cls": ElementClass, "var": VariantKind, "mat": PaletteRole, "role": ZoneRole,
-         "fix": FixedField}
+         "fix": FixedField, "sill_kind": SillKind, "casing_kind": CasingKind,
+         "shutters_kind": ShutterKind, "canopy_kind": CanopyKind, "trim": Trim}
 PREFIX = {enum: name for name, enum in ENUMS.items()}
 HALF_STEP_UP = 1e-6  # запас на хвост float при округлении полушага; допуск, не настройка
 KIND = "kind"    # вид материала из библиотеки — открытый набор из config/library.toml
 STYLE = "style"  # стиль дома — открытый набор из config/synthetic.toml
+SIZE = "size"    # номер типоразмера окна дома: от 0 до window_types − 1 (config/tokens.toml)
 
 
 def tok(value: StrEnum) -> str:
@@ -83,7 +104,12 @@ def vocabulary(cfg: Config) -> list[str]:
     values = [tok(v) for enum in ENUMS.values() for v in enum]
     kinds = [f"{KIND}:{k}" for k in cfg.library.kinds]
     styles = [f"{STYLE}:{s}" for s in ["", *cfg.synthetic.spec.styles]]
-    return [*map(str, Mark), *values, *kinds, *styles, *numbers]
+    sizes = [size_tok(k) for k in range(cfg.tokens.window_types)]
+    return [*map(str, Mark), *values, *kinds, *styles, *sizes, *numbers]
+
+
+def size_tok(k: int) -> str:
+    return f"{SIZE}:{k}"
 
 
 def units(metres: float, cfg: Tokens) -> int:
@@ -103,7 +129,7 @@ def lines(tokens: list[str]) -> list[str]:
     starts = tuple(f"{PREFIX[enum]}:" for enum in (ElementClass, ZoneRole))
     out: list[list[str]] = []
     for t in tokens:
-        if not out or t in (Mark.HOUSE, Mark.SIDE, Mark.ANSWER, Mark.WALL, Mark.END) \
+        if not out or t in (Mark.HOUSE, Mark.SIDE, Mark.ANSWER, Mark.TYPES, Mark.WALL, Mark.END) \
                 or t.startswith(starts):
             out.append([])
         out[-1].append(t)
@@ -123,7 +149,7 @@ def condition(sheet: FacadeSheet, mode: Mode, cfg: Config) -> list[str]:
     out = [Mark.HOUSE, tok(mode), tok(spec.building_type), str(spec.floors),
            *(str(units(h, t)) for h in spec.floor_heights_m),
            str(units(spec.plinth_m, t)), str(units(spec.eaves_m, t)),
-           tok(spec.roof.kind), f"{STYLE}:{spec.style}"]
+           tok(spec.roof.kind), f"{STYLE}:{spec.style}", *(tok(spec.trim.kind(t)) for t in Trim)]
     for m in spec.materials:
         out += [_material(m.id), f"{KIND}:{m.kind}"]
     for f in sheet.facades:
@@ -132,16 +158,71 @@ def condition(sheet: FacadeSheet, mode: Mode, cfg: Config) -> list[str]:
 
 
 def answer(sheet: FacadeSheet, mode: Mode, cfg: Config) -> list[str]:
-    """Что модель должна выдать: элементы и зоны всех стен подряд."""
-    out: list[str] = [Mark.ANSWER]
+    """Что модель должна выдать: типоразмеры окон дома, элементы и зоны всех стен подряд.
+    Выводимые элементы (подоконник, наличник, ставни, козырёк) — признаками своего проёма."""
+    sizes = window_sizes([e for f in sheet.facades for e in f.elements
+                          if e.cls is ElementClass.WINDOW], cfg)
+    out: list[str] = [Mark.ANSWER, Mark.TYPES, str(len(sizes)),
+                      *(str(n) for size in sizes for n in size)]
     for f in sheet.facades:
         out.append(Mark.WALL)
-        index = {e.id: i for i, e in enumerate(f.elements)}
-        for e in f.elements:
-            out += _element(e, index, mode, cfg.tokens)
+        written = derive.base(f.elements)
+        writer = _Writer(mode, cfg.tokens, sizes, {e.id: i for i, e in enumerate(written)})
+        marks = derive.flags(f.elements)
+        for e in written:
+            out += _element(e, marks.get(e.id, set()), sheet, writer)
         for z in f.zones:
             out += _zone(z, cfg.tokens)
     return _known([*out, Mark.END], cfg)
+
+
+Size = tuple[int, int]  # ширина и высота окна в шагах сетки
+
+
+class _Writer(NamedTuple):
+    """Общее для записи элементов стены: режим, сетка, типоразмеры дома, номера элементов."""
+
+    mode: Mode
+    cfg: Tokens
+    sizes: list[Size]
+    index: dict[str, int]
+
+
+def window_sizes(windows: list[Element], cfg: Config) -> list[Size]:
+    """Типоразмеры окон дома, не больше window_types: разных размеров не больше — они и есть,
+    иначе — центры групп: начало — самые частые размеры, окно — к ближнему, центр — медиана
+    группы (у реальных домов окна разных размеров, gf#212)."""
+    found = Counter(_size(w, cfg.tokens) for w in windows)
+    limit = cfg.tokens.window_types
+    if len(found) <= limit:
+        return sorted(found)
+    centres = [size for size, _ in sorted(found.items(), key=lambda kv: (-kv[1], kv[0]))[:limit]]
+    for _ in range(limit * len(found)):  # сходится за несколько шагов; предел — от зацикливания
+        groups: dict[int, list[Size]] = {}
+        for size, n in found.items():
+            groups.setdefault(nearest(size, centres), []).extend([size] * n)
+        moved = [_median(groups[k]) if k in groups else c for k, c in enumerate(centres)]
+        if moved == centres:
+            break
+        centres = moved
+    return sorted(set(centres))
+
+
+def nearest(size: Size, sizes: list[Size]) -> int:
+    """Номер ближнего типоразмера: по сумме разниц ширины и высоты, при равенстве — меньший."""
+    return min(range(len(sizes)), key=lambda k: (abs(sizes[k][0] - size[0])
+                                                 + abs(sizes[k][1] - size[1]), k))
+
+
+def _median(sizes: list[Size]) -> Size:
+    ws, hs = sorted(w for w, _ in sizes), sorted(h for _, h in sizes)
+    return ws[len(ws) // 2], hs[len(hs) // 2]
+
+
+def _size(e: Element, cfg: Tokens) -> Size:
+    """Размер в шагах сетки — разность краёв на сетке, как у рамки (`_box`)."""
+    _, _, w, h = _box(e, cfg)
+    return int(w), int(h)
 
 
 def _known(tokens: list[str], cfg: Config) -> list[str]:
@@ -185,17 +266,28 @@ def _fixed(e: Element, mode: Mode) -> list[FixedField]:
     return [] if blind_window else e.fixed
 
 
-def _element(e: Element, index: dict[str, int], mode: Mode, cfg: Tokens) -> list[str]:
-    out = [tok(e.cls), *_box(e, cfg)]
+def _element(e: Element, marks: set[Trim], sheet: FacadeSheet, w: _Writer) -> list[str]:
+    box = _box(e, w.cfg)
+    if e.cls is ElementClass.WINDOW:  # окно — типоразмером дома, а не шириной и высотой
+        box = box[:2] + [size_tok(nearest(_size(e, w.cfg), w.sizes))]
+    out = [tok(e.cls), *box]
     if e.floor is not None:
         out += [Mark.FLOOR, str(e.floor)]
     if e.variant is not None:
         out += [tok(e.variant.kind), str(e.variant.cols), str(e.variant.rows)]
     if e.material is not None:
         out.append(_material(e.material))
-    if e.parent is not None:
-        out += [Mark.PARENT, str(index[e.parent])]
-    return out + [tok(f) for f in _fixed(e, mode)]
+    if e.parent in w.index:  # родитель — выводимый элемент: связь выводит код, не пишется
+        out += [Mark.PARENT, str(w.index[e.parent])]
+    return out + _trims(e, marks, sheet) + [tok(f) for f in _fixed(e, w.mode)]
+
+
+def _trims(e: Element, marks: set[Trim], sheet: FacadeSheet) -> list[str]:
+    """Признаки выводимых элементов проёма; вида, которого у дома нет, быть не может."""
+    for t in marks:
+        if not sheet.spec.trim.has(t):
+            raise TokenError(f"элемент {e.id}: признак {t}, а вида {t} у дома нет")
+    return [tok(t) for t in Trim if t in marks]
 
 
 def _box(e: Element, cfg: Tokens) -> list[str]:
@@ -219,6 +311,7 @@ class _Reader:
 
     def __init__(self, tokens: list[str], cfg: Tokens):
         self.tokens, self.at, self.cfg = tokens, 0, cfg
+        self.sizes: list[Size] = []  # типоразмеры окон из начала ответа
 
     def peek(self) -> str:
         return self.tokens[self.at] if self.at < len(self.tokens) else ""
@@ -253,14 +346,40 @@ class _Reader:
 
 
 def decode(tokens: list[str], walls: FacadeSheet, cfg: Config) -> FacadeSheet:
-    """Ответ модели → стены с элементами и зонами; walls — дом после развёртки (шаг 3)."""
+    """Ответ модели → стены с элементами и зонами; walls — дом после развёртки (шаг 3).
+    Выводимые элементы ставит код (derive.py) по признакам проёмов и виду дома."""
     r = _Reader(tokens, cfg.tokens)
     r.expect(Mark.ANSWER)
-    facades = [_exact(_wall(r, f), walls.spec, cfg.tokens) for f in walls.facades]
+    r.sizes = _read_sizes(r, cfg.tokens.window_types)
+    facades = []
+    for f in walls.facades:
+        wall, marks = _wall(r, f)
+        _check_trims(marks, walls.spec)
+        wall = _exact(wall, walls.spec, cfg.tokens)
+        ctx = derive.Wall(walls.spec, f.side.length_m, cfg.derive)
+        facades.append(wall.model_copy(update={
+            "elements": derive.place(wall.elements, marks, ctx)}))
     r.expect(Mark.END)
     if r.at != len(tokens):
         raise TokenError(f"после {Mark.END} ещё {len(tokens) - r.at} токенов")
     return walls.model_copy(update={"facades": facades})
+
+
+def _read_sizes(r: _Reader, limit: int) -> list[Size]:
+    r.expect(Mark.TYPES)
+    n = r.number()
+    if n > limit:
+        raise TokenError(f"токен {r.at}: типоразмеров {n}, а можно не больше {limit}")
+    sizes = [(r.number(), r.number()) for _ in range(n)]
+    if any(0 in size for size in sizes):
+        raise TokenError(f"токен {r.at}: типоразмер окна нулевой — {sizes}")
+    return sizes
+
+
+def _check_trims(marks: Flags, spec: HouseSpec) -> None:
+    for owner, trims in marks.items():
+        if missing := sorted(t for t in trims if not spec.trim.has(t)):
+            raise TokenError(f"элемент {owner}: признаки {missing}, а таких видов у дома нет")
 
 
 def bare(sheet: FacadeSheet) -> FacadeSheet:
@@ -277,11 +396,15 @@ def given_sides(sheet: FacadeSheet, mode: Mode) -> FacadeSheet:
     return sheet.model_copy(update={"facades": facades})
 
 
-def _wall(r: _Reader, wall: SideFacade) -> SideFacade:
+def _wall(r: _Reader, wall: SideFacade) -> tuple[SideFacade, Flags]:
     r.expect(Mark.WALL)
     elements: list[Element] = []
+    marks: Flags = {}
     while (cls := r.value(ElementClass)) is not None:
-        elements.append(_read_element(r, cls, len(elements)))
+        e, trims = _read_element(r, cls, len(elements))
+        elements.append(e)
+        if trims:
+            marks[e.id] = trims
     for e in elements:  # родитель — номер элемента в стене; номера за её пределами — брак
         if e.parent is not None and int(e.parent) >= len(elements):
             raise TokenError(f"элемент {e.id}: родитель {e.parent} — такого номера в стене нет")
@@ -290,7 +413,7 @@ def _wall(r: _Reader, wall: SideFacade) -> SideFacade:
     zones = []
     while (role := r.value(ZoneRole)) is not None:
         zones.append(_read_zone(r, role))
-    return wall.model_copy(update={"elements": named, "zones": zones})
+    return wall.model_copy(update={"elements": named, "zones": zones}), marks
 
 
 def _exact(wall: SideFacade, spec: HouseSpec, cfg: Tokens) -> SideFacade:
@@ -330,9 +453,8 @@ def name(index: int) -> str:
     return f"e{index}"
 
 
-def _read_element(r: _Reader, cls: ElementClass, index: int) -> Element:
-    x, y, w, h = (r.length() for _ in range(4))
-    data: dict = {"id": name(index), "cls": cls, "x_m": x, "y_m": y, "w_m": w, "h_m": h}
+def _read_element(r: _Reader, cls: ElementClass, index: int) -> tuple[Element, set[Trim]]:
+    data: dict = {"id": name(index), "cls": cls, **_read_box(r, cls)}
     if r.peek() == Mark.FLOOR:
         r.take()
         data["floor"] = r.number()
@@ -344,8 +466,32 @@ def _read_element(r: _Reader, cls: ElementClass, index: int) -> Element:
     if r.peek() == Mark.PARENT:
         r.take()
         data["parent"] = str(r.number())  # пока номер; имя — когда прочитана вся стена
+    trims = _read_trims(r, cls)
     data["fixed"] = _read_fixed(r)
-    return _build(Element, data, r)
+    return _build(Element, data, r), trims
+
+
+def _read_box(r: _Reader, cls: ElementClass) -> dict[str, float]:
+    """x y w h; у окна ширина и высота — его типоразмера."""
+    x, y = r.length(), r.length()
+    if cls is not ElementClass.WINDOW:
+        return {"x_m": x, "y_m": y, "w_m": r.length(), "h_m": r.length()}
+    got = r.take()
+    name_, _, k = got.partition(":")
+    if name_ != SIZE or not k.isdigit() or int(k) >= len(r.sizes):
+        raise TokenError(f"токен {r.at}: ждали типоразмер окна из {len(r.sizes)}, пришло {got!r}")
+    w, h = r.sizes[int(k)]
+    return {"x_m": x, "y_m": y, "w_m": metres(w, r.cfg), "h_m": metres(h, r.cfg)}
+
+
+def _read_trims(r: _Reader, cls: ElementClass) -> set[Trim]:
+    """Признаки выводимых элементов; признак не своего класса проёма — брак."""
+    trims = set()
+    while (trim := r.value(Trim)) is not None:
+        if derive.OWNER[trim] is not cls:
+            raise TokenError(f"токен {r.at}: признак {trim} — у {derive.OWNER[trim]}, а не у {cls}")
+        trims.add(trim)
+    return trims
 
 
 def _read_fixed(r: _Reader) -> list[FixedField]:

@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from simple_house import SIMPLE
 
-from genfacade import config
+from genfacade import config, derive
 from genfacade.datasets import store
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import ElementClass, Mode, VariantKind, ZoneRole
@@ -152,9 +152,10 @@ def test_sample_tokens_shown_for_every_mode(client, sample, opened, cfg):
         assert " ".join(given["lines"]).split() == tokens.condition(sample.sheet, mode, cfg)
         assert " ".join(answer["lines"]).split() == tokens.answer(sample.sheet, mode, cfg)
         assert answer["count"] == len(tokens.answer(sample.sheet, mode, cfg))
-        # своя строка — у <answer>, каждой стены, каждого элемента и зоны, и у <end>
+        # своя строка — у <answer>, типоразмеров, каждой стены, каждого элемента и зоны, и у <end>;
+        # подоконник — признак окна, а не элемент (gf#212)
         walls = sample.sheet.facades
-        rows = 2 + len(walls) + sum(len(f.elements) + len(f.zones) for f in walls)
+        rows = 3 + len(walls) + sum(len(derive.base(f.elements)) + len(f.zones) for f in walls)
         assert len(answer["lines"]) == rows
 
 

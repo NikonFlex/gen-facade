@@ -2,7 +2,7 @@
 
 import random
 
-from genfacade import pipeline
+from genfacade import derive, pipeline
 from genfacade.config import Config, Synthetic
 from genfacade.datasets import genplan_writer
 from genfacade.datasets.synthetic import decor, openings, plan, sizes, upper, zones
@@ -27,7 +27,7 @@ def sample(seed: int, cfg: Config) -> Sample:
     floor = preprocess(svg, Mode.WITH_OPENINGS, cfg.plan).model_copy(
         update={"source": Source.SYNTHETIC})
     # Свой поток случайных чисел: правка правил плана не меняет параметры дома, и наоборот.
-    spec, look = house(random.Random(f"house/{seed}"), rules,  # noqa: S311 — не криптография
+    spec, look = house(random.Random(f"house/{seed}"), cfg,  # noqa: S311 — не криптография
                        sizes.pick(seed, rules))
     sheet = lay_out(pipeline.walls(spec, floor), look, cfg,
                     random.Random(f"upper/{seed}"))  # noqa: S311 — не криптография
@@ -44,24 +44,19 @@ def lay_out(sheet: FacadeSheet, look: Look, cfg: Config, rng: random.Random) -> 
         rows = upper.rows(rng, f.side, spec.floors, cfg)
         placed = f.model_copy(update={"elements": openings.windows(rows, spec, look,
                                                                    rules.facade.windows)})
-        walls.append(_wall(placed, spec, look, rules))
+        walls.append(_wall(placed, spec, look, cfg))
     return sheet.model_copy(update={"facades": walls})
 
 
-def _wall(wall: SideFacade, spec: HouseSpec, look: Look, rules: Synthetic) -> SideFacade:
-    """Стена с уже поставленными окнами (`wall.elements`) — дверь, декор и зоны."""
-    cfg, side, windows = rules.facade, wall.side, wall.elements
-    doors = openings.doors(side, spec, look, cfg)
-    casing = cfg.casing.width_m if look.casing else 0.0  # ставни — снаружи наличника
-    # порядок — порядок отрисовки: наличник под окном, подоконник и карниз поверх стены
-    elements = [
-        *(decor.casings(windows, cfg) if look.casing else []), *windows, *doors,
-        *decor.sills(windows, cfg),
-        *(decor.shutters(windows + doors, side.length_m, casing, cfg.shutter)
-          if look.shutters else []),
-        *([decor.porch(d, spec, cfg) for d in doors] if look.porch and spec.plinth_m > 0 else []),
-        *([decor.canopy(d, cfg) for d in doors] if look.canopy else []),
-        decor.cornice(side.length_m, spec, cfg),
-    ]
-    laid = wall.model_copy(update={"elements": elements})
-    return laid.model_copy(update={"zones": zones.zones(laid, spec, look, cfg.finish)})
+def _wall(wall: SideFacade, spec: HouseSpec, look: Look, cfg: Config) -> SideFacade:
+    """Стена с уже поставленными окнами (`wall.elements`) — дверь, декор и зоны. Подоконники,
+    наличники, ставни и козырёк правило только отмечает у проёма, ставит их код (derive.py)."""
+    rules, side, windows = cfg.synthetic.facade, wall.side, wall.elements
+    doors = openings.doors(side, spec, look, rules)
+    porch = look.porch and spec.plinth_m > 0  # крыльцо — на высоту цоколя: без цоколя его нет
+    porches = [decor.porch(d, spec, rules) for d in doors] if porch else []
+    ctx = derive.Wall(spec, side.length_m, cfg.derive)
+    laid = [*windows, *doors, *porches, decor.cornice(side.length_m, spec, look.cornice_m)]
+    elements = derive.place(laid, decor.flags(windows, doors, ctx), ctx)
+    placed = wall.model_copy(update={"elements": elements})
+    return placed.model_copy(update={"zones": zones.zones(placed, spec, look, rules.finish)})

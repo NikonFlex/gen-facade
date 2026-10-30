@@ -14,6 +14,11 @@
 Место окну модели страж выбирает в обоих режимах: в «окна из плана» проёмы плана первого этажа —
 занятые отрезки, своё окно модель туда не ставит (налезало на широкое окно плана GenPlan, gf#197).
 
+Окно пишется не шириной и высотой, а номером типоразмера дома из начала ответа (`<types>`, gf#212):
+страж оставляет типоразмеры, с которыми окно встаёт на свободное место и под карниз, а x — где
+помещается самый узкий типоразмер дома. Признаки выводимых элементов (`trim:`) — только у своего
+класса проёма и только тех видов, что есть у дома.
+
 В обоих режимах (gf#197): рамка любого элемента — в пределах стены и не выше карниза; проём плана
 (в «окна из плана» — окна и двери, в глухом — вход) модель пишет числами условия: очередной
 элемент его класса — в x и ширину проёма, на первом этаже, с `fix:x_m fix:w_m`; стену не
@@ -27,6 +32,7 @@ from enum import Enum, auto
 from typing import NamedTuple
 
 from genfacade.config import Config, Tokens
+from genfacade.derive import OWNER, TRIM_OF
 from genfacade.schema import (
     DOOR_KINDS,
     EPS,
@@ -34,9 +40,11 @@ from genfacade.schema import (
     FacadeSheet,
     FixedField,
     ForbiddenZone,
+    HouseTrim,
     Mode,
     Opening,
     PaletteRole,
+    Trim,
     VariantKind,
     ZoneRole,
 )
@@ -100,6 +108,11 @@ class Vocab:
                         if w.startswith(f"{PREFIX[VariantKind]}:")}
         self.fix = {FixedField(w.split(":", 1)[1]): i for i, w in enumerate(words)
                     if w.startswith(f"{PREFIX[FixedField]}:")}
+        self.trim = {i: Trim(w.split(":", 1)[1]) for i, w in enumerate(words)
+                     if w.startswith(f"{PREFIX[Trim]}:")}
+        self.sizes = {i: int(w.split(":", 1)[1]) for i, w in enumerate(words)
+                      if w.startswith(f"{tokens.SIZE}:")}  # номер токена → номер типоразмера
+        self.types = words.index(Mark.TYPES)
         self.wall, self.end = words.index(Mark.WALL), words.index(Mark.END)
         self.floor, self.parent = words.index(Mark.FLOOR), words.index(Mark.PARENT)
         self.size = len(words)
@@ -112,12 +125,18 @@ class Need(Enum):
     POSITIVE = auto()  # ширина, высота, число точек зоны
     MATERIAL = auto()
     POINTS = auto()    # число точек зоны: за ним — по два числа на точку
+    TYPES = auto()     # число типоразмеров окон: за ним — по два числа на типоразмер
+    SIZE = auto()      # номер типоразмера окна
 
 
-# Необязательные поля элемента после рамки — в этом порядке (`tokens._element`); заданные
-# поля (`fix:`) — последними, сколько угодно.
-FLOOR_FIELD, VARIANT_FIELD, MATERIAL_FIELD, PARENT_FIELD, FIXED_FIELD = range(5)
+# Необязательные поля элемента после рамки — в этом порядке (`tokens._element`): этаж, вид,
+# материал, родитель, признаки выводимых элементов (`trim:`, в порядке Trim); заданные поля
+# (`fix:`) — последними, сколько угодно.
+FLOOR_FIELD, VARIANT_FIELD, MATERIAL_FIELD, PARENT_FIELD = range(4)
+TRIM_FIELD = {t: PARENT_FIELD + 1 + k for k, t in enumerate(Trim)}
+FIXED_FIELD = PARENT_FIELD + 1 + len(Trim)
 BOX = [Need.NUMBER, Need.NUMBER, Need.POSITIVE, Need.POSITIVE]
+WINDOW_BOX = [Need.NUMBER, Need.NUMBER, Need.SIZE]  # окно — x y и типоразмер дома
 # Зона корпуса — прямоугольник: (x0 y0) (x1 y0) (x1 y1) (x0 y1). Правило на каждое число точек:
 # «*» — любое на стене, «>» k — больше k-го числа, «=» k — равно k-му.
 ZONE_RECT = (("*", 0), ("*", 0), (">", 0), ("=", 1), ("=", 2), (">", 1), ("=", 0), ("=", 5))
@@ -136,12 +155,14 @@ class Grammar:
         self.field: int | None = None     # последнее поле элемента; None — не в элементе
         self.zones = False                # зоны стены начались — элементов больше нет
         self.done = False
+        self.header = False               # `<types>` написан
+        self.sizes: list[tuple[int, int]] = []  # типоразмеры окон дома, ширина и высота в шагах
+        self.numbers: list[int] = []      # числа типоразмеров, пока они пишутся
 
     def step(self, token: int) -> None:
         v = self.vocab
         if self.need:
-            if self.need.pop(0) is Need.POINTS:
-                self.need = [Need.NUMBER] * 2 * v.number.get(token, 0)
+            self._number(token)
             return
         fields = {v.floor: (FLOOR_FIELD, [Need.NUMBER]), v.parent: (PARENT_FIELD, [Need.NUMBER])}
         if token in fields:
@@ -152,13 +173,41 @@ class Grammar:
             self.field = MATERIAL_FIELD
         elif token in v.fixed:
             self.field = FIXED_FIELD
-        elif token in v.cls:
-            self.cls, self.field, self.need = v.cls[token], -1, list(BOX)
+        elif token in v.trim:
+            self.field = TRIM_FIELD[v.trim[token]]
+        else:
+            self._part(token)
+        self.done = token == v.end
+
+    def _number(self, token: int) -> None:
+        """Токен, которого ждали: число или материал; за числом точек и типоразмеров — их числа."""
+        v = self.vocab
+        need = self.need.pop(0)
+        if need is Need.POINTS:
+            self.need = [Need.NUMBER] * 2 * v.number.get(token, 0)
+        elif need is Need.TYPES:
+            self.need = [Need.POSITIVE] * 2 * v.number.get(token, 0)
+        elif self.at < 0:
+            self._size_number(v.number.get(token, 0))
+
+    def _part(self, token: int) -> None:
+        """Начало элемента, зоны, стены или типоразмеров."""
+        v = self.vocab
+        if token in v.cls:
+            self.cls, self.field = v.cls[token], -1
+            self.need = list(WINDOW_BOX if self.cls is ElementClass.WINDOW else BOX)
         elif token in v.zone:
             self.field, self.zones, self.need = None, True, [Need.MATERIAL, Need.POINTS]
         elif token == v.wall:
             self.at, self.field, self.zones = self.at + 1, None, False
-        self.done = token == v.end
+        elif token == v.types:
+            self.header, self.need = True, [Need.TYPES]
+
+    def _size_number(self, n: int) -> None:
+        self.numbers.append(n)
+        if len(self.numbers) == 2:
+            self.sizes.append((self.numbers[0], self.numbers[1]))
+            self.numbers = []
 
     def allowed(self) -> set[int] | None:
         """Годные следующими токены; None — ответ кончился, запрещать нечего."""
@@ -169,9 +218,13 @@ class Grammar:
             need = self.need[0]
             if need is Need.MATERIAL:
                 return set(v.material)
+            if need is Need.TYPES:  # типоразмеров — не больше, чем номеров у словаря
+                return {i for i, n in v.number.items() if n <= len(v.sizes)}
+            if need is Need.SIZE:
+                return {i for i, k in v.sizes.items() if k < len(self.sizes)}
             return {i for i, n in v.number.items() if n > 0 or need is Need.NUMBER}
         if self.at < 0:
-            return {v.wall}
+            return {v.wall} if self.header else {v.types}
         return self._fields() | self._next()
 
     def _fields(self) -> set[int]:
@@ -181,15 +234,28 @@ class Grammar:
         v, f = self.vocab, self.field
         door = self.cls is ElementClass.DOOR  # виды двери — только у двери (`schema.Element`)
         kinds = {i for i, k in v.variant.items() if (k in DOOR_KINDS) == door}
+        # признак — только у своего класса проёма (derive.OWNER)
+        trims = [({i}, TRIM_FIELD[t]) for i, t in v.trim.items() if OWNER[t] is self.cls]
         order = [({v.floor}, FLOOR_FIELD), (kinds, VARIANT_FIELD),
-                 (v.material, MATERIAL_FIELD), ({v.parent}, PARENT_FIELD)]
+                 (v.material, MATERIAL_FIELD), ({v.parent}, PARENT_FIELD), *trims]
         return set(v.fixed).union(*(ids for ids, at in order if f < at))
 
     def _next(self) -> set[int]:
         """Начало следующего элемента, зоны, стены или конец ответа."""
         v = self.vocab
         last = self.at >= self.walls - 1
-        return ({v.end} if last else {v.wall}) | set(v.zone) | (set() if self.zones else set(v.cls))
+        # выводимые классы — не элементы ответа, а признаки проёма (gf#212); окна — если у дома
+        # есть типоразмеры
+        own = {i for i, c in v.cls.items() if c not in TRIM_OF
+               and (c is not ElementClass.WINDOW or self.sizes)}
+        return ({v.end} if last else {v.wall}) | set(v.zone) | (set() if self.zones else own)
+
+
+class House(NamedTuple):
+    """Что стражу известно о доме из условия: роли палитры и виды выводимых элементов."""
+
+    palette: set[PaletteRole]
+    trim: HouseTrim = HouseTrim()
 
 
 class WallGeometry:
@@ -197,12 +263,15 @@ class WallGeometry:
     окна модели на стене."""
 
     def __init__(self, walls: list[Wall], vocab: Vocab, narrowest: int,
-                 palette: set[PaletteRole] | None = None):
-        # narrowest — самое узкое окно корпуса в шагах: x, за которым оно не помещается, не годен;
-        # palette — роли палитры дома: материал элемента и зоны — только из них (None — любые)
+                 house: House | None = None):
+        # narrowest — самое узкое окно корпуса в шагах, пока у дома нет типоразмеров; house —
+        # материал элемента и зоны только из палитры дома, признаки — только видов, что у дома есть
+        # (None — любые)
         self.walls, self.vocab, self.narrowest = walls, vocab, narrowest
-        self.foreign = {i for i, r in vocab.material.items() if palette is not None
-                        and r not in palette}
+        self.foreign = {i for i, r in vocab.material.items() if house is not None
+                        and r not in house.palette}
+        self.foreign |= {i for i, t in vocab.trim.items() if house is not None
+                         and not house.trim.has(t)}
         self.grammar = Grammar(vocab, len(walls))
         self.at = -1                      # номер стены; до первого `<wall>` — ещё не стена
         self.placed: list[tuple[Span, int]] = []  # отрезок проёма и его этаж
@@ -235,6 +304,8 @@ class WallGeometry:
             self.index += 1
         elif in_box and token in v.number:
             self._number(v.number[token])
+        elif in_box and token in v.sizes:
+            self._size(v.sizes[token])
         elif token in v.fixed:
             self.fixes += 1
         elif token in v.zone:
@@ -249,8 +320,17 @@ class WallGeometry:
             floor = self.walls[self.at].floor(self.box[Y])
             self.placed.append(((self.box[X], self.box[X] + self.box[W]), floor))
 
+    def _size(self, k: int) -> None:
+        """Типоразмер окна: отрезок окна на этаже занят; у окна плана ширина — плана."""
+        sizes = self.grammar.sizes
+        w = self.current.w if self.current is not None else sizes[k][0] if k < len(sizes) else 0
+        floor = self.walls[self.at].floor(self.box[Y])
+        self.placed.append(((self.box[X], self.box[X] + w), floor))
+        self.box.append(k)  # рамка окна закончена: x y и типоразмер
+
     def _in_box(self) -> bool:
-        return (self.cls is not None and len(self.box) < 4 and bool(self.grammar.need)
+        size = len(WINDOW_BOX if self.cls is ElementClass.WINDOW else BOX)
+        return (self.cls is not None and len(self.box) < size and bool(self.grammar.need)
                 and 0 <= self.at < len(self.walls))
 
     def _head(self) -> Planned | None:
@@ -266,18 +346,51 @@ class WallGeometry:
         keep = self.grammar.allowed()
         if keep is None:
             return []
-        if self._in_box():
+        if self._in_box() and self.grammar.need[:1] == [Need.SIZE]:
+            keep &= self._sizes() or keep  # годного типоразмера нет — грамматика, брак — валидатору
+        elif self._in_box():
             if numbers := self._box_numbers():
                 keep = {self.vocab.token[n] for n in numbers}
         elif self.point >= 0 and self.grammar.need and 0 <= self.at < len(self.walls):
             keep &= self._point_numbers()
         elif self.grammar.need[:1] == [Need.POINTS]:
             keep &= {self.vocab.token[len(ZONE_RECT) // 2]}  # зона — прямоугольник, 4 точки
+        elif self.grammar.need[:1] == [Need.TYPES] and self._plan_windows():
+            # окна плана ставятся типоразмером дома: без типоразмеров окно плана не поставить,
+            # и стена с ним не кончается (необученная модель писала «<types> 0», gf#212)
+            keep -= {self.vocab.token[0]}
+        elif self.grammar.need[:1] == [Need.POSITIVE] and self.at < 0:
+            keep &= self._size_numbers()
         else:
             # материал не из палитры дома лист не примет (у реального дома палитра — main, gf#197)
             keep = (self._tail(keep) - self.foreign) or keep  # годного нет — грамматика
         keep = keep or self.grammar.allowed()  # всё запрещено — сэмплеру не из чего выбрать
         return [i for i in range(self.vocab.size) if i not in keep]
+
+    def _sizes(self) -> set[int]:
+        """Типоразмеры, с которыми окно не выше карниза, а окно модели ещё и на стене и на
+        свободном месте своего этажа."""
+        wall, (x, y) = self.walls[self.at], self.box
+        busy = wall.taken(wall.floor(y), self.placed)
+        out = set()
+        for i, k in self.vocab.sizes.items():
+            if k >= len(self.grammar.sizes):
+                continue
+            w, h = self.grammar.sizes[k]
+            fits = self.current is not None or (x + w <= wall.length and _free(x, w, busy))
+            if fits and (not wall.height or y + h <= wall.height):
+                out.add(i)
+        return out
+
+    def _size_numbers(self) -> set[int]:
+        """Ширина типоразмера — не длиннее самой длинной стены, высота — не выше карниза: окно
+        13,9 × 16 м необученной модели не встаёт ни на одну стену (gf#212)."""
+        width = len(self.grammar.numbers) % 2 == 0
+        top = max(w.length if width else w.height for w in self.walls) if self.walls else 0
+        return {i for n, i in self.vocab.token.items() if 0 < n and (not top or n <= top)}
+
+    def _plan_windows(self) -> bool:
+        return any(p.cls is ElementClass.WINDOW for w in self.walls for p in w.plan)
 
     def _box_numbers(self) -> set[int]:
         wall, place = self.walls[self.at], len(self.box)
@@ -366,7 +479,7 @@ class WallGeometry:
             # загоняет модель в ширину, какой она не видела, — и ответ ломается (gf#153: x 98 на
             # стене 109 шагов, ширина 4, дальше «ждали <wall>, пришло '32'»). Этажа ещё нет —
             # годен x, при котором окно помещается хотя бы на одном.
-            return [n for n in numbers if n + self.narrowest <= wall.length and self._fits(n)]
+            return [n for n in numbers if n + self._narrowest() <= wall.length and self._fits(n)]
         if place == Y:
             # x годен не на всех этажах — y только там, где годен: иначе у окна первого этажа
             # в запретной зоне нет годной ширины (план GenPlan, 9 из 20 браков, gf#155).
@@ -380,7 +493,11 @@ class WallGeometry:
         """Этажи, где на x помещается самое узкое окно."""
         wall = self.walls[self.at]
         return {f for f in range(1, len(wall.floors) + 2)
-                if _free(x, self.narrowest, wall.taken(f, self.placed))}
+                if _free(x, self._narrowest(), wall.taken(f, self.placed))}
+
+    def _narrowest(self) -> int:
+        """Самый узкий типоразмер дома; пока их нет — самое узкое окно корпуса."""
+        return min((w for w, _ in self.grammar.sizes), default=self.narrowest)
 
 
 def _free(x: int, w: int, busy: list[Span]) -> bool:
@@ -423,4 +540,4 @@ def guard(bare: FacadeSheet, mode: Mode, vocab: Vocab, cfg: Config) -> WallGeome
     used = [mix.genplan] + ([mix.real] if mix.real_share > 0 else [])
     narrowest = tokens.units(min(p.window_width_m[0] for p in used), cfg.tokens)
     palette = {PaletteRole(m.id) for m in bare.spec.materials if m.id in set(PaletteRole)}
-    return WallGeometry(walls(bare, mode, cfg), vocab, narrowest, palette)
+    return WallGeometry(walls(bare, mode, cfg), vocab, narrowest, House(palette, bare.spec.trim))

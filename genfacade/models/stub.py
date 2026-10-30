@@ -1,6 +1,7 @@
 """Стабы моделей шагов 1 и 4: интерфейс — как у моделей, ответ — заготовка из stub_data/.
 
-Стаб 1: текст → HouseSpec — один и тот же дом, из текста берётся только этажность.
+Стаб 1: текст → HouseSpec — один и тот же дом, из текста берутся этажность и стиль, а по стилю —
+виды выводимых элементов (подоконник, наличник, ставни, козырёк, gf#212).
 Стаб 2: стена после развёртки + контекст → стена с элементами и зонами — готовые фасады
 простого дома (tests/fixtures/simple_house.svg), один набор на оба режима; «задано условием»
 (fixed) остаётся только у проёмов, которые есть на стороне плана. Заготовку один раз
@@ -42,21 +43,23 @@ class LayoutContext:
 
 
 def spec_model(text: str, cfg: SpecStub) -> HouseSpec:
-    """Шаг 1: описание → параметры дома. Стаб: заготовка, этажей — по слову в тексте; высота
-    этажа и цоколь — заготовки, карниз — над последним этажом."""
+    """Шаг 1: описание → параметры дома. Стаб: заготовка, этажей и стиль — по слову в тексте,
+    виды выводимых элементов — по стилю; высота этажа и цоколь — заготовки, карниз — над
+    последним этажом."""
     spec = HouseSpec.model_validate_json(DATA.joinpath("house.json").read_text())
-    floors = _floors(text, cfg) or spec.floors
+    floors = _first(text, cfg.floors_words) or spec.floors
+    style = _first(text, cfg.style_words) or spec.style
     heights = [spec.floor_heights_m[0]] * floors
     return spec.model_copy(update={"floors": floors, "floor_heights_m": heights,
-                                   "eaves_m": round(spec.plinth_m + sum(heights), 3)})
+                                   "eaves_m": round(spec.plinth_m + sum(heights), 3),
+                                   "style": style, "trim": cfg.trim[style]})
 
 
-def _floors(text: str, cfg: SpecStub) -> int | None:
-    """Этажей — по слову, которое в тексте раньше других; слова нет — None."""
+def _first[T](text: str, words: dict[T, list[str]]) -> T | None:
+    """Значение по слову, которое в тексте раньше других; слова нет — None."""
     low = text.lower()
-    found = [(low.find(w), n) for n, words in cfg.floors_words.items() for w in words
-             if w.lower() in low]
-    return min(found)[1] if found else None
+    found = [(low.find(w.lower()), n) for n, ws in words.items() for w in ws if w.lower() in low]
+    return min(found, key=lambda f: f[0])[1] if found else None
 
 
 def layout_model(wall: SideFacade, ctx: LayoutContext) -> SideFacade:

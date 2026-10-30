@@ -20,11 +20,12 @@ BUILD = "_build.json"
 PACKAGE = Path(__file__).parents[2]
 # Код, от которого зависят дома сборки (`data: Сборка не смешивает настройки`): генератор,
 # запись его плана в SVG GenPlan и препроцессор, который этот план читает (build.sample),
-# развёртка, схема примера, валидатор (отбраковка) и формат файлов примера. Коммит всего репо
-# не годится: правка смотрелки, обучения или документов домов не меняет, а пересборку требовала
-# бы. pipeline.py не входит: из него сборке нужна только walls() — обёртка над unfold.
+# развёртка, схема примера, валидатор (отбраковка), вывод декора (derive.py) и формат файлов
+# примера. Коммит всего репо не годится: правка смотрелки, обучения или документов домов не меняет,
+# а пересборку требовала бы. pipeline.py не входит: из него сборке нужна только walls() — обёртка
+# над unfold.
 GENERATOR_CODE = ("datasets/synthetic", "datasets/genplan_writer.py", "datasets/store.py",
-                  "plan", "unfold.py", "schema.py", "validate.py")
+                  "plan", "unfold.py", "schema.py", "validate.py", "derive.py")
 
 
 class BuildError(ValueError):
@@ -74,6 +75,7 @@ def _begin(folder: Path, cfg: Config, overwrite: bool) -> dict:
 def _settings(cfg: Config) -> dict:
     """Настройки, от которых зависят дома: генератор, препроцессор его плана, валидатор."""
     return {"synthetic": cfg.synthetic.model_dump(mode="json"),
+            "derive": cfg.derive.model_dump(mode="json"),
             "plan": cfg.plan.model_dump(mode="json"), "checks": cfg.checks.model_dump(mode="json")}
 
 
