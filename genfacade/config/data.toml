@@ -56,3 +56,21 @@ solar-decathlon = "data/solar-decathlon"   # <год>/<комплект>.pdf, to
 length_tol_m = 0.1        # противоположные стороны расходятся больше — контур не прямоугольник
 wall_m = 0.2              # толщина стен в плане: план нужен для сторон и проёмов
 inside_share = 0.5        # элемент за карнизом или углом обрезается, если внутри не меньше этой доли
+
+# Частные дома ResPlan (`data: Стены с проёмами из ResPlan`, gf#215): реальные планы с окнами и
+# дверями → стороны с проёмами в метрах. github.com/m-agour/ResPlan, данные CC BY 4.0 — вне git.
+[resplan.paths]
+pickle = "data/resplan/unzipped/ResPlan.pkl"        # из ResPlan.zip репозитория
+splits = "data/resplan/src/ResPlan-main/split.json"
+out_dir = "data/resplan/houses"                     # <id>.json, svg/<id>.svg, _manifest.json
+
+[resplan]
+# Частный дом — есть хоть один из слоёв: поля «тип жилья» в ResPlan нет (ключи пикла, 30.10.2026)
+house_layers = ["garden", "parking", "pool", "stair"]
+snap_m = 0.06             # координаты рёбер ближе этого сводятся к одной линии: шум векторизации
+max_slant_m = 0.1         # наклонных рёбер стен после сведения больше — план не ортогональный, отказ
+dedup_raster_px = 64      # растр разметки для поиска почти дублей
+dedup_iou = 0.9           # IoU растров не ниже — почти дубль (порог авторов, croissant.json)
+dedup_area_tol = 0.05     # сравниваются планы, чья площадь листинга отличается не больше этой доли
+match_tol_m = 0.3         # сверка с исходником: проём стороны дальше этого от проёма ResPlan — не он
+preview_px = 1600         # ширина картинки «исходник | шаг 2»

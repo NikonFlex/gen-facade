@@ -245,12 +245,34 @@ class Manual(Section):
     inside_share: float
 
 
+class ResPlanPaths(Section):
+    pickle: Path    # ResPlan.pkl из ResPlan.zip
+    splits: Path    # split.json — каноническое разбиение
+    out_dir: Path   # дома после перевода и опись
+
+
+class ResPlan(Section):
+    """Частные дома ResPlan → стороны с проёмами (config/data.toml,
+    `data: Стены с проёмами из ResPlan`)."""
+
+    paths: ResPlanPaths
+    house_layers: list[str]
+    snap_m: float
+    max_slant_m: float
+    dedup_raster_px: int
+    dedup_iou: float
+    dedup_area_tol: float
+    match_tol_m: float
+    preview_px: int
+
+
 class Data(Section):
     """Данные для обучения и теста (config/data.toml, спека data)."""
 
     paths: DataPaths
     buildingnet: BuildingNet
     manual: Manual
+    resplan: ResPlan
 
 
 Range = tuple[float, float]

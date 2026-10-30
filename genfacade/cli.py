@@ -1,5 +1,5 @@
-"""Командная строка: genfacade run <план.svg> --text …, serve, synth, buildingnet, manual, tokens,
-train, eval, metrics, calibrate, baseline, guidelines, realtest."""
+"""Командная строка: genfacade run <план.svg> --text …, serve, synth, buildingnet, manual, resplan,
+tokens, train, eval, metrics, calibrate, baseline, guidelines, realtest."""
 
 import argparse
 import sys
@@ -40,6 +40,13 @@ def markup(args: argparse.Namespace) -> Path:
     from genfacade.datasets import manual
 
     return manual.run(config.load(args.config))
+
+
+def resplan(args: argparse.Namespace) -> Path:
+    """Частные дома ResPlan → планы со сторонами и проёмами в метрах и опись (gf#215)."""
+    from genfacade.datasets.resplan import build
+
+    return build.run(config.load(args.config), args.preview, args.preview_count)
 
 
 def tokens(args: argparse.Namespace) -> Path:
@@ -147,6 +154,10 @@ def _parser() -> argparse.ArgumentParser:
     n.add_argument("--splits", nargs="+", type=Split, default=[Split.TEST],
                    help="части официального разбиения: train val test (по умолчанию test)")
     sub.add_parser("manual", help="ручная разметка реальных коттеджей → примеры теста и опись")
+    p = sub.add_parser("resplan", help="частные дома ResPlan → стороны с проёмами и опись")
+    p.add_argument("--preview", type=Path,
+                   help="папка картинок «исходник | шаг 2» и планов для смотрелки")
+    p.add_argument("--preview-count", type=int, default=20, help="сколько домов в --preview")
     t = sub.add_parser("tokens", help="дома источника → корпус для обучения: номера токенов")
     _source(t)
     f = sub.add_parser("train", help="корпус токенов → модель шага 4, кривая потерь, ответы")
@@ -188,6 +199,7 @@ COMMANDS = {
     "synth": (synth, {batch.BuildError: "сборка остановлена"}),
     "buildingnet": (buildingnet, {}),
     "manual": (markup, {}),
+    "resplan": (resplan, {}),
     "tokens": (tokens, {corpus.CorpusError: "корпус не собран"}),
     "train": (train, {corpus.CorpusError: "обучение не начато"}),
     "eval": (eval_model, {corpus.CorpusError: "оценка не начата",
