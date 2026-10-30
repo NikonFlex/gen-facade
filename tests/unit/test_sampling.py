@@ -96,12 +96,28 @@ def test_guard_makes_untrained_answer_readable(checkpoint, cfg, lay_out, constra
         assert len(sheet.facades) == len(bare.facades)
 
 
-def test_redo_changes_only_its_wall(checkpoint, cfg, lay_out):
-    """Перегенерация одной стены (gf#213): слова до её `<wall>` и после неё — прежние, остальные
-    стены дома не меняются, а она — сэмплирована заново."""
+@pytest.fixture
+def asked(checkpoint, cfg, lay_out):
+    """Крошечная модель, простой дом после развёртки и условие на него."""
     model = layout.load(_settings(cfg, checkpoint))
     bare = tokens.bare(lay_out())
-    prompt = model.prompt(bare, Mode.WITH_OPENINGS, cfg)
+    return model, bare, model.prompt(bare, Mode.WITH_OPENINGS, cfg)
+
+
+def test_answers_in_one_batch_each_with_own_guard(asked, cfg):
+    """Пачка ответов для «лучшего из N» (gf#213): у каждого свой страж — каждый разбирается;
+    ответы разные; пачка из одного — тот же ответ, что `answer`."""
+    model, bare, prompt = asked
+    many = model.answers(prompt, bare, 0, cfg, 3)
+    assert all(len(a.sheet.facades) == len(bare.facades) for a in many)
+    assert len({tuple(a.words) for a in many}) == 3
+    assert model.answers(prompt, bare, 5, cfg, 1)[0] == model.answer(prompt, bare, 5, cfg)
+
+
+def test_redo_changes_only_its_wall(asked, cfg):
+    """Перегенерация одной стены (gf#213): слова до её `<wall>` и после неё — прежние, остальные
+    стены дома не меняются, а она — сэмплирована заново."""
+    model, bare, prompt = asked
     old = model.answer(prompt, bare, 0, cfg)
     for wall in range(len(bare.facades)):
         new = model.redo(prompt, bare, old, wall, 1, cfg)

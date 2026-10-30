@@ -54,11 +54,27 @@ class Layout:
         """Стены после развёртки → стены с элементами и зонами; ответ не разобран — TokenError.
         С `constrain` рамка элемента не ломается (gf#177), а в глухом режиме окна не заходят в
         запретные зоны и на проёмы (gf#132)."""
-        guard = self._guard(bare, prompt.mode, cfg)
+        got = self.answers(prompt, bare, seed, cfg, 1)[0]
+        if isinstance(got, TokenError):
+            raise got
+        return got
+
+    def answers(self, prompt: Condition, bare: FacadeSheet, seed: int, cfg: Config,
+                n: int) -> list[Answer | TokenError]:
+        """n ответов одной пачкой, у каждого свой страж; неразобранный — TokenError на его месте.
+        Пачка — ради «лучшего из N» (gf#213): на процессоре best_of = 16 — в среднем 36 с на дом
+        при 8 с на один ответ, а не 16 × 8 (`docs/metrics-results.md`, раздел gf#213)."""
+        guards = [self._guard(bare, prompt.mode, cfg) for _ in range(n)]
         torch.manual_seed(seed)
-        ids = sampling.answer_all(self.sampler, [sampling.Prompt(prompt.ids, guard)],
-                                  cfg.models.layout, batch=1)[0]
-        return self._decoded(ids, bare, cfg)
+        ids = sampling.answer_all(self.sampler, [sampling.Prompt(prompt.ids, g) for g in guards],
+                                  cfg.models.layout, batch=n)
+        return [self._tried(i, bare, cfg) for i in ids]
+
+    def _tried(self, ids: list[int], bare: FacadeSheet, cfg: Config) -> Answer | TokenError:
+        try:
+            return self._decoded(ids, bare, cfg)
+        except TokenError as e:
+            return e
 
     def redo(self, prompt: Condition, bare: FacadeSheet, old: Answer, wall: int,
              seed: int, cfg: Config) -> Answer:

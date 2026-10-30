@@ -108,6 +108,8 @@ def test_answer_follows_grammar(guard, keep):
     points = keep(guard(*zone, "mat:accent", 2, 0, 10, 8, 10))
     assert not {str(n) for n in range(200)} & points and WINDOW not in points  # 2 точки, зоны
     assert guard(*window, Mark.END).banned() == []                        # ответ кончился
+    # в пачке соседние ответы ещё пишутся: токены после `<end>` страж не читает (gf#213)
+    assert guard(*window, Mark.END, Mark.WALL, WINDOW, 1).banned() == []
 
 
 def test_wall_count_decides_end(cfg, vocab, keep):

@@ -247,6 +247,8 @@ class WallGeometry:
         self.tops: dict[int, list[int]] = {}         # верх окон стены по этажам
 
     def step(self, token: int) -> None:
+        if self.grammar.done:  # в пачке ответ кончился, а соседние ещё пишутся — дальше мусор
+            return
         v = self.vocab
         in_box = self._in_box()
         in_points = (self.grammar.zones and self.grammar.need[:1] == [Need.NUMBER]

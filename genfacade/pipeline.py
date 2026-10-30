@@ -165,25 +165,44 @@ def layout(bare: FacadeSheet, req: PlanRun, cfg: Config) -> Checked:
 
 
 def _good(model, prompt, bare: FacadeSheet, cfg: Config, trace: dict) -> Iterator[Checked]:
-    """Годные ответы модели по очереди; на один годный — до attempts попыток. Попытка k — seed
-    + k; бракованная стена, если её можно назвать, досэмплируется (`wall_retry`)."""
-    settings, last, wall = cfg.models.layout, None, None
-    for seed in range(settings.seed, settings.seed + settings.attempts * settings.best_of):
-        attempt = {"seed": seed} | ({"wall": wall} if last else {})
-        trace["attempts"].append(attempt)
-        try:
-            got = model.redo(prompt, bare, last, wall, seed, cfg) if last else model.answer(
-                prompt, bare, seed, cfg)
-        except TokenError as e:
-            attempt["error"], last = f"ответ не разобран: {e}", None
-            continue
-        result = _check(got.sheet, cfg, trace)
-        bad = errors(result.violations)
-        attempt["error"] = _rejected(bad) if bad else None
-        wall = _bad_wall(bad, got.sheet) if bad and settings.wall_retry else None
-        last = got if wall is not None else None
-        if not bad:
-            yield result
+    """Годные ответы модели по очереди, до attempts раундов. Раунд k — seed + k: бракованные
+    стены прошлого раунда досэмплируются (`wall_retry`), недостающие до best_of ответы — одной
+    пачкой (`Layout.answers`). При best_of = 1 раунд — одна попытка, как до gf#213."""
+    settings, redo, found = cfg.models.layout, [], 0
+    for seed in range(settings.seed, settings.seed + settings.attempts):
+        got = [(_redone(model, prompt, bare, old, wall, seed, cfg), wall) for old, wall in redo]
+        need = settings.best_of - found - len(redo)
+        fresh = model.answers(prompt, bare, seed, cfg, need) if need > 0 else []
+        redo = []
+        for answer, wall in got + [(a, None) for a in fresh]:
+            result, bad = _attempt(answer, {"seed": seed, "wall": wall}, cfg, trace)
+            if result is not None and not bad:
+                found += 1
+                yield result
+            elif bad and settings.wall_retry and (at := _bad_wall(bad, answer.sheet)) is not None:
+                redo.append((answer, at))
+
+
+def _redone(model, prompt, bare: FacadeSheet, old, wall: int, seed: int, cfg: Config):
+    try:
+        return model.redo(prompt, bare, old, wall, seed, cfg)
+    except TokenError as e:
+        return e
+
+
+def _attempt(answer, attempt: dict, cfg: Config,
+             trace: dict) -> tuple[Checked | None, list[Violation]]:
+    """Попытка в трассу: ответ не разобран (TokenError) или ошибки валидатора — причина."""
+    if attempt["wall"] is None:
+        del attempt["wall"]
+    trace["attempts"].append(attempt)
+    if isinstance(answer, TokenError):
+        attempt["error"] = f"ответ не разобран: {answer}"
+        return None, []
+    result = _check(answer.sheet, cfg, trace)
+    bad = errors(result.violations)
+    attempt["error"] = _rejected(bad) if bad else None
+    return result, bad
 
 
 def _bad_wall(bad: list[Violation], sheet: FacadeSheet) -> int | None:

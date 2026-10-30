@@ -39,17 +39,27 @@ class Fake:
     досэмплирование стены — тоже следующий из очереди, с пометкой, какая стена."""
 
     def __init__(self, *answers):
-        self.answers, self.seeds, self.walls = list(answers), [], []
+        self.queue, self.seeds, self.walls = list(answers), [], []
 
     def prompt(self, bare, mode, cfg):
         return mode
 
     def answer(self, prompt, bare, seed, cfg):
         self.seeds.append(seed)
-        answer = self.answers.pop(0)
+        answer = self.queue.pop(0)
         if isinstance(answer, Exception):
             raise answer
         return Answer([], answer(bare))
+
+    def answers(self, prompt, bare, seed, cfg, n):
+        """Пачка из n — следующие n ответов очереди; неразобранный — исключение на его месте."""
+        return [self._next(bare, seed) for _ in range(n)]
+
+    def _next(self, bare, seed):
+        try:
+            return self.answer(None, bare, seed, None)
+        except TokenError as e:
+            return e
 
     def redo(self, prompt, bare, old, wall, seed, cfg):
         self.walls.append(wall)
@@ -123,13 +133,15 @@ def _short_windows(bare):
 
 
 def test_best_of_n_takes_the_likeliest_answer(run, cfg, monkeypatch):
-    """Лучший из N (gf#213): из best_of годных ответов — с наибольшей density стен против
-    эталона, а не первый годный."""
+    """Лучший из N (gf#213): best_of ответов одной пачкой (один seed), из годных — с наибольшей
+    density стен против эталона, а не первый годный."""
     reference = realism.walls([_good(tokens.bare(pipeline.walls(*_house(cfg))))] * 3)
     monkeypatch.setattr(pipeline, "_reference", lambda settings, without: reference)
-    meta, _ = run(Fake(_short_windows, _good), _tuned(cfg, best_of=2))
+    model = Fake(_short_windows, _good)
+    meta, _ = run(model, _tuned(cfg, best_of=2))
     density = meta["layout"]["density"]
     assert meta["layout"]["chosen"] == 1 and density[1] > density[0]
+    assert model.seeds == [cfg.models.layout.seed] * 2
 
 
 def _house(cfg):
