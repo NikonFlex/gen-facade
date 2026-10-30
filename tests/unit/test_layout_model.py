@@ -14,7 +14,7 @@ from genfacade.metrics import realism
 from genfacade.models import stub
 from genfacade.models.stub import ModelError
 from genfacade.plan.preprocess import preprocess
-from genfacade.schema import ElementClass, Mode, Source, Split
+from genfacade.schema import ElementClass, Mode
 from genfacade.train import tokens
 from genfacade.train.tokens import Answer, TokenError
 
@@ -153,9 +153,10 @@ def test_reference_leaves_out_the_house_itself(at, sample):
     """Эталон «лучшего из N» — дома [layout.reference] без дома с именем плана запроса: иначе
     стены реального дома на реальном тесте находят в эталоне сами себя."""
     cfg = at("data")
+    ref = cfg.models.layout.reference
     for name in ("a", "b"):
-        store.write(sample.model_copy(update={"id": name, "source": Source.MANUAL,
-                                              "split": Split.TEST}), cfg.data.paths.samples_dir)
+        store.write(sample.model_copy(update={"id": name, "source": ref.source,
+                                              "split": ref.split}), cfg.data.paths.samples_dir)
     walls = len(sample.sheet.facades)
     assert len(pipeline._reference(cfg, "a")) == walls
     assert len(pipeline._reference(cfg, "other")) == 2 * walls

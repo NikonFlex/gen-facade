@@ -292,15 +292,16 @@ class SpecRules(Section):
 
 
 class Windows(Section):
-    size: dict[str, Range]
-    weights: dict[str, float]
-    sash_max_w_m: float
-    transom_min_h_m: float
+    head_m: Range
     lintel_m: float
+    heights_m: list[float]
+    sill_m: Range
     narrow_max_w_m: float
-    narrow_low: float
+    narrow_heights_m: list[float]
     wide_min_w_m: float
     wide_floor_p: float
+    sash_max_w_m: float
+    transom_min_h_m: float
 
 
 class Height(Section):
@@ -322,6 +323,11 @@ class Sill(Section):
 class Casing(Section):
     styles: list[str]
     width_m: float
+
+
+class Shutter(Section):
+    p: float
+    share: float
 
 
 class Finish(Section):
@@ -346,6 +352,7 @@ class FacadeRules(Section):
     door: Door
     sill: Sill
     casing: Casing
+    shutter: Shutter
     cornice: Height
     finish: Finish
     entry: Entry
@@ -365,6 +372,7 @@ class Sizes(Section):
     plinth_m: Range
     window_width_m: Range
     window_step_m: float
+    window_widths_m: list[float] | None = None  # ряд ширин окна; нет — сетка от и до с шагом
     # отступ проёма от угла и простенок; нет — как в [openings]
     corner_clear_m: float | None = None
     between_m: float | None = None

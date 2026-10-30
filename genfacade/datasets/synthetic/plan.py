@@ -34,7 +34,7 @@ def draft(seed: int, cfg: Synthetic) -> PlanDraft:
     depth = min(width, on_grid(rng, size.depth_m, cfg.house.grid_m))
     cuts = _cuts(rng, width, cfg)
     walls = _walls(width, depth, cuts, cfg)
-    widths = sizes.grid(size.window_width_m, size.window_step_m)
+    widths = sizes.window_widths(size)
     while True:  # дом совсем без окон не нужен — тянем раскладку ещё раз тем же генератором
         runs = _with_openings(rng, walls, widths, cfg.openings)
         if any(o.hole is Hole.WINDOW for r in runs for o in r.openings):
