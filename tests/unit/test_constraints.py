@@ -75,7 +75,8 @@ def test_box_takes_only_numbers_inside_the_wall(guard, vocab, cfg):
     (gf#197); карниз стены неизвестен — по высоте предела нет."""
     numbers = set(vocab.token)
     assert _allowed(guard(Mark.WALL, WINDOW, 52), vocab) == numbers       # y — любое число
-    assert _allowed(guard(Mark.WALL, DOOR), vocab) == set(range(160))     # x — на стене
+    cornice = tokens.tok(ElementClass.CORNICE)
+    assert _allowed(guard(Mark.WALL, cornice), vocab) == set(range(160))  # x — на стене
     assert _allowed(guard(Mark.WALL, DOOR, 30, 10), vocab) == set(range(1, 131))  # до конца
     assert _allowed(guard(Mark.WALL, WINDOW, 52, 10, 20), vocab) == numbers - {0}  # высота > 0
     ids = {w: i for i, w in enumerate(tokens.vocabulary(cfg))}
@@ -167,6 +168,17 @@ def test_own_window_does_not_cover_a_plan_opening(cfg, vocab):
               Mark.WALL, WINDOW, 33, 10, 15, 30, Mark.FLOOR, 1, "fix:x_m", "fix:w_m", WINDOW)
     assert not set(range(22, 48)) & _allowed(g, vocab)                    # не налезть на 33–48
     assert {0, 48, 148} <= _allowed(g, vocab)
+
+
+def test_own_door_does_not_cover_a_plan_door(cfg, vocab):
+    """Своя дверь модели — тоже на свободное место: на реальном тесте модель ставила вторую дверь
+    поверх двери плана, и валидатор браковал «проёмы пересекаются» (gf#213)."""
+    plan = constraints.Planned(ElementClass.DOOR, 28, 18)
+    wall = constraints.Wall(160, [], [(28, 46)], plan=(plan,), given=[(28, 46)])
+    g = _read(constraints.WallGeometry([wall], vocab, NORMS), cfg,
+              Mark.WALL, DOOR, 28, 0, 18, 42, Mark.FLOOR, 1, "fix:x_m", "fix:w_m", DOOR)
+    assert not set(range(28 - NARROWEST + 1, 46)) & _allowed(g, vocab)
+    assert {0, 46, 148} <= _allowed(g, vocab)
 
 
 def test_materials_only_from_the_house_palette(cfg, vocab, keep):

@@ -13,6 +13,7 @@
 
 Место окну модели страж выбирает в обоих режимах: в «окна из плана» проёмы плана первого этажа —
 занятые отрезки, своё окно модель туда не ставит (налезало на широкое окно плана GenPlan, gf#197).
+Так же — своей двери: модель ставила вторую дверь поверх двери плана (реальный тест, gf#213).
 
 В обоих режимах (gf#197): рамка любого элемента — в пределах стены и не выше карниза; проём плана
 (в «окна из плана» — окна и двери, в глухом — вход) модель пишет числами условия: очередной
@@ -326,10 +327,14 @@ class WallGeometry:
         if (plan := self._plan(wall, place)) is not None:
             allowed &= plan
         planned = self.current is not None or (place == X and self._head() is not None)
-        if self.cls is not ElementClass.WINDOW:
+        if self.cls not in OPENINGS:
             return allowed
         if not planned and (geometry := self._allowed()):
-            allowed &= set(geometry)  # окно модели — на свободное место: проём плана уже занят
+            # свой проём модели — на свободное место: проём плана уже занят; дверь — тоже: модель
+            # ставила вторую дверь поверх двери плана (реальный тест, gf#213)
+            allowed &= set(geometry)
+        if self.cls not in OPENINGS:
+            return allowed
         for rule in self._size_rules(place, planned):
             allowed = (allowed & rule) or allowed  # норму не выполнить — как без неё
         return allowed
@@ -431,7 +436,7 @@ class WallGeometry:
     def _place(self, strict: bool) -> list[int]:
         numbers, place = list(self.vocab.token), len(self.box)
         wall = self.walls[self.at]
-        corner = self.norms.corner if strict else 0
+        corner = self.norms.corner if strict and self.cls is ElementClass.WINDOW else 0
         if place == X:
             # Окну нужно место: x, за которым до края или занятого отрезка уже самого узкого окна,
             # загоняет модель в ширину, какой она не видела, — и ответ ломается (gf#153: x 98 на
