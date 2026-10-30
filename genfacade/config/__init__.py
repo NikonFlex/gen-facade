@@ -11,7 +11,7 @@ import tomllib
 from importlib.resources import files
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from genfacade.datasets.buildingnet.mesh import Label
 from genfacade.schema import (
@@ -470,13 +470,23 @@ class Train(Section):
     paths: TrainPaths
 
 
+class RealismReference(Section):
+    """С какими домами сравнивается правдоподобие ответа в «лучшем из N» (gf#213)."""
+
+    source: Source
+    split: Split
+
+
 class LayoutModel(Sampling):
     checkpoint: Path
     attempts: int
+    best_of: int = Field(ge=1)
+    wall_retry: bool
     seed: int
     device: Device
     bf16: bool
     constrain: bool
+    reference: RealismReference
 
 
 class SpecStub(Section):

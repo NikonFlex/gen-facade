@@ -21,6 +21,7 @@
 
 import math
 from enum import StrEnum
+from typing import NamedTuple
 
 from genfacade.config import Config, Tokens
 from genfacade.schema import (
@@ -60,6 +61,14 @@ class Mark(StrEnum):
 
 class TokenError(ValueError):
     """Дом не записывается токенами или последовательность не разбирается; текст — причина."""
+
+
+class Answer(NamedTuple):
+    """Ответ модели шага 4: слова от `<answer>` до `<end>` и разобранный по ним дом. Слова нужны,
+    чтобы досэмплировать одну стену, сохранив остальные (gf#213)."""
+
+    words: list[str]
+    sheet: FacadeSheet
 
 
 # Значения разных enum пересекаются («window» — и класс, и вид проёма плана), поэтому токен
