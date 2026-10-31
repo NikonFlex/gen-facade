@@ -104,6 +104,10 @@ def door_size(p: Params, sheet: FacadeSheet, plan: Plan | None) -> list[bool]:
             for f in sheet.facades for e in _of(f, ElementClass.DOOR)]
 
 
+def door_height(p: Params, sheet: FacadeSheet, plan: Plan | None) -> list[bool]:
+    return [_within(e.h_m, p) for f in sheet.facades for e in _of(f, ElementClass.DOOR)]
+
+
 def window_types(p: Params, sheet: FacadeSheet, plan: Plan | None) -> list[bool]:
     """Размеров окон на фасаде и на доме не больше заданного; размеры ближе tol — один."""
     def count(ws: list[Element]) -> int:
@@ -330,6 +334,7 @@ CHECKS: dict[GuidelineCheck, Check] = {
     GuidelineCheck.FLOOR_OPENING_WIDTH: floor_opening_width,
     GuidelineCheck.WINDOW_TYPES: window_types,
     GuidelineCheck.DOOR_SIZE: door_size,
+    GuidelineCheck.DOOR_HEIGHT: door_height,
     GuidelineCheck.DOOR_HEAD_LINE: door_head_line,
     GuidelineCheck.SILL_UNDER_WINDOW: sill_under_window,
     GuidelineCheck.CANOPY_OVER_ENTRANCE: canopy_over_entrance,
@@ -358,6 +363,7 @@ PARAMS: dict[GuidelineCheck, tuple[set[str], set[str]]] = {
     GuidelineCheck.FLOOR_OPENING_WIDTH: (set(), {"min", "max"}),
     GuidelineCheck.WINDOW_TYPES: ({"per_facade", "per_house", "tol_m"}, set()),
     GuidelineCheck.DOOR_SIZE: ({"min_w", "min_h"}, {"max_w", "max_h"}),
+    GuidelineCheck.DOOR_HEIGHT: ({"min"}, {"max"}),
     GuidelineCheck.DOOR_HEAD_LINE: ({"tol_m"}, set()),
     GuidelineCheck.SILL_UNDER_WINDOW: ({"skip_below_m", "tol_m"}, set()),
     GuidelineCheck.CANOPY_OVER_ENTRANCE: (set(), set()),

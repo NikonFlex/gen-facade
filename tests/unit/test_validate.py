@@ -9,10 +9,10 @@ import pytest
 from simple_house import WALL_INTO_WINDOW, before_leaf
 
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import ElementClass, Rule, Severity
+from genfacade.schema import Element, ElementClass, MaterialZone, Rule, Severity, ZoneRole
 from genfacade.snap import snap
 from genfacade.unfold import unfold
-from genfacade.validate import errors, validate, validate_svg
+from genfacade.validate import DEFECTS, defects, errors, validate, validate_svg
 
 
 @pytest.fixture
@@ -34,9 +34,21 @@ def _with_upper(sheet):
     upper = low.model_copy(update={"id": "upper", "floor": 2, "y_m": low.y_m + up, "fixed": []})
     upper_sill = sill.model_copy(update={"id": "s_upper", "parent": "upper", "floor": 2,
                                          "y_m": sill.y_m + up})
-    facades = list(sheet.facades)
+    facades = [_raised(g, sheet.spec.eaves_m) for g in sheet.facades]
+    f = facades[SIDE]
     facades[SIDE] = f.model_copy(update={"elements": [*f.elements, upper, upper_sill]})
     return sheet.model_copy(update={"facades": facades})
+
+
+def _raised(f, eaves: float):
+    """Стена после подъёма карниза: зоны отделки — до нового карниза, карниз — под ним; иначе
+    верх стены без отделки, а карниз — посреди второго этажа (gf#242)."""
+    old = max(y for z in f.zones for _, y in z.shape)
+    zones = [z.model_copy(update={"shape": [(x, eaves if y == old else y) for x, y in z.shape]})
+             for z in f.zones]
+    elements = [e.model_copy(update={"y_m": eaves - e.h_m}) if e.cls is ElementClass.CORNICE
+                else e for e in f.elements]
+    return f.model_copy(update={"zones": zones, "elements": elements})
 
 
 def _edit(sheet, side, element_id, **update):
@@ -69,9 +81,97 @@ def test_outside_silhouette(clean, cfg):
     assert Rule.OUTSIDE in _rules(_edit(clean, SIDE, w.id, x_m=-0.5), cfg)
 
 
+def test_door_outside_the_wall(house, cfg):
+    """Дверь за краем стены — брак (gf#242)."""
+    door, length = _door(house), house.facades[FRONT].side.length_m
+    assert Rule.OUTSIDE in _rules(_edit(house, FRONT, door.id, x_m=length - 0.4), cfg)
+
+
 def test_openings_overlap(clean, cfg):
     a, b = _window(clean, floor=1), _window(clean, floor=2)
     assert Rule.OVERLAP in _rules(_edit(clean, SIDE, b.id, y_m=a.y_m + 0.1), cfg)
+
+
+FRONT = 0  # сторона входа простого дома: дверь, окно, полоса акцента у двери
+
+
+def _door(sheet):
+    return next(e for e in sheet.facades[FRONT].elements if e.cls is ElementClass.DOOR)
+
+
+def _added(sheet, side, *elements):
+    f = sheet.facades[side]
+    facades = list(sheet.facades)
+    facades[side] = f.model_copy(update={"elements": [*f.elements, *elements]})
+    return sheet.model_copy(update={"facades": facades})
+
+
+def _zones(sheet, side, *zones):
+    facades = list(sheet.facades)
+    facades[side] = sheet.facades[side].model_copy(update={"zones": list(zones)})
+    return sheet.model_copy(update={"facades": facades})
+
+
+def _rect(role, x0, y0, x1, y1):
+    return MaterialZone(role=role, material="main", shape=[(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
+
+
+def test_door_lower_than_the_norm(house, cfg):
+    """Дверь ниже нормы свода `door_min_height` — брак (gf#242: у модели — 0,05 м); самая
+    низкая дверь реального теста — 1,89 м — нет."""
+    door = _door(house)
+    assert Rule.DOOR_LOW in _rules(_edit(house, FRONT, door.id, h_m=0.1), cfg)
+    assert Rule.DOOR_LOW not in _rules(_edit(house, FRONT, door.id, h_m=1.89), cfg)
+
+
+def test_cornice_on_an_opening(house, cfg):
+    """Карниз заходит на проём — брак (gf#242: карниз на двери и окнах, 22 дома из 27)."""
+    cornice = next(e for e in house.facades[FRONT].elements if e.cls is ElementClass.CORNICE)
+    door = _door(house)
+    low = _edit(house, FRONT, cornice.id, y_m=door.y_m + door.h_m - 0.3)
+    assert Rule.CORNICE in _rules(low, cfg)
+    assert Rule.CORNICE not in _rules(house, cfg)
+
+
+def test_trims_of_different_openings_overlap(clean, cfg):
+    """Выводимый элемент одного проёма на другом проёме — налезание (gf#242: ставни окна на
+    соседнем, козырёк двери на окне); свой подоконник под окном — нет."""
+    w = _window(clean)
+    blind = Element(id="b_w", cls=ElementClass.BLIND, x_m=w.x_m + w.w_m - 0.2, y_m=w.y_m,
+                    w_m=0.5, h_m=w.h_m, parent="upper")
+    found = validate(_added(clean, SIDE, blind), cfg.checks)
+    assert [v.rule for v in found] == [Rule.OVERLAP]
+
+
+def test_wall_without_finish(house, cfg):
+    """Отделка на полстены — белая стена, поверх облицовка (gf#242): основная зона короче стены
+    — брак, и часть стены без зоны — брак."""
+    length = house.facades[SIDE].side.length_m
+    half = _zones(house, SIDE, _rect(ZoneRole.MAIN, 0, 0, length / 2, house.spec.eaves_m))
+    found = [v for v in validate(half, cfg.checks) if v.rule is Rule.FINISH]
+    assert len(found) == 2  # зона короче стены и стена без отделки
+
+
+def test_accent_ends_on_a_support(house, cfg):
+    """Акцент доходит по ширине или по высоте до края стены, отметки, проёма или зоны во всю
+    длину: полоса у входа (стаб) — не брак; вставка посреди стены — брак."""
+    f, eaves = house.facades[FRONT], house.spec.eaves_m
+    base = [z for z in f.zones if z.role is not ZoneRole.ACCENT]
+    floating = _zones(house, FRONT, *base, _rect(ZoneRole.ACCENT, 2.9, 1.6, 3.6, 2.4))
+    corner = _zones(house, FRONT, *base, _rect(ZoneRole.ACCENT, 0, 0.5, 0.6, eaves))
+    assert Rule.FINISH in _rules(floating, cfg)
+    assert Rule.FINISH not in _rules(corner, cfg)
+    assert Rule.FINISH not in _rules(house, cfg)
+
+
+def test_defects_by_kind(house, cfg):
+    """Брак листа по видам (gf#242) — одна функция для датчика и метрики: у каждого вида —
+    его нарушения."""
+    door = _door(house)
+    found = defects(_edit(house, FRONT, door.id, h_m=0.1), cfg.checks)
+    assert set(found) == set(DEFECTS)
+    assert [v.element for v in found[Rule.DOOR_LOW]] == [door.id]
+    assert not any(found[r] for r in DEFECTS if r is not Rule.DOOR_LOW)
 
 
 def test_plan_window_in_forbidden_zone_is_a_warning(lay_out, simple_svg, cfg):
