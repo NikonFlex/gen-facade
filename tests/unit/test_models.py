@@ -27,6 +27,19 @@ def test_spec_stub_reads_only_floors(cfg, text, floors):
                                    ("floors", "floor_heights_m", "eaves_m")}) == base
 
 
+def test_spec_stub_style_and_trim_from_text(cfg):
+    """`generation: Вид выводимых элементов в стабе — по стилю`: стиль — по слову в тексте, нет
+    слова — стиль заготовки; виды подоконника, наличника, ставен, козырька — по стилю."""
+    rules = cfg.models.spec
+    one, two = (stub.spec_model(t, rules)
+                for t in ("A classic house", "A classic two-storey house"))
+    assert one.style == two.style == "classic"
+    assert one.trim == two.trim == rules.trim["classic"]
+    base = stub.spec_model("", rules)
+    assert base.trim == rules.trim[base.style] != rules.trim["classic"]
+    assert set(rules.trim) == set(rules.style_words) == set(cfg.synthetic.spec.styles)
+
+
 def _unfixed(elements):
     return [e.model_copy(update={"fixed": []}) for e in elements]
 

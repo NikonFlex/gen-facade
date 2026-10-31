@@ -13,18 +13,21 @@ from xml.etree import ElementTree
 
 import shapely
 
-from genfacade.config import Axes, Config, DoorLook, Levels, Sheet, SheetLayout
+from genfacade.config import Axes, Config, DoorLook, Levels, Sheet, SheetLayout, TrimLook
 from genfacade.render import sheet_format
 from genfacade.render.sheet_format import num
 from genfacade.schema import (
     EPS,
+    CanopyKind,
     Element,
     ElementClass,
     FacadeSheet,
     HouseSpec,
+    HouseTrim,
     MaterialZone,
     Point,
     Polygon,
+    ShutterKind,
     SideFacade,
     VariantKind,
     Violation,
@@ -33,10 +36,15 @@ from genfacade.unfold import plan_corners
 
 
 class Pen(NamedTuple):
-    """Чем красить: настройки и цвета материалов этого дома."""
+    """Чем красить: настройки, цвета материалов и виды выводимых элементов этого дома."""
 
     cfg: Config
     colors: dict[str, str]  # id материала палитры → цвет
+    trim: HouseTrim = HouseTrim()
+
+
+def pen_for(sheet: FacadeSheet, cfg: Config) -> Pen:
+    return Pen(cfg, palette_colors(sheet.spec, cfg), sheet.spec.trim)
 
 
 class Marks(NamedTuple):
@@ -88,7 +96,7 @@ def sheet_svg(sheet: FacadeSheet, cfg: Config, violations: list[Violation] | Non
     root = canvas(width, height, cfg.css)
     root.set("width", f"{width * mm_per_m:.0f}mm")
     root.set("height", f"{height * mm_per_m:.0f}mm")
-    pen = Pen(cfg, palette_colors(sheet.spec, cfg))
+    pen = pen_for(sheet, cfg)
     axes = _axis_labels(sheet, cfg.sheet.axes.letters)
     marks_at = levels(sheet.spec, cfg.sheet.levels)
     for facade, origin in zip(sheet.facades, cells, strict=True):
@@ -201,6 +209,10 @@ def _element(g: ElementTree.Element, e: Element, pen: Pen, zones: list[MaterialZ
         attrs["fill"] = lib.fill.glass  # материал окна красит раму
         if e.material:
             attrs["stroke"] = pen.colors[e.material]
+    framed = e.cls is ElementClass.CANOPY and pen.trim.canopy in (CanopyKind.GABLE,
+                                                                   CanopyKind.BRACKET)
+    if framed:  # рисунок вида — не прямоугольник: прямоугольник остаётся только для разбора
+        attrs["class"] = "trim-frame"
     ElementTree.SubElement(g, "rect", attrs)
     if e.cls is ElementClass.WINDOW and e.variant is not None:
         _mullions(g, e, (e.x_m, e.y_m, e.w_m, e.h_m))
@@ -208,6 +220,10 @@ def _element(g: ElementTree.Element, e: Element, pen: Pen, zones: list[MaterialZ
         glass = _door_glass(e, pen.cfg.sheet.door)
         _box(g, "door-glass", glass).set("fill", lib.fill.glass)
         _mullions(g, e, glass)
+    elif e.cls is ElementClass.BLIND:
+        _shutter(g, e, pen.trim.shutters, pen.cfg.sheet.trim)
+    elif framed:
+        _canopy(g, e, pen.trim.canopy, pen.cfg.sheet.trim).set("fill", attrs["fill"])
 
 
 def _material(e: Element, zones: list[MaterialZone]) -> dict[str, str]:
@@ -221,6 +237,40 @@ def _material(e: Element, zones: list[MaterialZone]) -> dict[str, str]:
     if not under:
         return {}
     return {sheet_format.MATERIAL: under[-1].material, sheet_format.ZONE_MATERIAL: "true"}
+
+
+def _shutter(g: ElementTree.Element, e: Element, kind: ShutterKind, look: TrimLook) -> None:
+    """Рисунок створки ставни по виду дома: планки жалюзи, доски или две филёнки."""
+    x0, y0, w, h = e.x_m, e.y_m, e.w_m, e.h_m
+    if kind is ShutterKind.LOUVERED:
+        for k in range(1, int(h / look.louver_step_m)):
+            add_line(g, "trim-line", (x0, y0 + k * look.louver_step_m),
+                     (x0 + w, y0 + k * look.louver_step_m))
+    elif kind is ShutterKind.BOARD:
+        for k in range(1, int(w / look.board_step_m)):
+            add_line(g, "trim-line", (x0 + k * look.board_step_m, y0),
+                     (x0 + k * look.board_step_m, y0 + h))
+    elif kind is ShutterKind.PANEL:
+        inset = w * look.panel_inset
+        half = (h - 3 * inset) / 2
+        for y in (y0 + inset, y0 + 2 * inset + half):
+            _box(g, "trim-line", (x0 + inset, y, w - 2 * inset, half)).set("fill", "none")
+
+
+def _canopy(g: ElementTree.Element, e: Element, kind: CanopyKind,
+            look: TrimLook) -> ElementTree.Element:
+    """Двускатный козырёк — треугольник; на кронштейнах — плита сверху и два кронштейна."""
+    x0, y0, w, h = e.x_m, e.y_m, e.w_m, e.h_m
+    if kind is CanopyKind.GABLE:
+        shape = [(x0, y0), (x0 + w, y0), (x0 + w / 2, y0 + h)]
+        return ElementTree.SubElement(g, "polygon", {"points": points(shape)})
+    slab = min(look.slab_m, h)
+    top = ElementTree.SubElement(g, "g")
+    _box(top, "", (x0, y0 + h - slab, w, slab))
+    for at, side in ((x0 + w * look.bracket_at, 1), (x0 + w * (1 - look.bracket_at), -1)):
+        shape = [(at, y0 + h - slab), (at, y0), (at + side * look.bracket_w_m, y0 + h - slab)]
+        ElementTree.SubElement(top, "polygon", {"points": points(shape)})
+    return top
 
 
 def _mullions(g: ElementTree.Element, e: Element, glass: tuple[float, ...]) -> None:

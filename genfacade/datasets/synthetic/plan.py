@@ -64,14 +64,23 @@ def _walls(width: float, depth: float, cuts: list[float], cfg: Synthetic) -> lis
     """Четыре наружные стены; у длинных участки разделены перегородками, у торцов — один."""
     t, clear = cfg.house.wall_m, cfg.openings.corner_clear_m
     stops = [(0.0, t), *((x, x + t) for x in cuts), (width - t, width)]
-    long_bays = tuple((a[1] + clear, b[0] - clear) for a, b in zip(stops, stops[1:], strict=False))
-    short_bays = ((t + clear, depth - t - clear),)
+    long_bays = off_corners([(a[1] + clear, b[0] - clear) for a, b in zip(stops, stops[1:],
+                                                                         strict=False)],
+                            width, cfg.openings.window_corner_m)
+    short_bays = off_corners([(t + clear, depth - t - clear)], depth, cfg.openings.window_corner_m)
     return [
         _Wall(Run(Axis.X, 0.0, 0.0, width), long_bays, True),
         _Wall(Run(Axis.X, depth - t, 0.0, width), long_bays, True),
         _Wall(Run(Axis.Y, 0.0, 0.0, depth), short_bays, False),
         _Wall(Run(Axis.Y, width - t, 0.0, depth), short_bays, False),
     ]
+
+
+def off_corners(bays: list[Span], length: float, corner: float) -> tuple[Span, ...]:
+    """Участки для окон — не ближе corner к углам стены (window_corner_distance, gf#212): иначе
+    эталон корпуса нарушал норму стража, и страж его обрывал."""
+    clamped = [(max(lo, corner), min(hi, length - corner)) for lo, hi in bays]
+    return tuple((lo, hi) for lo, hi in clamped if hi > lo)
 
 
 def _with_openings(rng: random.Random, walls: list[_Wall], choice: list[float],

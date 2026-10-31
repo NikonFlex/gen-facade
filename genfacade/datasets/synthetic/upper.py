@@ -8,7 +8,7 @@
 import random
 
 from genfacade.config import Checks, Config, Synthetic
-from genfacade.datasets.synthetic.plan import Span, bay_windows
+from genfacade.datasets.synthetic.plan import Span, bay_windows, off_corners
 from genfacade.schema import EPS, Opening, OpeningKind, Side
 
 
@@ -49,5 +49,6 @@ def _bays(side: Side, rules: Synthetic) -> list[Span]:
     t, clear = rules.house.wall_m, rules.openings.corner_clear_m
     stops = [(0.0, t), *((z.x0_m, z.x1_m) for z in side.forbidden),
              (side.length_m - t, side.length_m)]
-    return [(a[1] + clear, b[0] - clear) for a, b in zip(stops, stops[1:], strict=False)
+    bays = [(a[1] + clear, b[0] - clear) for a, b in zip(stops, stops[1:], strict=False)
             if b[0] - a[1] > 2 * clear]
+    return list(off_corners(bays, side.length_m, rules.openings.window_corner_m))

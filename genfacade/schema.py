@@ -154,6 +154,53 @@ class Rule(StrEnum):
     AXIS_ALIGN = "axis_align"
 
 
+class Trim(StrEnum):
+    """Выводимый элемент проёма (`facade: Состав фасада по уровням`, gf#212): модель ставит у
+    проёма только признак, прямоугольник считает код (derive.py) по виду дома и своду правил."""
+
+    SILL = "sill"          # подоконник под окном
+    CASING = "casing"      # наличник по бокам и сверху окна
+    SHUTTERS = "shutters"  # пара ставен по бокам окна
+    CANOPY = "canopy"      # козырёк над дверью
+
+
+class SillKind(StrEnum):
+    """Вид подоконника дома; none — у дома их нет."""
+
+    NONE = "none"
+    FLAT = "flat"      # тонкая полка
+    SLOPED = "sloped"  # плита с отливом: толще и с большим свесом
+
+
+class CasingKind(StrEnum):
+    """Вид наличника дома; none — у дома их нет."""
+
+    NONE = "none"
+    FLAT = "flat"  # узкая доска
+    WIDE = "wide"  # широкая доска
+
+
+class ShutterKind(StrEnum):
+    """Вид ставен дома; none — у дома их нет."""
+
+    NONE = "none"
+    PANEL = "panel"        # филёнчатые
+    LOUVERED = "louvered"  # жалюзийные
+    BOARD = "board"        # дощатые
+
+
+class CanopyKind(StrEnum):
+    """Вид козырька над входом; none — у дома их нет."""
+
+    NONE = "none"
+    FLAT = "flat"        # плоский
+    GABLE = "gable"      # двускатный
+    BRACKET = "bracket"  # на кронштейнах
+
+
+NO_TRIM = (SillKind.NONE, CasingKind.NONE, ShutterKind.NONE, CanopyKind.NONE)
+
+
 class GuidelineCheck(StrEnum):
     """Вид проверки правила фасада из свода (config/guidelines.toml, gf#209); что считает каждый —
     guidelines.py. none — правило по прямоугольникам фасада не проверяется."""
@@ -222,6 +269,23 @@ class Roof(Model):
     material: str | None = None  # покрытие из палитры
 
 
+class HouseTrim(Model):
+    """Виды выводимых элементов дома — одни на все стены (`facade: Общие параметры дома`):
+    у проёма модель решает только, есть ли элемент (Trim), а вид — дома."""
+
+    sill: SillKind = SillKind.NONE
+    casing: CasingKind = CasingKind.NONE
+    shutters: ShutterKind = ShutterKind.NONE
+    canopy: CanopyKind = CanopyKind.NONE
+
+    def kind(self, trim: Trim) -> StrEnum:
+        return getattr(self, trim)
+
+    def has(self, trim: Trim) -> bool:
+        """У дома такие элементы бывают: вид не none."""
+        return self.kind(trim) not in NO_TRIM
+
+
 class HouseSpec(Model):
     """Параметры, общие для всех сторон дома (`facade: Общие параметры дома`)."""
 
@@ -232,6 +296,7 @@ class HouseSpec(Model):
     eaves_m: float = Field(gt=0)
     roof: Roof
     style: str = ""
+    trim: HouseTrim = HouseTrim()
     materials: list[Material]
 
     @model_validator(mode="after")

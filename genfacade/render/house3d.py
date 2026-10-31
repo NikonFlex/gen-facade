@@ -7,7 +7,7 @@
 """
 
 from genfacade.config import Config
-from genfacade.render.svg import Pen, facade_svg, palette_colors
+from genfacade.render.svg import facade_svg, pen_for
 from genfacade.schema import FacadeSheet
 from genfacade.unfold import plan_corners
 
@@ -16,7 +16,7 @@ def house_3d(sheet: FacadeSheet, cfg: Config) -> dict:
     """Углы контура, высота карниза и стены: края в плане, нормаль наружу, SVG фасада.
     Контур не ортогональный или не замкнут — PlanError из plan_corners."""
     corners = plan_corners([f.side for f in sheet.facades])
-    pen = Pen(cfg, palette_colors(sheet.spec, cfg))
+    pen = pen_for(sheet, cfg)
     walls = [{
         "side": f.side.index,
         "left": corners[(k + 1) % len(corners)],

@@ -15,13 +15,18 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from genfacade.datasets.buildingnet.mesh import Label
 from genfacade.schema import (
+    CanopyKind,
+    CasingKind,
     Device,
     ElementClass,
     GuidelineCheck,
     GuidelineUse,
+    HouseTrim,
     Mode,
     PaletteRole,
     Region,
+    ShutterKind,
+    SillKind,
     Source,
     Split,
     VariantKind,
@@ -116,12 +121,22 @@ class DoorLook(Section):
     transom_share: float
 
 
+class TrimLook(Section):
+    louver_step_m: float
+    board_step_m: float
+    panel_inset: float
+    slab_m: float
+    bracket_at: float
+    bracket_w_m: float
+
+
 class Sheet(Section):
     sheet: SheetLayout
     ground: Ground
     levels: Levels
     axes: Axes
     door: DoorLook
+    trim: TrimLook
     title: Title
     preview: Preview
     plan: PlanLook
@@ -243,6 +258,8 @@ class Manual(Section):
     length_tol_m: float
     wall_m: float
     inside_share: float
+    link_tol_m: float
+    trim: HouseTrim
 
 
 class Data(Section):
@@ -269,6 +286,9 @@ class HouseSize(Section):
 class OpeningRules(Section):
     grid_m: float
     corner_clear_m: float
+    # окно — не ближе к углу стены: правило свода window_corner_distance, когда оно в страже
+    # (gf#213); в файле настроек его нет — ставит datasets/synthetic/build.rules (gf#212)
+    window_corner_m: float = 0.0
     between_m: float
     widths_per_house: int
     per_bay_weights: list[float]
@@ -304,10 +324,6 @@ class Windows(Section):
     transom_min_h_m: float
 
 
-class Height(Section):
-    height_m: float
-
-
 class Door(Section):
     height_m: float
     transom_m: float
@@ -315,19 +331,18 @@ class Door(Section):
     glazed_panes: tuple[int, int]
 
 
-class Sill(Section):
-    overhang_m: float
+class Cornice(Section):
     height_m: float
+    min_m: float
 
 
-class Casing(Section):
-    styles: list[str]
-    width_m: float
+class TrimWeights(Section):
+    """Веса видов выводимых элементов дома (config/synthetic.toml, [facade.trim])."""
 
-
-class Shutter(Section):
-    p: float
-    share: float
+    sill: dict[SillKind, float]
+    casing: dict[CasingKind, float]
+    shutters: dict[ShutterKind, float]
+    canopy: dict[CanopyKind, float]
 
 
 class Finish(Section):
@@ -341,19 +356,13 @@ class Finish(Section):
 class Entry(Section):
     porch_p: float
     porch_pad_m: float
-    canopy_p: float
-    canopy_pad_m: float
-    canopy_gap_m: float
-    canopy_m: float
 
 
 class FacadeRules(Section):
     windows: Windows
     door: Door
-    sill: Sill
-    casing: Casing
-    shutter: Shutter
-    cornice: Height
+    trim: TrimWeights
+    cornice: Cornice
     finish: Finish
     entry: Entry
 
@@ -403,6 +412,40 @@ class Tokens(Section):
 
     grid_m: float
     max_m: float
+
+
+class SillLook(Section):
+    overhang_m: float
+    height_m: float
+
+
+class ShutterLook(Section):
+    share: float
+
+
+class CanopyLook(Section):
+    pad_m: float
+    gap_m: float
+    height_m: float
+
+
+class CanopyKinds(Section):
+    min_h_m: float
+    flat: CanopyLook
+    gable: CanopyLook
+    bracket: CanopyLook
+
+    def of(self, kind: CanopyKind) -> CanopyLook:
+        return getattr(self, kind)
+
+
+class Derive(Section):
+    """Выводимые элементы проёма (config/derive.toml, gf#212): размеры по виду дома."""
+
+    sill: dict[SillKind, SillLook]
+    casing: dict[CasingKind, float]
+    shutters: ShutterLook
+    canopy: CanopyKinds
 
 
 class GPTSize(Section):
@@ -491,6 +534,8 @@ class LayoutModel(Sampling):
 
 class SpecStub(Section):
     floors_words: dict[int, list[str]]  # этажей → слова в тексте
+    style_words: dict[str, list[str]]   # стиль → слова в тексте
+    trim: dict[str, HouseTrim]          # стиль → виды выводимых элементов дома
 
 
 class Models(Section):
@@ -588,6 +633,7 @@ class Config(Section):
     metrics: Metrics
     baselines: Baselines
     guidelines: Guidelines
+    derive: Derive
     css: str
 
 
@@ -610,6 +656,7 @@ def load(user_dir: Path | None = None) -> Config:
         metrics=Metrics(**_toml("metrics.toml", user_dir)),
         baselines=Baselines(**_toml("baselines.toml", user_dir)),
         guidelines=Guidelines(**_toml("guidelines.toml", user_dir)),
+        derive=Derive(**_toml("derive.toml", user_dir)),
         css=css,
     )
 

@@ -9,7 +9,8 @@ import pytest
 from genfacade import config
 from genfacade.datasets import manual, store
 from genfacade.datasets.manual import M_PER_FT, Markup
-from genfacade.schema import ElementClass, OpeningKind, Source, Split
+from genfacade.schema import ElementClass, Mode, OpeningKind, Source, Split, Trim
+from genfacade.train import tokens
 from genfacade.validate import errors, validate
 
 CFG = config.load()
@@ -74,6 +75,31 @@ def test_markup_becomes_sample_in_metres():
     assert right.elements[0].y_m + right.elements[0].h_m == pytest.approx(ft(PLINTH_FT + EAVE_FT))
     assert front.side.has_entrance and front.side.openings[0].kind is OpeningKind.ENTRANCE
     assert errors(validate(sample.sheet, CFG.checks)) == []
+
+
+def test_trims_link_to_their_opening():
+    """Выводимый элемент без родителя в разметке (gf#212) — к проёму по месту: подоконник к окну
+    над ним, ставня к окну сбоку, козырёк к двери под ним; вид у дома — по умолчанию у тех, что
+    есть, у остальных — нет. В токенах они — признаки проёма."""
+    sides = [side("FRONT", 12, {"cls": "door", "box": box(5, 0, 2, 6.75)},
+                  {"cls": "canopy", "box": box(4.5, 7.0, 3, 0.5)}),
+             side("LEFT", 20, {"cls": "window", "box": box(9, 3, 2, 4.5)},
+                  {"cls": "blind", "box": box(8, 3, 1, 4.5)},
+                  {"cls": "sill", "box": box(8.8, 2.8, 2.4, 0.2)},
+                  {"cls": "sill", "box": box(15, 1, 2, 0.2)}),   # не под окном — без родителя
+             side("REAR", 12), side("RIGHT", 20)]
+    sample, _ = manual.house(markup(sides=sides), CFG.data.manual)
+    front, left, *_ = sample.sheet.facades
+    door, canopy = front.elements
+    window, blind, sill, stray = left.elements
+    assert (canopy.parent, blind.parent, sill.parent, stray.parent) == (
+        door.id, window.id, window.id, None)
+    trim = sample.sheet.spec.trim
+    assert (trim.sill, trim.shutters, trim.canopy) == (
+        CFG.data.manual.trim.sill, CFG.data.manual.trim.shutters, CFG.data.manual.trim.canopy)
+    assert not trim.has(Trim.CASING)
+    answer = tokens.answer(sample.sheet, Mode.WITH_OPENINGS, CFG)
+    assert {tokens.tok(t) for t in (Trim.SILL, Trim.SHUTTERS, Trim.CANOPY)} <= set(answer)
 
 
 def test_contour_must_close():
