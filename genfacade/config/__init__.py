@@ -158,12 +158,18 @@ class PlanConfig(Section):
     outline: Outline
 
 
+GuidelineParams = dict[str, ElementClass | float | list[float]]
+
+
 class Checks(Section):
-    """Шаг 5: допуски привязки и валидатора (config/checks.toml)."""
+    """Шаг 5: допуски привязки и валидатора (config/checks.toml); norms — параметры правил свода
+    с `use = ["validate"]` по виду проверки (gf#242): их не пишут в checks.toml, их кладёт `load`
+    из guidelines.toml — число нормы в одном месте."""
 
     eps_m: float
     align_m: float
     snap_m: float
+    norms: dict[GuidelineCheck, GuidelineParams] = {}
 
 
 class Server(Section):
@@ -615,7 +621,7 @@ class Guideline(Section):
     id: str
     text: str
     check: GuidelineCheck
-    params: dict[str, ElementClass | float | list[float]] = {}
+    params: GuidelineParams = {}
     applies: list[Region]
     use: list[GuidelineUse] = []
     note: str = ""
@@ -653,12 +659,14 @@ def load(*user_dirs: Path) -> Config:
     for folder in user_dirs:
         if (folder / "sheet.css").exists():
             css += "\n" + (folder / "sheet.css").read_text()
+    guidelines = Guidelines(**_toml("guidelines.toml", user_dirs))
+    norms = {g.check: g.params for g in guidelines.guideline if GuidelineUse.VALIDATE in g.use}
     return Config(
         library=Library(**_toml("library.toml", user_dirs)),
         sheet=Sheet(**_toml("sheet.toml", user_dirs)),
         viewer=Viewer(**_toml("viewer.toml", user_dirs)),
         plan=PlanConfig(**_toml("plan.toml", user_dirs)),
-        checks=Checks(**_toml("checks.toml", user_dirs)),
+        checks=Checks(**_toml("checks.toml", user_dirs), norms=norms),
         data=Data(**_toml("data.toml", user_dirs)),
         synthetic=Synthetic(**_toml("synthetic.toml", user_dirs)),
         tokens=Tokens(**_toml("tokens.toml", user_dirs)),
@@ -666,7 +674,7 @@ def load(*user_dirs: Path) -> Config:
         models=Models(**_toml("models.toml", user_dirs)),
         metrics=Metrics(**_toml("metrics.toml", user_dirs)),
         baselines=Baselines(**_toml("baselines.toml", user_dirs)),
-        guidelines=Guidelines(**_toml("guidelines.toml", user_dirs)),
+        guidelines=guidelines,
         derive=Derive(**_toml("derive.toml", user_dirs)),
         css=css,
     )

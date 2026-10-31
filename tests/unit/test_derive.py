@@ -5,7 +5,7 @@ import pytest
 
 from genfacade import derive, guidelines
 from genfacade.datasets.synthetic import build
-from genfacade.schema import EPS, Element, ElementClass, GuidelineCheck, Mode, Trim
+from genfacade.schema import EPS, CanopyKind, Element, ElementClass, GuidelineCheck, Mode, Trim
 from genfacade.snap import snap
 from genfacade.train import tokens
 
@@ -154,3 +154,19 @@ def test_synthetic_windows_keep_frieze(cfg):
     rule = next(g for g in cfg.guidelines.guideline if g.check is GuidelineCheck.HEAD_TO_EAVES)
     for seed in SEEDS:
         assert all(guidelines.cases(rule, build.sample(seed, cfg).sheet, None)), seed
+
+
+def test_trim_does_not_land_on_another_opening(cfg):
+    """Выведенный элемент, который налез бы на чужой проём, не ставится (gf#242: козырёк двери
+    на соседнем окне, ставни на соседних ставнях): у двери вплотную к окну козырька нет, у
+    отдельной двери — есть."""
+    spec = build.sample(0, cfg).sheet.spec
+    spec = spec.model_copy(update={"trim": spec.trim.model_copy(
+        update={"canopy": CanopyKind.FLAT})})
+    door = Element(id="d", cls=ElementClass.DOOR, x_m=2.0, y_m=0.0, w_m=0.9, h_m=2.1, floor=1)
+    window = Element(id="w", cls=ElementClass.WINDOW, x_m=3.0, y_m=1.0, w_m=1.0, h_m=1.5, floor=1)
+    wall, marks = derive.Wall(spec, 8.0, cfg.derive), {"d": {Trim.CANOPY}}
+    near = derive.place([door, window], marks, wall)
+    far = derive.place([door, window.model_copy(update={"x_m": 5.0})], marks, wall)
+    canopies = [[e for e in got if e.cls is ElementClass.CANOPY] for got in (near, far)]
+    assert [len(c) for c in canopies] == [0, 1]

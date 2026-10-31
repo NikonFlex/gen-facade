@@ -13,13 +13,13 @@ from typing import NamedTuple
 from genfacade.config import Derive
 from genfacade.schema import (
     EPS,
+    OPENINGS,
     Element,
     ElementClass,
     HouseSpec,
     PaletteRole,
     Trim,
 )
-from genfacade.validate import OPENINGS
 
 # Класс выведенного элемента и класс проёма, у которого бывает признак.
 DERIVED = {Trim.SILL: ElementClass.SILL, Trim.CASING: ElementClass.MOLDING,
@@ -63,12 +63,32 @@ def place(elements: list[Element], marks: Flags, wall: Wall) -> list[Element]:
         return [e for e in elements if e.cls is OWNER[trim] and trim in marks.get(e.id, ())
                 and wall.spec.trim.has(trim)]
 
-    casings = [_casing(w, wall) for w in marked(Trim.CASING)]
-    sills = [_sill(w, wall) for w in marked(Trim.SILL)]
+    casings = [[_casing(w, wall)] for w in marked(Trim.CASING)]
+    sills = [[_sill(w, wall)] for w in marked(Trim.SILL)]
     fit = shutter_fits(elements, marks, wall)
-    shutters = [s for w in marked(Trim.SHUTTERS) if w.id in fit for s in _shutters(w, marks, wall)]
-    canopies = [c for d in marked(Trim.CANOPY) if (c := _canopy(d, elements, wall)) is not None]
-    return [*casings, *elements, *sills, *shutters, *canopies]
+    shutters = [_shutters(w, marks, wall) for w in marked(Trim.SHUTTERS) if w.id in fit]
+    canopies = [[c] for d in marked(Trim.CANOPY) if (c := _canopy(d, elements, wall)) is not None]
+    keep = _apart([*casings, *sills, *shutters, *canopies], elements)
+    return [*(e for g in casings for e in g if e.id in keep), *elements,
+            *(e for g in [*sills, *shutters, *canopies] for e in g if e.id in keep)]
+
+
+def _apart(groups: list[list[Element]], elements: list[Element]) -> set[str]:
+    """Имена выведенных элементов, которые не налезают на чужие проёмы, карниз и уже оставленные
+    элементы чужих проёмов (gf#242: ставни окна на соседнем, козырёк двери на окне — брак);
+    группа (пара ставен) остаётся или уходит целиком. Элементу без места его нет, как ставням у
+    угла стены."""
+    kept = [e for e in elements if e.cls in OPENINGS or e.cls is ElementClass.CORNICE]
+    for group in groups:
+        if not any(_hits(d, o) for d in group for o in kept if (o.parent or o.id) != d.parent):
+            kept += group
+    return {e.id for e in kept}
+
+
+def _hits(a: Element, b: Element) -> bool:
+    w = min(a.x_m + a.w_m, b.x_m + b.w_m) - max(a.x_m, b.x_m)
+    h = min(a.y_m + a.h_m, b.y_m + b.h_m) - max(a.y_m, b.y_m)
+    return w > EPS and h > EPS
 
 
 def _child(parent: Element, trim: Trim, box: tuple[float, ...], wall: Wall) -> Element:

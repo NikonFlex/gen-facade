@@ -50,6 +50,7 @@ def _allowed(g, vocab) -> set[int]:
 
 WINDOW, DOOR, ZONE = (tokens.tok(v) for v in (ElementClass.WINDOW, ElementClass.DOOR,
                                               ZoneRole.MAIN))
+MAIN, PLINTH, ACCENT = ZONE, tokens.tok(ZoneRole.PLINTH), tokens.tok(ZoneRole.ACCENT)
 
 
 def test_window_x_avoids_zones_entrance_and_wall_end(guard, vocab):
@@ -142,6 +143,8 @@ def test_answer_follows_grammar(guard, keep, cfg, vocab):
     after_box = keep(guard(*window))
     assert {Mark.FLOOR, Mark.END, WINDOW, ZONE, "var:regular"} \
         <= after_box                                                      # поля, элемент, конец
+    accent = keep(guard(*window, ACCENT, "mat:main", 4, 0, 0, 10, 0, 10, 50, 0, 50))
+    assert ZONE in accent and Mark.END not in accent   # без основной зоны стена белая (gf#242)
     assert "fix:x_m" not in after_box                                     # `fix:` — у проёма плана
     assert not after_box & {"50", Mark.HOUSE, Mark.WALL, "kind:brick"}    # «12 32 10 36 50»
     assert "var:regular" not in keep(guard(*window, "fix:w_m"))          # поля — по порядку
@@ -261,15 +264,76 @@ def test_zone_is_a_rectangle_on_the_wall(cfg, vocab):
     """Зона — прямоугольник на стене, как все зоны корпуса: (x0 y0) (x1 y0) (x1 y1) (x0 y1), x до
     длины, y до карниза; зоны модели торчали за стену треугольниками (gf#197)."""
     g = _read(constraints.WallGeometry([WALL._replace(height=60)], vocab, NORMS), cfg,
-              *TYPES, Mark.WALL, ZONE, "mat:main")
+              *TYPES, Mark.WALL, ACCENT, "mat:main")
     assert _allowed(g, vocab) == {4}                                      # четыре точки
-    steps = [(4, set(range(160))), (10, set(range(60))), (20, set(range(11, 161))), (90, {20}),
-             (20, {90}), (90, set(range(21, 61))), (50, {10}), (10, {50})]
+    # акцент на опорах по ширине (край стены 0) и по высоте (земля 0): углы — любые на стене
+    steps = [(4, set(range(160))), (0, set(range(60))), (0, set(range(1, 161))), (160, {0}),
+             (0, {160}), (160, set(range(1, 61))), (50, {0}), (0, {50})]
     for word, allowed in steps:
         assert _allowed(_read(g, cfg, word), vocab) == allowed
     edge = _read(constraints.WallGeometry([WALL._replace(height=60)], vocab, NORMS), cfg,
-                 *TYPES, Mark.WALL, ZONE, "mat:main", 4)
+                 *TYPES, Mark.WALL, ACCENT, "mat:main", 4)
     assert 160 not in _allowed(edge, vocab)    # угол на краю — правее места нет, всё запрещено
+
+
+def _zone_steps(g, cfg, vocab, words) -> list[set[int]]:
+    """Числа, которые страж оставил перед свободными точками зоны (ZONE_RECT): x0, y0, x1, y1."""
+    out = []
+    for word in words:
+        out.append(_allowed(g, vocab))
+        _read(g, cfg, word)
+    return [out[i] for i in (0, 1, 2, 5)]
+
+
+def test_wall_zones_run_the_whole_wall(cfg, vocab):
+    """Цоколь и основная зона — во всю длину стены, цоколь от земли, основная — до карниза от
+    верха цоколя или от земли: модель писала отделку на полстены (gf#242)."""
+    g = _read(constraints.WallGeometry([WALL._replace(height=60)], vocab, NORMS), cfg,
+              *TYPES, Mark.WALL, PLINTH, "mat:main", 4)
+    x0, y0, x1, y1 = _zone_steps(g, cfg, vocab, [0, 0, 160, 0, 160, 10, 0, 10])
+    assert (x0, y0, x1) == ({0}, {0}, {160}) and y1 == set(range(1, 61))
+    _read(g, cfg, MAIN, "mat:main", 4)
+    x0, y0, x1, y1 = _zone_steps(g, cfg, vocab, [0, 10, 160, 10, 160, 60, 0, 60])
+    assert (x0, y0, x1, y1) == ({0}, {0, 10}, {160}, {60})
+
+
+def test_accent_ends_on_a_support(cfg, vocab):
+    """Акцент упирается по ширине или по высоте в опоры — край стены, отметку, проём (gf#242):
+    левый край посреди стены — низ и верх только на опорах (с шагом сетки в обе стороны)."""
+    g = _read(constraints.WallGeometry([WALL._replace(height=60)], vocab, NORMS), cfg,
+              *TYPES, Mark.WALL, DOOR, 30, 0, 18, 42, ACCENT, "mat:main", 4)
+    _, y0, _, y1 = _zone_steps(g, cfg, vocab, [100, 0, 110, 0, 110, 60, 100, 60])
+    assert y0 == {0, 1, 41, 42, 43, 59} and y1 == {1, 41, 42, 43, 59, 60}  # земля, дверь, карниз
+    g = _read(constraints.WallGeometry([WALL._replace(height=60)], vocab, NORMS), cfg,
+              *TYPES, Mark.WALL, DOOR, 30, 0, 18, 42, ACCENT, "mat:main", 4)
+    _, _, x1, _ = _zone_steps(g, cfg, vocab, [47, 20, 100, 20, 100, 30, 47, 30])
+    assert x1 == {48, 49, 159, 160}                       # по ширине: до края двери или стены
+
+
+def test_door_not_lower_than_the_norm(cfg, vocab):
+    """Правило свода `door_min_height` (gf#242): дверь не ниже нормы и встаёт под карниз стены."""
+    # одноэтажная стена до карниза 60 и дом в два этажа (второй от 60) — дверь в первом: дверь
+    # плана на 2,35 м заходила на окно второго этажа (реальный тест, gf#242)
+    for wall, x in (([WALL._replace(height=60)], 30), ([TWO], 100)):
+        def door(*words, wall=wall, x=x):
+            return _allowed(_strict(cfg, vocab, wall, Mark.WALL, DOOR, x, *words, door=36), vocab)
+        assert door() == set(range(0, 25))                                # низ — чтобы влезла
+        assert door(10, 18) == set(range(36, 51))                         # 1,8 м … до 60
+
+
+def test_cornice_does_not_cover_an_opening(cfg, vocab, sizes):
+    """Карниз не заходит на проём (gf#242): окно под поставленным карнизом — типоразмером, верх
+    которого ниже карниза; карниз над окном — выше его верха."""
+    cornice = tokens.tok(ElementClass.CORNICE)
+    wall = [WALL._replace(height=60)]
+    after = _strict(cfg, vocab, wall, Mark.TYPES, 2, 12, 20, 12, 30, Mark.WALL, cornice,
+                    0, 35, 160, 5, WINDOW, 100, 10)
+    assert sizes(after) == {0}                                            # 10 + 30 > 35
+    window = (Mark.WALL, WINDOW, 100, 10, SIZE[0], cornice)               # окно 100…112 × 10…40
+    assert _allowed(_strict(cfg, vocab, wall, *window, 105), vocab) == set(range(60)) - set(
+        range(10, 40))                                                    # низ — не в высоте окна
+    assert _allowed(_strict(cfg, vocab, wall, *window, 0, 20), vocab) == set(range(1, 101))
+    assert _allowed(_strict(cfg, vocab, wall, *window, 0, 0, 160), vocab) == set(range(1, 11))
 
 
 def test_plan_entrance_is_kept_in_blind_mode(cfg, lay_out, vocab):

@@ -40,6 +40,9 @@ class ElementClass(StrEnum):
     CANOPY = "canopy"
 
 
+OPENINGS = (ElementClass.WINDOW, ElementClass.DOOR, ElementClass.GARAGE_DOOR)  # проёмы стены
+
+
 class BuildingType(StrEnum):
     COTTAGE = "cottage"
     APARTMENT = "apartment"
@@ -152,6 +155,10 @@ class Rule(StrEnum):
     CORNER = "corner"
     FLOOR_ALIGN = "floor_align"
     AXIS_ALIGN = "axis_align"
+    # геометрический брак листа (gf#242): validate.DEFECTS
+    DOOR_LOW = "door_low"          # дверь ниже нормы свода
+    CORNICE = "cornice"            # карниз на проёме или его выводимом элементе
+    FINISH = "finish"              # часть стены без отделки, зона обрывается посреди стены
 
 
 class Trim(StrEnum):
@@ -219,6 +226,7 @@ class GuidelineCheck(StrEnum):
     FLOOR_OPENING_WIDTH = "floor_opening_width"
     WINDOW_TYPES = "window_types"
     DOOR_SIZE = "door_size"
+    DOOR_HEIGHT = "door_height"
     DOOR_HEAD_LINE = "door_head_line"
     SILL_UNDER_WINDOW = "sill_under_window"
     CANOPY_OVER_ENTRANCE = "canopy_over_entrance"
@@ -249,6 +257,7 @@ class GuidelineUse(StrEnum):
     DERIVE = "derive"        # вывод зависимых элементов кодом, gf#212
     GUARD = "guard"          # страж при генерации, gf#213
     TRAIN = "train"          # обучение
+    VALIDATE = "validate"    # браковка валидатором шага 5, gf#242
 
 
 class Model(BaseModel):
