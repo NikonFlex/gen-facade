@@ -218,8 +218,8 @@ def _bad_wall(bad: list[Violation], sheet: FacadeSheet) -> int | None:
 def _likeliest(good: list[Checked], name: str, cfg: Config) -> Checked:
     """Годный ответ с наибольшей density стен против домов эталона, кроме дома name
     (`metrics.realism.house_density`, gf#210). Эталона нет — первый годный."""
-    ref = _reference(cfg, name)
-    scores = [realism.house_density(realism.walls([g.sheet]), ref, cfg.metrics.realism.k)
+    ref, settings = _reference(cfg, name), cfg.metrics.realism
+    scores = [realism.house_density(realism.walls([g.sheet], settings), ref, settings.k)
               if len(ref) else None for g in good]
     best = max(range(len(good)), key=lambda i: -math.inf if scores[i] is None else scores[i])
     good[best].layout["density"] = scores
@@ -238,7 +238,7 @@ def _reference(cfg: Config, without: str) -> numpy.ndarray:
     key = (cfg.data.paths.samples_dir.resolve(), ref.source, ref.split)
     if key not in _houses:
         houses = calibrate.houses(ref.source, ref.split, 0, cfg)
-        _houses[key] = {n: realism.walls([s]) for n, s in houses.items()}
+        _houses[key] = {n: realism.walls([s], cfg.metrics.realism) for n, s in houses.items()}
     rest = [w for n, w in _houses[key].items() if n != without and len(w)]
     return numpy.vstack(rest) if rest else numpy.empty((0, 0))
 

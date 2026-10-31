@@ -87,7 +87,7 @@ def reference(items: list[Item], cfg: Config) -> Reference:
     walls = [measures.features(f, s.spec) for s in sheets for f in s.facades]
     scale = [pstdev(col) or 1.0 for col in zip(*walls, strict=True)] if walls else [1.0] * 5
     return Reference(measures.structure(sheets), scale, _inception(sheets, cfg),
-                     realism.walls(sheets))
+                     realism.walls(sheets, cfg.metrics.realism))
 
 
 def _inception(sheets: list[FacadeSheet], cfg: Config) -> numpy.ndarray | None:
@@ -139,7 +139,7 @@ def _guidelines(sheets: list[FacadeSheet], cfg: Config) -> dict[str, float]:
 
 
 def _realism(sheets: list[FacadeSheet], ref: Reference, cfg: Config) -> dict:
-    ours = realism.walls(sheets)
+    ours = realism.walls(sheets, cfg.metrics.realism)
     if not len(ours) or not len(ref.realism):
         return dict.fromkeys(("c2st", "c2st_sd", "density", "coverage"))
     a, b = realism.standardized(ours, ref.realism)

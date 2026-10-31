@@ -568,6 +568,10 @@ class Visual(Section):
 class Realism(Section):
     k: int
     subsets: int
+    features: list[str]  # имена из metrics/wall_features.FEATURES; опечатка — ошибка при счёте
+    size_tol_m: float
+    axis_tol_m: float
+    zone_step_m: float
 
 
 class Realtest(Section):

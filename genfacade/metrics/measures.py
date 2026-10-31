@@ -38,7 +38,7 @@ def level_of(e: Element, spec: HouseSpec) -> float:
     return spec.floor_levels()[min(floor_of(e, spec), spec.floors) - 1]
 
 
-def _by_floor(f: SideFacade, spec: HouseSpec) -> list[list[Element]]:
+def by_floor(f: SideFacade, spec: HouseSpec) -> list[list[Element]]:
     floors: dict[int, list[Element]] = {}
     for w in windows(f):
         floors.setdefault(floor_of(w, spec), []).append(w)
@@ -50,7 +50,7 @@ def _by_floor(f: SideFacade, spec: HouseSpec) -> list[list[Element]]:
 def top_spread(f: SideFacade, spec: HouseSpec) -> list[float]:
     """Разброс верха окон этажа в долях средней высоты окна (так мерили CMP, gf#16)."""
     out = []
-    for ws in _by_floor(f, spec):
+    for ws in by_floor(f, spec):
         if len(ws) > 1:
             tops = [w.y_m + w.h_m for w in ws]
             out.append((max(tops) - min(tops)) / mean(w.h_m for w in ws))
@@ -59,7 +59,7 @@ def top_spread(f: SideFacade, spec: HouseSpec) -> list[float]:
 
 def axis_offset(f: SideFacade, spec: HouseSpec) -> list[float]:
     """Окно верхнего этажа: сдвиг центра от ближайшего окна этажа ниже в долях своей ширины."""
-    floors, out = _by_floor(f, spec), []
+    floors, out = by_floor(f, spec), []
     for low, high in zip(floors, floors[1:], strict=False):
         for w in high:
             c = w.x_m + w.w_m / 2
@@ -70,7 +70,7 @@ def axis_offset(f: SideFacade, spec: HouseSpec) -> list[float]:
 def gap_cv(f: SideFacade, spec: HouseSpec) -> list[float]:
     """Постоянство шага: коэффициент вариации простенков этажа, где окон три и больше."""
     out = []
-    for ws in _by_floor(f, spec):
+    for ws in by_floor(f, spec):
         gaps = [b.x_m - (a.x_m + a.w_m) for a, b in zip(ws, ws[1:], strict=False)]
         if len(gaps) > 1 and mean(gaps) > EPS:
             out.append(pstdev(gaps) / mean(gaps))
@@ -132,22 +132,6 @@ def features(f: SideFacade, spec: HouseSpec) -> list[float]:
     glass = sum(w.w_m * w.h_m for w in ws) / (f.side.length_m * spec.eaves_m)
     return [len(ws), mean(w.w_m for w in ws), mean(w.h_m for w in ws),
             mean(sill_m(f, spec)), glass]
-
-
-def realism_features(f: SideFacade, spec: HouseSpec) -> list[float]:
-    """Признаки стены для слоя «отличим ли от настоящего» (gf#210): окна на метр, их размеры и
-    высоты над полом, остекление, ровность верха, оси этажей, ритм, отступ от угла, двери на метр.
-    Нет величины на стене (одно окно, один этаж) — ноль, как у идеально ровной стены."""
-    ws = windows(f)
-    doors = [e for e in f.elements if e.cls is ElementClass.DOOR]
-    return [len(ws) / f.side.length_m, _avg(width_m(f, spec)), _avg(height_m(f, spec)),
-            _avg(sill_m(f, spec)), _avg(head_m(f, spec)), features(f, spec)[4],
-            _avg(top_spread(f, spec)), _avg(axis_offset(f, spec)), _avg(gap_cv(f, spec)),
-            min(edge_share(f, spec), default=0.0), len(doors) / f.side.length_m]
-
-
-def _avg(values: list[float]) -> float:
-    return mean(values) if values else 0.0
 
 
 # ——— соответствие описанию: требования текста, которые видны на чертеже ———

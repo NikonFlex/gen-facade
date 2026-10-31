@@ -11,6 +11,24 @@ k_max = 25            # rank-k приближения k = 1..k_max, как в с
 [realism]             # слой «отличим ли от настоящего» метрики правдоподобия (gf#210)
 k = 5                 # density и coverage: радиус шара эталонной стены — до k-го соседа (Naeem 2020)
 subsets = 50          # подвыборок: c2st, density, coverage — среднее по ним, c2st_sd — разброс (gf#235)
+# признаки стены (metrics/wall_features.py, номера кандидатов gf#243 — в описании функций);
+# признак дома одинаков у всех его стен. Набор — по согласию с хозяином на 48 парах (gf#243,
+# docs/metrics-results.md); группа А (брак листа) — место для функции валидатора gf#242
+features = [
+    # прежние 11 (gf#210)
+    "windows_per_m", "width_m", "height_m", "sill_m", "head_m", "glass", "top_spread",
+    "axis_offset", "gap_cv", "edge_share", "doors_per_m",
+    # Б, В, Г: не ухудшают согласие
+    "min_pier_m", "sizes_floor", "sizes_house", "axis_share", "bottom_spread", "aspect",
+    # Г23, Д: карниз, цоколь, зоны отделки
+    "plinth_share", "cornice_share", "zones", "second_finish", "corner_mismatch", "hidden_zones",
+]
+# Выключены до решения хозяина (gf#243): ухудшают согласие с хозяином — blind_walls,
+# opening_share, house_doors, edge_m, symmetry, frieze_m, height_share, front_rich, floor_lines,
+# end_windows, trim_mixed; не различают (1 у всех домов данных) — front_door.
+size_tol_m = 0.05     # окна ближе по ширине и высоте — один типоразмер (sizes_floor, sizes_house)
+axis_tol_m = 0.1      # центры ближе — одна ось (axis_share), зеркальный двойник (symmetry)
+zone_step_m = 0.25    # шаг по высоте, с которым сравнивается отделка у угла (corner_mismatch)
 
 [realtest]            # genfacade realtest: сводная таблица summary.md — все строки, оба режима
 # годных листов (valid × домов) — первой колонкой всегда; дальше — эти колонки metrics.json
