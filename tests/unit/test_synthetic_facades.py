@@ -20,16 +20,19 @@ from genfacade.schema import (
     OpeningKind,
     PaletteRole,
     Source,
+    Trim,
     VariantKind,
     ZoneRole,
 )
 from genfacade.validate import OPENINGS, validate
 
 SEEDS = range(60)
-# Правила свода, которые генератор выполняет по построению (gf#211, config/guidelines.toml)
-SVOD = {"window_head_line", "window_head_height_us", "window_head_to_eaves", "door_head_line",
-        "window_lower_not_smaller", "pier_min", "window_types", "sill_under_window",
-        "shutter_width_us"}
+# Правила свода, которые генератор выполняет по построению (gf#211, config/guidelines.toml). Не по
+# построению (gf#212): window_head_height_us — на этаже 2,5 м с наличником верх окон ниже 2,1 м,
+# чтобы над окном остался фриз до карниза (window_head_to_eaves); sill_under_window — подоконников
+# у дома может не быть, их вид — параметр дома.
+SVOD = {"window_head_line", "window_head_to_eaves", "door_head_line",
+        "window_lower_not_smaller", "pier_min", "window_types", "shutter_width_us"}
 
 
 @pytest.fixture(scope="module")
@@ -40,7 +43,7 @@ def houses(cfg):
 @pytest.fixture(scope="module")
 def looks(cfg):
     """Параметры и характер дома по тем же seed, что у примеров."""
-    return [house(random.Random(f"house/{s}"), cfg.synthetic,  # noqa: S311
+    return [house(random.Random(f"house/{s}"), cfg,  # noqa: S311
                   sizes.pick(s, cfg.synthetic)) for s in SEEDS]
 
 
@@ -107,8 +110,9 @@ def test_door_kind_one_per_house_and_fits_under_cornice(houses, looks, cfg):
         kind = door.variant.kind if door.variant else None
         kinds.add(kind)
         assert (door.y_m, door.h_m) == (spec.plinth_m, look.head_m)
-        above = rules.entry.canopy_gap_m + rules.entry.canopy_m if look.canopy else 0.0
-        assert door.y_m + door.h_m + above <= spec.eaves_m - rules.cornice.height_m + EPS, h.id
+        canopy = [k for f in h.sheet.facades for k in _of(f, ElementClass.CANOPY)]
+        top = max([door.y_m + door.h_m, *(k.y_m + k.h_m for k in canopy)])
+        assert top <= spec.eaves_m - look.cornice_m + EPS, h.id  # козырёк — под карнизом
         if kind is not look.door:  # фрамуга не влезла — дверь со стеклом
             assert (look.door, kind) == (VariantKind.TRANSOM, VariantKind.GLAZED)
             assert look.head_m < rules.door.height_m + rules.door.transom_m
@@ -122,9 +126,8 @@ def test_window_tops_align_and_heights_come_from_rows(houses, looks, cfg):
     rules = cfg.synthetic.facade.windows
     for h, (spec, look) in zip(houses, looks, strict=True):
         under = spec.floor_heights_m[0] - rules.lintel_m  # перемычка до потолка этажа
-        assert look.head_m == pytest.approx(min(look.head_m, under))
-        assert rules.head_m[0] - EPS <= look.head_m <= rules.head_m[1] + EPS or (
-            look.head_m == pytest.approx(under))
+        assert look.head_m <= under + EPS
+        assert look.head_m <= rules.head_m[1] + EPS
         assert look.window_h_m in rules.heights_m and look.narrow_h_m in rules.narrow_heights_m
         assert rules.sill_m[0] - EPS <= look.head_m - look.window_h_m <= rules.sill_m[1] + EPS
         levels = spec.floor_levels()
@@ -137,24 +140,18 @@ def test_window_tops_align_and_heights_come_from_rows(houses, looks, cfg):
             assert (w.variant.kind is VariantKind.PANORAMIC) == (want == look.head_m)
 
 
-def test_shutters_beside_their_window(houses, looks, cfg):
-    """Ставни — пара по бокам окна шириной share его ширины (shutter_width_us, gf#211), снаружи
-    наличника, в пределах стены и не заходят на соседний проём и его ставни."""
-    rules, casing = cfg.synthetic.facade.shutter, cfg.synthetic.facade.casing.width_m
+def test_shutters_beside_their_window(houses):
+    """Ставни — у дома с ними, у окна не в пол; ставни разных проёмов этажа не сходятся
+    (геометрия — tests/unit/test_derive.py)."""
     shuttered = 0
-    for h, (_, look) in zip(houses, looks, strict=True):
+    for h in houses:
         for f in h.sheet.facades:
             blinds, by_id = _of(f, ElementClass.BLIND), {e.id: e for e in f.elements}
-            assert not blinds or look.shutters, h.id
+            assert not blinds or h.sheet.spec.trim.has(Trim.SHUTTERS), h.id
             shuttered += bool(blinds)
-            offset = casing if look.casing else 0.0
             for b in blinds:
                 w = by_id[b.parent]
                 assert w.cls is ElementClass.WINDOW and w.variant.kind is VariantKind.REGULAR
-                assert (b.y_m, b.h_m, b.w_m) == (w.y_m, w.h_m, pytest.approx(rules.share * w.w_m))
-                assert b.x_m + b.w_m == pytest.approx(w.x_m - offset) or (
-                    b.x_m == pytest.approx(w.x_m + w.w_m + offset))
-                assert -EPS <= b.x_m and b.x_m + b.w_m <= f.side.length_m + EPS
             busy = [*blinds, *(e for e in f.elements if e.cls in OPENINGS)]
             for a, b in combinations(busy, 2):
                 apart = a.x_m + a.w_m <= b.x_m + EPS or b.x_m + b.w_m <= a.x_m + EPS
@@ -173,14 +170,18 @@ def test_svod_rules_the_generator_applies_hold(houses, cfg):
     assert SVOD <= {g.id for g in cfg.guidelines.guideline}
 
 
-def test_sills_and_casings_only_at_windows_with_sill_wall(houses, looks):
-    for h, (_, look) in zip(houses, looks, strict=True):
+def test_sills_and_casings_only_at_windows_with_sill_wall(houses):
+    """Подоконник и наличник — у каждого окна не в пол, если такие у дома есть (вид — параметр
+    дома, gf#212); наличник рисуется под своим окном."""
+    for h in houses:
+        trim = h.sheet.spec.trim
         for f in h.sheet.facades:
             framed = {w.id for w in _of(f, ElementClass.WINDOW)
                       if w.variant.kind is not VariantKind.PANORAMIC}
-            assert {s.parent for s in _of(f, ElementClass.SILL)} == framed, h.id
+            sills = {s.parent for s in _of(f, ElementClass.SILL)}
+            assert sills == (framed if trim.has(Trim.SILL) else set()), h.id
             casings = _of(f, ElementClass.MOLDING)
-            assert {m.parent for m in casings} == (framed if look.casing else set())
+            assert {m.parent for m in casings} == (framed if trim.has(Trim.CASING) else set())
             order = [e.id for e in f.elements]  # наличник рисуется под своим окном
             assert all(order.index(m.id) < order.index(m.parent) for m in casings)
 
@@ -237,21 +238,19 @@ def test_accent_follows_house_scheme(houses, looks, cfg):
     assert set(finish.weights) == {s.value for s in Scheme}  # у каждой схемы есть вес в config
 
 
-def test_porch_and_canopy_at_entrance(houses, looks, cfg):
-    entry = cfg.synthetic.facade.entry
+def test_porch_and_canopy_at_entrance(houses, looks):
     for h, (spec, look) in zip(houses, looks, strict=True):
         for f in h.sheet.facades:
             porch, canopy = _of(f, ElementClass.PORCH), _of(f, ElementClass.CANOPY)
             # крыльцо — на высоту цоколя: без цоколя его нет
             assert len(porch) == (look.porch and f.side.has_entrance and spec.plinth_m > 0), h.id
-            assert len(canopy) == (look.canopy and f.side.has_entrance), h.id
+            assert len(canopy) <= (spec.trim.has(Trim.CANOPY) and f.side.has_entrance), h.id
             for door in _of(f, ElementClass.DOOR):
                 for p in porch:
                     assert (p.y_m, p.h_m, p.parent) == (0.0, spec.plinth_m, door.id)
                     assert p.x_m < door.x_m and p.x_m + p.w_m > door.x_m + door.w_m
                 for k in canopy:
-                    assert k.y_m == pytest.approx(door.y_m + door.h_m + entry.canopy_gap_m)
-                    assert k.y_m + k.h_m <= spec.eaves_m + EPS and k.parent == door.id
+                    assert k.y_m > door.y_m + door.h_m and k.parent == door.id
 
 
 def test_house_parameters_come_from_config(looks, cfg):
@@ -281,8 +280,11 @@ def test_houses_differ_in_character(looks, cfg):
     assert len({look.head_m for _, look in looks}) > 3  # верх окон — не три уровня, как было
     assert {look.window_h_m for _, look in looks} == set(windows.heights_m)
     assert {look.scheme for _, look in looks} == set(Scheme)
-    for flag in ("casing", "wide_to_floor", "porch", "canopy", "shutters"):
+    for flag in ("wide_to_floor", "porch"):
         assert {getattr(look, flag) for _, look in looks} == {True, False}, flag
+    for trim in Trim:  # виды выводимых элементов — все, что в весах генератора (gf#212)
+        kinds = {spec.trim.kind(trim) for spec, _ in looks}
+        assert kinds == set(getattr(cfg.synthetic.facade.trim, trim)), trim
 
 
 def test_sheets_survive_svg(houses, cfg):

@@ -143,9 +143,25 @@ def head_height(p: Params, sheet: FacadeSheet, plan: Plan | None) -> list[bool]:
 
 
 def head_to_eaves(p: Params, sheet: FacadeSheet, plan: Plan | None) -> list[bool]:
+    """Фриз над окном верхнего этажа: от верха окна с наличником до низа карниза над ним, а
+    без карниза — до отметки карниза дома. От отметки зазор засчитывал окно, упёртое в карниз
+    0,25 м (gf#212)."""
     spec = sheet.spec
-    return [spec.eaves_m - _top(w) + EPS >= p["min"] for f in sheet.facades
-            for w in _of(f, ElementClass.WINDOW) if floor_of(w, spec) == spec.floors]
+    return [_eaves_line(f, w, spec.eaves_m) - _head(f, w) + EPS >= p["min"]
+            for f in sheet.facades for w in _of(f, ElementClass.WINDOW)
+            if floor_of(w, spec) == spec.floors]
+
+
+def _head(f: SideFacade, w: Element) -> float:
+    """Верх окна вместе с наличником (у наличника родитель — окно)."""
+    return max([_top(w), *(_top(m) for m in _of(f, ElementClass.MOLDING) if m.parent == w.id)])
+
+
+def _eaves_line(f: SideFacade, w: Element, eaves_m: float) -> float:
+    """Низ карниза стены над окном; карниза нет — отметка карниза дома."""
+    above = [c.y_m for c in _of(f, ElementClass.CORNICE) if c.y_m + EPS >= _top(w)
+             and c.x_m < w.x_m + w.w_m and c.x_m + c.w_m > w.x_m]
+    return min([eaves_m, *above])
 
 
 def plinth_height(p: Params, sheet: FacadeSheet, plan: Plan | None) -> list[bool]:

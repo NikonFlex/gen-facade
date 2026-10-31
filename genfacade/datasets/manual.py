@@ -9,8 +9,13 @@ pt, и внутренний ли угол после неё (Г-, Т-конту�
 Что выше карниза и чего формат не держит (скаты, фронтоны, мансарды), разметчик не размечает, а
 перечисляет в `cut` — это идёт в опись (`data: Стена до карниза в данных`); элемент, заходящий
 за карниз или угол, обрезается по стене.
+
+Подоконник, ставни, наличник и козырёк модель шага 4 пишет признаком своего проёма (gf#212): их
+связь с проёмом — родитель. Где разметчик родителя не указал, он ставится по месту (`_linked`); вид
+этих элементов у дома — по умолчанию из настроек, для тех, что у дома есть.
 """
 
+import math
 import tomllib
 from collections import Counter
 from pathlib import Path
@@ -18,13 +23,16 @@ from pathlib import Path
 import numpy
 from pydantic import Field
 
+from genfacade import derive
 from genfacade.config import Config, Manual
 from genfacade.datasets import rect_house, store
 from genfacade.schema import (
+    EPS,
     BuildingType,
     Element,
     ElementClass,
     HouseSpec,
+    HouseTrim,
     Material,
     Model,
     OpeningVariant,
@@ -34,6 +42,7 @@ from genfacade.schema import (
     Sample,
     Source,
     Split,
+    Trim,
 )
 from genfacade.validate import errors, validate
 
@@ -90,7 +99,8 @@ def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
         elements = _side_elements(e, m, spec)
         kept = [x for x in (_clipped(x, lengths[k], spec, cfg) for x in elements) if x]
         dropped += len(elements) - len(kept)
-        laid.append((k, kept))
+        laid.append((k, _linked(kept, cfg.link_tol_m)))
+    spec = spec.model_copy(update={"trim": _trim([xs for _, xs in laid], cfg.trim)})
     plan, sheet = rect_house.assemble(spec, fp, laid, Source.MANUAL)
     return Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet), dropped
 
@@ -151,6 +161,47 @@ def _clipped(x: Element, length: float, spec: HouseSpec, cfg: Manual) -> Element
     if x1 <= x0 or y1 <= y0 or (x1 - x0) * (y1 - y0) < cfg.inside_share * x.w_m * x.h_m:
         return None
     return x.model_copy(update={"x_m": x0, "y_m": y0, "w_m": x1 - x0, "h_m": y1 - y0})
+
+
+def _linked(elements: list[Element], tol: float) -> list[Element]:
+    """Выводимый элемент без родителя → родитель — проём по месту; места нет — без родителя."""
+    out = []
+    for x in elements:
+        trim = derive.TRIM_OF.get(x.cls)
+        if trim is None or x.parent is not None:
+            out.append(x)
+            continue
+        owners = [o for o in elements if o.cls is derive.OWNER[trim]]
+        # козырёк — над дверью на любой высоте: навес крыльца разметчик снимает до свеса
+        reach = math.inf if trim is Trim.CANOPY else tol
+        near = [(gap, o.id) for o in owners if (gap := _gap(x, o, trim)) is not None
+                and gap <= reach]
+        out.append(x.model_copy(update={"parent": min(near)[1]}) if near else x)
+    return out
+
+
+def _gap(x: Element, o: Element, trim: Trim) -> float | None:
+    """Зазор от выводимого элемента до проёма на своём месте: подоконник под окном, ставня сбоку,
+    козырёк над дверью (наличник — вокруг окна); не на своём месте — None."""
+    def overlap(a0: float, a1: float, b0: float, b1: float) -> float:
+        return min(a1, b1) - max(a0, b0)
+
+    across = overlap(x.x_m, x.x_m + x.w_m, o.x_m, o.x_m + o.w_m)
+    along = overlap(x.y_m, x.y_m + x.h_m, o.y_m, o.y_m + o.h_m)
+    if trim is Trim.SHUTTERS:
+        return max(0.0, -across) if along >= o.h_m / 2 else None
+    if trim is Trim.SILL:
+        return abs(x.y_m + x.h_m - o.y_m) if across >= o.w_m / 2 else None
+    if trim is Trim.CANOPY:
+        return max(0.0, x.y_m - o.y_m - o.h_m) if across > EPS and x.y_m + EPS >= o.y_m else None
+    return 0.0 if across >= o.w_m - EPS and along >= o.h_m - EPS else None
+
+
+def _trim(walls: list[list[Element]], kinds: HouseTrim) -> HouseTrim:
+    """Виды выводимых элементов дома: по умолчанию — у тех, что есть у проёмов его стен;
+    остальные — none (у дома их нет). Имена элементов — свои у каждой стены."""
+    present = {t for wall in walls for marks in derive.flags(wall).values() for t in marks}
+    return HouseTrim(**{t: kinds.kind(t) if t in present else HouseTrim().kind(t) for t in Trim})
 
 
 def run(cfg: Config) -> Path:

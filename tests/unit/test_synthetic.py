@@ -34,7 +34,7 @@ SIMPLE_DRAFT = PlanDraft(10.0, 5.0, 0.15, (
 @pytest.fixture(scope="module")
 def houses(cfg):
     """Черновик и готовый пример для каждого seed."""
-    return [(draft(s, cfg.synthetic), build.sample(s, cfg)) for s in SEEDS]
+    return [(draft(s, build.with_norms(cfg).synthetic), build.sample(s, cfg)) for s in SEEDS]
 
 
 def _holes(sketch: PlanDraft, hole: Hole) -> list[Opening]:
@@ -145,7 +145,7 @@ def mixed(cfg):
     rules = cfg.synthetic.model_copy(update={"sizes": sizes_cfg})
     tok = cfg.tokens.model_copy(update={"max_m": 40.0})
     mix = cfg.model_copy(update={"synthetic": rules, "tokens": tok})
-    return mix, [(draft(s, rules), build.sample(s, mix)) for s in SEEDS]
+    return mix, [(draft(s, build.with_norms(mix).synthetic), build.sample(s, mix)) for s in SEEDS]
 
 
 def test_partitions_grow_with_house_length(mixed):

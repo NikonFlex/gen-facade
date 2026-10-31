@@ -6,8 +6,8 @@
 одну высоту.
 Элемент «задан планом», которому проёма плана не досталось, — лишний: модель повторила проём
 плана (gf#153, окно GenPlan не на сетке токенов), он убирается вместе с подоконником и наличником.
-Подоконник и наличник едут вместе со своим окном. Заготовки стаба шага 4 уже ровные —
-привязка нужна модели, её выход неточный.
+Подоконник, наличник, ставни и козырёк едут вместе со своим проёмом. Заготовки стаба шага 4 уже
+ровные — привязка нужна модели, её выход неточный.
 """
 
 from statistics import median
@@ -115,14 +115,41 @@ def _target(group: list[Element]) -> tuple[float, float]:
 
 
 def _follow(child: Element, moved: dict[str, Element], before: list[Element]) -> Element:
-    """Подоконник и наличник повторяют сдвиг и растяжение окна."""
+    """Подоконник, наличник, ставни и козырёк повторяют сдвиг и растяжение своего проёма
+    (их ставит derive.py по проёму, gf#212)."""
     if child.parent not in moved:
         return child
     old = next(e for e in before if e.id == child.parent)
     new = moved[child.parent]
-    dx, dw, dy, dh = new.x_m - old.x_m, new.w_m - old.w_m, new.y_m - old.y_m, new.h_m - old.h_m
-    # наличник обнимает окно по высоте и растягивается с ним, подоконник под окном — только едет
-    stretch = child.y_m >= old.y_m - EPS
-    h = child.h_m + (dh if stretch else 0.0)
-    return child.model_copy(update={"x_m": child.x_m + dx, "w_m": child.w_m + dw,
-                                    "y_m": child.y_m + dy, "h_m": h})
+    if _box(old) == _box(new):  # проём не сдвинулся — хвосты float не трогают точные числа
+        return child
+    x, w = _follow_x(child, old, new)
+    y, h = _follow_y(child, old, new)
+    return child.model_copy(update={"x_m": x, "w_m": w, "y_m": y, "h_m": h})
+
+
+def _follow_x(child: Element, old: Element, new: Element) -> tuple[float, float]:
+    """Сбоку от проёма (ставня) — тот же зазор до его края, ширина — в долю проёма; над, под
+    проёмом и вокруг него — тянется с ним."""
+    if child.x_m + child.w_m <= old.x_m + EPS:
+        w = child.w_m * new.w_m / old.w_m
+        return new.x_m - (old.x_m - child.x_m - child.w_m) - w, w
+    if child.x_m >= old.x_m + old.w_m - EPS:
+        w = child.w_m * new.w_m / old.w_m
+        return new.x_m + new.w_m + (child.x_m - old.x_m - old.w_m), w
+    return child.x_m + (new.x_m - old.x_m), child.w_m + (new.w_m - old.w_m)
+
+
+def _box(e: Element) -> tuple[float, float, float, float]:
+    return e.x_m, e.y_m, e.w_m, e.h_m
+
+
+def _follow_y(child: Element, old: Element, new: Element) -> tuple[float, float]:
+    """Под проёмом (подоконник) — едет с низом, над ним (козырёк) — с верхом, рядом и вокруг
+    (ставни, наличник) — тянется с проёмом."""
+    dy, dh = new.y_m - old.y_m, new.h_m - old.h_m
+    if child.y_m + child.h_m <= old.y_m + EPS:
+        return child.y_m + dy, child.h_m
+    if child.y_m >= old.y_m + old.h_m - EPS:
+        return child.y_m + dy + dh, child.h_m
+    return child.y_m + dy, child.h_m + dh
