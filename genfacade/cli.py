@@ -15,7 +15,7 @@ from genfacade.train import corpus
 
 def run(args: argparse.Namespace) -> Path:
     """План GenPlan + текст → трасса шагов 1–6 (`generation: Конвейер из семи шагов`)."""
-    cfg = config.load(args.config)
+    cfg = config.load(*args.config)
     req = pipeline.PlanRun(plan=str(args.plan), text=args.text, mode=args.mode)
     out = args.out or pipeline.new_run_dir(cfg.viewer.paths.runs_dir, args.plan.stem)
     return pipeline.generate(req, args.plan.read_text(), out, cfg)
@@ -24,7 +24,7 @@ def run(args: argparse.Namespace) -> Path:
 def synth(args: argparse.Namespace) -> Path:
     """Синтетические дома по seed подряд → примеры и опись; готовые дома пропускаются."""
     seeds = range(args.first_seed, args.first_seed + args.count)
-    return batch.run(seeds, config.load(args.config), args.overwrite)
+    return batch.run(seeds, config.load(*args.config), args.overwrite)
 
 
 def buildingnet(args: argparse.Namespace) -> Path:
@@ -32,19 +32,19 @@ def buildingnet(args: argparse.Namespace) -> Path:
     gf#198)."""
     from genfacade.datasets.buildingnet import build
 
-    return build.run(config.load(args.config), args.count, tuple(args.splits))
+    return build.run(config.load(*args.config), args.count, tuple(args.splits))
 
 
 def markup(args: argparse.Namespace) -> Path:
     """Ручная разметка реальных коттеджей → примеры теста и опись со срезанным (gf#180)."""
     from genfacade.datasets import manual
 
-    return manual.run(config.load(args.config))
+    return manual.run(config.load(*args.config))
 
 
 def tokens(args: argparse.Namespace) -> Path:
     """Собранные дома источника → номера токенов одним файлом и опись."""
-    return corpus.build(args.source, config.load(args.config))
+    return corpus.build(args.source, config.load(*args.config))
 
 
 def train(args: argparse.Namespace) -> Path:
@@ -52,7 +52,7 @@ def train(args: argparse.Namespace) -> Path:
     # torch — в группе [train]: без обучения пакет его не тянет.
     from genfacade.train import fit
 
-    cfg = config.load(args.config)
+    cfg = config.load(*args.config)
     out = args.out or pipeline.new_run_dir(cfg.train.paths.runs_dir, args.source)
     return fit.run(args.source, cfg, out)
 
@@ -62,7 +62,7 @@ def eval_model(args: argparse.Namespace) -> Path:
     # torch — в группе [train]: без обучения пакет его не тянет.
     from genfacade.train import evaluate
 
-    cfg = config.load(args.config)
+    cfg = config.load(*args.config)
     out = args.out or pipeline.new_run_dir(cfg.train.paths.runs_dir, f"eval-{args.source}")
     return evaluate.run(args.source, cfg, out)
 
@@ -71,7 +71,7 @@ def metrics_table(args: argparse.Namespace) -> Path:
     """Папки листов → таблица метрик против эталона (`evaluation: Метрики одной командой`)."""
     from genfacade.metrics import table
 
-    cfg = config.load(args.config)
+    cfg = config.load(*args.config)
     out = args.out or pipeline.new_run_dir(cfg.train.paths.runs_dir, "metrics")
     return table.run(args.folders, args.reference, cfg, out)
 
@@ -80,7 +80,7 @@ def metrics_calibrate(args: argparse.Namespace) -> Path:
     """Эталон генератора против подмен на val источника: каждая метрика их различает."""
     from genfacade.metrics import calibrate
 
-    cfg = config.load(args.config)
+    cfg = config.load(*args.config)
     out = args.out or pipeline.new_run_dir(cfg.train.paths.runs_dir, f"calibrate-{args.source}")
     return calibrate.run(args.source, cfg, out)
 
@@ -89,33 +89,42 @@ def baseline(args: argparse.Namespace) -> Path:
     """Листы папки → фасады базового подхода на тех же домах (`evaluation: Базовые подходы`)."""
     from genfacade import baselines
 
-    return baselines.run(args.name, args.source_dir, config.load(args.config), args.out)
+    return baselines.run(args.name, args.source_dir, config.load(*args.config), args.out)
 
 
 def realtest(args: argparse.Namespace) -> Path:
     """Таблица метрик против реального теста: модель, правило GenPlan, синтетика, подмены."""
     from genfacade.metrics import realtest
 
-    cfg = config.load(args.config)
+    cfg = config.load(*args.config)
     out = args.out or pipeline.new_run_dir(cfg.train.paths.runs_dir, "realtest")
-    return realtest.run(cfg, out, args.synthetic)
+    rows = realtest.Rows(dict(args.model), dict(args.sheets))
+    return realtest.run(cfg, out, args.synthetic, rows)
 
 
 def guidelines_table(args: argparse.Namespace) -> Path:
     """Свод правил фасада на домах реального теста → таблица для чтения (gf#209)."""
     from genfacade import guidelines
 
-    return guidelines.run(config.load(args.config), args.out)
+    return guidelines.run(config.load(*args.config), args.out)
 
 
-def serve(config_dir: Path | None) -> None:
+def serve(config_dirs: list[Path]) -> None:
     # uvicorn и fastapi — в группе [viewer]: без смотрелки пакет их не тянет.
     import uvicorn
 
     from genfacade.viewer.app import create_app
 
-    cfg = config.load(config_dir)
+    cfg = config.load(*config_dirs)
     uvicorn.run(create_app(cfg), host=cfg.viewer.server.host, port=cfg.viewer.server.port)
+
+
+def _named(value: str) -> tuple[str, Path]:
+    """ИМЯ=ПУТЬ → (имя, путь)."""
+    name, sep, path = value.partition("=")
+    if not (name and sep and path):
+        raise argparse.ArgumentTypeError(f"ждали ИМЯ=ПУТЬ, а не {value!r}")
+    return name, Path(path)
 
 
 def _source(parser: argparse.ArgumentParser) -> None:
@@ -125,8 +134,9 @@ def _source(parser: argparse.ArgumentParser) -> None:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="genfacade")
-    parser.add_argument("-c", "--config", type=Path,
-                        help="папка своих настроек: любые файлы из genfacade/config/")
+    parser.add_argument("-c", "--config", type=Path, action="append", default=[],
+                        help="папка своих настроек: любые файлы из genfacade/config/; "
+                             "несколько -c — следующая перекрывает предыдущую")
     sub = parser.add_subparsers(dest="command", required=True)
     g = sub.add_parser("run", help="план GenPlan + описание → фасады, трасса шагов 1–6")
     g.add_argument("plan", type=Path, help="SVG-план GenPlan")
@@ -175,6 +185,12 @@ def _parser() -> argparse.ArgumentParser:
     b.add_argument("-o", "--out", type=Path, required=True, help="папка фасадов базового подхода")
     q = sub.add_parser("realtest", help="таблица метрик против реального теста")
     q.add_argument("-n", "--synthetic", type=int, default=0, help="домов синтетики val; 0 — все")
+    q.add_argument("--model", type=_named, action="append", default=[], metavar="ИМЯ=ЧЕКПОЙНТ",
+                   help="строка model-ИМЯ: ответы этого чекпойнта; без --model — модель "
+                        "config/models.toml, строка model")
+    q.add_argument("--sheets", type=_named, action="append", default=[], metavar="ИМЯ=ПАПКА",
+                   help="строка model-ИМЯ: листы <режим>/model прошлого genfacade realtest — "
+                        "для модели другой записи токенов, ответившей своим кодом")
     q.add_argument("-o", "--out", type=Path,
                    help="папка листов и таблиц; по умолчанию runs_dir/<время>-realtest")
     r = sub.add_parser("guidelines", help="свод правил фасада на домах реального теста → таблица")
@@ -196,7 +212,8 @@ COMMANDS = {
     "baseline": (baseline, {}),
     "calibrate": (metrics_calibrate, {}),
     "guidelines": (guidelines_table, {}),
-    "realtest": (realtest, {}),
+    "realtest": (realtest, {ModelError: "таблица не начата",
+                            FileNotFoundError: "таблица не начата"}),
     "run": (run, pipeline.REFUSALS),
 }
 

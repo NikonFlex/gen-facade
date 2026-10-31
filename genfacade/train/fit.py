@@ -12,6 +12,7 @@ Loss — только на ответе: условие и паддинг пом
 
 import json
 import math
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -20,7 +21,7 @@ from typing import NamedTuple
 import numpy
 import torch
 
-from genfacade.config import Config, Fit
+from genfacade.config import Config, Fit, GPTSize
 from genfacade.datasets import store
 from genfacade.pipeline import git_sha
 from genfacade.schema import Device, Mode, Source, Split
@@ -82,10 +83,37 @@ def mixed(source: Source, cfg: Config) -> Corpus:
         parts[Split.TRAIN] = Sequences(*(mine + [theirs[i] for i in rows]
                                          for mine, theirs in zip(own, add, strict=True)))
         longest = max(longest, *(len(add.ids[i]) for i in rows))
-    if cfg.train.fit.skip_longer:
-        parts = {split: _within(part, cfg.train.model.block) for split, part in parts.items()}
-        longest = min(longest, cfg.train.model.block)
     return Corpus(parts, data.words, longest)
+
+
+def size(data: Corpus, cfg: Config, init: dict | None) -> GPTSize:
+    """Размер модели. Дообучение — размер чекпойнта init: веса подходят только к нему. Новая
+    модель — из настроек, но окно не короче самой длинной последовательности корпуса: запись
+    токенов меняется (gf#212), и окно из настроек не должно останавливать обучение."""
+    if init is not None:
+        return GPTSize(**init["size"])
+    model = cfg.train.model
+    if data.longest <= model.block:
+        return model
+    print(f"окно {model.block} → {data.longest}: самая длинная последовательность корпуса",
+          file=sys.stderr)
+    return model.model_copy(update={"block": data.longest})
+
+
+def fitted(data: Corpus, init: dict | None, fit: Fit) -> tuple[Corpus, dict[Split, int]]:
+    """Корпус в окне дообучаемой модели: окно чекпойнта не растёт. Длиннее окна — отказ, а с
+    `skip_longer` такие последовательности отброшены и посчитаны; молча не режется ничего.
+    Новая модель берёт окно по корпусу (`size`) — ей отбрасывать нечего."""
+    block = data.longest if init is None else init["size"]["block"]
+    if data.longest <= block:
+        return data, {}
+    if not fit.skip_longer:
+        raise corpus.CorpusError(f"окно {block} короче самой длинной последовательности "
+                                 f"корпуса ({data.longest})")
+    parts = {split: _within(part, block) for split, part in data.parts.items()}
+    dropped = {split: len(data.parts[split].ids) - len(part.ids) for split, part in parts.items()}
+    print(f"длиннее окна {block} отброшено: {json.dumps(dropped)}", file=sys.stderr)
+    return Corpus(parts, data.words, max(len(i) for p in parts.values() for i in p.ids)), dropped
 
 
 def _within(part: Sequences, block: int) -> Sequences:
@@ -120,14 +148,16 @@ class Trainer:
 
     def __init__(self, data: Corpus, cfg: Config):
         fit, self.fit, self.data = cfg.train.fit, cfg.train.fit, data
-        if data.longest > cfg.train.model.block:
-            raise corpus.CorpusError(f"окно {cfg.train.model.block} короче самой длинной "
+        init = checkpoint(fit)
+        self.size = size(data, cfg, init)
+        if data.longest > self.size.block:
+            raise corpus.CorpusError(f"окно {self.size.block} короче самой длинной "
                                      f"последовательности корпуса ({data.longest})")
         self.device = sampling.device(fit.device)
         self.cuda = self.device.type == Device.CUDA
-        self.model = sampling.build_model(cfg.train.model, len(data.words))
-        if fit.init is not None:
-            _start_from(self.model, fit.init, data.words)
+        self.model = sampling.build_model(self.size, len(data.words))
+        if init is not None:
+            _start_from(self.model, init, data.words)
         self.model.to(self.device)
         self.opt = self.model.configure_optimizers(fit.weight_decay, fit.lr, fit.betas, self.cuda)
         self.forward = torch.compile(self.model) if fit.compile else self.model
@@ -172,12 +202,19 @@ class Trainer:
         return total / count
 
 
-def _start_from(model: torch.nn.Module, path: Path, words: list[str]) -> None:
+def checkpoint(fit: Fit) -> dict | None:
+    """Чекпойнт `[fit] init` или None — модель учится с нуля."""
+    if fit.init is None:
+        return None
+    return torch.load(fit.init, map_location="cpu", weights_only=True)
+
+
+def _start_from(model: torch.nn.Module, init: dict, words: list[str]) -> None:
     """Дообучение: веса чекпойнта; другой словарь — другая запись токенов, веса не подходят."""
-    checkpoint = torch.load(path, map_location="cpu", weights_only=True)
-    if list(checkpoint["vocabulary"]) != words:
-        raise corpus.CorpusError(f"словарь {path} не совпадает с корпусом: дообучать нельзя")
-    model.load_state_dict(checkpoint["model"])
+    if list(init["vocabulary"]) != words:
+        raise corpus.CorpusError("словарь чекпойнта [fit] init не совпадает с корпусом: "
+                                 "дообучать нельзя")
+    model.load_state_dict(init["model"])
 
 
 def run(source: Source, cfg: Config, out: Path) -> Path:
@@ -185,7 +222,7 @@ def run(source: Source, cfg: Config, out: Path) -> Path:
     fit = cfg.train.fit
     torch.manual_seed(fit.seed)
     rng = numpy.random.default_rng(fit.seed)
-    data = mixed(source, cfg)
+    data, dropped = fitted(mixed(source, cfg), checkpoint(fit), fit)
     trainer = Trainer(data, cfg)
     out.mkdir(parents=True, exist_ok=True)
     probe = _probe(data, source, cfg)
@@ -196,20 +233,20 @@ def run(source: Source, cfg: Config, out: Path) -> Path:
             history[-1]["probe"] = probe.measure(trainer.sampler)
         print(json.dumps(history[-1]), flush=True)
         if fit.save_every and epoch % fit.save_every == 0 and epoch < fit.epochs:
-            _save(trainer, data, cfg, out / f"model-e{epoch}.pt")
-    _save(trainer, data, cfg, out / MODEL)
+            _save(trainer, data, out / f"model-e{epoch}.pt")
+    _save(trainer, data, out / MODEL)
     plot.losses(history, out)
     samples = sample(trainer, source, cfg, rng)
     (out / SAMPLES).write_text(json.dumps(samples, ensure_ascii=False, indent=1))
     summary = {k: v for k, v in samples.items() if k != "rows"}
     counts = {split.value: len(part.ids) for split, part in data.parts.items()}
     return _settings(trainer, cfg, {"source": source, "sequences": counts, "history": history,
-                                    "samples": summary}, out)
+                                    "skipped_longer": dropped, "samples": summary}, out)
 
 
-def _save(trainer: Trainer, data: Corpus, cfg: Config, path: Path) -> None:
+def _save(trainer: Trainer, data: Corpus, path: Path) -> None:
     """Веса, размеры и словарь — то, что читает `models.layout.load`."""
-    torch.save({"model": trainer.model.state_dict(), "size": cfg.train.model.model_dump(),
+    torch.save({"model": trainer.model.state_dict(), "size": trainer.size.model_dump(),
                 "vocabulary": data.words}, path)
 
 
@@ -272,7 +309,7 @@ def _settings(trainer: Trainer, cfg: Config, result: dict, out: Path) -> Path:
     manifest = cfg.data.paths.samples_dir / result["source"] / corpus.MANIFEST
     gpu = torch.cuda.get_device_name() if trainer.cuda else None
     settings = {
-        "train": cfg.train.model_dump(mode="json"),
+        "train": cfg.train.model_dump(mode="json") | {"model": trainer.size.model_dump()},
         "tokens": cfg.tokens.model_dump(mode="json"),
         "corpus": json.loads(manifest.read_text()) if manifest.exists() else None,
         "parameters": trainer.model.get_num_params(),

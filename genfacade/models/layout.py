@@ -46,9 +46,12 @@ class Layout:
                              "токенов: модель учили на другой версии — переобучить")
         try:  # `<answer>` в корпусе — первый токен ответа: с него модель начинает отвечать
             words = [*tokens.condition(bare, mode, cfg), Mark.ANSWER]
-            return Condition([self.number[t] for t in words], mode)
         except TokenError as e:
             raise ModelError(f"дом не записывается условием модели: {e}") from e
+        block = self.sampler.model.config.block_size
+        if len(words) >= block:  # на ответ не осталось ни токена: повтор не поможет
+            raise ModelError(f"условие дома — {len(words)} токенов, окно модели — {block}")
+        return Condition([self.number[t] for t in words], mode)
 
     def answer(self, prompt: Condition, bare: FacadeSheet, seed: int, cfg: Config) -> Answer:
         """Стены после развёртки → стены с элементами и зонами; ответ не разобран — TokenError.

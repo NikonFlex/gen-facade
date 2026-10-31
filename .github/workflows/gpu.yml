@@ -9,38 +9,46 @@ on:
   workflow_dispatch:
     inputs:
       job:
-        description: "probe — проверить GPU; train — обучить модель шага 4; finetune — дообучить её на коттеджах BuildingNet; eval — оценить на val; visual — таблица метрик с FID и KID; realtest — таблица против реального теста с FID и KID"
+        description: "probe — проверить GPU; train — обучить модель шага 4; finetune — дообучить её на коттеджах BuildingNet; eval — оценить на val; visual — таблица метрик с FID и KID; realtest — таблица против реального теста с FID и KID; retrain — всё сразу: корпус, обучение, дообучение по флагу, реальный тест новой и прежней модели одной таблицей"
         type: choice
-        options: [probe, train, finetune, eval, visual, realtest]
+        options: [probe, train, finetune, eval, visual, realtest, retrain]
         default: probe
       houses:
-        description: "train: сколько синтетических домов в корпусе (собранные раньше не пересобираются)"
+        description: "train, retrain: сколько синтетических домов в корпусе (собранные раньше не пересобираются)"
         type: number
         default: 10000
       epochs:
-        description: "train: эпох обучения (умолчание config/train.toml — 10); датчик [probe] пишется в историю"
+        description: "train, retrain: эпох обучения (умолчание config/train.toml — 10; gf#155 учили 24); датчик [probe] пишется в историю"
         type: number
         default: 10
       rebuild:
-        description: "train: пересобрать дома заново — нужно, если код генератора поменялся с прошлой сборки"
+        description: "train, retrain: пересобрать дома заново — нужно, если код генератора поменялся с прошлой сборки"
         type: boolean
         default: false
+      finetune:
+        description: "retrain: дообучить новую модель на коттеджах BuildingNet (извлечение скачанных — около 11 мин, первое скачивание — около 50 мин)"
+        type: boolean
+        default: false
+      ft_epochs:
+        description: "finetune, retrain: эпох дообучения (gf#198: на процессоре val-loss минимален на 3-й)"
+        type: number
+        default: 3
       init_run:
-        description: "finetune: номер запуска train, чью модель дообучать (артефакт train-<номер>); 39586817099 — gf#155"
+        description: "finetune: номер запуска train, чью модель дообучать; retrain: с чьей моделью сравнивать (артефакт train-<номер>); 39586817099 — gf#155"
         type: string
         default: "39586817099"
       mix:
-        description: "finetune: сколько последовательностей train синтетики подмешать к BuildingNet"
+        description: "finetune, retrain: сколько последовательностей train синтетики подмешать к BuildingNet"
         type: number
         default: 1500
       lr:
-        description: "finetune: шаг обучения после разгона"
+        description: "finetune, retrain: шаг обучения дообучения после разгона"
         type: string
         default: "1e-4"
       model_run:
         description: "eval, realtest: номер запуска train, чью модель оценивать (артефакт train-<номер>); 39586817099 — gf#155"
         type: string
-        default: "38560937357"
+        default: "39586817099"
       eval_run:
         description: "visual: номер запуска eval, чьи листы считать (артефакт eval-<номер>)"
         type: string
@@ -68,13 +76,20 @@ env:
   # BuildingNet — только на этой машине: качается с Drive по секрету, в артефакты не попадает (gf#198)
   BUILDINGNET: /home/runner/data/buildingnet
   OUT: outputs/train/gpu-${{ github.run_id }}
+  # Модель из артефакта train-<номер> — в папке этапа: дообучение пишет finetune/, обучение — train/.
+  MODEL_DIR: ${{ (inputs.job == 'finetune' || (inputs.job == 'retrain' && inputs.finetune)) && 'finetune' || 'train' }}
+  # Код, на котором отвечает модель для сравнения (init_run) в retrain: последний main до новой
+  # записи токенов gf#212 — её словарь новый код не читает. Сменилась модель — сменить и код.
+  BASE_REF: 52b943ec370febfb4ec7fde60b4c43b3a35577c6
 
 jobs:
   gpu:
     runs-on: [self-hosted, gpu]
     # 24 эпохи на 10 000 домах в 1–3 этажа — около часа (gf#186); оценка и метрики — до часа;
-    # finetune в первый раз качает и извлекает BuildingNet — часа два до обучения
-    timeout-minutes: 480
+    # finetune в первый раз качает и извлекает BuildingNet — часа два до обучения; retrain на
+    # 24 эпохи — около 1,5 ч, с дообучением — ещё около 20 мин (оценка 30.10 по запускам
+    # 39586817099 и 40507586318; реальный тест на GPU ещё не шёл)
+    timeout-minutes: 600
     steps:
       - uses: actions/checkout@v7
 
@@ -114,40 +129,9 @@ jobs:
           print(f"matmul {n}x{n} fp32: {step * 1e3:.1f} мс, {2 * n**3 / step / 1e12:.1f} TFLOPS")
           PY
 
-      - name: Дома и корпус
-        # Только для обучения: оценка берёт готовый корпус, словарь сверяет сама модель.
-        if: inputs.job == 'train'
-        run: |
-          mkdir -p "$DATA_CONFIG"
-          printf '[paths]\nsamples_dir = "%s"\n' "$SAMPLES" > "$DATA_CONFIG/data.toml"
-          genfacade -c "$DATA_CONFIG" synth -n "${{ inputs.houses }}" ${{ inputs.rebuild && '--overwrite' || '' }}
-          genfacade -c "$DATA_CONFIG" tokens
-          head -30 "$SAMPLES/synthetic/_tokens.json"
-
-      - name: Коттеджи BuildingNet на этой машине
-        if: inputs.job == 'finetune'
-        env:
-          BUILDINGNET_DRIVE: ${{ secrets.BUILDINGNET_DRIVE }}
-        run: |
-          python tools/fetch_buildingnet.py "$BUILDINGNET"
-          mkdir -p "$DATA_CONFIG"
-          printf '[paths]\nsamples_dir = "%s"\n' "$SAMPLES" > "$DATA_CONFIG/data.toml"
-          cfg="$RUNNER_TEMP/bn-config"
-          mkdir -p "$cfg"
-          cp "$DATA_CONFIG/data.toml" "$cfg/"
-          printf '\n[buildingnet.paths]\nmodels_dir = "%s"\ncomponent_labels = "%s"\n' \
-            "$BUILDINGNET/v1/OBJ_MODELS" "$BUILDINGNET/probe/v1/component_labels.zip" >> "$cfg/data.toml"
-          printf '\n[buildingnet.paths.splits]\ntrain = "%s"\nval = "%s"\ntest = "%s"\n' \
-            "$BUILDINGNET/probe/v1/train_split.txt" "$BUILDINGNET/probe/v1/val_split.txt" \
-            "$BUILDINGNET/probe/v1/test_split.txt" >> "$cfg/data.toml"
-          genfacade -c "$cfg" buildingnet --splits train val test
-          genfacade -c "$cfg" tokens -s buildingnet
-          genfacade -c "$cfg" tokens
-          head -40 "$SAMPLES/buildingnet/_manifest.json"
-          head -20 "$SAMPLES/buildingnet/_tokens.json"
-
       - name: Модель-основа
-        if: inputs.job == 'finetune'
+        # finetune — дообучать её; retrain — сравнивать с ней на реальном тесте.
+        if: inputs.job == 'finetune' || inputs.job == 'retrain'
         uses: actions/download-artifact@v8
         with:
           name: train-${{ inputs.init_run }}
@@ -155,43 +139,97 @@ jobs:
           run-id: ${{ inputs.init_run }}
           github-token: ${{ github.token }}
 
-      - name: Дообучение
-        if: inputs.job == 'finetune'
+      - name: Код модели-основы
+        if: inputs.job == 'retrain'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.BASE_REF }}
+          path: base-code
+
+      - name: Модель для реального теста
+        if: inputs.job == 'realtest'
+        uses: actions/download-artifact@v8
+        with:
+          name: train-${{ inputs.model_run }}
+          path: model
+          run-id: ${{ inputs.model_run }}
+          github-token: ${{ github.token }}
+
+      - name: Коттеджи BuildingNet на этой машине
+        if: inputs.job == 'finetune' || (inputs.job == 'retrain' && inputs.finetune)
+        env:
+          BUILDINGNET_DRIVE: ${{ secrets.BUILDINGNET_DRIVE }}
+        run: python tools/fetch_buildingnet.py "$BUILDINGNET"
+
+      - name: Монитор GPU
+        # Загрузка GPU и видеопамять — раз в 10 с: PyTorch сам их не меряет. Процесс живёт до
+        # конца задания — раннер убирает его сам.
+        if: inputs.job == 'train' || inputs.job == 'finetune' || inputs.job == 'retrain'
         run: |
           mkdir -p "$OUT"
-          /usr/lib/wsl/lib/nvidia-smi --query-gpu=timestamp,utilization.gpu,memory.used,memory.total \
-            --format=csv -l 10 > "$OUT/gpu.csv" &
-          monitor=$!
-          cfg="$RUNNER_TEMP/finetune-config"
-          mkdir -p "$cfg"
-          cp "$DATA_CONFIG/data.toml" "$cfg/"
-          printf '[fit]\nepochs = %s\nlr = %s\nwarmup_steps = 50\nsave_every = 1\ninit = "%s"\nskip_longer = true\n\n[fit.mix]\nsynthetic = %s\n\n[probe]\nevery = 1\n' \
-            "${{ inputs.epochs }}" "${{ inputs.lr }}" "$PWD/init/model.pt" "${{ inputs.mix }}" > "$cfg/train.toml"
-          genfacade -c "$cfg" train -s buildingnet -o "$OUT"
-          kill "$monitor"
+          nohup /usr/lib/wsl/lib/nvidia-smi --query-gpu=timestamp,utilization.gpu,memory.used,memory.total \
+            --format=csv -l 10 > "$OUT/gpu.csv" 2>&1 &
 
-      - name: Обучение
-        if: inputs.job == 'train'
-        # Загрузка GPU и видеопамять — раз в 10 с рядом с моделью: PyTorch сам их не меряет.
+      - name: Этапы
+        # Команды этапов — tools/retrain.sh, те же, что в локальном прогоне в миниатюре.
+        # Дома и корпусы — в $SAMPLES: переживают запуски.
+        if: inputs.job == 'train' || inputs.job == 'finetune' || inputs.job == 'realtest' || inputs.job == 'retrain'
+        env:
+          WORK: ${{ env.OUT }}
+          HOUSES: ${{ inputs.houses }}
+          EPOCHS: ${{ inputs.epochs }}
+          REBUILD: ${{ inputs.rebuild }}
+          FT_EPOCHS: ${{ inputs.ft_epochs }}
+          LR: ${{ inputs.lr }}
+          MIX: ${{ inputs.mix }}
+          BASE_MODEL: ${{ github.workspace }}/init/model.pt
+          BASE_CODE: ${{ github.workspace }}/base-code
         run: |
-          mkdir -p "$OUT"
-          /usr/lib/wsl/lib/nvidia-smi --query-gpu=timestamp,utilization.gpu,memory.used,memory.total \
-            --format=csv -l 10 > "$OUT/gpu.csv" &
-          monitor=$!
-          cfg="$RUNNER_TEMP/train-config"
-          mkdir -p "$cfg"
-          cp "$DATA_CONFIG/data.toml" "$cfg/"
-          printf '[fit]\nepochs = %s\n' "${{ inputs.epochs }}" > "$cfg/train.toml"
-          genfacade -c "$cfg" train -o "$OUT"
-          kill "$monitor"
+          case "${{ inputs.job }}" in
+            train) stages="corpus train" ;;
+            finetune) stages="buildingnet finetune"; export INIT="$BASE_MODEL" ;;
+            realtest) stages="realtest"; export MODELS="run${{ inputs.model_run }}=$PWD/model/model.pt" ;;
+            retrain) stages="base corpus train ${{ inputs.finetune && 'buildingnet finetune' || '' }} realtest" ;;
+          esac
+          sh tools/retrain.sh $stages
 
-      - name: Результат обучения
-        if: always() && (inputs.job == 'train' || inputs.job == 'finetune')
+      - name: Загрузка GPU рядом с моделью
+        if: always() && (inputs.job == 'train' || inputs.job == 'finetune' || inputs.job == 'retrain')
+        run: |
+          [ ! -d "$OUT/$MODEL_DIR" ] || cp "$OUT/gpu.csv" "$OUT/$MODEL_DIR/"
+
+      - name: Модель
+        if: always() && (inputs.job == 'train' || inputs.job == 'finetune' || inputs.job == 'retrain')
         uses: actions/upload-artifact@v7
         with:
           name: train-${{ github.run_id }}
-          path: ${{ env.OUT }}
+          path: ${{ env.OUT }}/${{ env.MODEL_DIR }}
           if-no-files-found: ignore
+
+      - name: Модель до дообучения
+        if: always() && inputs.job == 'retrain' && inputs.finetune
+        uses: actions/upload-artifact@v7
+        with:
+          name: pretrain-${{ github.run_id }}
+          path: ${{ env.OUT }}/train
+          if-no-files-found: ignore
+
+      - name: Результат реального теста
+        # summary.md — сводка: строки обеих моделей (model-train, model-finetune, model-base) и
+        # базовых подходов, оба режима; листы и metrics.json — рядом.
+        if: always() && (inputs.job == 'realtest' || inputs.job == 'retrain')
+        uses: actions/upload-artifact@v7
+        with:
+          name: realtest-${{ github.run_id }}
+          path: ${{ env.OUT }}/realtest
+          if-no-files-found: ignore
+
+      - name: Папка данных
+        # Оценка и метрики берут корпус, собранный этапом corpus в $SAMPLES.
+        if: inputs.job == 'eval' || inputs.job == 'visual'
+        run: |
+          mkdir -p "$DATA_CONFIG"
+          printf '[paths]\nsamples_dir = "%s"\n' "$SAMPLES" > "$DATA_CONFIG/data.toml"
 
       - name: Модель для оценки
         if: inputs.job == 'eval'
@@ -242,35 +280,6 @@ jobs:
             genfacade metrics eval/sheets/{reference,model,constrained,constrained_raw,independent,untrained}/$mode \
               "$OUT/genplan/$mode" -r "$OUT/calibrate/$mode/reference" -o "$OUT/rows/$mode"
           done
-
-      - name: Модель для реального теста
-        if: inputs.job == 'realtest'
-        uses: actions/download-artifact@v8
-        with:
-          name: train-${{ inputs.model_run }}
-          path: model
-          run-id: ${{ inputs.model_run }}
-          github-token: ${{ github.token }}
-
-      - name: Реальный тест с FID и KID
-        if: inputs.job == 'realtest'
-        # 27 домов ручной разметки (markup/ в git) — эталон; строки — модель на шагах 4–5 со стражем,
-        # правило GenPlan, синтетика val, подмены; половина реальных против другой (gf#210).
-        run: |
-          cfg="$RUNNER_TEMP/realtest-config"
-          mkdir -p "$cfg" "$OUT"
-          cp "$DATA_CONFIG/data.toml" "$cfg/"
-          printf '[layout]\ncheckpoint = "%s"\n' "$GITHUB_WORKSPACE/model/model.pt" > "$cfg/models.toml"
-          genfacade -c "$cfg" manual
-          genfacade -c "$cfg" realtest -o "$OUT"
-
-      - name: Результат реального теста
-        if: always() && inputs.job == 'realtest'
-        uses: actions/upload-artifact@v7
-        with:
-          name: realtest-${{ github.run_id }}
-          path: ${{ env.OUT }}
-          if-no-files-found: ignore
 
       - name: Результат метрик
         if: always() && inputs.job == 'visual'

@@ -96,10 +96,26 @@ def test_model_saved_every_n_epochs(tiny, tmp_path):
     assert first.keys() == last.keys() and first["vocabulary"] == last["vocabulary"]
 
 
-def test_window_shorter_than_corpus_is_refused(at, houses, tmp_path):
-    cfg = at("data", VAL_HALF, TINY.replace("[model]", "[model]\nblock = 8"))
+SHORT_WINDOW = TINY.replace("[model]", "[model]\nblock = 8")
+
+
+def test_window_grows_to_longest_sequence(at, houses, tmp_path):
+    """Новая модель: окно из настроек короче корпуса — растёт до самой длинной
+    последовательности, а не останавливает обучение (запись токенов меняется, gf#212); с этим
+    окном модель сохраняется и загружается."""
+    cfg = at("data", VAL_HALF, SHORT_WINDOW)
+    longest = fit.load(Source.SYNTHETIC, cfg).longest
+    settings = json.loads(fit.run(Source.SYNTHETIC, cfg, tmp_path / "run").read_text())
+    saved = torch.load(tmp_path / "run" / fit.MODEL, weights_only=True)
+    assert longest > 8
+    assert saved["size"]["block"] == settings["train"]["model"]["block"] == longest
+    assert settings["skipped_longer"] == {}
+
+
+def test_window_of_init_checkpoint_does_not_grow(tiny):
+    """Дообучение: окно чекпойнта не растёт — корпус длиннее без `skip_longer` — отказ."""
     with pytest.raises(corpus.CorpusError, match="окно 8 короче"):
-        fit.run(Source.SYNTHETIC, cfg, tmp_path / "run")
+        fit.fitted(fit.load(Source.SYNTHETIC, tiny), {"size": {"block": 8}}, tiny.train.fit)
 
 
 PROBE = "\n[probe]\nevery = 1\ncount = 2\n"
@@ -150,10 +166,15 @@ def test_mix_adds_train_sequences_of_other_sources(tiny):
     assert len(data.parts[Split.VAL].ids) == len(own.parts[Split.VAL].ids)
 
 
-def test_skip_longer_drops_what_the_window_cannot_hold(at, houses):
-    """Дообучение: окно чекпойнта не растёт — длинные последовательности отброшены явно, а не
-    отказом всего обучения (`[fit] skip_longer`, gf#198)."""
-    cfg = at("data", VAL_HALF, TINY.replace("[model]", "[model]\nblock = 8"))
-    data = fit.mixed(Source.SYNTHETIC, _with_fit(cfg, skip_longer=True))
-    assert all(len(ids) <= 8 for part in data.parts.values() for ids in part.ids)
-    assert data.longest <= 8
+def test_skip_longer_drops_what_the_window_cannot_hold(tiny):
+    """Дообучение: окно чекпойнта не растёт — длинные последовательности отброшены и
+    посчитаны, а не отказом всего обучения и не молча (`[fit] skip_longer`, gf#198)."""
+    whole = fit.load(Source.SYNTHETIC, tiny)
+    short = min(len(ids) for part in whole.parts.values() for ids in part.ids)
+    init = {"size": {"block": short}}
+    data, dropped = fit.fitted(whole, init, _with_fit(tiny, skip_longer=True).train.fit)
+    assert all(len(ids) <= short for part in data.parts.values() for ids in part.ids)
+    assert data.longest <= short
+    for split, part in whole.parts.items():
+        assert dropped[split] == len(part.ids) - len(data.parts[split].ids)
+    assert sum(dropped.values()) > 0

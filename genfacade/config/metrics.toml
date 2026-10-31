@@ -12,6 +12,10 @@ k_max = 25            # rank-k приближения k = 1..k_max, как в с
 k = 5                 # density и coverage: радиус шара эталонной стены — до k-го соседа (Naeem 2020)
 subsets = 50          # подвыборок: c2st, density, coverage — среднее по ним, c2st_sd — разброс (gf#235)
 
+[realtest]            # genfacade realtest: сводная таблица summary.md — все строки, оба режима
+# годных листов (valid × домов) — первой колонкой всегда; дальше — эти колонки metrics.json
+summary = ["rules", "c2st", "density", "coverage", "fid", "kid", "windows_per_wall"]
+
 [calibrate]           # genfacade calibrate: эталон генератора против подмен
 reference = 1000      # домов train — эталонное распределение структуры и разнообразия
 
