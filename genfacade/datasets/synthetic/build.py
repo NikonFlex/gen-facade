@@ -52,10 +52,13 @@ def _wall(wall: SideFacade, spec: HouseSpec, look: Look, rules: Synthetic) -> Si
     """Стена с уже поставленными окнами (`wall.elements`) — дверь, декор и зоны."""
     cfg, side, windows = rules.facade, wall.side, wall.elements
     doors = openings.doors(side, spec, look, cfg)
+    casing = cfg.casing.width_m if look.casing else 0.0  # ставни — снаружи наличника
     # порядок — порядок отрисовки: наличник под окном, подоконник и карниз поверх стены
     elements = [
         *(decor.casings(windows, cfg) if look.casing else []), *windows, *doors,
         *decor.sills(windows, cfg),
+        *(decor.shutters(windows + doors, side.length_m, casing, cfg.shutter)
+          if look.shutters else []),
         *([decor.porch(d, spec, cfg) for d in doors] if look.porch and spec.plinth_m > 0 else []),
         *([decor.canopy(d, cfg) for d in doors] if look.canopy else []),
         decor.cornice(side.length_m, spec, cfg),

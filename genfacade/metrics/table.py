@@ -21,6 +21,9 @@
                 правил свода, включённых в метрику (`use = ["metric"]`, config/guidelines.toml);
 - c2st, density, coverage — слой «отличим ли от настоящего» против эталона (realism.py):
                 c2st 0,5 — не отличить, 1,0 — разделимы; density ≈ 1 и coverage ≈ 1 — как эталон.
+                Все три — средние по `[realism] subsets` подвыборкам, уравнивающим метод с
+                эталоном (density и coverage — только когда стен метода больше);
+- c2st_sd     — разброс c2st: стандартное отклонение одиночных подвыборок, из которых среднее.
 Доли — от всех домов папки: неразобранный дом не проходит ни одной проверки.
 """
 
@@ -44,7 +47,7 @@ METRICS = "metrics.json"
 GEOMETRY = {Rule.SVG_PARSE, Rule.OUTSIDE, Rule.OVERLAP}
 PLAN = {Rule.PLAN_OPENING, Rule.FORBIDDEN, Rule.CORNER}
 COLUMNS = ("valid", "geometry", "plan", "structure", "diversity", "description", "fid", "kid",
-           "svd", "rules", "c2st", "density", "coverage", "windows_per_wall")
+           "svd", "rules", "c2st", "c2st_sd", "density", "coverage", "windows_per_wall")
 
 
 class Item(NamedTuple):
@@ -83,11 +86,8 @@ def reference(items: list[Item], cfg: Config) -> Reference:
     sheets = _sheets(items)
     walls = [measures.features(f, s.spec) for s in sheets for f in s.facades]
     scale = [pstdev(col) or 1.0 for col in zip(*walls, strict=True)] if walls else [1.0] * 5
-    return Reference(measures.structure(sheets), scale, _inception(sheets, cfg), _walls(sheets))
-
-
-def _walls(sheets: list[FacadeSheet]) -> numpy.ndarray:
-    return numpy.array([measures.realism_features(f, s.spec) for s in sheets for f in s.facades])
+    return Reference(measures.structure(sheets), scale, _inception(sheets, cfg),
+                     realism.walls(sheets))
 
 
 def _inception(sheets: list[FacadeSheet], cfg: Config) -> numpy.ndarray | None:
@@ -139,13 +139,16 @@ def _guidelines(sheets: list[FacadeSheet], cfg: Config) -> dict[str, float]:
 
 
 def _realism(sheets: list[FacadeSheet], ref: Reference, cfg: Config) -> dict:
-    ours = _walls(sheets)
+    ours = realism.walls(sheets)
     if not len(ours) or not len(ref.realism):
-        return {"c2st": None, "density": None, "coverage": None}
+        return dict.fromkeys(("c2st", "c2st_sd", "density", "coverage"))
     a, b = realism.standardized(ours, ref.realism)
-    dc = realism.density_coverage(a, b, cfg.metrics.realism.k) or (None, None)
-    c = realism.c2st(a, b, numpy.random.default_rng(cfg.metrics.seed))
-    return {"c2st": _round(c), "density": _round(dc[0]), "coverage": _round(dc[1])}
+    settings, seed = cfg.metrics.realism, cfg.metrics.seed
+    dc = realism.density_coverage_subsets(a, b, settings, numpy.random.default_rng(seed))
+    c = realism.c2st_subsets(a, b, numpy.random.default_rng(seed), settings.subsets)
+    dc, c = dc or (None, None), c or (None, None)
+    return {"c2st": _round(c[0]), "c2st_sd": _round(c[1]), "density": _round(dc[0]),
+            "coverage": _round(dc[1])}
 
 
 def _round(v: float | None) -> float | None:

@@ -759,7 +759,7 @@ text = "Окна: верхние кромки (head) или подоконник
 check = "head_line"
 params = { tol_m = 0.05, doors = 0 }
 applies = ["us", "eu"]
-use = ["metric"]
+use = ["metric", "guard"]
 note = "У Grapevine допустима общая линия по head или по sill; Roanoke: ширина окон этажа может различаться не более чем на 6 дюймов (0,15 м)."
 [[guideline.source]]
 doc = "Grapevine Historic Township Pattern Book, 2025"
@@ -1013,6 +1013,7 @@ text = "Расстояние от окна и двери до угла стен�
 check = "corner_distance"
 params = { cls = "window", min = 1.0 }
 applies = ["us", "eu", "ru-izhs"]
+use = ["guard"]
 note = "Отступ от угла: 1,0 м (Schleching, Spiekeroog, Казань), 0,8 м (Regensburg), 0,457 м (Grapevine, 1,5 ft); EDG — «как можно дальше от углов», числа нет. Исключения: зимние сады, эркеры, окна в общей раме. В ТД Казани значения фиксированы по типу (1,0–1,2 м), допуск ±0,3 м."
 [[guideline.source]]
 doc = "Grapevine Historic Township Pattern Book, 2025"
@@ -1057,7 +1058,7 @@ text = "Простенок между соседними проёмами одн
 check = "pier_min"
 params = { min = 0.5 }
 applies = ["us", "eu", "ru-izhs"]
-use = ["metric"]
+use = ["metric", "guard"]
 note = "Значения: 0,5 м (Spiekeroog, строгий исторический остров), 0,457 м (Grapevine), 0,65–0,9 м (Казань, фиксированные размеры типов), 0,64 м (КГАСУ: уже — сплошная кладка). Не относится к окнам одной группы (mullion 0,10–0,15 м, см. window_group_gap_us)."
 [[guideline.source]]
 doc = "Grapevine Historic Township Pattern Book, 2025"
@@ -1583,6 +1584,7 @@ text = "Число различных типоразмеров окон огра
 check = "window_types"
 params = { per_facade = 3, per_house = 4, tol_m = 0.15 }
 applies = ["us", "eu"]
+use = ["guard"]
 note = "Числа 3 и 4 — Schleching (обязательно); американские книги чисел не дают («same window design throughout, with the exception of special windows»), строгое чтение — 1 основной + accent. Roanoke: ширина окон этажа может различаться не более чем на 6 дюймов (0,15 м) — tol_m. Accent: w ≤ 0,81 м, h ≤ 1,22 м (Mississippi), только когда мало места."
 [[guideline.source]]
 doc = "Pattern Book for Neighborly Houses, 2007"

@@ -53,12 +53,16 @@ class Sampler:
 
     @torch.no_grad()
     def answer(self, prompts: torch.Tensor, opts: Sampling,
-               guards: list[Guard | None] | None = None) -> list[list[int]]:
-        """Дописывать токены, пока у всех не будет `<end>` или не кончится окно; вернуть ответы
-        от `<answer>` — последнего токена условия — до `<end>` включительно. Условия в пачке —
+               guards: list[Guard | None] | None = None,
+               stops: frozenset[int] | None = None) -> list[list[int]]:
+        """Дописывать токены, пока у всех не будет стопового (по умолчанию `<end>`) или не
+        кончится окно; вернуть ответы от последнего токена условия (`<answer>`) до стопового
+        включительно. Стоп `<wall>` — досэмплировать одну стену (gf#213). Условия в пачке —
         одной длины: позиции в nanoGPT абсолютные, паддинг слева их бы сдвинул. Прошлые
         позиции не пересчитываются — KV-кэш (`GPT.step`)."""
         self.model.eval()
+        stops = stops or frozenset({self.end})
+        stop = torch.tensor(sorted(stops), device=self.device)
         idx = prompts.to(self.device)
         done = torch.zeros(len(idx), dtype=torch.bool, device=self.device)
         start = idx.size(1) - 1
@@ -68,12 +72,12 @@ class Sampler:
             nxt = _pick(_forbid(logits[:, -1, :].float(), guards), opts)
             _observe(guards, nxt)
             idx = torch.cat((idx, nxt), dim=1)
-            done |= nxt.squeeze(1) == self.end
+            done |= torch.isin(nxt.squeeze(1), stop)
             if done.all() or idx.size(1) >= self.model.config.block_size:
                 break
             with self.autocast():
                 logits, past = self.model.step(nxt, past)
-        return [_cut(row[start:].tolist(), self.end) for row in idx]
+        return [_cut(row[start:].tolist(), stops) for row in idx]
 
 
 def answer_all(sampler: Sampler, prompts: list[Prompt], opts: Sampling,
@@ -117,5 +121,8 @@ def _pick(logits: torch.Tensor, opts: Sampling) -> torch.Tensor:
     return torch.multinomial(torch.softmax(logits, dim=-1), num_samples=1)
 
 
-def _cut(ids: list[int], end: int) -> list[int]:
-    return ids[:ids.index(end) + 1] if end in ids else ids
+def _cut(ids: list[int], stops: frozenset[int]) -> list[int]:
+    """До первого стопового после токена условия: сам он (`<wall>` стены, которую
+    досэмплируют) — не стоп."""
+    at = next((i for i, t in enumerate(ids) if i and t in stops), None)
+    return ids if at is None else ids[:at + 1]
