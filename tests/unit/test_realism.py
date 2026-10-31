@@ -8,7 +8,7 @@
 import numpy
 
 from genfacade import config
-from genfacade.metrics import calibrate, measures, realism, table
+from genfacade.metrics import calibrate, realism, table
 from genfacade.schema import ElementClass
 
 RNG = numpy.random.default_rng(0)
@@ -44,7 +44,7 @@ def test_c2st_over_subsets_steadier_than_single(cfg):
 def test_table_takes_subsets_from_config(house, cfg, tmp_path):
     """Строка таблицы: c2st_sd > 0 при подвыборках из настройки и 0 при одной — таблица не
     подменяет настройку своим числом. Эталон — стены дома с шумом, впятеро больше стен метода."""
-    walls = realism.walls([house])
+    walls = realism.walls([house], cfg.metrics.realism)
     noisy = numpy.repeat(walls, 5, axis=0)
     noisy += numpy.random.default_rng(2).normal(size=noisy.shape)
     ref = table.Reference({}, [], None, noisy)
@@ -77,11 +77,6 @@ def test_density_and_coverage_of_shifted_distribution_zero():
 def test_standardized_divides_by_pooled_spread():
     a, b = realism.standardized(numpy.array([[0.0, 1.0]]), numpy.array([[2.0, 1.0]]))
     assert a.tolist() == [[0.0, 1.0]] and b.tolist() == [[2.0, 1.0]]
-
-
-def test_realism_features_of_blind_wall(house):
-    f = house.facades[0].model_copy(update={"elements": []})
-    assert measures.realism_features(f, house.spec) == [0.0] * 11
 
 
 def _with_twins(house, lift):

@@ -1,6 +1,6 @@
 """Слой «отличим ли от настоящего» метрики правдоподобия (gf#210): стены метода против стен
-эталона в пространстве признаков `measures.realism_features`, признаки — в долях разброса обеих
-выборок вместе.
+эталона в пространстве признаков `wall_features` (`[realism] features`), признаки — в долях
+разброса обеих выборок вместе.
 
 - c2st     — тест двух выборок классификатором (Lopez-Paz, Oquab 2017) в простейшем виде: доля
              стен, которые ближайший сосед относит к своей выборке (точность 1-NN с исключением
@@ -18,15 +18,16 @@
 import numpy
 
 from genfacade.config import Realism
-from genfacade.metrics import measures
+from genfacade.metrics import wall_features
 from genfacade.schema import FacadeSheet
 
 BLOCK = 256  # строк за проход в _distances: память, не результат
 
 
-def walls(sheets: list[FacadeSheet]) -> numpy.ndarray:
-    """Признаки стен домов (`measures.realism_features`): строка — стена."""
-    return numpy.array([measures.realism_features(f, s.spec) for s in sheets for f in s.facades])
+def walls(sheets: list[FacadeSheet], cfg: Realism) -> numpy.ndarray:
+    """Признаки стен домов (`wall_features`, `[realism] features`): строка — стена."""
+    rows = [row for s in sheets for row in wall_features.of_house(s, cfg)]
+    return numpy.array(rows).reshape(len(rows), len(cfg.features))
 
 
 def standardized(ours: numpy.ndarray, ref: numpy.ndarray) -> tuple[numpy.ndarray, numpy.ndarray]:
@@ -103,9 +104,9 @@ def _distances(a: numpy.ndarray, b: numpy.ndarray) -> numpy.ndarray:
 
 def house_density(house: numpy.ndarray, ref: numpy.ndarray, k: int) -> float | None:
     """Оценка правдоподобия одного дома (gf#210, для «лучшего из N» gf#213): density его стен
-    против эталона, признаки — в долях разброса дома и эталона вместе. С оценкой хозяина на 24
-    парах согласна в 23 (docs/metrics-results.md, 30.10). Дом из эталона из ref убирает
-    вызывающий: иначе стена находит в эталоне саму себя."""
+    против эталона, признаки — в долях разброса дома и эталона вместе. С оценкой хозяина согласна
+    в 23 из 24 пар gf#210 и в 23 из 24 пар gf#212 (docs/metrics-results.md, 31.10, gf#243). Дом
+    из эталона из ref убирает вызывающий: иначе стена находит в эталоне саму себя."""
     if not len(house):
         return None
     a, b = standardized(house, ref)
