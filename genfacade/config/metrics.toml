@@ -11,6 +11,12 @@ k_max = 25            # rank-k приближения k = 1..k_max, как в с
 [realism]             # слой «отличим ли от настоящего» метрики правдоподобия (gf#210)
 k = 5                 # density и coverage: радиус шара эталонной стены — до k-го соседа (Naeem 2020)
 subsets = 50          # подвыборок: c2st, density, coverage — среднее по ним, c2st_sd — разброс (gf#235)
+# Оценка одного дома — обе (gf#245): density — стены дома в шарах эталонных стен по всем признакам
+# сразу (необычный по двум признакам настоящий дом получает 0); marginal — по каждому признаку
+# отдельно, лог доли эталонных стен в окне ±marginal_window разброса. Согласие с хозяином на 48
+# парах — docs/metrics-results.md; «лучший из N» выбирает по house_score.
+house_score = "density"
+marginal_window = 0.5
 # признаки стены (metrics/wall_features.py, номера кандидатов gf#243 — в описании функций);
 # признак дома одинаков у всех его стен. Набор — по согласию с хозяином на 48 парах (gf#243,
 # docs/metrics-results.md); группа А (брак листа) — место для функции валидатора gf#242
@@ -32,7 +38,8 @@ zone_step_m = 0.25    # шаг по высоте, с которым сравни
 
 [realtest]            # genfacade realtest: сводная таблица summary.md — все строки, оба режима
 # годных листов (valid × домов) — первой колонкой всегда; дальше — эти колонки metrics.json
-summary = ["rules", "c2st", "density", "coverage", "fid", "kid", "windows_per_wall"]
+summary = ["rules", "c2st", "density", "coverage", "house_density", "house_marginal", "fid", "kid",
+           "windows_per_wall"]
 
 [calibrate]           # genfacade calibrate: эталон генератора против подмен
 reference = 1000      # домов train — эталонное распределение структуры и разнообразия

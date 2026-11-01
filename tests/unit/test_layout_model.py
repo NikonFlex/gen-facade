@@ -134,14 +134,17 @@ def _short_windows(bare):
 
 def test_best_of_n_takes_the_likeliest_answer(run, cfg, monkeypatch):
     """Лучший из N (gf#213): best_of ответов одной пачкой (один seed), из годных — с наибольшей
-    density стен против эталона, а не первый годный."""
+    оценкой дома против эталона (`house_score`, по умолчанию density), а не первый годный; в
+    трассе — обе оценки (gf#245)."""
     reference = realism.walls([_good(tokens.bare(pipeline.walls(*_house(cfg))))] * 3,
                               cfg.metrics.realism)
     monkeypatch.setattr(pipeline, "_reference", lambda settings, without: reference)
     model = Fake(_short_windows, _good)
     meta, _ = run(model, _tuned(cfg, best_of=2))
-    density = meta["layout"]["density"]
+    scores = meta["layout"]["scores"]
+    density, marginal = scores["density"], scores["marginal"]
     assert meta["layout"]["chosen"] == 1 and density[1] > density[0]
+    assert marginal[1] > marginal[0]
     assert model.seeds == [cfg.models.layout.seed] * 2
 
 

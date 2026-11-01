@@ -104,6 +104,19 @@ def test_house_density_prefers_house_from_reference_distribution():
     assert realism.house_density(SAME[0][:0], SAME[1], k=5) is None
 
 
+def test_house_marginal_loses_less_for_one_odd_feature():
+    """marginal (gf#245) — по каждому признаку отдельно: дом, необычный по одному признаку из
+    четырёх, у density обнуляется, как дом вдали по всем, а у marginal остаётся между своим и
+    дальним — так настоящий необычный дом не проигрывает подделке."""
+    near, ref = SAME[0][:4], SAME[1]
+    odd = near.copy()
+    odd[:, 0] += 10.0
+    assert realism.house_density(odd, ref, k=5) == realism.house_density(FAR[:4], ref, k=5) == 0
+    scores = [realism.house_marginal(h, ref, 0.5) for h in (near, odd, FAR[:4])]
+    assert scores[0] > scores[1] > scores[2]
+    assert realism.house_marginal(near[:0], ref, 0.5) is None
+
+
 def test_real_house_beats_its_random_substitute_on_rules(house, cfg):
     """Тот же дом с подменой `random` (окна раскиданы по стене) проходит правила метрики хуже."""
     real = _with_twins(house, 0.0)

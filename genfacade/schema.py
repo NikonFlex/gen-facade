@@ -90,6 +90,14 @@ class Device(StrEnum):
     CPU = "cpu"
 
 
+class HouseScore(StrEnum):
+    """Оценка правдоподобия одного дома (`metrics.realism.house_scores`, gf#245): density — стены
+    дома в шарах эталонных стен по всем признакам сразу; marginal — по каждому признаку отдельно."""
+
+    DENSITY = "density"
+    MARGINAL = "marginal"
+
+
 class TextKind(StrEnum):
     """Как получено описание дома (`data: Описания из разметки`)."""
 
