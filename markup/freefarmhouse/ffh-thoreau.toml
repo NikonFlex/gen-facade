@@ -7,9 +7,13 @@ roof = "двускатная 10/12, спальный чердак; кирпич�
 pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"
 material = "wood"         # CEDAR BEVEL SIDING
 plinth_ft = 1.32          # земля у входа — FIN. FLOOR +0'-0"
+plinth_material = "brick" # BRICK PIER (на листе: «могут быть простым бетоном»), между столбами — открытое подполье (gf#245)
+trim_material = "wood"    # 1x8 FASCIA BD под кровлей, на боковых стенах (gf#245)
 floor_heights_ft = [8.3333]   # EAVE +8'-4"
 cut = ["front: створчатое окно во фронтоне", "rear: створчатые окна во фронтоне x2",
        "front: ступень", "rear: труба дымохода выше карниза"]
+absent = ["front, rear: нет карнизной полосы — щипцовые стены, горизонтальной линии на отметке карниза нет (1x8 FASCIA BD идёт по скату)",
+          "все стороны: нет зон второй отделки — вся стена одной обшивкой CEDAR BEVEL SIDING"]
 
 [[sides]]
 view = "FRONT ELEVATION"
@@ -28,6 +32,7 @@ wall = [425.5, 727.7]
 floor = 420.5
 elements = [
   { cls = "window", box = [525.2, 288.0, 580.0, 384.0], variant = { cols = 3, rows = 4 } },
+  { cls = "cornice", box = [425.5, 270.5, 727.7, 278.8] },   # 1x8 FASCIA BD
 ]
 
 [[sides]]
@@ -46,4 +51,5 @@ wall = [425.5, 727.7]
 floor = 420.5
 elements = [
   { cls = "window", box = [573.2, 288.0, 628.0, 384.0], variant = { cols = 3, rows = 4 } },
+  { cls = "cornice", box = [425.5, 270.5, 727.7, 278.8] },   # 1x8 FASCIA BD
 ]

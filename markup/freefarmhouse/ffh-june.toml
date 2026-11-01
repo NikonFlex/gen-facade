@@ -11,7 +11,11 @@ roof = "двускатная 10/12, коньком вдоль; дормеры 4/
 pt_per_ft = 9.0           # SCALE: 1/8" = 1'-0"
 material = "siding"       # CLAPBOARD SIDING (fiber cement); фронтоны — диагональная вагонка
 plinth_ft = 0.75          # земля у стены 406.3 pt, 1ST FLOOR +0'-0" — 399.6 pt
+plinth_material = "concrete"  # «concrete slab foundation» (note 3): кромка плиты 401.8–406.3 под плинтусной доской
+trim_material = "wood"    # TRIM: WOOD OR FIBER CEMENT — карнизная доска (gf#245)
 floor_heights_ft = [11.5]     # EAVE +11'-6"; мансарда (2ND FLOOR +8'-4") — не этаж
+absent = ["west, east: карниза нет — щипцовые торцы, горизонтальной полосы на отметке карниза нет",
+          "north, south: под дормером карниза нет — стена дормера идёт до свеса, полоса только по краям"]
 cut = ["west: окно мансарды во фронтоне", "east: окно мансарды во фронтоне",
        "south: дормер с окном", "north: дормер с окном",
        "north: два возможных окна (пунктир, note 4) — не размечены",
@@ -37,7 +41,10 @@ view = "SOUTH ELEVATION (A2.1; на деле северный)"
 page = 8
 wall = [405.3, 657.3]
 floor = 399.6
-elements = []
+elements = [
+  { cls = "cornice", box = [405.3, 296.1, 495.3, 300.6] },  # карнизная доска слева от дормера
+  { cls = "cornice", box = [567.3, 296.1, 657.3, 300.6] },  # и справа от него
+]
 
 [[sides]]
 view = "WEST ELEVATION (A2.1; на деле восточный)"
@@ -61,4 +68,6 @@ elements = [
   { cls = "window", box = [623.1, 336.6, 647.1, 381.6], variant = { cols = 2, rows = 2 } },
   { cls = "sill", box = [485.1, 381.9, 513.6, 384.2], parent = 0 },
   { cls = "sill", box = [621.6, 381.9, 650.1, 384.2], parent = 1 },
+  { cls = "cornice", box = [441.6, 296.1, 531.6, 300.6] },  # карнизная доска слева от дормера
+  { cls = "cornice", box = [603.6, 296.1, 693.6, 300.6] },  # и справа от него
 ]

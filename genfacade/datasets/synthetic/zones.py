@@ -12,7 +12,6 @@ from genfacade.schema import (
     HouseSpec,
     MaterialZone,
     PaletteRole,
-    Polygon,
     SideFacade,
     ZoneRole,
 )
@@ -22,13 +21,13 @@ Box = tuple[float, float, float, float]  # x0, y0, x1, y1
 
 def zones(wall: SideFacade, spec: HouseSpec, look: Look, cfg: Finish) -> list[MaterialZone]:
     """Зоны стены по её проёмам (`wall.elements`) и схеме отделки дома."""
-    length = wall.side.length_m
+    length, zone = wall.side.length_m, MaterialZone.rect
     base = [
-        *([_zone(ZoneRole.PLINTH, PaletteRole.PLINTH, (0, 0, length, spec.plinth_m))]
+        *([zone(ZoneRole.PLINTH, PaletteRole.PLINTH, (0, 0, length, spec.plinth_m))]
           if spec.plinth_m > 0 else []),  # без цоколя — без его зоны
-        _zone(ZoneRole.MAIN, PaletteRole.MAIN, (0, spec.plinth_m, length, spec.eaves_m)),
+        zone(ZoneRole.MAIN, PaletteRole.MAIN, (0, spec.plinth_m, length, spec.eaves_m)),
     ]
-    return base + [_zone(ZoneRole.ACCENT, PaletteRole.ACCENT, box)
+    return base + [zone(ZoneRole.ACCENT, PaletteRole.ACCENT, box)
                    for box in _accents(wall, spec, look, cfg)]
 
 
@@ -59,9 +58,3 @@ def _piers(windows: list[Element], max_m: float) -> list[Box]:
 
 def _of(wall: SideFacade, cls: ElementClass) -> list[Element]:
     return [e for e in wall.elements if e.cls is cls]
-
-
-def _zone(role: ZoneRole, material: PaletteRole, box: Box) -> MaterialZone:
-    x0, y0, x1, y1 = box
-    shape: Polygon = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
-    return MaterialZone(role=role, material=material, shape=shape)

@@ -10,6 +10,8 @@ roof = "двускатная 12/12, коньком вдоль; кирпична�
 pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"
 material = "siding"       # CLAPBOARD SIDING
 plinth_ft = 2.5           # APPROX. GRADE -2'-6", кирпичный фундамент
+plinth_material = "brick" # BRICK FOUNDATION: от чистого пола 627.6 до земли 672.6 на всех листах
+trim_material = "wood"    # FRIEZE BOARD под карнизом (gf#245)
 floor_heights_ft = [10.0, 10.0]   # 2ND FLOOR +10'-0", ROOF EAVE +20'-0"
 cut = ["west: фронтон с вентрешёткой, труба выше карниза",
        "east: фронтон с вентрешёткой",
@@ -32,6 +34,7 @@ elements = [
   { cls = "window", box = [760.4, 303.9, 805.3, 393.8], variant = { cols = 2, rows = 2 } },
   { cls = "canopy", box = [347.2, 411.8, 876.9, 474.8] },   # крыша крыльца до балки
   { cls = "porch", box = [347.2, 627.6, 876.9, 672.6] },    # настил: от чистого пола до земли
+  { cls = "cornice", box = [321.3, 267.6, 902.8, 294.9] },  # фриз: от карниза до первой доски обшивки
 ]
 
 [[sides]]
@@ -42,6 +45,7 @@ floor = 627.6
 elements = [
   { cls = "chimney", box = [567.5, 482.9, 651.4, 672.6] },
   { cls = "chimney", box = [585.1, 268.0, 633.8, 482.9] },
+  { cls = "cornice", box = [462.6, 267.6, 756.3, 277.0] },  # щипец: полоса на отметке карниза
 ]
 
 [[sides]]
@@ -57,6 +61,7 @@ elements = [
   { cls = "window", box = [594.0, 312.9, 630.0, 384.8], variant = { cols = 2, rows = 2 } },
   { cls = "window", box = [764.8, 312.9, 800.8, 384.8], variant = { cols = 2, rows = 2 } },
   { cls = "canopy", box = [528.6, 447.4, 623.1, 480.3] },
+  { cls = "cornice", box = [321.3, 267.6, 902.7, 294.9] },
 ]
 
 [[sides]]
@@ -67,4 +72,5 @@ floor = 627.6
 elements = [
   { cls = "window", box = [590.1, 483.8, 635.0, 573.7], variant = { cols = 2, rows = 2 } },
   { cls = "window", box = [590.1, 303.9, 635.0, 393.8], variant = { cols = 2, rows = 2 } },
+  { cls = "cornice", box = [465.7, 267.6, 759.4, 277.0] },  # щипец: полоса на отметке карниза
 ]

@@ -448,6 +448,14 @@ class MaterialZone(Model):
     material: str
     role: ZoneRole
 
+    @classmethod
+    def rect(cls, role: ZoneRole, material: str, box: tuple[float, float, float, float]
+             ) -> "MaterialZone":
+        """Прямоугольная зона x0, y0, x1, y1 — обходом (x0 y0) (x1 y0) (x1 y1) (x0 y1), как у
+        синтетики и в ответе модели (`constraints.ZONE_RECT`)."""
+        x0, y0, x1, y1 = box
+        return cls(role=role, material=material, shape=[(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
+
 
 class SideFacade(Model):
     side: Side
