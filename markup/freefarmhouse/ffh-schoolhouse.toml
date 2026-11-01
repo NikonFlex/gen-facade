@@ -9,6 +9,8 @@ roof = "двускатная 10/12, фальцевая; над входом ку
 pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"; дверь 80" = 120 pt, стена 12' = 216 pt
 material = "siding"       # 4-6" FIBER CEMENT CLAPBOARD
 plinth_ft = 1.5           # обшивка до 18 pt под FLOOR +0, ниже до земли 6" MIN (вид справа)
+plinth_material = "concrete"   # NOTE 3 FOUNDATION: 12x12 CONCRETE PIERS OR REINFORCED BRICK; на виде — гладкая полоса под обшивкой (gf#245)
+trim_material = "wood"    # 1x6 FASCIA BOARD под карнизом (NOTE 7, TRIM: SOLID WOOD OR FIBER CEMENT)
 floor_heights_ft = [6.8333]   # EAVE +6'-10"
 cut = ["front: выступ 6'x1' вокруг двери от земли до карниза",
        "front: выступ-купол над входом выше карниза (фронтон, вентрешётка ATTIC VENT)",
@@ -17,6 +19,8 @@ cut = ["front: выступ 6'x1' вокруг двери от земли до �
        "rear: треугольная вентрешётка во фронтоне",
        "right, left: выступ входа и козырёк в профиле за углом стены",
        "right, left: скат кровли и купол"]
+absent = ["front, rear: нет карнизной полосы — щипцовые стены, на отметке карниза горизонтальной линии нет",
+          "все стороны: нет зон второй отделки — вся стена одной обшивкой CLAPBOARD SIDING"]
 
 [[sides]]
 view = "FRONT ELEVATION"
@@ -34,6 +38,7 @@ wall = [441.3, 657.3]
 floor = 427.4
 elements = [
   { cls = "window", box = [527.5, 318.7, 571.0, 392.2], variant = { cols = 2, rows = 2 } },
+  { cls = "cornice", box = [441.3, 304.4, 657.3, 313.3] },   # 1x6 FASCIA BOARD
 ]
 
 [[sides]]
@@ -50,4 +55,5 @@ wall = [477.3, 693.3]
 floor = 427.4
 elements = [
   { cls = "window", box = [563.5, 318.1, 607.0, 391.6], variant = { cols = 2, rows = 2 } },
+  { cls = "cornice", box = [477.3, 304.4, 693.3, 312.8] },   # 1x6 FASCIA BOARD
 ]

@@ -30,7 +30,16 @@ from genfacade.render.plan_svg import plan_svg
 from genfacade.render.preview import to_png
 from genfacade.render.spec_svg import spec_svg
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import FacadeSheet, HouseSpec, Mode, Plan, Rule, SideFacade, Violation
+from genfacade.schema import (
+    FacadeSheet,
+    HouseScore,
+    HouseSpec,
+    Mode,
+    Plan,
+    Rule,
+    SideFacade,
+    Violation,
+)
 from genfacade.snap import snap
 from genfacade.train.tokens import TokenError
 from genfacade.unfold import unfold
@@ -216,13 +225,15 @@ def _bad_wall(bad: list[Violation], sheet: FacadeSheet) -> int | None:
 
 
 def _likeliest(good: list[Checked], name: str, cfg: Config) -> Checked:
-    """Годный ответ с наибольшей density стен против домов эталона, кроме дома name
-    (`metrics.realism.house_density`, gf#210). Эталона нет — первый годный."""
+    """Годный ответ с наибольшей оценкой дома `house_score` против домов эталона, кроме дома
+    name (`metrics.realism.house_scores`, gf#210, gf#245); в трассу — обе оценки каждого ответа.
+    Эталона нет — первый годный."""
     ref, settings = _reference(cfg, name), cfg.metrics.realism
-    scores = [realism.house_density(realism.walls([g.sheet], settings), ref, settings.k)
-              if len(ref) else None for g in good]
-    best = max(range(len(good)), key=lambda i: -math.inf if scores[i] is None else scores[i])
-    good[best].layout["density"] = scores
+    scores = [realism.house_scores(realism.walls([g.sheet], settings), ref, settings)
+              if len(ref) else {} for g in good]
+    chosen = [s.get(settings.house_score) for s in scores]
+    best = max(range(len(good)), key=lambda i: -math.inf if chosen[i] is None else chosen[i])
+    good[best].layout["scores"] = {k: [s.get(k) for s in scores] for k in HouseScore}
     good[best].layout["chosen"] = best
     return good[best]
 

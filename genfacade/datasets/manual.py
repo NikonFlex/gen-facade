@@ -10,6 +10,10 @@ pt, и внутренний ли угол после неё (Г-, Т-конту�
 перечисляет в `cut` — это идёт в опись (`data: Стена до карниза в данных`); элемент, заходящий
 за карниз или угол, обрезается по стене.
 
+Отделка (gf#245): цоколь — зона от земли до чистого пола (`plinth_ft`) материалом `plinth_material`,
+основная — от цоколя до карниза, вторая отделка (акцент, пояс) — прямоугольниками стороны; карниз —
+элемент `cornice` стороны рамкой с листа, материалом `trim_material`. Чего на листе нет (цоколя под
+обшивкой, карниза на щипцовой стене), разметчик перечисляет в `absent`.
 Подоконник, ставни, наличник и козырёк модель шага 4 пишет признаком своего проёма (gf#212): их
 связь с проёмом — родитель. Где разметчик родителя не указал, он ставится по месту (`_linked`); вид
 этих элементов у дома — по умолчанию из настроек, для тех, что у дома есть.
@@ -34,6 +38,7 @@ from genfacade.schema import (
     HouseSpec,
     HouseTrim,
     Material,
+    MaterialZone,
     Model,
     OpeningVariant,
     PaletteRole,
@@ -43,6 +48,7 @@ from genfacade.schema import (
     Source,
     Split,
     Trim,
+    ZoneRole,
 )
 from genfacade.validate import errors, validate
 
@@ -51,7 +57,11 @@ M_PER_FT = 0.3048  # международный фут — определени�
 FIRST_NORMAL = (0.0, 1.0)  # сторона входа смотрит в +y плана (rect_house.NORMALS[0])
 
 
-class BadContour(Exception):
+class BadMarkup(Exception):
+    """Разметка не собирается в дом: пример не пишется, причина — в опись."""
+
+
+class BadContour(BadMarkup):
     """Стороны разметки не складываются в замкнутый ортогональный контур по часовой."""
 
 
@@ -64,12 +74,21 @@ class Mark(Model):
     parent: int | None = None  # номер окна в списке стороны: у ставен, подоконника
 
 
+class ZoneMark(Model):
+    """Вторая отделка на листе: акцент или пояс, прямоугольник x0, верх, x1, низ в pt."""
+
+    role: ZoneRole
+    material: str        # вид из library.toml: у дома один вид второй отделки (палитра)
+    box: tuple[float, float, float, float]
+
+
 class Elevation(Model):
     view: str            # подпись вида на листе: по ней разметку сверяют с PDF
     page: int = Field(ge=1)
     wall: tuple[float, float]  # левый и правый край стены, pt
     floor: float         # отметка чистого пола первого этажа, pt
     elements: list[Mark] = []
+    zones: list[ZoneMark] = []
     inner_corner: bool = False  # угол после этой стороны — внутренний (Г-, Т-контур, gf#199)
 
 
@@ -81,6 +100,9 @@ class Markup(Model):
     material: str        # вид основной отделки из library.toml
     plinth_ft: float = Field(ge=0)    # чистый пол над землёй
     floor_heights_ft: list[float]     # этажи от чистого пола до карниза
+    plinth_material: str | None = None  # вид отделки цоколя; None — цоколя на листе нет (absent)
+    trim_material: str | None = None    # вид карниза — элементов `cornice` сторон
+    absent: list[str] = []  # чего нет в источнике: «west: карниза нет — щипцовая стена»
     cut: list[str] = []  # срезанное разметчиком: что и с какой стороны
     sides: list[Elevation]
 
@@ -102,6 +124,9 @@ def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
         laid.append((k, _linked(kept, cfg.link_tol_m)))
     spec = spec.model_copy(update={"trim": _trim([xs for _, xs in laid], cfg.trim)})
     plan, sheet = rect_house.assemble(spec, fp, laid, Source.MANUAL)
+    facades = [f.model_copy(update={"zones": _zones(e, m, spec, f.side.length_m)})
+               for f, e in zip(sheet.facades, m.sides, strict=True)]
+    sheet = sheet.model_copy(update={"facades": facades})
     return Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet), dropped
 
 
@@ -134,23 +159,54 @@ def _spec(m: Markup) -> HouseSpec:
     plinth, heights = m.plinth_ft * M_PER_FT, [h * M_PER_FT for h in m.floor_heights_ft]
     return HouseSpec(building_type=BuildingType.COTTAGE, floors=len(heights),
                      floor_heights_m=heights, plinth_m=plinth, eaves_m=plinth + sum(heights),
-                     roof=Roof(kind=RoofKind.FLAT),
-                     materials=[Material(id=PaletteRole.MAIN, kind=m.material)])
+                     roof=Roof(kind=RoofKind.FLAT), materials=_palette(m))
+
+
+def _palette(m: Markup) -> list[Material]:
+    """Палитра дома по разметке: основная, цоколь, карниз и вторая отделка — те, что на листе."""
+    second = {z.material for e in m.sides for z in e.zones}
+    if len(second) > 1:  # у палитры одна роль второй отделки (`PaletteRole.ACCENT`)
+        raise BadMarkup(f"{m.id}: видов второй отделки {len(second)} — у палитры один")
+    kinds = {PaletteRole.MAIN: m.material, PaletteRole.ACCENT: next(iter(second), None),
+             PaletteRole.PLINTH: m.plinth_material if m.plinth_ft > 0 else None,
+             PaletteRole.TRIM: m.trim_material}
+    return [Material(id=role, kind=kind) for role, kind in kinds.items() if kind is not None]
+
+
+def _metres(box: tuple[float, float, float, float], e: Elevation, m: Markup,
+            spec: HouseSpec) -> tuple[float, float, float, float]:
+    """Прямоугольник листа в pt (x вправо, y вниз) → x0, y0, x1, y1 стены: x от левого края,
+    y от земли, метры."""
+    x0, top, x1, bottom = (v / m.pt_per_ft * M_PER_FT for v in box)
+    left, floor = (v / m.pt_per_ft * M_PER_FT for v in (e.wall[0], e.floor))
+    return x0 - left, spec.plinth_m + floor - bottom, x1 - left, spec.plinth_m + floor - top
 
 
 def _side_elements(e: Elevation, m: Markup, spec: HouseSpec) -> list[Element]:
-    """Прямоугольники листа → элементы стены: x от левого края, y от земли, метры."""
-    def metres(v: float) -> float:
-        return v / m.pt_per_ft * M_PER_FT
-
+    """Прямоугольники листа → элементы стены; карниз — материалом карниза дома."""
     out = []
     for n, mark in enumerate(e.elements):
-        x0, top, x1, bottom = (metres(v) for v in mark.box)
-        y0 = spec.plinth_m + metres(e.floor) - bottom
-        out.append(Element(id=f"e{n}", cls=mark.cls, x_m=x0 - metres(e.wall[0]), y_m=y0,
-                           w_m=x1 - x0, h_m=bottom - top, variant=mark.variant,
+        x0, y0, x1, y1 = _metres(mark.box, e, m, spec)
+        trim = mark.cls is ElementClass.CORNICE and m.trim_material is not None
+        out.append(Element(id=f"e{n}", cls=mark.cls, x_m=x0, y_m=y0, w_m=x1 - x0, h_m=y1 - y0,
+                           variant=mark.variant, material=PaletteRole.TRIM if trim else None,
                            parent=None if mark.parent is None else f"e{mark.parent}",
-                           floor=rect_house.floor_of(y0 + (bottom - top) / 2, spec)))
+                           floor=rect_house.floor_of((y0 + y1) / 2, spec)))
+    return out
+
+
+def _zones(e: Elevation, m: Markup, spec: HouseSpec, length: float) -> list[MaterialZone]:
+    """Зоны стены: цоколь от земли до чистого пола, основная — от него до карниза, вторая
+    отделка с листа — обрезанной по стене, как в синтетике (`synthetic.zones`)."""
+    zone, eaves = MaterialZone.rect, spec.eaves_m
+    plinth = spec.plinth_m if m.plinth_material is not None else 0.0
+    out = [zone(ZoneRole.PLINTH, PaletteRole.PLINTH, (0.0, 0.0, length, plinth))] if plinth else []
+    out.append(zone(ZoneRole.MAIN, PaletteRole.MAIN, (0.0, plinth, length, eaves)))
+    for z in e.zones:
+        x0, y0, x1, y1 = _metres(z.box, e, m, spec)
+        box = (max(x0, 0.0), max(y0, 0.0), min(x1, length), min(y1, eaves))
+        if box[2] > box[0] + EPS and box[3] > box[1] + EPS:
+            out.append(zone(z.role, PaletteRole.ACCENT, box))
     return out
 
 
@@ -210,16 +266,17 @@ def run(cfg: Config) -> Path:
     # Источник целиком — производное разметки: удалённая разметка не должна оставить пример.
     for old in store.ids(root, Source.MANUAL):
         store.path(root, Source.MANUAL, old).unlink()
-    rejected, cut, roofs, invalid = {}, {}, {}, Counter()
+    rejected, cut, roofs, absent, invalid = {}, {}, {}, {}, Counter()
     for path in sorted(rules.paths.markup_dir.glob("*/*.toml")):
         m = read(path)
         try:
             sample, dropped = house(m, rules)
-        except BadContour as e:
+        except BadMarkup as e:
             rejected[m.id] = str(e)
             continue
-        cut[m.id], roofs[m.id] = len(m.cut) + dropped, m.roof
+        cut[m.id], roofs[m.id], absent[m.id] = len(m.cut) + dropped, m.roof, m.absent
         invalid.update(v.rule for v in errors(validate(sample.sheet, cfg.checks)))
         store.write(sample, root)
     return store.write_manifest(root, Source.MANUAL, {
-        "rejected": rejected, "cut": cut, "roofs": roofs, "invalid": dict(invalid)})
+        "rejected": rejected, "cut": cut, "roofs": roofs, "absent": absent,
+        "invalid": dict(invalid)})

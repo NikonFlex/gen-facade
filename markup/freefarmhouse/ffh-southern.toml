@@ -13,6 +13,8 @@ roof = "двускатная 10/12, коньком вдоль длинной с�
 pt_per_ft = 9.0           # SCALE 1/4" = 1'-0" на листе 22x17", PDF уменьшен до 11x8.5"
 material = "siding"       # CLAPBOARD SIDING
 plinth_ft = 2.0           # APPROX. 24" [600] от земли до чистого пола, кирпичные столбы
+plinth_material = "brick" # BRICK FOUNDATION (+ WATER TABLE BOARD — доска над кирпичом, не зона) (gf#245)
+trim_material = "wood"    # FASCIA + FRIEZE BOARD под карнизом (gf#245)
 floor_heights_ft = [10.917, 10.25]   # 2ND FLOOR +10'-11", ROOF EAVE +21'-2"
 cut = ["west, east: фронтон с вентрешёткой (attic vent), труба выше карниза",
        "south, north: сетчатые веранды и эркер в профиль — за углом стены",
@@ -22,6 +24,9 @@ cut = ["west, east: фронтон с вентрешёткой (attic vent), т�
        "east: стена 1-го этажа за сеткой Breakfast Porch — только дверь кухни, видная сквозь сетку",
        "east: крыша эркера у карниза, филёнки под окнами эркера",
        "north: наличник двери (door surround) — по коробке двери"]
+absent = ["south: карнизная полоса на отметке карниза — это фасция и балка крыши галереи, уже в canopy",
+          "west, east: нет карнизной полосы — щипцовые стены, горизонтальной линии нет (только возвраты карниза в углах и крыша эркера)",
+          "все стороны: нет зон второй отделки — вся стена одной обшивкой CLAPBOARD SIDING"]
 
 [[sides]]
 view = "SOUTH ELEVATION (FRONT)"
@@ -118,6 +123,7 @@ elements = [
   { cls = "blind", box = [518.4, 245.0, 531.9, 291.0], parent = 9 },
   { cls = "blind", box = [560.8, 245.0, 574.3, 291.0], parent = 9 },
   { cls = "porch", box = [376.0, 414.8, 433.0, 433.9] },    # кирпичное крыльцо (stoop)
+  { cls = "cornice", box = [215.2, 224.2, 594.0, 235.9] },   # FASCIA + FRIEZE BOARD: от кромки кровли до первой доски обшивки
 ]
 
 [[sides]]

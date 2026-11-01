@@ -6,7 +6,8 @@
 overlay — кадр каждого фасада из PDF, поверх — края стены, чистый пол, земля, карниз и рамки
 элементов; картинка на дом — стороны по две в ряд.
 
-Цвета: стена и уровни — синие, окна — красные, двери и ворота — зелёные, прочее — оранжевое.
+Цвета: стена и уровни — синие, окна — красные, двери и ворота — зелёные, прочее (и карниз) —
+оранжевое, зоны второй отделки — малиновые, с подписью роли и материала (gf#245).
 Нужен pdfplumber (dev-зависимости).
 """
 
@@ -25,7 +26,7 @@ from genfacade.datasets import manual  # noqa: E402
 
 PT = 72.0          # pt на дюйм — определение единицы
 MARGIN_FT = 3.0    # поле вокруг стены на кадре
-LEVELS, WINDOW, DOOR, OTHER = "blue", "red", "green", "orange"
+LEVELS, WINDOW, DOOR, OTHER, ZONE = "blue", "red", "green", "orange", "magenta"
 DOORS = {"door", "garage_door"}
 
 
@@ -70,6 +71,9 @@ def draw(img: Image.Image, box: tuple, e: manual.Elevation, m: manual.Markup, dp
         color = WINDOW if b.cls == "window" else DOOR if b.cls in DOORS else OTHER
         d.rectangle([px(b.box[0], b.box[1]), px(b.box[2], b.box[3])], outline=color, width=2)
         d.text(px(b.box[0] + 2, b.box[1] + 1), str(n), fill=color, font=font(12))
+    for z in e.zones:
+        d.rectangle([px(z.box[0], z.box[1]), px(z.box[2], z.box[3])], outline=ZONE, width=2)
+        d.text(px(z.box[0] + 2, z.box[3] - 14), f"{z.role} {z.material}", fill=ZONE, font=font(12))
     d.text((4, 4), f"{e.view} (стр. {e.page})", fill="black", font=font(14))
 
 

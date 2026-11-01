@@ -21,6 +21,7 @@ from genfacade.schema import (
     ElementClass,
     GuidelineCheck,
     GuidelineUse,
+    HouseScore,
     HouseTrim,
     Mode,
     PaletteRole,
@@ -574,6 +575,8 @@ class Visual(Section):
 class Realism(Section):
     k: int
     subsets: int
+    house_score: HouseScore  # по какой оценке дома «лучший из N» выбирает ответ
+    marginal_window: float   # окно marginal: ± столько разбросов признака
     features: list[str]  # имена из metrics/wall_features.FEATURES; опечатка — ошибка при счёте
     size_tol_m: float
     axis_tol_m: float

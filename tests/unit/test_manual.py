@@ -122,6 +122,48 @@ def test_l_shaped_house(tmp_path):
     assert errors(validate(sample.sheet, CFG.checks)) == []
 
 
+def finished(**changes) -> Markup:
+    """Тот же дом с отделкой с листа (gf#245): кирпичный цоколь, карниз под отметкой карниза на
+    стороне входа и камень в нижней части левой стены, заходящий за её край."""
+    raw = markup().model_dump(mode="json")
+    raw["sides"][0]["elements"].append({"cls": "cornice", "box": box(0, EAVE_FT - 0.75, 12, 0.75)})
+    raw["sides"][1]["zones"] = [{"role": "accent", "material": "stone", "box": box(-1, 0, 25, 3)}]
+    return Markup.model_validate(raw | {"plinth_material": "brick", "trim_material": "wood",
+                                        "absent": ["rear: карниза нет — щипцовая стена"]} | changes)
+
+
+def test_finish_from_markup():
+    """Цоколь — зона от земли до чистого пола, основная — от него до карниза, вторая отделка —
+    обрезанной по стене, карниз — элемент материалом карниза; палитра — то, что на листе: у
+    реального теста не было ни цоколя, ни карниза, и признаки метрики различали эталон по
+    самому их наличию (gf#245)."""
+    sample, _ = manual.house(finished(), CFG.data.manual)
+    sheet, eaves = sample.sheet, ft(PLINTH_FT + EAVE_FT)
+    palette = {m.id: m.kind for m in sheet.spec.materials}
+    assert palette == {"main": "siding", "plinth": "brick", "trim": "wood", "accent": "stone"}
+    front, left = sheet.facades[0], sheet.facades[1]
+    assert [(z.role, z.shape[0][1], z.shape[2][1]) for z in front.zones] == [
+        ("plinth", 0.0, pytest.approx(ft(PLINTH_FT))),
+        ("main", pytest.approx(ft(PLINTH_FT)), pytest.approx(eaves))]
+    cornice = next(e for e in front.elements if e.cls is ElementClass.CORNICE)
+    assert cornice.material == "trim" and cornice.y_m + cornice.h_m == pytest.approx(eaves)
+    accent = left.zones[-1]
+    assert accent.role == "accent" and accent.material == "accent"
+    assert (accent.shape[0][0], accent.shape[2][0]) == (0.0, pytest.approx(left.side.length_m))
+    assert accent.shape[2][1] == pytest.approx(ft(PLINTH_FT + 3))
+    assert errors(validate(sheet, CFG.checks)) == []
+    bare, _ = manual.house(markup(), CFG.data.manual)           # без отделки на листе — как было
+    assert [z.role for z in bare.sheet.facades[0].zones] == ["main"]
+
+
+def test_one_second_finish_per_house():
+    """У палитры одна роль второй отделки: два вида на доме — разметка не собирается."""
+    raw = finished().model_dump(mode="json")
+    raw["sides"][3]["zones"] = [{"role": "band", "material": "wood", "box": box(0, 4, 20, 0.5)}]
+    with pytest.raises(manual.BadMarkup):
+        manual.house(Markup.model_validate(raw), CFG.data.manual)
+
+
 def test_run_writes_samples_and_manifest(tmp_path):
     marks = tmp_path / "markup"
     ffh = marks / "freefarmhouse"  # папка на источник
@@ -151,7 +193,7 @@ def _toml(m: Markup) -> str:
         return json.dumps(v, ensure_ascii=False)
 
     raw = m.model_dump(mode="json", exclude={"sides"})
-    head = "".join(f"{k} = {value(v)}\n" for k, v in raw.items())
+    head = "".join(f"{k} = {value(v)}\n" for k, v in raw.items() if v is not None)
     sides = "".join("\n[[sides]]\n" + "".join(f"{k} = {value(v)}\n" for k, v in s.items())
                     for s in m.model_dump(mode="json")["sides"])
     return head + sides

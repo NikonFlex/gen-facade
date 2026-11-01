@@ -90,6 +90,14 @@ class Device(StrEnum):
     CPU = "cpu"
 
 
+class HouseScore(StrEnum):
+    """Оценка правдоподобия одного дома (`metrics.realism.house_scores`, gf#245): density — стены
+    дома в шарах эталонных стен по всем признакам сразу; marginal — по каждому признаку отдельно."""
+
+    DENSITY = "density"
+    MARGINAL = "marginal"
+
+
 class TextKind(StrEnum):
     """Как получено описание дома (`data: Описания из разметки`)."""
 
@@ -447,6 +455,14 @@ class MaterialZone(Model):
     shape: Polygon
     material: str
     role: ZoneRole
+
+    @classmethod
+    def rect(cls, role: ZoneRole, material: str, box: tuple[float, float, float, float]
+             ) -> "MaterialZone":
+        """Прямоугольная зона x0, y0, x1, y1 — обходом (x0 y0) (x1 y0) (x1 y1) (x0 y1), как у
+        синтетики и в ответе модели (`constraints.ZONE_RECT`)."""
+        x0, y0, x1, y1 = box
+        return cls(role=role, material=material, shape=[(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
 
 
 class SideFacade(Model):

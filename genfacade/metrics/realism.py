@@ -13,13 +13,15 @@
              coverage — доля эталонных стен, в шаре которых есть стена метода. coverage растёт
              с числом стен метода, поэтому метод больше эталона уравнивается подвыборками, как
              в c2st (`density_coverage_subsets`).
+- оценка одного дома — `house_scores`: density его стен и marginal — по каждому признаку отдельно
+             (gf#245); согласие обеих с хозяином — docs/metrics-results.md.
 """
 
 import numpy
 
 from genfacade.config import Realism
 from genfacade.metrics import wall_features
-from genfacade.schema import FacadeSheet
+from genfacade.schema import FacadeSheet, HouseScore
 
 BLOCK = 256  # строк за проход в _distances: память, не результат
 
@@ -112,3 +114,22 @@ def house_density(house: numpy.ndarray, ref: numpy.ndarray, k: int) -> float | N
     a, b = standardized(house, ref)
     found = density_coverage(a, b, k)
     return None if found is None else found[0]
+
+
+def house_marginal(house: numpy.ndarray, ref: numpy.ndarray, window: float) -> float | None:
+    """Оценка правдоподобия одного дома по каждому признаку отдельно (gf#245): средний по стенам и
+    признакам лог доли эталонных стен, у которых признак в окне ±window разброса от стены дома.
+    Необычный по одному-двум признакам дом теряет немного, а не обнуляется, как в density; зато
+    сочетаний признаков оценка не видит."""
+    if not len(house) or not len(ref):
+        return None
+    a, b = standardized(house, ref)
+    near = (numpy.abs(a[:, None, :] - b[None, :, :]) <= window).sum(axis=1)
+    return float(numpy.log((near + 1) / (len(b) + 1)).mean())
+
+
+def house_scores(house: numpy.ndarray, ref: numpy.ndarray,
+                 cfg: Realism) -> dict[HouseScore, float | None]:
+    """Обе оценки одного дома против эталона; дом из эталона убирает вызывающий."""
+    return {HouseScore.DENSITY: house_density(house, ref, cfg.k),
+            HouseScore.MARGINAL: house_marginal(house, ref, cfg.marginal_window)}

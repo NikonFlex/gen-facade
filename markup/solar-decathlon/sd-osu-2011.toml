@@ -13,6 +13,7 @@ roof = "низкоуклонная бабочка с фонарями из по�
 pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"
 material = "wood"         # WOOD SIDING TYPE 1/2; на юге — металл (гофра)
 plinth_ft = 2.3333        # FINISH FLOOR 0'-0", GRADE -2'-4"; дом на настиле с юбкой
+plinth_material = "wood"  # COMPOSITE DECK SKIRT (06 73 00): юбка настила от чистого пола до земли на всех листах (gf#245)
 floor_heights_ft = [8.361]    # южная стена: 150,5 pt до низа фасции — самая низкая
 cut = ["north, west: верх стены выше карниза (до 9'-1\" на севере, 9'-5\" на западе)",
        "all: фонари из поликарбоната, коллекторы и панели над кровлей",
@@ -20,6 +21,8 @@ cut = ["north, west: верх стены выше карниза (до 9'-1\" н
        "north: пандус вдоль стены", "south: воздушный солнечный коллектор на стене (HOT AIR COLLECTOR)",
        "west: наружный блок кондиционера", "east, west: полоса 2'-2\" за южной стеной в профиль",
        "all: деревянные экраны (виды w/ SCREEN) не размечены"]
+absent = ["все: карниз — на юге фасция лежит выше отметки (отметка — её низ), на east, west, north стена идёт выше карниза к фасции кровли; полосы ниже отметки нет",
+          "east, west, north: вторая отделка — одна WOOD SIDING TYPE 1; на юге вся стена другая (accent)"]
 
 [[sides]]
 view = "EAST ELEVATION w/o SCREEN (C1, A-212)"
@@ -45,6 +48,9 @@ elements = [
   { cls = "window", box = [1276.9, 476.0, 1330.9, 615.5], variant = { kind = "panoramic", cols = 1, rows = 2 } },  # 8 над 7
   { cls = "window", box = [1358.0, 476.0, 1412.0, 615.5], variant = { kind = "panoramic", cols = 1, rows = 2 } },
   { cls = "window", box = [1438.8, 476.0, 1492.8, 615.5], variant = { kind = "panoramic", cols = 1, rows = 2 } },
+]
+zones = [
+  { role = "accent", material = "metal", box = [1216.2, 468.0, 1757.0, 618.5] },   # вертикальная гофра-металл на всей южной стене
 ]
 
 [[sides]]
