@@ -99,10 +99,11 @@ def test_types_come_first_and_not_more_than_allowed(guard, keep, cfg):
     assert "0" not in some and "1" in some              # окно плана без типоразмера не поставить
     width = keep(_read(constraints.WallGeometry([WALL._replace(height=60)], constraints.Vocab(
         tokens.vocabulary(cfg)), NORMS), cfg, Mark.TYPES, 1))
-    assert width == {str(n) for n in range(1, 161)}    # ширина — не длиннее стены
+    # ширина — не длиннее стены и не уже самого узкого окна корпуса (gf#250)
+    assert width == {str(n) for n in range(NARROWEST, 161)}
     height = keep(_read(constraints.WallGeometry([WALL._replace(height=60)], constraints.Vocab(
-        tokens.vocabulary(cfg)), NORMS), cfg, Mark.TYPES, 1, 12))
-    assert height == {str(n) for n in range(1, 61)}    # высота — не выше карниза
+        tokens.vocabulary(cfg)), NORMS._replace(lowest=12)), cfg, Mark.TYPES, 1, 12))
+    assert height == {str(n) for n in range(12, 61)}   # высота — до карниза, от самого низкого окна
 
 
 @pytest.fixture
@@ -247,6 +248,42 @@ def test_own_door_does_not_cover_a_plan_door(cfg, vocab):
               Mark.WALL, DOOR, 28, 0, 18, 42, Mark.FLOOR, 1, "fix:x_m", "fix:w_m", DOOR)
     assert not set(range(28 - NARROWEST + 1, 46)) & _allowed(g, vocab)
     assert {0, 46, 148} <= _allowed(g, vocab)
+
+
+PLANNED = constraints.Planned(ElementClass.WINDOW, 33, 15)
+PLAN_WINDOW = (*TYPES, Mark.WALL, WINDOW, 33, 10, SIZE[2], Mark.FLOOR, 1, "fix:x_m", "fix:w_m")
+
+
+def _sealed(cfg, vocab, floors, *words):
+    """Стена «окон из плана» (sealed) с окном плана 33–48, прочитавшая окно плана и words."""
+    wall = constraints.Wall(160, [], [(33, 48)], floors, plan=(PLANNED,), given=[(33, 48)],
+                            sealed=True)
+    return _read(constraints.WallGeometry([wall], vocab, NORMS), cfg, *PLAN_WINDOW, *words)
+
+
+def test_plan_floor_takes_no_own_openings(cfg, vocab, keep):
+    """«Окна из плана»: проёмы первого этажа — только плана (`generation: Режимы отличаются
+    входом`, «Торец без окон»); на реальном тесте модель ставила там свои окна — 73 на 106 стен
+    (gf#250). Своё окно — на втором этаже, своей двери нет."""
+    one = keep(_sealed(cfg, vocab, ()))
+    assert not {WINDOW, DOOR} & one and ZONE in one                  # этаж один — своих нет
+    two = keep(_sealed(cfg, vocab, (60,)))
+    assert WINDOW in two and DOOR not in two
+    assert _allowed(_sealed(cfg, vocab, (60,), WINDOW, 0), vocab) == {
+        n for n in vocab.token if n >= 60}                           # y — на втором этаже
+    floor = _sealed(cfg, vocab, (60,), WINDOW, 0, 70, SIZE[0], Mark.FLOOR)
+    assert _allowed(floor, vocab) == {2}
+
+
+def test_full_wall_takes_no_more_openings(cfg, vocab, keep):
+    """Стена заполнена — своего проёма больше не начать: годного x нет, и страж пускал любой —
+    модель громоздила окна, брак отсеивал такие попытки, и проходили дома с окнами 0,3 м (gf#250).
+    Стена 30 шагов, самое узкое окно 12: после двух окон 0–24 места нет."""
+    g = constraints.WallGeometry([constraints.Wall(30, [])], vocab, NORMS)
+    first = keep(_read(g, cfg, *TYPES, Mark.WALL, WINDOW, 0, 10, SIZE[0]))
+    assert WINDOW in first
+    full = keep(_read(g, cfg, WINDOW, 12, 10, SIZE[0]))
+    assert not {WINDOW, DOOR} & full and ZONE in full
 
 
 def test_materials_only_from_the_house_palette(cfg, vocab, keep):
