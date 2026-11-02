@@ -130,14 +130,19 @@ def _follow(child: Element, moved: dict[str, Element], before: list[Element]) ->
 
 def _follow_x(child: Element, old: Element, new: Element) -> tuple[float, float]:
     """Сбоку от проёма (ставня) — тот же зазор до его края, ширина — в долю проёма; над, под
-    проёмом и вокруг него — тянется с ним."""
+    проёмом и вокруг него — тянется с ним. Проём сузился больше ширины элемента (окно плана
+    уже окна модели, gf#257: крыльцо у сайдлайта шириной 0,37 м) — элемент тоже в долю проёма,
+    иначе ширина уходит в минус."""
+    k = new.w_m / old.w_m
     if child.x_m + child.w_m <= old.x_m + EPS:
-        w = child.w_m * new.w_m / old.w_m
+        w = child.w_m * k
         return new.x_m - (old.x_m - child.x_m - child.w_m) - w, w
     if child.x_m >= old.x_m + old.w_m - EPS:
-        w = child.w_m * new.w_m / old.w_m
+        w = child.w_m * k
         return new.x_m + new.w_m + (child.x_m - old.x_m - old.w_m), w
-    return child.x_m + (new.x_m - old.x_m), child.w_m + (new.w_m - old.w_m)
+    if child.w_m + new.w_m - old.w_m > EPS:
+        return child.x_m + (new.x_m - old.x_m), child.w_m + (new.w_m - old.w_m)
+    return new.x_m + (child.x_m - old.x_m) * k, child.w_m * k
 
 
 def _box(e: Element) -> tuple[float, float, float, float]:
