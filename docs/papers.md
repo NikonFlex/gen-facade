@@ -192,6 +192,27 @@ LLM-модели для генерации SVG напрямую.
 
 ---
 
+## Базовый подход «LLM без дообучения» (gf#162)
+
+Поиск 02.11.2026. Репозитории `[проверено: GitHub API 02.11]`: дата последнего push, лицензия,
+архив. Формат промптов и числа брака — пересказ поиска по arXiv-html `[не проверено]`, кроме
+ячеек с отметкой.
+
+| работа | код | как подают условие и берут ответ | годность ответа |
+|---|---|---|---|
+| LayoutGPT, NeurIPS 2023, arXiv:2305.15393 | UCSB-AI/LayoutGPT, MIT, push 2024-04-10 | условие — CSS-блоки `name {width; height; left; top}`; few-shot k=8–16 ближайших по CLIP или размеру комнаты | правила повтора нет |
+| LayoutPrompter, NeurIPS 2023, arXiv:2311.06495 | microsoft/LayoutGeneration, MIT, архив, push 2025-01-06 | in-context; динамический подбор примеров; ответ — HTML с `<div>` | ранжировщик выбирает лучший из нескольких ответов `[проверено: abs]` |
+| LayoutCoT, arXiv:2504.10829 | кода нет | RAG по примерам, затем CoT-доработка | — |
+| LayoutNUWA, arXiv:2309.09506 | ProjectNUWA/LayoutNUWA, MIT, push 2024-01-31 | раскладка как HTML-код; метод — **дообучение** (Code Instruct Tuning), для нас не базовый подход | в таблице статьи у GPT-4 без дообучения — 28–34 % брака |
+| Floor-plan RLVR, arXiv:2605.14117 (Mila, 13.05.2026) | ludolara/floor-plan-rlvr, без лицензии | план квартиры JSON-ом | «We evaluated few-shot prompting with state-of-the-art backbones, including GPT-4o, OpenAI o3, and QwQ-32B. None consistently produced a valid floor plan JSON.» (прил. A.8) `[проверено: html 02.11]` |
+
+Раскладки фасада LLM без дообучения не нашли (запросы — в `docs/tasks/gf-0162.md`). Ближайшая
+работа — ProxyBuild, arXiv:2609.23386. Там LLM только разбирает текст в параметры, а раскладка
+обучена. Это аргумент о новизне. Риск базового подхода — брак ответа: у LayoutNUWA и
+Floor-plan RLVR он высокий, поэтому в таблице брак считается отдельной колонкой (`годных`).
+
+---
+
 ## Фасады: генерация и представление
 
 ### Pro-DG: Procedural Diffusion Guidance for Architectural Facade Generation
