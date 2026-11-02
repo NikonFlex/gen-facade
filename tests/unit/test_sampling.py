@@ -167,3 +167,44 @@ def test_guarded_tokens_are_never_picked(model):
     assert not set(guarded[1:]) & set(range(1, 6))
     assert guards[0].seen == guarded[1:]        # страж видел все выбранные токены, по порядку
     assert set(free[1:]) & set(range(1, 6))     # без стража те же токены выпадают
+
+
+class _BanAllAt(_Ban):
+    """Страж, который до шага `at` не пускает стоп (0), а на шаге `at` запрещает всё."""
+
+    def __init__(self, at, vocab):
+        super().__init__([0])
+        self.at, self.vocab = at, vocab
+
+    def banned(self):
+        return list(range(self.vocab)) if len(self.seen) == self.at else [0]
+
+
+def test_row_with_everything_banned_is_blocked_not_sampled(model):
+    """Страж запретил все токены (gf#257): строка не сэмплируется — на CUDA softmax из одних −∞
+    дал бы произвольный токен, на процессоре multinomial падал. Её ответ кончается BLOCKED на
+    шаге запрета, соседние строки пачки живут своей жизнью."""
+    sampler = sampling.Sampler(model, end=0, bf16=False)
+    torch.manual_seed(3)
+    for top_k in (0, 3):
+        guards = [_BanAllAt(2, VOCAB), _Ban([0]), None]       # страж помнит прочитанное
+        prompts = [sampling.Prompt([7, 8, 9], g) for g in guards]
+        blocked, alive, free = sampling.answer_all(
+            sampler, prompts, Sampling(temperature=1.0, top_k=top_k), 3)
+        assert len(blocked) == 1 + 2 + 1 and blocked[-1] == sampling.BLOCKED
+        assert sampling.BLOCKED not in blocked[:-1]
+        assert sampling.BLOCKED not in alive + free
+        assert len(alive) > 4                     # сосед не оборван запретом соседа
+
+
+def test_layout_reports_blocked_row_and_keeps_the_others(asked, cfg, monkeypatch):
+    """Пачка ответов (`Layout.answers`): запертая стражем строка — TokenError с понятной
+    причиной, остальные строки пачки разобраны."""
+    model, bare, prompt = asked
+    real = model._guard
+    made = []
+    monkeypatch.setattr(model, "_guard", lambda *a: made.append(0) or (
+        _BanAllAt(3, len(model.words)) if len(made) == 1 else real(*a)))
+    first, second = model.answers(prompt, bare, 0, cfg, 2)
+    assert isinstance(first, TokenError) and str(first) == layout.BLOCKED_REASON
+    assert len(second.sheet.facades) == len(bare.facades)
