@@ -208,3 +208,14 @@ def test_layout_reports_blocked_row_and_keeps_the_others(asked, cfg, monkeypatch
     first, second = model.answers(prompt, bare, 0, cfg, 2)
     assert isinstance(first, TokenError) and str(first) == layout.BLOCKED_REASON
     assert len(second.sheet.facades) == len(bare.facades)
+
+
+def test_cut_answer_keeps_its_words(asked, cfg, monkeypatch):
+    """Датчик обрыва (gf#257): страж не пускает `<end>` — ответ доходит до края окна модели и не
+    разбирается; TokenError несёт его слова от `<answer>` — по ним видно, чем занято окно."""
+    model, bare, prompt = asked
+    monkeypatch.setattr(model, "_guard", lambda *a: _Ban([model.vocab.end]))
+    cut = model.answers(prompt, bare, 0, cfg, 1)[0]
+    assert isinstance(cut, TokenError)
+    assert cut.words[0] == Mark.ANSWER and Mark.END not in cut.words
+    assert len(prompt.ids) - 1 + len(cut.words) == model.sampler.model.config.block_size

@@ -111,7 +111,10 @@ class Layout:
         if sampling.BLOCKED in ids:
             raise TokenError(BLOCKED_REASON)
         words = [self.words[i] for i in ids]
-        return Answer(words, tokens.decode(words, bare, cfg))
+        try:
+            return Answer(words, tokens.decode(words, bare, cfg))
+        except TokenError as e:
+            raise TokenError(str(e), words) from e
 
 
 _loaded: dict[tuple, Layout] = {}

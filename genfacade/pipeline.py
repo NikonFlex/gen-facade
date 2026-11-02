@@ -170,7 +170,7 @@ def layout(bare: FacadeSheet, req: PlanRun, cfg: Config) -> Checked:
                        settings.best_of))
     if not good:
         raise ModelError(f"за {len(trace['attempts'])} попыток нет годного ответа; причины — "
-                         f"{_reasons(trace['attempts'])}")
+                         f"{_reasons(trace['attempts'])}", trace["attempts"])
     return good[0] if len(good) == 1 else _likeliest(good, Path(req.plan).stem, cfg)
 
 
@@ -208,6 +208,8 @@ def _attempt(answer, attempt: dict, cfg: Config,
     trace["attempts"].append(attempt)
     if isinstance(answer, TokenError):
         attempt["error"] = f"ответ не разобран: {answer}"
+        if answer.words:  # датчик обрыва (gf#257): чем ответ занял окно модели
+            attempt["words"] = " ".join(answer.words)
         return None, []
     result = _check(answer.sheet, cfg, trace)
     bad = errors(result.violations)

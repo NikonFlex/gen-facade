@@ -115,6 +115,18 @@ def test_refusal_lists_reasons_of_all_attempts(run, cfg):
     assert text.index("× 3") < text.index("× 1")                 # частые — первыми
 
 
+def test_refusal_keeps_words_of_unparsed_answers(run, cfg):
+    """Датчик обрыва (gf#257): у отказа — попытки трассы, у неразобранной — слова ответа; у
+    разобранной, но негодной слов нет — её лист и так виден."""
+    cut = TokenError("последовательность оборвалась", ["<answer>", "<wall>", "3"])
+    model = Fake(cut, *[_without_door] * 4)
+    with pytest.raises(ModelError) as refused:
+        run(model, _tuned(cfg, attempts=5))
+    attempts = refused.value.attempts
+    assert attempts[0]["words"] == "<answer> <wall> 3"
+    assert all("words" not in a for a in attempts[1:]) and len(attempts) == 5
+
+
 def test_without_checkpoint_the_stub_answers(cfg, tmp_path):
     req = pipeline.PlanRun(plan=str(SIMPLE), text="", mode=MODE)
     out = pipeline.generate(req, SIMPLE.read_text(), tmp_path / "run", cfg)
