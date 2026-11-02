@@ -5,13 +5,18 @@
 """
 
 import math
+import random
+from collections.abc import Callable
+from typing import NamedTuple
 
-from genfacade.config import FacadeRules, Windows
+from genfacade.config import Config, FacadeRules, Windows
+from genfacade.datasets.synthetic import plan
 from genfacade.datasets.synthetic.house import Look
 from genfacade.schema import (
     EPS,
     Element,
     ElementClass,
+    FacadeSheet,
     FixedField,
     HouseSpec,
     Opening,
@@ -20,8 +25,20 @@ from genfacade.schema import (
     Side,
     VariantKind,
 )
+from genfacade.train import constraints, tokens
 
 FROM_PLAN = [FixedField.X, FixedField.W]
+
+
+class Slot(NamedTuple):
+    """Окно по вертикали: низ над землёй, высота и низ над полом этажа (0 — окно в пол)."""
+
+    y_m: float
+    h_m: float
+    low_m: float
+
+
+Placer = Callable[[Opening, float], Slot]  # окно ряда и отметка пола его этажа → место по вертикали
 
 
 def doors(side: Side, spec: HouseSpec, look: Look, rules: FacadeRules) -> list[Element]:
@@ -47,26 +64,55 @@ def _door(look: Look, rules: FacadeRules) -> OpeningVariant | None:
     return OpeningVariant(kind=VariantKind.GLAZED, cols=cols, rows=rows)
 
 
-def windows(rows: list[list[Opening]], spec: HouseSpec, look: Look, cfg: Windows) -> list[Element]:
-    """Окна по этажам (rows — снизу вверх): на этаже верх у всех один, низ — по ширине окна
-    (`window_height`). Место и ширину задаёт план только на первом этаже."""
+def windows(rows: list[list[Opening]], spec: HouseSpec, place: Placer, cfg: Windows
+            ) -> list[Element]:
+    """Окна по этажам (rows — снизу вверх); низ и высоту окна задаёт place — правило линии верха
+    (`on_head_line`) или случайная расстановка (`scattered`). Место и ширину задаёт план только на
+    первом этаже."""
     out = []
     for floor, (row, base) in enumerate(zip(rows, spec.floor_levels(), strict=False), start=1):
-        out += _row(row, floor, base, look, cfg)
+        out += [_window(o, (floor, i), place(o, base), cfg) for i, o in enumerate(row, start=1)]
     return out
 
 
-def _row(row: list[Opening], floor: int, base: float, look: Look, cfg: Windows) -> list[Element]:
-    """Окна одного этажа; base — отметка его пола."""
-    top = round(base + look.head_m, 3)  # на миллиметрах: верх окон этажа — один
-    out = []
-    for i, o in enumerate(row, start=1):
+def _window(o: Opening, number: tuple[int, int], slot: Slot, cfg: Windows) -> Element:
+    """Окно: номер — (этаж, место в ряду). Заданные планом поля — только на первом этаже."""
+    floor, i = number
+    return Element(
+        id=f"w{floor}_{i}", cls=ElementClass.WINDOW, x_m=o.x_m, y_m=slot.y_m, w_m=o.width_m,
+        h_m=slot.h_m, floor=floor, fixed=FROM_PLAN if floor == 1 else [],
+        variant=_variant(o.width_m, slot.h_m, slot.low_m, cfg))
+
+
+def on_head_line(look: Look, cfg: Windows) -> Placer:
+    """Правила генератора: на этаже верх у всех окон один (look.head_m), низ — по высоте окна
+    (`window_height`)."""
+    def place(o: Opening, base: float) -> Slot:
         h = window_height(o.width_m, look, cfg)
-        out.append(Element(
-            id=f"w{floor}_{i}", cls=ElementClass.WINDOW, x_m=o.x_m, y_m=round(top - h, 3),
-            w_m=o.width_m, h_m=h, floor=floor, fixed=FROM_PLAN if floor == 1 else [],
-            variant=_variant(o.width_m, h, look.head_m - h, cfg)))
-    return out
+        top = round(base + look.head_m, 3)  # на миллиметрах: верх окон этажа — один
+        return Slot(round(top - h, 3), h, look.head_m - h)
+
+    return place
+
+
+def scattered(rng: random.Random, sheet: FacadeSheet, look: Look, cfg: Config) -> Placer:
+    """Случайная расстановка по вертикали (gf#217): у дома по типоразмеру на ширину окна плана
+    (их не больше widths_per_house), высота типоразмера — равномерно от самого низкого окна стража
+    до верха окон этажа; окно любого типоразмера — низ равномерно в пределах этажа, целиком внутри
+    него: ни линии верха окон, ни привязки к подоконнику."""
+    step = cfg.synthetic.spec.grid_m
+    lowest = tokens.metres(constraints.norms(cfg).lowest, cfg.tokens)
+    # ширины — до миллиметра: окно верхнего этажа берёт ширину с сетки, план читает пикселями
+    widths = sorted({round(o.width_m, 3) for f in sheet.facades for o in f.side.openings
+                     if o.kind is OpeningKind.WINDOW})
+    types = {w: plan.on_grid(rng, (lowest, look.head_m), step) for w in widths}
+
+    def place(o: Opening, base: float) -> Slot:
+        h = types[round(o.width_m, 3)]
+        low = plan.on_grid(rng, (0.0, look.head_m - h), step)
+        return Slot(round(base + low, 3), h, low)
+
+    return place
 
 
 def window_height(width_m: float, look: Look, cfg: Windows) -> float:

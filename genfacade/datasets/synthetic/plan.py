@@ -10,11 +10,11 @@ from dataclasses import dataclass, replace
 
 from genfacade.config import OpeningRules, Synthetic
 from genfacade.datasets.genplan_writer import Hole, Opening, PlanDraft, Run
-from genfacade.datasets.synthetic import sizes
+from genfacade.datasets.synthetic import scatter, sizes
+from genfacade.datasets.synthetic.scatter import Span
 from genfacade.plan.gaps import Axis
 from genfacade.plan.preprocess import ENTRANCE_WIDTH_M
-
-Span = tuple[float, float]
+from genfacade.schema import Placement
 
 
 @dataclass(frozen=True)
@@ -97,9 +97,18 @@ def _with_openings(rng: random.Random, walls: list[_Wall], choice: list[float],
             door, bays = _entrance(rng, bays, (wall.run.start_m, wall.run.end_m), cfg)
             found.append(door)
         if rng.random() >= (cfg.blind_long_p if wall.long else cfg.blind_short_p):
-            found += [o for bay in bays for o in bay_windows(rng, bay, rng.choice(widths), cfg)]
+            found += _windows(rng, bays, widths, cfg)
         runs.append(replace(wall.run, openings=tuple(found)))
     return runs
+
+
+def _windows(rng: random.Random, bays: list[Span], widths: list[float],
+             cfg: OpeningRules) -> list[Opening]:
+    """Окна стены на её свободных участках: по правилам — участок за участком, случайно (gf#217) —
+    по всей стене сразу, в тех же пределах."""
+    if cfg.placement is Placement.RANDOM:
+        return scatter.windows(rng, bays, widths, cfg)
+    return [o for bay in bays for o in bay_windows(rng, bay, rng.choice(widths), cfg)]
 
 
 def _entrance(rng: random.Random, bays: list[Span], outer: Span, cfg: OpeningRules):

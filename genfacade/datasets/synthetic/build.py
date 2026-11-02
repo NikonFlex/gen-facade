@@ -14,6 +14,7 @@ from genfacade.schema import (
     GuidelineUse,
     HouseSpec,
     Mode,
+    Placement,
     Sample,
     SideFacade,
     Source,
@@ -59,12 +60,14 @@ def sample(seed: int, cfg: Config) -> Sample:
 def lay_out(sheet: FacadeSheet, look: Look, cfg: Config, rng: random.Random) -> FacadeSheet:
     """Раскладка всех стен дома при одних параметрах и одном характере; rng — окна верхних
     этажей, которых нет в плане."""
-    spec, rules = sheet.spec, cfg.synthetic
+    spec, windows = sheet.spec, cfg.synthetic.facade.windows
+    place = (openings.scattered(rng, sheet, look, cfg)
+             if cfg.synthetic.openings.placement is Placement.RANDOM
+             else openings.on_head_line(look, windows))
     walls = []
     for f in sheet.facades:
         rows = upper.rows(rng, f.side, spec.floors, cfg)
-        placed = f.model_copy(update={"elements": openings.windows(rows, spec, look,
-                                                                   rules.facade.windows)})
+        placed = f.model_copy(update={"elements": openings.windows(rows, spec, place, windows)})
         walls.append(_wall(placed, spec, look, cfg))
     return sheet.model_copy(update={"facades": walls})
 

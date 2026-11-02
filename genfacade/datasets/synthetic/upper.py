@@ -2,14 +2,16 @@
 
 Чаще стена повторяет окна нижнего этажа на тех же осях; иначе — свой ряд на тех же участках
 стены, что у плана: между углами и примыканиями перегородок (запретными зонами), поэтому окно
-верхнего этажа в запретную зону не попадает. Третий этаж повторяет второй.
+верхнего этажа в запретную зону не попадает. Третий этаж повторяет второй. При `placement =
+random` (gf#217) каждый верхний этаж — свой независимый случайный ряд на тех же участках.
 """
 
 import random
 
 from genfacade.config import Checks, Config, Synthetic
+from genfacade.datasets.synthetic import scatter
 from genfacade.datasets.synthetic.plan import Span, bay_windows, off_corners
-from genfacade.schema import EPS, Opening, OpeningKind, Side
+from genfacade.schema import EPS, Opening, OpeningKind, Placement, Side
 
 
 def rows(rng: random.Random, side: Side, floors: int, cfg: Config) -> list[list[Opening]]:
@@ -17,6 +19,8 @@ def rows(rng: random.Random, side: Side, floors: int, cfg: Config) -> list[list[
     ground = [o for o in side.openings if o.kind is OpeningKind.WINDOW]
     if floors == 1 or not ground:  # глухая стена — глухая на всех этажах
         return [ground] * floors
+    if cfg.synthetic.openings.placement is Placement.RANDOM:
+        return [ground] + [_scattered(rng, side, ground, cfg.synthetic) for _ in range(floors - 1)]
     on_axes = rng.random() < cfg.synthetic.openings.upper_on_axes_p
     own = ground if on_axes else _own(rng, side, ground, cfg.synthetic)
     # Пустой ряд оставил бы этаж без окон, ряд почти на осях валидатор считает промахом.
@@ -30,6 +34,21 @@ def _own(rng: random.Random, side: Side, ground: list[Opening], rules: Synthetic
     плане, по весам."""
     width = rng.choice(sorted({o.width_m for o in ground}))
     found = [o for bay in _bays(side, rules) for o in bay_windows(rng, bay, width, rules.openings)]
+    return _row(found)
+
+
+def _scattered(rng: random.Random, side: Side, ground: list[Opening],
+               rules: Synthetic) -> list[Opening]:
+    """Ряд этажа при случайной расстановке: окна по участкам стены, как у плана, ширины — из
+    окон плана этой стены (типоразмеры дома), хотя бы одно окно; не вышло — как внизу, чтобы этаж
+    не остался без окон."""
+    widths = sorted({o.width_m for o in ground})
+    found = scatter.windows(rng, _bays(side, rules), widths, rules.openings, least=1)
+    return _row(found) or ground
+
+
+def _row(found: list) -> list[Opening]:
+    """Окна генератора плана (`at_m`) → окна листа."""
     return [Opening(kind=OpeningKind.WINDOW, x_m=o.at_m, width_m=o.width_m) for o in found]
 
 

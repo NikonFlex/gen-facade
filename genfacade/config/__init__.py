@@ -25,6 +25,7 @@ from genfacade.schema import (
     HouseTrim,
     Mode,
     PaletteRole,
+    Placement,
     Region,
     ShutterKind,
     SillKind,
@@ -291,6 +292,7 @@ class HouseSize(Section):
 
 
 class OpeningRules(Section):
+    placement: Placement
     grid_m: float
     corner_clear_m: float
     # окно — не ближе к углу стены: правило свода window_corner_distance, когда оно в страже

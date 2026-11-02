@@ -90,6 +90,15 @@ class Device(StrEnum):
     CPU = "cpu"
 
 
+class Placement(StrEnum):
+    """Как синтетика ставит проёмы (config/synthetic.toml, [openings]): rules — по правилам
+    генератора, random — случайно в допустимых пределах (gf#217: формат ответа учим на синтетике,
+    расстановку — на реальных домах)."""
+
+    RULES = "rules"
+    RANDOM = "random"
+
+
 class HouseScore(StrEnum):
     """Оценка правдоподобия одного дома (`metrics.realism.house_scores`, gf#245): density — стены
     дома в шарах эталонных стен по всем признакам сразу; marginal — по каждому признаку отдельно."""
