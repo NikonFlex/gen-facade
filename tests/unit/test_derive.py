@@ -5,8 +5,19 @@ import pytest
 
 from genfacade import derive, guidelines
 from genfacade.datasets.synthetic import build
-from genfacade.schema import EPS, CanopyKind, Element, ElementClass, GuidelineCheck, Mode, Trim
-from genfacade.snap import snap
+from genfacade.schema import (
+    EPS,
+    CanopyKind,
+    Element,
+    ElementClass,
+    FixedField,
+    GuidelineCheck,
+    Mode,
+    Opening,
+    OpeningKind,
+    Trim,
+)
+from genfacade.snap import snap, snap_side
 from genfacade.train import tokens
 
 SEEDS = range(40)
@@ -170,3 +181,20 @@ def test_trim_does_not_land_on_another_opening(cfg):
     far = derive.place([door, window.model_copy(update={"x_m": 5.0})], marks, wall)
     canopies = [[e for e in got if e.cls is ElementClass.CANOPY] for got in (near, far)]
     assert [len(c) for c in canopies] == [0, 1]
+
+
+def test_child_of_narrowed_opening_keeps_positive_width(cfg):
+    """Окно плана намного уже окна модели (сайдлайт 0,37 м, ffh-southern, gf#257): крыльцо
+    модели на этом окне сужается в долю проёма и остаётся внутри него, а не уходит в минус."""
+    f = build.sample(0, cfg).sheet.facades[0]
+    side = f.side.model_copy(update={"openings": [
+        Opening(kind=OpeningKind.WINDOW, x_m=5.47, width_m=0.37)]})
+    window = Element(id="w", cls=ElementClass.WINDOW, x_m=5.0, y_m=1.0, w_m=0.95, h_m=1.25,
+                     floor=1, fixed=[FixedField.X, FixedField.W])
+    porch = Element(id="p", cls=ElementClass.PORCH, x_m=5.2, y_m=0.0, w_m=0.4, h_m=0.6, floor=1,
+                    parent="w")
+    got = snap_side(f.model_copy(update={"side": side, "elements": [window, porch]}), cfg.checks)
+    snapped = {e.id: e for e in got.elements}
+    assert (snapped["w"].x_m, snapped["w"].w_m) == pytest.approx((5.47, 0.37))
+    assert snapped["p"].w_m > EPS
+    assert 5.47 - EPS <= snapped["p"].x_m <= snapped["p"].x_m + snapped["p"].w_m <= 5.84 + EPS
