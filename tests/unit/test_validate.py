@@ -326,3 +326,14 @@ def test_snap_centers_model_windows_on_common_axis(clean, cfg):
 
 def test_snap_leaves_clean_sheet_alone(clean, cfg):
     assert snap(clean, cfg.checks) == clean
+
+
+def test_self_crossing_zone_is_a_defect(house, cfg):
+    """Зона, контур которой пересекает сам себя («бабочка» недоученной модели, gf#257: падение
+    GEOS на датчике обучения), — брак отделки, а не исключение."""
+    f, eaves = house.facades[SIDE], house.spec.eaves_m
+    length = f.side.length_m
+    bow = MaterialZone(role=ZoneRole.ACCENT, material="main",
+                       shape=[(0, 0), (length, eaves), (length, 0), (0, eaves)])
+    crossed = _zones(house, SIDE, *f.zones, bow, bow.model_copy(update={"role": ZoneRole.BAND}))
+    assert Rule.FINISH in _rules(crossed, cfg)

@@ -136,9 +136,13 @@ def _finish(f: SideFacade, spec: HouseSpec, cfg: Checks) -> list[Violation]:
     цоколь, основная и пояс — во всю длину; остальные зоны доходят до края, отметки или проёма
     (`_anchored`)."""
     wall = shapely.Polygon(f.silhouette or [])
-    shapes = [shapely.Polygon(z.shape) for z in f.zones]
+    drawn = [shapely.Polygon(z.shape) for z in f.zones]
+    # контур, пересекающий сам себя, — брак ответа; GEOS на нём падает, поэтому площадь — по
+    # исправленному make_valid
+    out = [_v(f, Rule.FINISH, None, f"контур зоны {z.role} пересекает сам себя")
+           for z, shape in zip(f.zones, drawn, strict=True) if not shape.is_valid]
+    shapes = [shapely.make_valid(s) for s in drawn]
     bare = wall.difference(shapely.unary_union(shapes)) if shapes else wall
-    out = []
     if not bare.buffer(-cfg.eps_m / 2).is_empty:
         out.append(_v(f, Rule.FINISH, None, f"{bare.area:.2f} м² стены без отделки"))
     for z, shape in zip(f.zones, shapes, strict=True):
