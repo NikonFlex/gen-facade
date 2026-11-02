@@ -1,7 +1,7 @@
 #!/bin/sh
 # Переобучение модели шага 4 и сравнение с прежней на реальном тесте (gf#212) — этапами.
 # Одни и те же команды идут в .github/workflows/gpu.yml (job retrain, а также train, finetune,
-# realtest) и в локальном прогоне в миниатюре: машины отличаются только папками и числами.
+# realtest, stability) и в локальном прогоне в миниатюре: машины отличаются только папками и числами.
 #
 #   sh tools/retrain.sh <этап>...
 #
@@ -26,7 +26,11 @@
 #   BASE_MODEL BASE_CODE BASE_HOUSES=100 (синтетики для строки generator прежнего кода)
 #   MODELS        «имя=чекпойнт …» — строки model-<имя>; по умолчанию — модели этапов обучения
 #                 в $WORK: model-train и, если было дообучение, model-finetune
-#   REALTEST_N=0  домов синтетики val в realtest; 0 — все
+#   REALTEST_N=0  домов синтетики val в realtest и stability; 0 — все
+#   VARIANTS      варианты сэмплинга для stability через «;»; вариант — пары ключ=значение
+#                 настроек [layout] (config/models.toml) через пробел, число или true/false:
+#                 "seed=0;seed=1;temperature=0.8 seed=0;top_k=20 seed=0;best_of=4 seed=0";
+#                 папка варианта — пары через запятую: temperature=0.8,seed=0
 set -eu
 
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -107,25 +111,57 @@ stage_finetune() {
     gf -c "$cfg" train -s buildingnet -o "$WORK/finetune"
 }
 
-stage_realtest() {
-    if [ -z "${MODELS:-}" ]; then
-        MODELS="train=$WORK/train/model.pt"
-        [ ! -f "$WORK/finetune/model.pt" ] || MODELS="$MODELS finetune=$WORK/finetune/model.pt"
+# Строки моделей для `gf realtest`: --model на каждую из MODELS, без них — на модели этапов
+# обучения в $WORK (пути без пробелов, как и везде здесь).
+model_args() {
+    models=${MODELS:-}
+    if [ -z "$models" ]; then
+        models="train=$WORK/train/model.pt"
+        [ ! -f "$WORK/finetune/model.pt" ] || models="$models finetune=$WORK/finetune/model.pt"
     fi
-    set --
-    for m in $MODELS; do
-        set -- "$@" --model "$m"
+    for m in $models; do
+        printf -- '--model %s ' "$m"
     done
-    [ ! -d "$WORK/base" ] || set -- "$@" --sheets "base=$WORK/base"
+}
+
+stage_realtest() {
+    sheets=""
+    [ ! -d "$WORK/base" ] || sheets="--sheets base=$WORK/base"
     gf manual
-    gf realtest -n "${REALTEST_N:-0}" "$@" -o "$WORK/realtest"
+    gf realtest -n "${REALTEST_N:-0}" $(model_args) $sheets -o "$WORK/realtest"
     cat "$WORK/realtest/summary.md"
+}
+
+# Один вариант сэмплинга (пары ключ=значение через пробел): свой слой настроек [layout] поверх
+# CONFIG и реальный тест в $WORK/stability/<пары через запятую>.
+stability_variant() {
+    set -- $1
+    [ $# -gt 0 ] || return 0
+    name=$(printf '%s' "$*" | tr ' ' ',')
+    echo "== вариант $name $(date +%T)"
+    cfg=$({
+        echo '[layout]'
+        for pair in "$@"; do
+            printf '%s = %s\n' "${pair%%=*}" "${pair#*=}"
+        done
+    } | stage_config "stability-$name" models.toml)
+    gf -c "$cfg" realtest -n "${REALTEST_N:-0}" $(model_args) -o "$WORK/stability/$name" < /dev/null
+}
+
+stage_stability() {
+    : "${VARIANTS:?варианты через «;»}"
+    gf manual
+    printf '%s\n' "$VARIANTS" | tr ';' '\n' | while read -r variant; do
+        stability_variant "$variant"
+    done
+    gf stability "$WORK/stability"
+    cat "$WORK/stability/summary.md"
 }
 
 data_config
 for stage in "$@"; do
     case $stage in
-        base | corpus | train | buildingnet | finetune | realtest)
+        base | corpus | train | buildingnet | finetune | realtest | stability)
             echo "== $stage $(date +%T)"
             "stage_$stage"
             ;;
