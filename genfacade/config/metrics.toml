@@ -40,6 +40,9 @@ zone_step_m = 0.25    # шаг по высоте, с которым сравни
 # годных листов (valid × домов) — первой колонкой всегда; дальше — эти колонки metrics.json
 summary = ["rules", "c2st", "density", "coverage", "house_density", "house_marginal", "fid", "kid",
            "windows_per_wall"]
+# genfacade stability (gf#257): колонки сводки по вариантам сэмплинга; «годных» — первой колонкой
+stability = ["c2st", "fid", "house_density", "house_marginal", "windows_per_wall"]
+digits = 3
 
 [calibrate]           # genfacade calibrate: эталон генератора против подмен
 reference = 1000      # домов train — эталонное распределение структуры и разнообразия

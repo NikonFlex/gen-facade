@@ -35,6 +35,8 @@ HALVES = ("half-a", "half-b")
 SUBSTITUTES = ("random", "foreign", "empty")
 MODEL = "model"
 SUMMARY = "summary.md"
+REAL_HALF = "real-half"
+GOOD = "годных"    # колонка: листов с разобранным SVG из всех домов, «k/n»
 
 
 class Rows(NamedTuple):
@@ -115,25 +117,34 @@ def _folders(given: dict, synth: dict, mode: Mode, cfg: Config, out: Path) -> li
     return [out / "genplan", out / "generator", *(out / n for n in SUBSTITUTES)]
 
 
+def named_rows(out: Path, mode: Mode) -> list[tuple[str, dict]]:
+    """Строки таблицы режима из metrics.json (а не из summary.md): (имя строки, её метрики);
+    реальные против реальных — последней, под именем real-half."""
+    def read(part: str) -> dict:
+        return json.loads((out / mode / part / table.METRICS).read_text())["rows"]
+
+    named = [(Path(k).name, r) for k, r in read("rows").items()]
+    return named + [(REAL_HALF, r) for r in read("half").values()]
+
+
 def summary(out: Path, cfg: Config) -> str:
     """Сводка Markdown: строка таблицы на (строку, режим), реальные против реальных — последней
     в режиме; годных листов — из доли valid и числа домов."""
     columns = cfg.metrics.realtest.summary
-    lines = ["| строка | режим | годных | " + " | ".join(columns) + " |",
+    lines = [f"| строка | режим | {GOOD} | " + " | ".join(columns) + " |",
              "|---|---|---|" + "---|" * len(columns)]
     for mode in Mode:
-        rows = json.loads((out / mode / "rows" / table.METRICS).read_text())["rows"]
-        half = json.loads((out / mode / "half" / table.METRICS).read_text())["rows"]
-        named = [(Path(k).name, r) for k, r in rows.items()]
-        named += [("real-half", r) for r in half.values()]
-        lines += [f"| {name} | {mode} | {_good(r)} | " + " | ".join(str(r[c]) for c in columns)
-                  + " |" for name, r in named]
+        lines += [f"| {name} | {mode} | {good(r)} | " + " | ".join(str(r[c]) for c in columns)
+                  + " |" for name, r in named_rows(out, mode)]
     return "\n".join(lines) + "\n"
 
 
-def _good(row: dict) -> str:
-    n = row["count"]
-    return f"{round((row['valid'] or 0) * n)}/{n}"
+def good_count(row: dict) -> int:
+    return round((row["valid"] or 0) * row["count"])
+
+
+def good(row: dict) -> str:
+    return f"{good_count(row)}/{row['count']}"
 
 
 def _answers(given: dict[str, FacadeSheet], mode: Mode, cfg: Config, out: Path) -> Path:

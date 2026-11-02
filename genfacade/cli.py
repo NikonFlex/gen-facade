@@ -1,5 +1,5 @@
 """Командная строка: genfacade run <план.svg> --text …, serve, synth, buildingnet, manual, tokens,
-train, eval, metrics, calibrate, baseline, guidelines, realtest."""
+train, eval, metrics, calibrate, baseline, guidelines, realtest, stability."""
 
 import argparse
 import sys
@@ -102,6 +102,13 @@ def realtest(args: argparse.Namespace) -> Path:
     return realtest.run(cfg, out, args.synthetic, rows)
 
 
+def stability(args: argparse.Namespace) -> Path:
+    """Папки вариантов сэмплинга реального теста → сводка с разбросом по seed (gf#257)."""
+    from genfacade.metrics import stability
+
+    return stability.run(args.root, config.load(*args.config))
+
+
 def guidelines_table(args: argparse.Namespace) -> Path:
     """Свод правил фасада на домах реального теста → таблица для чтения (gf#209)."""
     from genfacade import guidelines
@@ -193,6 +200,11 @@ def _parser() -> argparse.ArgumentParser:
                         "для модели другой записи токенов, ответившей своим кодом")
     q.add_argument("-o", "--out", type=Path,
                    help="папка листов и таблиц; по умолчанию runs_dir/<время>-realtest")
+    t = sub.add_parser("stability", help="сводка реального теста по вариантам сэмплинга")
+    t.add_argument("root", type=Path,
+                   help="папка вариантов: <вариант>/<режим>/rows/metrics.json от realtest; "
+                        "варианты — пары ключ=значение [layout] через запятую; сводка — "
+                        "summary.md в ней")
     r = sub.add_parser("guidelines", help="свод правил фасада на домах реального теста → таблица")
     r.add_argument("-o", "--out", type=Path, default=Path("docs/facade-rules.md"),
                    help="файл таблицы; по умолчанию docs/facade-rules.md")
@@ -212,6 +224,7 @@ COMMANDS = {
     "baseline": (baseline, {}),
     "calibrate": (metrics_calibrate, {}),
     "guidelines": (guidelines_table, {}),
+    "stability": (stability, {FileNotFoundError: "сводка не начата"}),
     "realtest": (realtest, {ModelError: "таблица не начата",
                             FileNotFoundError: "таблица не начата"}),
     "run": (run, pipeline.REFUSALS),

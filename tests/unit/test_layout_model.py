@@ -94,10 +94,25 @@ def test_bad_answers_are_regenerated_with_next_seed(run, cfg):
 def test_no_good_answer_within_attempts_is_refused(run, cfg):
     n = cfg.models.layout.attempts
     model = Fake(*[_without_door] * n)
-    with pytest.raises(ModelError, match=f"за {n} попыток нет годного ответа; последняя "
-                                         "причина — ошибок валидатора"):
+    with pytest.raises(ModelError, match=f"за {n} попыток нет годного ответа; причины — "
+                                         f"ошибок валидатора .* × {n}$"):
         run(model)
     assert len(model.seeds) == n
+
+
+def test_refusal_lists_reasons_of_all_attempts(run, cfg):
+    """Отказ называет причину каждой попытки счётчиком, а не только последней (gf#257): на GPU
+    сбой был не в последней, а трасса хранила одну."""
+    cut, other = TokenError("последовательность оборвалась"), TokenError("ждали <end>")
+    model = Fake(cut, _without_door, cut, other, cut)
+    with pytest.raises(ModelError) as refused:
+        run(model, _tuned(cfg, attempts=5))
+    text = str(refused.value)
+    assert text.startswith("за 5 попыток нет годного ответа; причины — ")
+    assert "ответ не разобран: последовательность оборвалась × 3" in text
+    assert "ответ не разобран: ждали <end> × 1" in text
+    assert "ошибок валидатора 1, первая — plan_opening" in text and "× 1" in text
+    assert text.index("× 3") < text.index("× 1")                 # частые — первыми
 
 
 def test_without_checkpoint_the_stub_answers(cfg, tmp_path):

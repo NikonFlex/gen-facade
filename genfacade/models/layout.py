@@ -16,6 +16,10 @@ from genfacade.schema import FacadeSheet, Mode
 from genfacade.train import constraints, sampling, tokens
 from genfacade.train.tokens import Answer, Mark, TokenError
 
+# Причина брака, когда страж запретил строке все токены (sampling.BLOCKED): в трассе отказа
+# она отличается от «ответ оборвался» — модель не оборвалась, ей не из чего было выбрать.
+BLOCKED_REASON = "страж запретил все токены"
+
 
 class Condition(NamedTuple):
     """Условие дома: номера токенов до `<answer>` включительно и режим — по нему страж решает,
@@ -104,6 +108,8 @@ class Layout:
         return constraints.guard(bare, mode, self.vocab, cfg) if on else None
 
     def _decoded(self, ids: list[int], bare: FacadeSheet, cfg: Config) -> Answer:
+        if sampling.BLOCKED in ids:
+            raise TokenError(BLOCKED_REASON)
         words = [self.words[i] for i in ids]
         return Answer(words, tokens.decode(words, bare, cfg))
 

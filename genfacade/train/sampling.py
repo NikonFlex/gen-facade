@@ -25,6 +25,11 @@ def build_model(size: GPTSize, vocabulary: int) -> GPT:
                          n_head=size.heads, n_embd=size.width, dropout=size.dropout))
 
 
+# Вместо стопового токена в ответе строки, у которой страж запретил все токены: ответ не годен,
+# а не оборван (gf#257). Не номер словаря — разбор ответа (`Layout`) узнаёт его и отказывает.
+BLOCKED = -1
+
+
 class Guard(Protocol):
     """Страж одного ответа: читает выбранные токены и называет запрещённые следующим."""
 
@@ -57,19 +62,22 @@ class Sampler:
                stops: frozenset[int] | None = None) -> list[list[int]]:
         """Дописывать токены, пока у всех не будет стопового (по умолчанию `<end>`) или не
         кончится окно; вернуть ответы от последнего токена условия (`<answer>`) до стопового
-        включительно. Стоп `<wall>` — досэмплировать одну стену (gf#213). Условия в пачке —
-        одной длины: позиции в nanoGPT абсолютные, паддинг слева их бы сдвинул. Прошлые
-        позиции не пересчитываются — KV-кэш (`GPT.step`)."""
+        включительно; у строки, где страж запретил все токены, ответ кончается `BLOCKED` вместо
+        стопового (остальные строки пачки живут дальше). Стоп `<wall>` — досэмплировать одну
+        стену (gf#213). Условия в пачке — одной длины: позиции в nanoGPT абсолютные, паддинг
+        слева их бы сдвинул. Прошлые позиции не пересчитываются — KV-кэш (`GPT.step`)."""
         self.model.eval()
         stops = stops or frozenset({self.end})
         stop = torch.tensor(sorted(stops), device=self.device)
         idx = prompts.to(self.device)
         done = torch.zeros(len(idx), dtype=torch.bool, device=self.device)
+        blocked = torch.zeros_like(done)
         start = idx.size(1) - 1
         with self.autocast():
             logits, past = self.model.step(idx)
         while True:
-            nxt = _pick(_forbid(logits[:, -1, :].float(), guards), opts)
+            nxt, dead = _pick(_forbid(logits[:, -1, :].float(), guards), opts, int(stop[0]))
+            blocked |= dead & ~done     # после стопа страж может запретить всё — это не брак
             _observe(guards, nxt)
             idx = torch.cat((idx, nxt), dim=1)
             done |= torch.isin(nxt.squeeze(1), stop)
@@ -77,7 +85,7 @@ class Sampler:
                 break
             with self.autocast():
                 logits, past = self.model.step(nxt, past)
-        return [_cut(row[start:].tolist(), stops) for row in idx]
+        return _answers(idx, start, stops, blocked)
 
 
 def answer_all(sampler: Sampler, prompts: list[Prompt], opts: Sampling,
@@ -112,13 +120,28 @@ def _observe(guards: list[Guard | None] | None, nxt: torch.Tensor) -> None:
             g.step(int(nxt[row, 0]))
 
 
-def _pick(logits: torch.Tensor, opts: Sampling) -> torch.Tensor:
-    """Следующий токен: температура, top-k, случайный выбор по вероятностям — как в nanoGPT."""
+def _pick(logits: torch.Tensor, opts: Sampling, stop: int) -> tuple[torch.Tensor, torch.Tensor]:
+    """Следующий токен: температура, top-k, случайный выбор по вероятностям — как в nanoGPT.
+    Строка, где все логиты −∞ (страж запретил всё), не сэмплируется: softmax дал бы NaN, на
+    процессоре multinomial падает, на CUDA молча отдаёт произвольный токен. Ей достаётся `stop`,
+    она помечена в маске второго значения."""
     logits = logits / opts.temperature
     if opts.top_k:
         v, _ = torch.topk(logits, min(opts.top_k, logits.size(-1)))
         logits[logits < v[:, [-1]]] = -float("inf")
-    return torch.multinomial(torch.softmax(logits, dim=-1), num_samples=1)
+    dead = torch.isneginf(logits).all(dim=-1)
+    logits[dead] = 0.0
+    nxt = torch.multinomial(torch.softmax(logits, dim=-1), num_samples=1)
+    nxt[dead] = stop
+    return nxt, dead
+
+
+def _answers(idx: torch.Tensor, start: int, stops: frozenset[int],
+             blocked: torch.Tensor) -> list[list[int]]:
+    """Ответы по строкам idx от токена start; у запертой стражем стоповый токен заменён BLOCKED."""
+    cut = [_cut(row[start:].tolist(), stops) for row in idx]
+    return [[*ids[:-1], BLOCKED] if dead else ids
+            for ids, dead in zip(cut, blocked.tolist(), strict=True)]
 
 
 def _cut(ids: list[int], stops: frozenset[int]) -> list[int]:

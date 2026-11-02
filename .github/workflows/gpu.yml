@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       job:
-        description: "probe — проверить GPU; train — обучить модель шага 4; finetune — дообучить её на коттеджах BuildingNet; eval — оценить на val; visual — таблица метрик с FID и KID; realtest — таблица против реального теста с FID и KID; retrain — всё сразу: корпус, обучение, дообучение по флагу, реальный тест новой и прежней модели одной таблицей"
+        description: "probe — проверить GPU; train — обучить модель шага 4; finetune — дообучить её на коттеджах BuildingNet; eval — оценить на val; visual — таблица метрик с FID и KID; realtest — таблица против реального теста с FID и KID; retrain — всё сразу: корпус, обучение, дообучение по флагу, реальный тест новой и прежней модели одной таблицей; stability — реальный тест модели по вариантам сэмплинга (variants) и сводка с разбросом по seed"
         type: choice
-        options: [probe, train, finetune, eval, visual, realtest, retrain]
+        options: [probe, train, finetune, eval, visual, realtest, retrain, stability]
         default: probe
       houses:
         description: "train, retrain: сколько синтетических домов в корпусе (собранные раньше не пересобираются)"
@@ -67,10 +67,19 @@ on:
         description: "finetune, retrain: шаг обучения дообучения после разгона"
         type: string
         default: "1e-4"
+      variants:
+        description: "stability: варианты сэмплинга через «;», вариант — пары ключ=значение настроек [layout] (config/models.toml) через пробел, например: seed=0;seed=1;temperature=0.8 seed=0;top_k=20 seed=0;best_of=4 seed=0"
+        type: string
+        default: "seed=0;seed=1;seed=2;seed=3;seed=4"
       model_run:
-        description: "eval, realtest: номер запуска train, чью модель оценивать (артефакт train-<номер>); 39586817099 — gf#155"
+        description: "eval, realtest, stability: номер запуска train, чью модель оценивать (артефакт train-<номер>); 39586817099 — gf#155"
         type: string
         default: "39586817099"
+      model_artifact:
+        description: "realtest, stability: какую модель запуска model_run брать. train — артефакт train-<номер> (после дообучения, если запуск дообучал); pretrain — pretrain-<номер> (без дообучения, есть только у retrain с дообучением); both — обе, двумя строками таблицы (run<номер> и run<номер>-pretrain)"
+        type: choice
+        options: [train, pretrain, both]
+        default: train
       eval_run:
         description: "visual: номер запуска eval, чьи листы считать (артефакт eval-<номер>)"
         type: string
@@ -167,11 +176,20 @@ jobs:
           path: base-code
 
       - name: Модель для реального теста
-        if: inputs.job == 'realtest'
+        if: (inputs.job == 'realtest' || inputs.job == 'stability') && inputs.model_artifact != 'pretrain'
         uses: actions/download-artifact@v8
         with:
           name: train-${{ inputs.model_run }}
-          path: model
+          path: model/train
+          run-id: ${{ inputs.model_run }}
+          github-token: ${{ github.token }}
+
+      - name: Модель для реального теста без дообучения
+        if: (inputs.job == 'realtest' || inputs.job == 'stability') && inputs.model_artifact != 'train'
+        uses: actions/download-artifact@v8
+        with:
+          name: pretrain-${{ inputs.model_run }}
+          path: model/pretrain
           run-id: ${{ inputs.model_run }}
           github-token: ${{ github.token }}
 
@@ -193,7 +211,7 @@ jobs:
       - name: Этапы
         # Команды этапов — tools/retrain.sh, те же, что в локальном прогоне в миниатюре.
         # Дома и корпусы — в $SAMPLES: переживают запуски.
-        if: inputs.job == 'train' || inputs.job == 'finetune' || inputs.job == 'realtest' || inputs.job == 'retrain'
+        if: inputs.job == 'train' || inputs.job == 'finetune' || inputs.job == 'realtest' || inputs.job == 'retrain' || inputs.job == 'stability'
         env:
           WORK: ${{ env.OUT }}
           HOUSES: ${{ inputs.houses }}
@@ -206,11 +224,20 @@ jobs:
           PLACEMENT: ${{ inputs.placement }}
           BASE_MODEL: ${{ github.workspace }}/init/model.pt
           BASE_CODE: ${{ github.workspace }}/base-code
+          VARIANTS: ${{ inputs.variants }}
+          MODEL_RUN: ${{ inputs.model_run }}
+          MODEL_ARTIFACT: ${{ inputs.model_artifact }}
         run: |
           case "${{ inputs.job }}" in
             train) stages="corpus train" ;;
             finetune) stages="buildingnet finetune"; export INIT="$BASE_MODEL" ;;
-            realtest) stages="realtest"; export MODELS="run${{ inputs.model_run }}=$PWD/model/model.pt" ;;
+            realtest | stability)
+              stages="${{ inputs.job }}"
+              # строки таблицы: run<номер> — train-<номер>, run<номер>-pretrain — pretrain-<номер>
+              MODELS=""
+              [ "$MODEL_ARTIFACT" = pretrain ] || MODELS="run$MODEL_RUN=$PWD/model/train/model.pt"
+              [ "$MODEL_ARTIFACT" = train ] || MODELS="$MODELS run$MODEL_RUN-pretrain=$PWD/model/pretrain/model.pt"
+              export MODELS ;;
             retrain)
               if [ "${{ inputs.mixture }}" = true ]; then
                 stages="base corpus buildingnet mixfit realtest"
@@ -249,6 +276,16 @@ jobs:
         with:
           name: realtest-${{ github.run_id }}
           path: ${{ env.OUT }}/realtest
+          if-no-files-found: ignore
+
+      - name: Результат устойчивости
+        # summary.md — строки таблицы по вариантам сэмплинга и среднее ± разброс по seed;
+        # в папке каждого варианта — листы и metrics.json его реального теста.
+        if: always() && inputs.job == 'stability'
+        uses: actions/upload-artifact@v7
+        with:
+          name: stability-${{ github.run_id }}
+          path: ${{ env.OUT }}/stability
           if-no-files-found: ignore
 
       - name: Папка данных
