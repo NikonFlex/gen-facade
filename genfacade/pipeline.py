@@ -10,6 +10,7 @@ import json
 import math
 import re
 import subprocess  # noqa: S404 — только git rev-parse
+from collections import Counter
 from collections.abc import Iterator
 from datetime import datetime
 from importlib.metadata import version
@@ -168,8 +169,8 @@ def layout(bare: FacadeSheet, req: PlanRun, cfg: Config) -> Checked:
     good = list(islice(_good(model, model.prompt(bare, req.mode, cfg), bare, cfg, trace),
                        settings.best_of))
     if not good:
-        raise ModelError(f"за {len(trace['attempts'])} попыток нет годного ответа; последняя "
-                         f"причина — {trace['attempts'][-1]['error']}")
+        raise ModelError(f"за {len(trace['attempts'])} попыток нет годного ответа; причины — "
+                         f"{_reasons(trace['attempts'])}")
     return good[0] if len(good) == 1 else _likeliest(good, Path(req.plan).stem, cfg)
 
 
@@ -268,6 +269,13 @@ def trained_model(settings: LayoutModel):
 def _check(raw: FacadeSheet, cfg: Config, trace: dict) -> Checked:
     sheet = snap(raw, cfg.checks)
     return Checked(raw, sheet, validate(sheet, cfg.checks), trace)
+
+
+def _reasons(attempts: list[dict]) -> str:
+    """Причины всех попыток отказа счётчиком, частые — первыми: на GPU сбой бывает не в
+    последней попытке (gf#257), а трасса хранила только её."""
+    counts = Counter(a["error"] for a in attempts)
+    return "; ".join(f"{reason} × {n}" for reason, n in counts.most_common())
 
 
 def _rejected(bad: list[Violation]) -> str:
