@@ -1,5 +1,5 @@
 """Сводка устойчивости по вариантам сэмплинга (gf#257): числа — из metrics.json вариантов,
-разброс — только по вариантам, отличающимся одним seed. Реальный тест не гоняется: папки
+разброс — по группам вариантов, отличающихся одним seed. Реальный тест не гоняется: папки
 вариантов собраны руками."""
 
 import json
@@ -57,6 +57,18 @@ def test_spread_counts_only_seed_variants(root, cfg):
     row = next(line for line in text.splitlines()
                if line.startswith("| model-m | 0.917 ± "))     # годных: 3/4, 4/4, 4/4
     assert f"| 0.800 ± {sd:.3f} |" in row
+    assert text.count("### Разброс по seed (n = 3: seed=0, seed=1, seed=10)") == len(Mode)
+
+
+def test_spread_per_setting_with_several_seeds(root, cfg):
+    """Перебор сэмплинга (gf#257): у temperature=0.5 два сида — свой разброс, отдельно от
+    вариантов с одним seed; среднее c2st группы — по её сидам, а не по всем."""
+    _variant(root, "temperature=0.5,seed=1", _row(0.30))
+    text = stability.run(root, cfg).read_text()
+    title = "### Разброс по seed при temperature=0.5 (n = 2: temperature=0.5,seed=0, "
+    assert text.count(title) == len(Mode)
+    group = text[text.index(title):]
+    assert f"| 0.200 ± {statistics.stdev([0.10, 0.30]):.3f} |" in group.split("\n## ")[0]
     assert text.count("### Разброс по seed (n = 3: seed=0, seed=1, seed=10)") == len(Mode)
 
 

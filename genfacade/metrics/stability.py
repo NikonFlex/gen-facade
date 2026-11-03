@@ -73,15 +73,32 @@ def _names(rows: dict[str, dict[str, dict]]) -> list[str]:
 
 
 def _by_seed(rows: dict[str, dict[str, dict]], cfg: Config) -> str:
-    """Среднее ± стандартное отклонение по вариантам, отличающимся только seed."""
-    seeds = [v for v in rows if set(_pairs(v)) == {SEED}]
-    title = f"### Разброс по seed (n = {len(seeds)}: {', '.join(seeds)})\n\n"
-    if len(seeds) < 2:
-        return title + "Меньше двух вариантов, отличающихся только seed, — разброса нет.\n"
+    """Среднее ± стандартное отклонение по каждой группе вариантов, отличающихся только seed:
+    seed=0 и seed=1 — одна группа, temperature=0.8,seed=0 и temperature=0.8,seed=1 — другая."""
+    groups = {rest: seeds for rest, seeds in _seed_groups(rows).items() if len(seeds) > 1}
+    if not groups:
+        return ("### Разброс по seed\n\n"
+                "Меньше двух вариантов, отличающихся только seed, — разброса нет.\n")
     columns = cfg.metrics.realtest.stability
-    body = [[name, *_spread([rows[v][name] for v in seeds], columns, cfg)]
-            for name in _names(rows)]
-    return title + _table(["строка", f"{realtest.GOOD} (доля)", *columns], body)
+    parts = []
+    for rest, seeds in groups.items():
+        at = f" при {rest}" if rest else ""
+        body = [[name, *_spread([rows[v][name] for v in seeds], columns, cfg)]
+                for name in _names(rows)]
+        parts.append(f"### Разброс по seed{at} (n = {len(seeds)}: {', '.join(seeds)})\n\n"
+                     + _table(["строка", f"{realtest.GOOD} (доля)", *columns], body))
+    return "\n".join(parts)
+
+
+def _seed_groups(rows: dict[str, dict[str, dict]]) -> dict[str, list[str]]:
+    """Варианты с seed по остальным парам (в имени папки через запятую): ключ "" — только seed."""
+    groups: dict[str, list[str]] = {}
+    for v in rows:
+        pairs = _pairs(v)
+        if SEED in pairs:
+            rest = PAIRS.join(f"{k}={x}" for k, x in pairs.items() if k != SEED)
+            groups.setdefault(rest, []).append(v)
+    return groups
 
 
 def _spread(group: list[dict], columns: list[str], cfg: Config) -> list[str]:
