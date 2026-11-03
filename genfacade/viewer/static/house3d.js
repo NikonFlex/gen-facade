@@ -127,7 +127,16 @@ export class HouseStage {
       this.render();
     }, { passive: false });
     el.addEventListener("dblclick", () => this.fit());
-    new ResizeObserver(() => this._resize()).observe(this.container);
+    this.observer = new ResizeObserver(() => this._resize());
+    this.observer.observe(this.container);
+  }
+
+  // Отдать WebGL-контекст: у браузера их немного (на телефоне — около 8), а страница проверки
+  // открывает по четыре дома на каждом шаге.
+  dispose() {
+    this.observer?.disconnect();
+    this.renderer?.dispose();
+    this.renderer?.forceContextLoss();
   }
 
   _resize() {

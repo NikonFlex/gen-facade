@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from genfacade import pipeline
-from genfacade.config import Config
+from genfacade.config import Config, Review
 from genfacade.datasets import preview, store
 from genfacade.metrics import calibrate
 from genfacade.plan.genplan_svg import PlanError
@@ -135,24 +135,43 @@ def _review_api(app: FastAPI, cfg: Config, root: Path | None) -> None:
     @app.get("/api/review/{mode}/{house}/{slot}/sheet.svg")
     def review_sheet(mode: Mode, house: str, slot: str) -> Response:
         """Лист места (A, B… — номер) или настоящий (`ref`); отказ модели — 422 с текстом."""
-        row = _row(root, mode, house, slot)
-        got = _guarded(lambda: review.sheet(_root(root), mode, house, row))
-        if isinstance(got, str):
-            raise HTTPException(422, got)
-        return Response(sheet_svg(got, cfg), media_type="image/svg+xml")
+        place = (mode, house, slot)
+        return Response(sheet_svg(_sheet(root, place, settings), cfg),
+                        media_type="image/svg+xml")
+
+    @app.get("/api/review/{mode}/{house}/{slot}/house3d")
+    def review_house(mode: Mode, house: str, slot: str) -> dict:
+        """Дом места объёмом, как вкладка «Дом в 3D» (хозяин 03.11: проверять по 3D-модели)."""
+        try:
+            return house_3d(_sheet(root, (mode, house, slot), settings), cfg)
+        except PlanError as e:
+            raise HTTPException(404, f"дом не собрать по контуру: {e}") from e
 
     @app.put("/api/review/{mode}/{house}/{slot}")
     def review_mark(mode: Mode, house: str, slot: int, mark: review.Mark) -> dict:
         _guarded(lambda: review.save(_root(root), mode, house, slot, mark, settings))
         return {"saved": True}
 
-    def _row(folder: Path | None, mode: Mode, house: str, slot: str) -> str:
-        if slot == REFERENCE_SLOT:
-            return calibrate.REFERENCE
-        order = _guarded(lambda: review.slots(_root(folder), mode, house, settings))
-        if not slot.isdigit() or int(slot) >= len(order):
-            raise HTTPException(404, f"нет места {slot!r}")
-        return order[int(slot)]
+
+def _sheet(root: Path | None, place: tuple[Mode, str, str], settings: Review) -> FacadeSheet:
+    """Лист места проверки (режим, дом, место); отказ модели — 422 с её текстом."""
+    mode, house, slot = place
+    row = _row(root, place, settings)
+    got = _guarded(lambda: review.sheet(_root(root), mode, house, row))
+    if isinstance(got, str):
+        raise HTTPException(422, got)
+    return got
+
+
+def _row(root: Path | None, place: tuple[Mode, str, str], settings: Review) -> str:
+    """Папка строки на месте: `ref` — настоящий дом, номер — строка по перемешанному порядку."""
+    mode, house, slot = place
+    if slot == REFERENCE_SLOT:
+        return calibrate.REFERENCE
+    order = _guarded(lambda: review.slots(_root(root), mode, house, settings))
+    if not slot.isdigit() or int(slot) >= len(order):
+        raise HTTPException(404, f"нет места {slot!r}")
+    return order[int(slot)]
 
 
 def _root(root: Path | None) -> Path:

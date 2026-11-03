@@ -7,34 +7,29 @@
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/review.css">
 </head>
-<body>
-  <header class="topbar">
-    <div class="top-left">
-      <a class="brand" href="/" title="Смотрелка">
-        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-          <path d="M4 15 16 5l12 10v13H4z"/><rect x="9" y="17" width="5" height="5"/><rect x="18" y="17" width="5" height="11"/>
-        </svg>
-        <span class="brand-name">Проверка глазами</span>
-      </a>
-      <span class="section-note" id="progress"></span>
+<body class="review-page">
+  <header class="review-bar">
+    <div class="review-bar-row">
+      <strong>Проверка глазами</strong>
+      <span class="review-progress" id="progress"></span>
     </div>
-    <div class="topbar-actions">
-      <button class="btn ghost" id="prev" title="Предыдущий дом (←)">← Назад</button>
-      <button class="btn ghost" id="next-open" title="Первый дом, где не всё отмечено">К неотмеченному</button>
-      <button class="btn" id="next" title="Следующий дом (→)">Дальше →</button>
+    <div class="review-bar-row">
+      <div class="segmented" role="radiogroup" aria-label="Вид">
+        <button class="btn" type="button" data-view="3d">3D</button>
+        <button class="btn" type="button" data-view="sheet">Фасады</button>
+      </div>
+      <button class="btn" id="prev" title="Предыдущий дом (←)">←</button>
+      <button class="btn ghost" id="next-open" title="Первый дом, где не всё отмечено">К&nbsp;неотмеченному</button>
+      <button class="btn" id="next" title="Следующий дом (→)"><span class="wide">Дальше </span>→</button>
     </div>
   </header>
   <main class="review" id="review">
     <p class="section-note" id="hint">
-      Слева сверху — настоящий дом. Ниже — листы трёх разных генераторов в случайном порядке,
-      без названий. У каждого: похож ли он на нормальный дом («годен» / «не годен») и, если нет, почему.
+      Первый — настоящий дом. Дальше три варианта от разных генераторов, в случайном порядке и
+      без названий: похож ли каждый на нормальный дом. В 3D дом крутится пальцем или мышью.
     </p>
     <h2 id="title"></h2>
-    <section class="review-ref">
-      <h3>Настоящий дом</h3>
-      <div class="review-sheet" id="ref"></div>
-    </section>
-    <div id="slots"></div>
+    <div class="review-grid" id="grid"></div>
   </main>
   <div class="toasts" id="toasts" aria-live="polite"></div>
   <script type="module" src="/static/review.js"></script>

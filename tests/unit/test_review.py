@@ -66,11 +66,20 @@ def test_sheets_of_reference_and_slots_are_svg(client):
     assert client.get(f"/api/review/{mode}/nope/0/sheet.svg").status_code == 404
 
 
+def test_houses_of_reference_and_slots_in_3d(client):
+    """Хозяин 03.11: проверять по 3D-модели — у настоящего дома и у каждого места есть объём."""
+    mode, house = Mode.BLIND, HOUSES[0]
+    for slot in ("ref", "0", "1", "2"):
+        got = client.get(f"/api/review/{mode}/{house}/{slot}/house3d")
+        assert got.status_code == 200 and got.json()["walls"], slot
+
+
 def test_refusal_is_shown_as_text(client, folder, cfg):
     mode, house = Mode.BLIND, HOUSES[1]
     slot = review.slots(folder, mode, house, cfg.viewer.review).index(ROWS[0])
-    got = client.get(f"/api/review/{mode}/{house}/{slot}/sheet.svg")
-    assert got.status_code == 422 and "нет годного ответа" in got.json()["detail"]
+    for view in ("sheet.svg", "house3d"):
+        got = client.get(f"/api/review/{mode}/{house}/{slot}/{view}")
+        assert got.status_code == 422 and "нет годного ответа" in got.json()["detail"], view
 
 
 def test_marks_saved_with_row_and_counted(client, folder, cfg):
