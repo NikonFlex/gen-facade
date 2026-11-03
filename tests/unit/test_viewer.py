@@ -51,7 +51,7 @@ def test_page_does_not_repeat_enum_values():
     values = [*Mode, *ElementClass, *VariantKind, *ZoneRole]
     quoted = re.compile("[\"'`](" + "|".join(map(re.escape, values)) + ")[\"'`]")
     key = re.compile(r"\b(" + "|".join(map(re.escape, values)) + r"):")
-    for name in ("app.js", "stage.js"):
+    for name in ("app.js", "stage.js", "review.js"):
         text = STATIC.joinpath(name).read_text()
         assert not quoted.findall(text) and not key.findall(text), name
     html = STATIC.joinpath("index.html").read_text()

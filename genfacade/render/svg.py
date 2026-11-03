@@ -192,12 +192,19 @@ def _zone(g: ElementTree.Element, z: MaterialZone, pen: Pen) -> None:
     })
 
 
+def element_fill(e: Element, pen: Pen) -> str:
+    """Цвет элемента: материал палитры дома, иначе цвет класса из библиотеки. Им же красит
+    выступы дом объёмом (render/house3d.py)."""
+    lib = pen.cfg.library
+    return pen.colors.get(e.material or "", lib.class_fill.get(e.cls, lib.fill.other))
+
+
 def _element(g: ElementTree.Element, e: Element, pen: Pen, zones: list[MaterialZone]) -> None:
     lib = pen.cfg.library
     attrs = {
         sheet_format.CLS: e.cls, sheet_format.ID: e.id,
         "x": num(e.x_m), "y": num(e.y_m), "width": num(e.w_m), "height": num(e.h_m),
-        "fill": pen.colors.get(e.material or "", lib.class_fill.get(e.cls, lib.fill.other)),
+        "fill": element_fill(e, pen),
     }
     optional = {sheet_format.FLOOR: e.floor, sheet_format.PARENT: e.parent}
     attrs |= {k: str(v) for k, v in optional.items() if v is not None} | _material(e, zones)

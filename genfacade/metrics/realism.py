@@ -61,8 +61,17 @@ def c2st_subsets(ours: numpy.ndarray, ref: numpy.ndarray, rng: numpy.random.Gene
                                   len(ours) + rng.choice(len(ref), n, replace=False)])
         sub = d[numpy.ix_(pick, pick)]
         numpy.fill_diagonal(sub, numpy.inf)
-        found.append(numpy.mean(label[sub.argmin(axis=1)] == label))
+        found.append(numpy.mean(label[_nearest(sub, rng)] == label))
     return float(numpy.mean(found)), float(numpy.std(found))
+
+
+def _nearest(d: numpy.ndarray, rng: numpy.random.Generator) -> numpy.ndarray:
+    """Ближайший сосед каждой строки; из равноудалённых — случайный. argmin брал первый, а первые
+    в матрице — стены метода: признаки расстановки равны 0 у 76–88 % настоящих стен (одно окно на
+    стене), ничьих много, и c2st сдвигался — у подмены random по разбросу верха окон 0,468 вместо
+    0,608 (gf#268)."""
+    ties = d == d.min(axis=1, keepdims=True)
+    return numpy.where(ties, rng.random(d.shape), -1.0).argmax(axis=1)
 
 
 def density_coverage(ours: numpy.ndarray, ref: numpy.ndarray, k: int) -> tuple[float, float] | None:

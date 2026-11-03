@@ -28,13 +28,29 @@ def _rows(out, mode) -> dict:
     return json.loads((out / mode / "rows" / "metrics.json").read_text())["rows"]
 
 
+def _half(out, mode) -> dict:
+    return json.loads((out / mode / "half" / "metrics.json").read_text())["rows"]
+
+
 def test_realtest_builds_rows_and_tables(real, cfg, tmp_path):
     realtest.run(cfg, tmp_path, 0, NO_ROWS)
     for mode in Mode:
-        assert sorted(k.rsplit("/", 1)[-1] for k in _rows(tmp_path, mode)) == sorted(
-            ["genplan", "generator", *realtest.SUBSTITUTES])
-        half = json.loads((tmp_path / mode / "half" / "metrics.json").read_text())["rows"]
-        assert [r["count"] for r in half.values()] == [2]
+        assert sorted(k.rsplit("/", 1)[-1] for k in _rows(tmp_path, mode)) == ["generator",
+                                                                               "genplan"]
+        half = _half(tmp_path, mode)
+        assert [k.rsplit("/", 1)[-1] for k in half] == [*realtest.SUBSTITUTES, "half-a"]
+        assert [r["count"] for r in half.values()] == [2] * (len(realtest.SUBSTITUTES) + 1)
+
+
+def test_substitutes_never_meet_their_own_houses(real, cfg, tmp_path):
+    """Подмена копирует у дома всё, кроме места окон (gf#268): она — из первой половины домов и
+    сравнивается со второй, а не с теми домами, из которых сделана."""
+    realtest.run(cfg, tmp_path, 0, NO_ROWS)
+    for mode in Mode:
+        against = {p.stem for p in (tmp_path / mode / realtest.HALVES[1]).glob("*.json")}
+        for name in realtest.SUBSTITUTES:
+            own = {p.stem for p in (tmp_path / mode / name).glob("*.json")}
+            assert own and not own & against, name
 
 
 def test_summary_has_every_row_of_both_modes(real, cfg, tmp_path):
@@ -44,7 +60,8 @@ def test_summary_has_every_row_of_both_modes(real, cfg, tmp_path):
                                          cfg.metrics.realtest.summary[-1] + " |"]
     body = [line.split(" | ")[:3] for line in lines[2:]]
     names = ["genplan", "generator", *realtest.SUBSTITUTES, "real-half"]
-    assert body == [[f"| {n}", m, "2/2" if n == "real-half" else "4/4"]
+    halves = {*realtest.SUBSTITUTES, "real-half"}
+    assert body == [[f"| {n}", m, "2/2" if n in halves else "4/4"]
                     for m in Mode for n in names]
 
 

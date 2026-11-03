@@ -5,7 +5,8 @@ GenPlan, синтетика val, подмены; калибровка «реал
 
     <out>/<режим>/<строка>/<дом>.json   листы
     <out>/<режим>/rows/metrics.json     строки против всех реальных домов
-    <out>/<режим>/half/metrics.json     половина реальных против другой
+    <out>/<режим>/half/metrics.json     подмены из одной половины реальных и сама она — против
+                                        другой половины
     <out>/summary.md                    сводка: строки обоих режимов, годных листов и колонки
                                         `[realtest] summary` (config/metrics.toml)
 
@@ -32,6 +33,7 @@ from genfacade.train import tokens
 from genfacade.train.tokens import bare, given_sides
 
 HALVES = ("half-a", "half-b")
+REFUSED = "error"  # ключ ответа-отказа модели в <дом>.json строки модели
 SUBSTITUTES = ("random", "foreign", "empty")
 MODEL = "model"
 SUMMARY = "summary.md"
@@ -58,9 +60,10 @@ def run(cfg: Config, out: Path, synthetic: int, rows: Rows) -> Path:
                   for name, run_cfg in layouts.items()]
         models += [_copied(source / mode / MODEL, out / mode / name)
                    for name, source in sheets.items()]
-        folders = models + _folders(given, synth, mode, cfg, out / mode)
-        table.run(folders, out / mode / calibrate.REFERENCE, cfg, out / mode / "rows")
-        table.run([out / mode / HALVES[0]], out / mode / HALVES[1], cfg, out / mode / "half")
+        folders, substitutes = _folders(given, synth, mode, cfg, out / mode)
+        table.run(models + folders, out / mode / calibrate.REFERENCE, cfg, out / mode / "rows")
+        table.run([*substitutes, out / mode / HALVES[0]], out / mode / HALVES[1], cfg,
+                  out / mode / "half")
     (out / SUMMARY).write_text(summary(out, cfg))
     return out
 
@@ -100,31 +103,40 @@ def _copied(source: Path, out: Path) -> Path:
     return out
 
 
-def _folders(given: dict, synth: dict, mode: Mode, cfg: Config, out: Path) -> list[Path]:
+def _folders(given: dict, synth: dict, mode: Mode, cfg: Config,
+             out: Path) -> tuple[list[Path], list[Path]]:
     """Эталон, половины, синтетика, правило GenPlan и подмены — строки без модели; given —
-    реальные дома с условием режима."""
+    реальные дома с условием режима. Вернуть строки против всех реальных домов и подмены —
+    они из первой половины домов и идут против второй, как «реальные против реальных»: подмена
+    копирует у настоящего дома всё, кроме места окон, и против своих же домов находила у каждой
+    стены близнеца (c2st random по доле остекления 0,082, gf#268)."""
     names, sheets = list(given), list(given.values())
     rng = numpy.random.default_rng(cfg.metrics.seed)
     calibrate.write(out / calibrate.REFERENCE, names, sheets)
     first = set(rng.permutation(names)[: len(names) // 2])
+    halves = []
     for part, keep in zip(HALVES, (True, False), strict=True):
         pick = [(n, s) for n, s in zip(names, sheets, strict=True) if (n in first) == keep]
         calibrate.write(out / part, [n for n, _ in pick], [s for _, s in pick])
+        halves.append(pick)
     calibrate.write(out / "generator", list(synth), [given_sides(s, mode) for s in synth.values()])
     baselines.run(Baseline.GENPLAN, out / calibrate.REFERENCE, cfg, out / "genplan")
+    own = [n for n, _ in halves[0]]
     for name in SUBSTITUTES:
-        calibrate.write(out / name, names, calibrate.ROWS[name](sheets, rng))
-    return [out / "genplan", out / "generator", *(out / n for n in SUBSTITUTES)]
+        calibrate.write(out / name, own, calibrate.ROWS[name]([s for _, s in halves[0]], rng))
+    return [out / "genplan", out / "generator"], [out / n for n in SUBSTITUTES]
 
 
 def named_rows(out: Path, mode: Mode) -> list[tuple[str, dict]]:
     """Строки таблицы режима из metrics.json (а не из summary.md): (имя строки, её метрики);
-    реальные против реальных — последней, под именем real-half."""
-    def read(part: str) -> dict:
-        return json.loads((out / mode / part / table.METRICS).read_text())["rows"]
+    подмены и реальные против реальных — из таблицы половин, реальные — последней, под именем
+    real-half."""
+    def read(part: str) -> list[tuple[str, dict]]:
+        rows = json.loads((out / mode / part / table.METRICS).read_text())["rows"]
+        return [(Path(k).name, r) for k, r in rows.items()]
 
-    named = [(Path(k).name, r) for k, r in read("rows").items()]
-    return named + [(REAL_HALF, r) for r in read("half").values()]
+    half = [(REAL_HALF if n == HALVES[0] else n, r) for n, r in read("half")]
+    return read("rows") + half
 
 
 def summary(out: Path, cfg: Config) -> str:
@@ -156,6 +168,6 @@ def _answers(given: dict[str, FacadeSheet], mode: Mode, cfg: Config, out: Path) 
             got = pipeline.layout(bare(sheet), pipeline.PlanRun(plan=name, text="", mode=mode), cfg)
             text = got.sheet.model_dump_json()
         except ModelError as e:
-            text = json.dumps({"error": str(e), "attempts": e.attempts}, ensure_ascii=False)
+            text = json.dumps({REFUSED: str(e), "attempts": e.attempts}, ensure_ascii=False)
         (out / f"{name}.json").write_text(text)
     return out

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GenFacade · проверка глазами</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/review.css">
+</head>
+<body class="review-page">
+  <header class="review-bar">
+    <div class="review-bar-row">
+      <strong>Проверка глазами</strong>
+      <span class="review-progress" id="progress"></span>
+    </div>
+    <div class="review-bar-row">
+      <div class="segmented" role="radiogroup" aria-label="Вид">
+        <button class="btn" type="button" data-view="3d">3D</button>
+        <button class="btn" type="button" data-view="sheet">Фасады</button>
+      </div>
+      <button class="btn" id="prev" title="Предыдущий дом (←)">←</button>
+      <button class="btn ghost" id="next-open" title="Первый дом, где не всё отмечено">К&nbsp;неотмеченному</button>
+      <button class="btn" id="next" title="Следующий дом (→)"><span class="wide">Дальше </span>→</button>
+    </div>
+  </header>
+  <main class="review" id="review">
+    <p class="section-note" id="hint">
+      Первый — настоящий дом. Дальше три варианта от разных генераторов, в случайном порядке и
+      без названий: похож ли каждый на нормальный дом. В 3D дом крутится пальцем или мышью.
+    </p>
+    <h2 id="title"></h2>
+    <div class="review-grid" id="grid"></div>
+  </main>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script type="module" src="/static/review.js"></script>
+</body>
+</html>
