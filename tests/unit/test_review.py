@@ -92,6 +92,12 @@ def test_marks_saved_with_row_and_counted(client, folder, cfg):
     assert f"| genplan | {Mode.BLIND} | — | 2 |" in table
 
 
+def test_mark_of_unknown_house_refused(client, folder):
+    got = client.put(f"/api/review/{Mode.BLIND}/nope/0", json={"ok": True})
+    assert got.status_code == 404
+    assert review.marks(folder) == {}
+
+
 def test_without_folder_review_is_off(tmp_path):
     (tmp_path / "viewer.toml").write_text(f'[paths]\nruns_dir = "{tmp_path / "runs"}"\n')
     client = TestClient(create_app(config.load(tmp_path)))

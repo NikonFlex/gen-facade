@@ -82,6 +82,8 @@ def key(mode: Mode, house: str, slot: int) -> str:
 
 def save(root: Path, mode: Mode, house: str, slot: int, mark: Mark, cfg: Review) -> None:
     """Отметка места дома; за местом в файле записана и строка — сводке не надо перемешивать."""
+    if house not in houses(root):
+        raise Missing(f"нет дома {house!r}")
     order = slots(root, mode, house, cfg)
     if not 0 <= slot < len(order):
         raise Missing(f"нет места {slot} у дома {house!r}")
