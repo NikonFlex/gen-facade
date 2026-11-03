@@ -167,13 +167,18 @@ def test_synthetic_windows_keep_frieze(cfg):
         assert all(guidelines.cases(rule, build.sample(seed, cfg).sheet, None)), seed
 
 
+def _with_canopy(cfg):
+    """Параметры дома синтетики, у которого есть козырёк."""
+    spec = build.sample(0, cfg).sheet.spec
+    return spec.model_copy(update={"trim": spec.trim.model_copy(
+        update={"canopy": CanopyKind.FLAT})})
+
+
 def test_trim_does_not_land_on_another_opening(cfg):
     """Выведенный элемент, который налез бы на чужой проём, не ставится (gf#242: козырёк двери
     на соседнем окне, ставни на соседних ставнях): у двери вплотную к окну козырька нет, у
     отдельной двери — есть."""
-    spec = build.sample(0, cfg).sheet.spec
-    spec = spec.model_copy(update={"trim": spec.trim.model_copy(
-        update={"canopy": CanopyKind.FLAT})})
+    spec = _with_canopy(cfg)
     door = Element(id="d", cls=ElementClass.DOOR, x_m=2.0, y_m=0.0, w_m=0.9, h_m=2.1, floor=1)
     window = Element(id="w", cls=ElementClass.WINDOW, x_m=3.0, y_m=1.0, w_m=1.0, h_m=1.5, floor=1)
     wall, marks = derive.Wall(spec, 8.0, cfg.derive), {"d": {Trim.CANOPY}}
@@ -181,6 +186,15 @@ def test_trim_does_not_land_on_another_opening(cfg):
     far = derive.place([door, window.model_copy(update={"x_m": 5.0})], marks, wall)
     canopies = [[e for e in got if e.cls is ElementClass.CANOPY] for got in (near, far)]
     assert [len(c) for c in canopies] == [0, 1]
+
+
+def test_door_beyond_the_wall_gets_no_canopy(cfg):
+    """Дверь за краем стены (GPU run 41542203924, датчик обучения gf#217: козырёк шириной −6,9 м
+    ронял обучение): козырька нет, дверь остаётся — её бракует валидатор."""
+    spec = _with_canopy(cfg)
+    door = Element(id="d", cls=ElementClass.DOOR, x_m=15.0, y_m=0.0, w_m=0.9, h_m=2.1, floor=1)
+    got = derive.place([door], {"d": {Trim.CANOPY}}, derive.Wall(spec, 8.0, cfg.derive))
+    assert [e.id for e in got] == ["d"]
 
 
 def test_child_of_narrowed_opening_keeps_positive_width(cfg):

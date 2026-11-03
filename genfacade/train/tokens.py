@@ -397,12 +397,21 @@ def decode(tokens: list[str], walls: FacadeSheet, cfg: Config) -> FacadeSheet:
         _check_trims(marks, walls.spec)
         wall = _exact(wall, walls.spec, cfg.tokens)
         ctx = derive.Wall(walls.spec, f.side.length_m, cfg.derive)
-        facades.append(wall.model_copy(update={
-            "elements": derive.place(wall.elements, marks, ctx)}))
+        facades.append(wall.model_copy(update={"elements": _placed(wall, marks, ctx)}))
     r.expect(Mark.END)
     if r.at != len(tokens):
         raise TokenError(f"после {Mark.END} ещё {len(tokens) - r.at} токенов")
     return walls.model_copy(update={"facades": facades})
+
+
+def _placed(wall: SideFacade, marks: Flags, ctx: derive.Wall) -> list[Element]:
+    """Элементы стены с выведенными; выведенный элемент, которого схема не принимает (ширина в
+    минус у проёма недоученной модели), — брак ответа, как в `_build`, а не падение датчика
+    обучения (GPU run 41542203924, gf#217)."""
+    try:
+        return derive.place(wall.elements, marks, ctx)
+    except ValueError as e:
+        raise TokenError(f"стена {wall.side.index}: выведенный элемент вне схемы: {e}") from e
 
 
 def _read_sizes(r: _Reader, limit: int) -> list[Size]:
