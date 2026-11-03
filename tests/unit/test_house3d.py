@@ -5,9 +5,11 @@ import math
 import pytest
 from test_unfold import L_SIDES, sides_of
 
+from genfacade.datasets.synthetic import build
 from genfacade.render.house3d import house_3d
 from genfacade.render.sheet_format import num
-from genfacade.schema import FacadeSheet, SideFacade
+from genfacade.render.svg import element_fill, pen_for
+from genfacade.schema import ElementClass, FacadeSheet, SideFacade, ZoneRole
 from genfacade.unfold import unfold
 
 
@@ -46,3 +48,24 @@ def test_wall_texture_is_the_facade(house, cfg):
         assert f'viewBox="0 0 {num(wall["length_m"])} {num(data["eaves_m"])}"' in wall["svg"]
         assert all(f'data-id="{e.id}"' in wall["svg"] for e in facade.elements)
         assert "<text" not in wall["svg"]
+
+
+def test_plinth_and_cornice_stand_out(cfg):
+    """Хозяин 03.11: цоколь и карниз — объёмом. У стены синтетики с карнизом и цоколем выступы —
+    рамкой того же элемента или зоны, глубиной из `[house3d]` и цветом листа."""
+    sheet = next(s for s in (build.sample(k, cfg).sheet for k in range(20))
+                 if any(e.cls is ElementClass.CORNICE for f in s.facades for e in f.elements)
+                 and any(z.role is ZoneRole.PLINTH for f in s.facades for z in f.zones))
+    look, pen = cfg.viewer.house3d, pen_for(sheet, cfg)
+    for wall, facade in zip(house_3d(sheet, cfg)["walls"], sheet.facades, strict=True):
+        boxes = {(b["x0"], b["y0"], b["x1"], b["y1"]): b for b in wall["relief"]}
+        for e in facade.elements:
+            if e.cls is ElementClass.CORNICE:
+                got = boxes[(e.x_m, e.y_m, e.x_m + e.w_m, e.y_m + e.h_m)]
+                assert got["depth"] == look.relief_cls[e.cls]
+                assert got["color"] == element_fill(e, pen)
+        plinths = [z for z in facade.zones if z.role is ZoneRole.PLINTH]
+        raised = [e for e in facade.elements if e.cls in look.relief_cls]
+        assert len(wall["relief"]) == len(plinths) + len(raised)
+        deep = look.relief_role[ZoneRole.PLINTH]
+        assert sum(b["depth"] == deep for b in wall["relief"]) >= len(plinths)

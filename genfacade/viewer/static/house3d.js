@@ -102,7 +102,28 @@ export class HouseStage {
     const [nx, ny] = w.normal;
     wall.rotation.y = Math.atan2(nx, -ny);
     this.scene.add(wall, this._edges(THREE, geo, wall.position).rotateY(wall.rotation.y));
+    this._relief(THREE, w, wall.rotation.y);
     this.render();
+  }
+
+  // Выступы стены (цоколь, карниз, подоконник, козырёк): коробки перед текстурой, в осях стены —
+  // x от её левого края, y от земли, z наружу. У края стены коробка удлиняется на свою глубину:
+  // пояс соседних стен сходится на углу без щели.
+  _relief(THREE, w, turn) {
+    const frame = new THREE.Group();
+    const [[lx, ly], [rx, ry]] = [w.left, w.right];
+    frame.position.set((lx + rx) / 2, 0, -(ly + ry) / 2);
+    frame.rotation.y = turn;
+    const EDGE = 0.01;  // м: рамка у края стены считается доходящей до угла
+    for (const r of w.relief) {
+      const x0 = r.x0 <= EDGE ? -r.depth : r.x0;
+      const x1 = r.x1 >= w.length_m - EDGE ? w.length_m + r.depth : r.x1;
+      const geo = new THREE.BoxGeometry(x1 - x0, r.y1 - r.y0, r.depth);
+      const box = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: r.color }));
+      box.position.set((x0 + x1) / 2 - w.length_m / 2, (r.y0 + r.y1) / 2, r.depth / 2);
+      frame.add(box, this._edges(THREE, geo, box.position));
+    }
+    this.scene.add(frame);
   }
 
   _bind() {

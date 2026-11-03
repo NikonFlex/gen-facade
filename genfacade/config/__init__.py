@@ -211,6 +211,9 @@ class House3d(Section):
     ground: str
     background: str
     edges: str
+    # выступы стены (gf#268): глубина в метрах для зон этих ролей и элементов этих классов
+    relief_role: dict[ZoneRole, float]
+    relief_cls: dict[ElementClass, float]
 
 
 class Review(Section):
