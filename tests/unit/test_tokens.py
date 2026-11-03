@@ -7,7 +7,16 @@ import pytest
 
 from genfacade import derive
 from genfacade.datasets.synthetic import build
-from genfacade.schema import ElementClass, FixedField, Mode, OpeningKind, Rule, Trim, VariantKind
+from genfacade.schema import (
+    Element,
+    ElementClass,
+    FixedField,
+    Mode,
+    OpeningKind,
+    Rule,
+    Trim,
+    VariantKind,
+)
 from genfacade.train import tokens
 from genfacade.train.tokens import Mark, TokenError
 from genfacade.unfold import unfold
@@ -250,6 +259,17 @@ def test_broken_answer_refused_with_reason(sheets, cfg, what):
     """Ответ модели бывает негодным: разбор не чинит его молча, а называет причину."""
     with pytest.raises(TokenError, match=what):
         tokens.decode(_broken(_answer(sheets, cfg), what), tokens.bare(sheets[0]), cfg)
+
+
+def test_derived_element_outside_schema_is_a_broken_answer(sheets, cfg, monkeypatch):
+    """Вывод элементов проёма дал элемент, которого схема не принимает (козырёк шириной −6,9 м,
+    GPU run 41542203924): это брак ответа с причиной, а не падение датчика обучения (gf#217)."""
+    def negative(elements, marks, wall):
+        return [*elements, Element.model_validate({**elements[0].model_dump(), "w_m": -6.9})]
+
+    monkeypatch.setattr(derive, "place", negative)
+    with pytest.raises(TokenError, match="выведенный элемент вне схемы"):
+        tokens.decode(_answer(sheets, cfg), tokens.bare(sheets[0]), cfg)
 
 
 def test_unknown_style_or_too_long_wall_cannot_be_written(sheets, cfg):

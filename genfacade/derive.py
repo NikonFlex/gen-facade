@@ -164,13 +164,15 @@ def _fits(row: list[Element], needs: list[float], i: int, length_m: float) -> bo
 
 
 def _canopy(d: Element, elements: list[Element], wall: Wall) -> Element | None:
-    """Козырёк над дверью; под карнизом тесно — ниже, но не ниже min_h_m, иначе его нет."""
+    """Козырёк над дверью; под карнизом тесно — ниже, но не ниже min_h_m, иначе его нет. Дверь
+    за краем стены (ответ недоученной модели, gf#217) — козырька нет: ширина ушла бы в минус, а
+    дверь и так брак валидатора (`outside`)."""
     kinds = wall.cfg.canopy
     look = kinds.of(wall.spec.trim.canopy)
     x0, x1 = max(0.0, d.x_m - look.pad_m), min(wall.length_m, d.x_m + d.w_m + look.pad_m)
     y = d.y_m + d.h_m + look.gap_m
     h = min(look.height_m, _ceiling(y, (x0, x1), elements, wall) - y)
-    if h + EPS < kinds.min_h_m:
+    if h + EPS < kinds.min_h_m or x1 - x0 <= EPS:
         return None
     return _child(d, Trim.CANOPY, (x0, y, x1 - x0, h), wall)
 
