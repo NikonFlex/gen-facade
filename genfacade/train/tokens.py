@@ -80,7 +80,13 @@ class Mark(StrEnum):
 
 
 class TokenError(ValueError):
-    """Дом не записывается токенами или последовательность не разбирается; текст — причина."""
+    """Дом не записывается токенами или последовательность не разбирается; текст — причина.
+    words — слова неразобранного ответа модели (`models.layout`): по ним видно, чем ответ
+    оборвался (gf#257, обрыв только на GPU)."""
+
+    def __init__(self, message: str, words: list[str] | None = None):
+        super().__init__(message)
+        self.words = words or []
 
 
 class Answer(NamedTuple):

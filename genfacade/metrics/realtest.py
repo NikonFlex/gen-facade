@@ -148,13 +148,14 @@ def good(row: dict) -> str:
 
 
 def _answers(given: dict[str, FacadeSheet], mode: Mode, cfg: Config, out: Path) -> Path:
-    """Ответ модели на каждый дом: лист после шагов 4–5 или {"error": …} — брак после попыток."""
+    """Ответ модели на каждый дом: лист после шагов 4–5 или {"error": …, "attempts": …} — брак
+    после попыток; у неразобранной попытки — её слова (датчик обрыва gf#257)."""
     out.mkdir(parents=True, exist_ok=True)
     for name, sheet in given.items():
         try:
             got = pipeline.layout(bare(sheet), pipeline.PlanRun(plan=name, text="", mode=mode), cfg)
             text = got.sheet.model_dump_json()
         except ModelError as e:
-            text = json.dumps({"error": str(e)}, ensure_ascii=False)
+            text = json.dumps({"error": str(e), "attempts": e.attempts}, ensure_ascii=False)
         (out / f"{name}.json").write_text(text)
     return out

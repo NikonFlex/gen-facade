@@ -30,7 +30,12 @@ DATA = files(__package__).joinpath("stub_data")
 
 
 class ModelError(ValueError):
-    """Модель (стаб) не может ответить на этот вход; текст — причина."""
+    """Модель (стаб) не может ответить на этот вход; текст — причина. attempts — попытки
+    обученной модели из трассы (`pipeline.layout`), когда годного ответа за них нет."""
+
+    def __init__(self, message: str, attempts: list[dict] | None = None):
+        super().__init__(message)
+        self.attempts = attempts or []
 
 
 @dataclass(frozen=True)
