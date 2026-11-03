@@ -28,6 +28,17 @@ def test_c2st_needs_two_points():
     assert realism.c2st(SAME[0][:1], SAME[1], numpy.random.default_rng(1)) is None
 
 
+def test_c2st_ties_do_not_favour_method():
+    """Ничьи ближайшего соседа (gf#268): у метода все стены 0, у эталона половина 0 и половина
+    разные. Равноудалённых соседей много; раньше брался первый — стена метода — и c2st выходил
+    0,75. При случайном выборе из равноудалённых — (2/3 + 1/2 · 1/3 + 1/2) / 2 ≈ 0,67."""
+    n = 60
+    ours = numpy.zeros((n, 1))
+    ref = numpy.vstack([numpy.zeros((n // 2, 1)), numpy.arange(1, n // 2 + 1)[:, None] * 10.0])
+    got = realism.c2st_subsets(ours, ref, numpy.random.default_rng(0), 20)[0]
+    assert abs(got - (2 / 3 + 1 / 6 + 1 / 2) / 2) < 0.04
+
+
 def test_c2st_over_subsets_steadier_than_single(cfg):
     """gf#235: среднее по подвыборкам ближе к 0,5, чем худшая одиночная, и разброс не нулевой.
     Выборки разного размера (как 800 синтетических стен против 110 реальных): одиночные
