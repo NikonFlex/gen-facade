@@ -1,7 +1,8 @@
 // Слепая проверка листов глазами (gf#268). Дом за домом: настоящий дом и дома строк на местах
 // A, B, C… — чья строка на каком месте, страница не знает (сервер её не отдаёт). По умолчанию —
 // 3D-модели (хозяин 03.11), переключатель «Фасады» — чертежи. Отметка сохраняется сразу;
-// открытый дом — в адресе (#i=…), вид — в localStorage.
+// открытый дом — в адресе (#i=…), вид — в localStorage. Отбор домов — параметры адреса:
+// mode=<режим> — только этот режим, open=1 — только неотмеченные, n=<число> — не больше стольких.
 
 import { HouseStage } from "/static/house3d.js";
 
@@ -121,6 +122,14 @@ function setView(view) {
   show(state.at);
 }
 
+// Отбор при открытии: отмеченный сейчас дом не пропадает из списка до перезагрузки.
+function picked(items, params) {
+  const mode = params.get("mode");
+  const n = Number(params.get("n")) || items.length;
+  return items.filter((it) => (!mode || it.mode === mode) && (params.get("open") !== "1" || !done(it)))
+    .slice(0, n);
+}
+
 async function start() {
   const [data, options] = await Promise.all([
     fetch("/api/review").then((r) => r.json()), fetch("/api/options").then((r) => r.json()),
@@ -131,7 +140,7 @@ async function start() {
     $("title").textContent = "Проверка не включена: genfacade serve --review <папка realtest>";
     return;
   }
-  state.items = data.items;
+  state.items = picked(data.items, new URLSearchParams(location.search));
   const at = Number(new URLSearchParams(location.hash.slice(1)).get("i") ?? 0);
   state.at = Number.isFinite(at) ? at : 0;
   let saved = null;
