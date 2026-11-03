@@ -1,14 +1,17 @@
 // Слепая проверка листов глазами (gf#268). Дом за домом: настоящий дом и дома строк на местах
 // A, B, C… — чья строка на каком месте, страница не знает (сервер её не отдаёт). По умолчанию —
 // 3D-модели (хозяин 03.11), переключатель «Фасады» — чертежи. Отметка сохраняется сразу;
-// открытый дом — в адресе (#i=…), вид — в localStorage. Отбор домов — параметры адреса:
-// mode=<режим> — только этот режим, open=1 — только неотмеченные, n=<число> — не больше стольких.
+// открытый дом — в адресе по имени (#h=<режим>/<дом>), вид — в localStorage. Отбор домов —
+// параметры адреса: mode=<режим> — только этот режим, open=1 — только неотмеченные, n=<число> —
+// не больше стольких. Отобранный список живёт во вкладке (sessionStorage): телефон перезагружал
+// страницу, open=1 выкидывал отмеченные дома, номер в адресе указывал на другой дом (хозяин 03.11).
 
 import { HouseStage } from "/static/house3d.js";
 
 const $ = (id) => document.getElementById(id);
 const LETTERS = "ABCDEFGH";
 const VIEW_KEY = "review.view";
+const LIST_KEY = `review.list${location.search.replace(/[?&]k=[^&]*/, "")}`;
 const state = { items: [], at: 0, modes: {}, look: null, view: "3d", stages: [] };
 
 function el(tag, attrs = {}, text = "") {
@@ -23,6 +26,7 @@ function toast(text, kind = "") {
   setTimeout(() => node.remove(), kind === "error" ? 7000 : 2000);
 }
 
+const keyOf = (item) => `${item.mode}/${item.house}`;
 const base = (item) => `/api/review/${item.mode}/${encodeURIComponent(item.house)}`;
 const marked = (item) => Object.values(item.marks).filter(Boolean).length;
 const done = (item) => marked(item) === item.slots;
@@ -93,7 +97,7 @@ function refCard(item) {
 function show(at) {
   if (!state.items.length) return;
   state.at = (at + state.items.length) % state.items.length;
-  history.replaceState(null, "", `#i=${state.at}`);
+  history.replaceState(null, "", `#h=${encodeURIComponent(keyOf(state.items[state.at]))}`);
   for (const stage of state.stages.splice(0)) stage.dispose();
   const item = state.items[state.at];
   $("title").textContent = `${item.house} · ${state.modes[item.mode] ?? item.mode}`;
@@ -122,12 +126,22 @@ function setView(view) {
   show(state.at);
 }
 
-// Отбор при открытии: отмеченный сейчас дом не пропадает из списка до перезагрузки.
+// Отбор при первом открытии во вкладке; после перезагрузки — тот же список, отмеченные в нём
+// дома остаются.
 function picked(items, params) {
+  let kept = null;
+  try { kept = JSON.parse(sessionStorage.getItem(LIST_KEY)); } catch { /* приватный режим */ }
+  if (Array.isArray(kept)) {
+    const byKey = new Map(items.map((it) => [keyOf(it), it]));
+    const list = kept.map((k) => byKey.get(k)).filter(Boolean);
+    if (list.length) return list;
+  }
   const mode = params.get("mode");
   const n = Number(params.get("n")) || items.length;
-  return items.filter((it) => (!mode || it.mode === mode) && (params.get("open") !== "1" || !done(it)))
+  const list = items.filter((it) => (!mode || it.mode === mode) && (params.get("open") !== "1" || !done(it)))
     .slice(0, n);
+  try { sessionStorage.setItem(LIST_KEY, JSON.stringify(list.map(keyOf))); } catch { /* приватный режим */ }
+  return list;
 }
 
 async function start() {
@@ -141,8 +155,9 @@ async function start() {
     return;
   }
   state.items = picked(data.items, new URLSearchParams(location.search));
-  const at = Number(new URLSearchParams(location.hash.slice(1)).get("i") ?? 0);
-  state.at = Number.isFinite(at) ? at : 0;
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const at = state.items.findIndex((it) => keyOf(it) === hash.get("h"));
+  state.at = at >= 0 ? at : Number(hash.get("i")) || 0;
   let saved = null;
   try { saved = localStorage.getItem(VIEW_KEY); } catch { /* приватный режим */ }
   setView(saved === "sheet" ? "sheet" : "3d");
