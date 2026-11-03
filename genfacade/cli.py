@@ -1,5 +1,5 @@
 """Командная строка: genfacade run <план.svg> --text …, serve, synth, buildingnet, manual, tokens,
-train, eval, metrics, calibrate, baseline, guidelines, realtest, stability."""
+train, eval, metrics, calibrate, baseline, guidelines, realtest, stability, review."""
 
 import argparse
 import sys
@@ -116,14 +116,21 @@ def guidelines_table(args: argparse.Namespace) -> Path:
     return guidelines.run(config.load(*args.config), args.out)
 
 
-def serve(config_dirs: list[Path]) -> None:
+def serve(config_dirs: list[Path], checked: Path | None = None) -> None:
     # uvicorn и fastapi — в группе [viewer]: без смотрелки пакет их не тянет.
     import uvicorn
 
     from genfacade.viewer.app import create_app
 
     cfg = config.load(*config_dirs)
-    uvicorn.run(create_app(cfg), host=cfg.viewer.server.host, port=cfg.viewer.server.port)
+    uvicorn.run(create_app(cfg, checked), host=cfg.viewer.server.host,
+                port=cfg.viewer.server.port)
+
+
+def review_summary(args: argparse.Namespace) -> str:
+    from genfacade.viewer import review
+
+    return review.summary(args.folder, config.load(*args.config).viewer.review)
 
 
 def _named(value: str) -> tuple[str, Path]:
@@ -153,7 +160,11 @@ def _parser() -> argparse.ArgumentParser:
                         f"{Mode.BLIND} — глухой куб (режим 1)")
     g.add_argument("-o", "--out", type=Path,
                    help="папка прогона; по умолчанию runs_dir/<время>-<имя>")
-    sub.add_parser("serve", help="смотрелка прогонов в браузере")
+    v = sub.add_parser("serve", help="смотрелка прогонов в браузере")
+    v.add_argument("--review", type=Path, help="папка genfacade realtest для слепой проверки "
+                                               "листов глазами (страница /review, gf#268)")
+    r = sub.add_parser("review", help="сводка слепой проверки: доля принятых листов по строкам")
+    r.add_argument("folder", type=Path, help="папка genfacade realtest с review.json")
     s = sub.add_parser("synth", help="синтетические дома → примеры датасета и опись")
     s.add_argument("-n", "--count", type=int, required=True, help="сколько домов")
     s.add_argument("--first-seed", type=int, default=0, help="seed первого дома; дальше подряд")
@@ -228,13 +239,14 @@ COMMANDS = {
     "realtest": (realtest, {ModelError: "таблица не начата",
                             FileNotFoundError: "таблица не начата"}),
     "run": (run, pipeline.REFUSALS),
+    "review": (review_summary, {}),
 }
 
 
 def main(argv: list[str] | None = None) -> None:
     args = _parser().parse_args(argv)
     if args.command not in COMMANDS:
-        serve(args.config)
+        serve(args.config, getattr(args, "review", None))
         return
     command, refusals = COMMANDS[args.command]
     try:

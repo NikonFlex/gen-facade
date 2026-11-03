@@ -213,11 +213,20 @@ class House3d(Section):
     edges: str
 
 
+class Review(Section):
+    """Слепая проверка листов глазами (gf#268, viewer/review.py): какие строки реального теста
+    показывать рядом с настоящим домом и от чего перемешивать их места."""
+
+    rows: list[str]
+    seed: int
+
+
 class Viewer(Section):
     server: Server
     paths: ViewerPaths
     samples: SamplesView
     house3d: House3d
+    review: Review
     labels: Labels
 
 

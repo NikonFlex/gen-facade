@@ -32,6 +32,7 @@ from genfacade.train import tokens
 from genfacade.train.tokens import bare, given_sides
 
 HALVES = ("half-a", "half-b")
+REFUSED = "error"  # ключ ответа-отказа модели в <дом>.json строки модели
 SUBSTITUTES = ("random", "foreign", "empty")
 MODEL = "model"
 SUMMARY = "summary.md"
@@ -156,6 +157,6 @@ def _answers(given: dict[str, FacadeSheet], mode: Mode, cfg: Config, out: Path) 
             got = pipeline.layout(bare(sheet), pipeline.PlanRun(plan=name, text="", mode=mode), cfg)
             text = got.sheet.model_dump_json()
         except ModelError as e:
-            text = json.dumps({"error": str(e), "attempts": e.attempts}, ensure_ascii=False)
+            text = json.dumps({REFUSED: str(e), "attempts": e.attempts}, ensure_ascii=False)
         (out / f"{name}.json").write_text(text)
     return out

@@ -1,4 +1,5 @@
-"""Сервер смотрелки: планы и прогоны, примеры датасета, режимы и подписи, файлы трассы.
+"""Сервер смотрелки: планы и прогоны, примеры датасета, режимы и подписи, файлы трассы, слепая
+проверка листов глазами (/review, gf#268).
 
 Страница ничего не считает сама: SVG рисует тот же render/, что и на выходе
 (docs/decisions.md, 29.09 «трасса каждого шага и веб-смотрелка»).
@@ -16,12 +17,15 @@ from pydantic import BaseModel
 from genfacade import pipeline
 from genfacade.config import Config
 from genfacade.datasets import preview, store
+from genfacade.metrics import calibrate
 from genfacade.plan.genplan_svg import PlanError
 from genfacade.render.house3d import house_3d
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import FacadeSheet, Mode, Sample, Source
+from genfacade.viewer import review
 
 STATIC = files(__package__).joinpath("static")
+REFERENCE_SLOT = "ref"  # место настоящего листа на странице проверки
 
 
 class RunRequest(BaseModel):
@@ -31,19 +35,25 @@ class RunRequest(BaseModel):
     svg: str | None = None
 
 
-def create_app(cfg: Config) -> FastAPI:
+def create_app(cfg: Config, checked: Path | None = None) -> FastAPI:
+    """checked — папка `genfacade realtest` для слепой проверки; None — страница /review пуста."""
     runs_dir = cfg.viewer.paths.runs_dir
     runs_dir.mkdir(parents=True, exist_ok=True)
     app = FastAPI(title="GenFacade · смотрелка")
     app.middleware("http")(_revalidate_page)
     _api(app, cfg, runs_dir)
     _samples_api(app, cfg)
+    _review_api(app, cfg, checked)
     app.mount("/files", StaticFiles(directory=runs_dir), name="files")
     app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
     @app.get("/")
     def index() -> FileResponse:
         return FileResponse(str(STATIC.joinpath("index.html")))
+
+    @app.get("/review")
+    def review_page() -> FileResponse:
+        return FileResponse(str(STATIC.joinpath("review.html")))
 
     return app
 
@@ -105,6 +115,62 @@ def _samples_api(app: FastAPI, cfg: Config) -> None:
     def sample_sheet(source: Source, sample_id: str) -> Response:
         svg = sheet_svg(_sample(source, sample_id, cfg).sheet, cfg)
         return Response(svg, media_type="image/svg+xml")
+
+
+def _review_api(app: FastAPI, cfg: Config, root: Path | None) -> None:
+    settings = cfg.viewer.review
+
+    @app.get("/api/review")
+    def review_items() -> dict:
+        """Дома × режимы: сколько мест и отметки; чья строка на месте — не отдаётся."""
+        if root is None:
+            return {"folder": None, "items": []}
+        found = review.marks(root)
+        n = len(settings.rows)
+        items = [{"mode": m, "house": h, "slots": n,
+                  "marks": {s: _public(found.get(review.key(m, h, s))) for s in range(n)}}
+                 for m in Mode for h in review.houses(root)]
+        return {"folder": str(root), "items": items}
+
+    @app.get("/api/review/{mode}/{house}/{slot}/sheet.svg")
+    def review_sheet(mode: Mode, house: str, slot: str) -> Response:
+        """Лист места (A, B… — номер) или настоящий (`ref`); отказ модели — 422 с текстом."""
+        row = _row(root, mode, house, slot)
+        got = _guarded(lambda: review.sheet(_root(root), mode, house, row))
+        if isinstance(got, str):
+            raise HTTPException(422, got)
+        return Response(sheet_svg(got, cfg), media_type="image/svg+xml")
+
+    @app.put("/api/review/{mode}/{house}/{slot}")
+    def review_mark(mode: Mode, house: str, slot: int, mark: review.Mark) -> dict:
+        _guarded(lambda: review.save(_root(root), mode, house, slot, mark, settings))
+        return {"saved": True}
+
+    def _row(folder: Path | None, mode: Mode, house: str, slot: str) -> str:
+        if slot == REFERENCE_SLOT:
+            return calibrate.REFERENCE
+        order = _guarded(lambda: review.slots(_root(folder), mode, house, settings))
+        if not slot.isdigit() or int(slot) >= len(order):
+            raise HTTPException(404, f"нет места {slot!r}")
+        return order[int(slot)]
+
+
+def _root(root: Path | None) -> Path:
+    if root is None:
+        raise HTTPException(404, "проверка не включена: genfacade serve --review <папка realtest>")
+    return root
+
+
+def _guarded(call):
+    try:
+        return call()
+    except review.Missing as e:
+        raise HTTPException(404, str(e)) from e
+
+
+def _public(mark: dict | None) -> dict | None:
+    """Отметка без строки: страница не должна знать, чья строка на месте."""
+    return None if mark is None else {"ok": mark["ok"], "why": mark["why"]}
 
 
 def _samples(cfg: Config) -> list[dict]:
