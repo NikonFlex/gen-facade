@@ -35,7 +35,6 @@ from task_links import has_local_repeat  # noqa: E402
 
 CONFIG = Path(".agents/guards/config.json")
 CODEX_RULES = Path(".codex/rules/default.rules")
-START = r"(?:^|[;&|\n(]|&&|\|\|)\s*"
 
 
 class Verdict(StrEnum):
@@ -64,24 +63,50 @@ ASK = [
 ]
 
 
+PR_CREATE = ["gh", "pr", "create"]
+OPERATORS = ";&|\n"  # разделители простых команд: ; && || | и перевод строки
+
+
 def config(root: Path) -> dict:
-    path = root / CONFIG
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    """Списки сторожей — только из config.json: запасной копии в коде нет, нет файла — сторож
+    падает, а упавший сторож — отказ (`decide`)."""
+    return json.loads((root / CONFIG).read_text(encoding="utf-8"))
 
 
 def commands(command: str) -> list[list[str]]:
-    """Простые команды строки: `a && b; c | d` → [[a…], [b…], [c…], [d…]]."""
-    out = []
-    for part in re.split(r"&&|\|\||[;|\n]", command):
-        try:
-            words = shlex.split(part, comments=True)
-        except ValueError:
-            words = part.split()
-        while words and re.match(r"^\w+=", words[0]):  # VAR=1 git push
-            words = words[1:]
-        if words:
-            out.append(words)
-    return out
+    """Простые команды строки: `a && b; c | d` → [[a…], [b…], [c…], [d…]]. Кавычки строка
+    держит целиком (тело PR бывает многострочным); не разобрать — по разделителям грубо."""
+    return lexed(command) or _rough(command)
+
+
+def lexed(command: str) -> list[list[str]] | None:
+    """Простые команды по shlex всей строки; `;` вплотную к слову (`create;ls`) — тоже
+    разделитель. Незакрытая кавычка — None."""
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=OPERATORS)
+    lexer.whitespace, lexer.whitespace_split = " \t\r", True
+    try:
+        words = list(lexer)
+    except ValueError:
+        return None
+    out, current = [], []
+    for word in [*words, ";"]:
+        if word and set(word) <= set(OPERATORS):
+            out.append(current)
+            current = []
+        else:
+            current.append(word)
+    return [w for w in map(_without_env, out) if w]
+
+
+def _rough(command: str) -> list[list[str]]:
+    parts = (part.split() for part in re.split(r"&&|\|\||[;|\n]", command))
+    return [w for w in map(_without_env, parts) if w]
+
+
+def _without_env(words: list[str]) -> list[str]:
+    while words and re.match(r"^\w+=", words[0]):  # VAR=1 git push
+        words = words[1:]
+    return words
 
 
 def matches(words: list[str], prefix: list) -> bool:
@@ -101,16 +126,16 @@ def github_write(call: Call, root: Path) -> tuple[Verdict, str]:
 
 
 def prod(call: Call, root: Path) -> tuple[Verdict, str]:
-    hit = next((p for p in config(root).get("prod", []) if re.search(p, call.command)), None)
+    hit = next((p for p in config(root)["prod"] if re.search(p, call.command)), None)
     return (Verdict.ASK, f"запись на прод-контур ({hit}) — только по «да» человека, с откатом") \
         if hit else (Verdict.ALLOW, "")
 
 
 def secret_path(path: str, root: Path) -> bool:
     name = Path(path).name
-    allowed = config(root).get("secret_allow", [".env.example"])
-    return name not in allowed and any(re.search(p, name) for p in
-                                       config(root).get("secret_files", [r"^\.env(\..+)?$"]))
+    rules = config(root)
+    return name not in rules["secret_allow"] and any(re.search(p, name)
+                                                     for p in rules["secret_files"])
 
 
 def secrets(call: Call, root: Path) -> tuple[Verdict, str]:
@@ -127,23 +152,9 @@ def closing(call: Call, root: Path) -> tuple[Verdict, str]:
                           "`Closes #N` в теле PR") if hits else (Verdict.ALLOW, "")
 
 
-def _pr_create_args(command: str) -> list[list[str]] | None:
-    """Аргументы каждого `gh pr create` команды; не разобрать — None. Целиком через shlex, а не
-    по строкам: тело PR в --body бывает многострочным."""
-    try:
-        words = shlex.split(command)
-    except ValueError:
-        return None
-    out = []
-    for i in range(len(words) - 2):
-        if words[i:i + 3] == ["gh", "pr", "create"]:
-            args = []
-            for w in words[i + 3:]:
-                if w in ("&&", "||", ";", "|"):
-                    break
-                args.append(w)
-            out.append(args)
-    return out
+def creates_pr(command: str) -> bool:
+    """Есть ли в строке `gh pr create` — одна проверка для всех сторожей PR."""
+    return any(matches(w, PR_CREATE) for w in commands(command))
 
 
 def _flag(args: list[str], names: tuple[str, ...]) -> str | None:
@@ -160,12 +171,12 @@ def pr_link(call: Call, root: Path) -> tuple[Verdict, str]:
     """Тело `gh pr create` — со строкой `Closes #N` или `Part of #N` и без других слов закрытия,
     заголовок — без слов закрытия (tools/pr_link.py, gf#283)."""
     # только сама команда, а не те же слова в тексте коммита или заметки
-    if not any(matches(w, ["gh", "pr", "create"]) for w in commands(call.command)):
+    if not creates_pr(call.command):
         return Verdict.ALLOW, ""
-    found_args = _pr_create_args(call.command)
-    if found_args is None:
+    parsed = lexed(call.command)
+    if parsed is None:
         return Verdict.DENY, "не разобрал `gh pr create`; тело PR — через --body-file <файл>"
-    for args in found_args:
+    for args in (w[len(PR_CREATE):] for w in parsed if matches(w, PR_CREATE)):
         if "--fill" in args:
             return Verdict.DENY, "тело PR — явно, через --body-file: в нём Closes или Part of"
         body, file = _flag(args, ("--body", "-b")), _flag(args, ("--body-file", "-F"))
@@ -203,7 +214,7 @@ def ticket_task(root: Path) -> Path | None:
 
 
 def local_repeat(call: Call, root: Path) -> tuple[Verdict, str]:
-    if not any(matches(w, ["gh", "pr", "create"]) for w in commands(call.command)):
+    if not creates_pr(call.command):
         return Verdict.ALLOW, ""
     task = ticket_task(root)
     if task is None:
@@ -222,11 +233,11 @@ def receipt(call: Call, root: Path) -> tuple[Verdict, str]:
     gate = json.loads((root / "tools/receipt.json").read_text(encoding="utf-8"))
     if not gate.get("gated"):
         return Verdict.ALLOW, ""
-    from scenario import state_dir, tree_hash
+    from scenario import PUSH_MODES, Outcome, state_dir, tree_hash
     tree = tree_hash(root)
     log = state_dir() / "receipts.jsonl"
     lines = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
-    ok = any(r["tree"] == tree and r["outcome"] == "прошло" and r["mode"] in ("live", "record")
+    ok = any(r["tree"] == tree and r["outcome"] == Outcome.PASSED and r["mode"] in PUSH_MODES
              for r in map(json.loads, lines))
     return (Verdict.ALLOW, "") if ok else (
         Verdict.DENY, f"нет квитанции live/record «прошло» на дереве {tree}: "
@@ -240,9 +251,19 @@ RANK = {Verdict.ALLOW: 0, Verdict.ASK: 1, Verdict.DENY: 2}
 
 
 def decide(call: Call, root: Path = ROOT) -> tuple[Verdict, str]:
-    answers = [guard(call, root) for guard in GUARDS]
+    answers = [_asked(guard, call, root) for guard in GUARDS]
     worst = max((a[0] for a in answers), key=RANK.__getitem__)
     return worst, "; ".join(reason for verdict, reason in answers if verdict == worst and reason)
+
+
+def _asked(guard: Callable[[Call, Path], tuple[Verdict, str]], call: Call,
+           root: Path) -> tuple[Verdict, str]:
+    """Упавший сторож — отказ со своей причиной: иначе одно исключение (битый config.json,
+    строка квитанции) роняло весь разбор, и отказы остальных сторожей терялись."""
+    try:
+        return guard(call, root)
+    except Exception as e:  # noqa: BLE001 — любой сбой сторожа означает «не пускать»
+        return Verdict.DENY, f"сторож {guard.__name__} упал: {type(e).__name__}: {e}"
 
 
 # --------------------------------------------------------------------------- входы сред
