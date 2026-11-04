@@ -5,6 +5,9 @@
 // параметры адреса: mode=<режим> — только этот режим, open=1 — только неотмеченные, n=<число> —
 // не больше стольких. Отобранный список живёт во вкладке (sessionStorage): телефон перезагружал
 // страницу, open=1 выкидывал отмеченные дома, номер в адресе указывал на другой дом (хозяин 03.11).
+// Настоящий дом — отдельной подписанной карточкой, если `[review] reference`; иначе он стоит на
+// месте среди вариантов вслепую (gf#272). Режим в заголовке — только когда режимов проверки больше
+// одного: у смешанной проверки на доме оба режима сразу.
 
 import { HouseStage } from "/static/house3d.js";
 
@@ -12,7 +15,9 @@ const $ = (id) => document.getElementById(id);
 const LETTERS = "ABCDEFGH";
 const VIEW_KEY = "review.view";
 const LIST_KEY = `review.list${location.search.replace(/[?&]k=[^&]*/, "")}`;
-const state = { items: [], at: 0, modes: {}, look: null, view: "3d", stages: [] };
+const state = {
+  items: [], at: 0, modes: {}, look: null, view: "3d", stages: [], reference: true, modeCount: 2,
+};
 
 function el(tag, attrs = {}, text = "") {
   const node = Object.assign(document.createElement(tag), attrs);
@@ -100,8 +105,9 @@ function show(at) {
   history.replaceState(null, "", `#h=${encodeURIComponent(keyOf(state.items[state.at]))}`);
   for (const stage of state.stages.splice(0)) stage.dispose();
   const item = state.items[state.at];
-  $("title").textContent = `${item.house} · ${state.modes[item.mode] ?? item.mode}`;
-  $("grid").replaceChildren(refCard(item),
+  const mode = state.modes[item.mode] ?? item.mode;
+  $("title").textContent = state.modeCount > 1 ? `${item.house} · ${mode}` : item.house;
+  $("grid").replaceChildren(...(state.reference ? [refCard(item)] : []),
     ...Array.from({ length: item.slots }, (_, s) => slotCard(item, s)));
   progress();
   window.scrollTo(0, 0);
@@ -154,6 +160,10 @@ async function start() {
     $("title").textContent = "Проверка не включена: genfacade serve --review <папка realtest>";
     return;
   }
+  state.reference = data.reference;
+  state.modeCount = data.modes;
+  $("hint").hidden = !state.reference;
+  $("hint-blind").hidden = state.reference;
   state.items = picked(data.items, new URLSearchParams(location.search));
   const hash = new URLSearchParams(location.hash.slice(1));
   const at = state.items.findIndex((it) => keyOf(it) === hash.get("h"));

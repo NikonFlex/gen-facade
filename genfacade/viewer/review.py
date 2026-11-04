@@ -5,11 +5,16 @@
 видит настоящий лист и листы строк `[review] rows` (config/viewer.toml) в случайном порядке без
 названий — места A, B, C; ставит «годен / нет» и причину. Порядок мест — от seed, режима и дома:
 тот же при каждом открытии. Отметки — `<папка>/review.json`; чья строка на каком месте, страница
-не знает, раскрывает только сводка (`genfacade review`).
+не знает, раскрывает только сводка (`genfacade review`). Строка может прийти из папки другого
+режима (`blind/model-`), и настоящий дом можно поставить на место наравне со строками: тогда на
+доме рядом ответы обоих режимов и настоящий, все вслепую (gf#272).
 """
 
+import fcntl
 import hashlib
 import json
+import os
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 
@@ -21,6 +26,7 @@ from genfacade.metrics import calibrate, realtest
 from genfacade.schema import FacadeSheet, Mode
 
 MARKS = "review.json"
+LOCK = "review.lock"  # запись отметок — по одной на папку, во всех процессах смотрелки
 
 
 class Mark(BaseModel):
@@ -40,15 +46,25 @@ def houses(root: Path) -> list[str]:
 
 
 def rows(root: Path, mode: Mode, cfg: Review) -> list[str]:
-    """Папки строк для проверки: первая папка режима, чьё имя начинается с элемента `rows`."""
-    found = sorted(d.name for d in (root / mode).iterdir() if d.is_dir())
+    """Папки строк для проверки: первая папка, чьё имя начинается с элемента `rows`, — в папке
+    режима, а у элемента с режимом впереди (`blind/model-`) — в папке того режима; такая строка
+    и записывается с режимом (`blind/model-run…`)."""
     out = []
-    for prefix in cfg.rows:
+    for entry in cfg.rows:
+        other, _, prefix = entry.rpartition("/")
+        folder = root / (Mode(other) if other else mode)
+        found = sorted(d.name for d in folder.iterdir() if d.is_dir())
         match = next((name for name in found if name.startswith(prefix)), None)
         if match is None:
-            raise Missing(f"в {root / mode} нет строки {prefix}…")
-        out.append(match)
+            raise Missing(f"в {folder} нет строки {prefix}…")
+        out.append(f"{other}/{match}" if other else match)
     return out
+
+
+def _folder(root: Path, mode: Mode, row: str) -> Path:
+    """Папка строки: с режимом впереди — от корня, иначе — в папке режима (отметки gf#268
+    записаны без режима)."""
+    return root / row if "/" in row else root / mode / row
 
 
 def slots(root: Path, mode: Mode, house: str, cfg: Review) -> list[str]:
@@ -64,9 +80,9 @@ def sheet(root: Path, mode: Mode, house: str, row: str) -> FacadeSheet | str:
     """Лист строки дома или текст отказа (`{"error": …}` в ответах модели)."""
     if house not in houses(root):
         raise Missing(f"нет дома {house!r}")
-    path = root / mode / row / f"{house}.json"
+    path = _folder(root, mode, row) / f"{house}.json"
     if not path.exists():
-        raise Missing(f"нет листа {mode}/{row}/{house}")
+        raise Missing(f"нет листа {path.relative_to(root)}")
     data = json.loads(path.read_text())
     return data[realtest.REFUSED] if realtest.REFUSED in data else FacadeSheet.model_validate(data)
 
@@ -87,17 +103,31 @@ def save(root: Path, mode: Mode, house: str, slot: int, mark: Mark, cfg: Review)
     order = slots(root, mode, house, cfg)
     if not 0 <= slot < len(order):
         raise Missing(f"нет места {slot} у дома {house!r}")
-    found = marks(root)
-    found[key(mode, house, slot)] = {**mark.model_dump(), "row": order[slot],
-                                     "date": date.today().isoformat()}
-    (root / MARKS).write_text(json.dumps(found, ensure_ascii=False, indent=2))
+    with _locked(root):
+        found = marks(root)
+        found[key(mode, house, slot)] = {**mark.model_dump(), "row": order[slot],
+                                         "date": date.today().isoformat()}
+        tmp = root / f"{MARKS}.tmp"
+        tmp.write_text(json.dumps(found, ensure_ascii=False, indent=2))
+        os.replace(tmp, root / MARKS)
+
+
+@contextmanager
+def _locked(root: Path):
+    """Отметки пишутся по одной: «Не годен» и причина уходят двумя запросами сразу, а на папку
+    смотрят два сервера (локальный и наружный) — без блокировки записи перемешались и испортили
+    файл (04.11, gf#272). Замена готовым файлом (`os.replace`): оборванная запись не оставит
+    полфайла."""
+    with (root / LOCK).open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
 
 
 def summary(root: Path, cfg: Review) -> str:
     """Доля принятых листов по строкам и режимам, Markdown; не размечено — в скобках."""
     found = marks(root)
     lines = ["| строка | режим | принято | размечено из |", "|---|---|---|---|"]
-    for mode in Mode:
+    for mode in cfg.modes:
         for row in rows(root, mode, cfg):
             got = [m for k, m in found.items() if k.startswith(f"{mode}/") and m["row"] == row]
             ok = sum(m["ok"] for m in got)
