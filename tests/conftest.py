@@ -26,11 +26,15 @@ collect_ignore = [] if find_spec("torch") else [
 collect_ignore += [] if find_spec("torch_fidelity") else ["unit/test_visual.py"]
 
 
-@pytest.fixture(autouse=True)
-def no_inception(monkeypatch):
+@pytest.fixture(autouse=True, scope="session")
+def no_inception():
     """FID и KID в таблице — None: Inception на CPU — секунды на растр, а torch есть не везде.
-    Прибор FID/KID проверяет tests/unit/test_visual.py, вызывая его напрямую."""
-    monkeypatch.setattr(visual, "available", lambda: False)
+    Прибор FID/KID проверяет tests/unit/test_visual.py, вызывая его напрямую. Подмена — на всю
+    сессию: фикстура модуля поднимается раньше фикстуры теста, и при подмене на тест калибровка
+    `calibrated` (test_metrics) считала FID через Inception — 572 с из 13 минут прогона (gf#282)."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(visual, "available", lambda: False)
+        yield
 
 
 @pytest.fixture(scope="module")
@@ -48,11 +52,14 @@ def half_val(tmp_path_factory):
     return build
 
 
-@pytest.fixture(autouse=True)
-def stub_layout(monkeypatch):
+@pytest.fixture(autouse=True, scope="session")
+def stub_layout():
     """Конвейер — на стабе шага 4, даже если в data/models лежит обученная модель: тесты не
-    зависят от файлов на диске. Тест модели подменяет `pipeline.trained_model` сам."""
-    monkeypatch.setattr(pipeline, "trained_model", lambda settings: None)
+    зависят от файлов на диске. Тест модели подменяет `pipeline.trained_model` сам. На всю
+    сессию — как `no_inception`: иначе фикстура модуля успевает поднять модель с диска."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(pipeline, "trained_model", lambda settings: None)
+        yield
 
 
 @pytest.fixture(scope="session")
