@@ -2,6 +2,7 @@
 сохраняются со строкой, сводка считает долю принятых."""
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from fastapi.testclient import TestClient
@@ -169,3 +170,16 @@ def test_mixed_marks_counted_per_row_and_only_its_mode(mixed, folder):
     assert f"| {Mode.WITH_OPENINGS}/{calibrate.REFERENCE} | {mode} | 1.00 (2/2) | 2 |" in table
     assert f"| {Mode.BLIND}/{BLIND_ONLY} | {mode} | 0.00 (0/2) | 2 |" in table
     assert {line.split("|")[2].strip() for line in table.splitlines()[2:]} == {mode}  # режим один
+
+
+def test_marks_survive_simultaneous_saves(folder, cfg):
+    """«Не годен» и причина уходят двумя запросами сразу, на папку смотрят два сервера: 04.11
+    одновременные записи испортили файл отметок (gf#272). Все отметки — в файле, файл читается."""
+    settings = cfg.viewer.review
+    places = [(mode, house, slot) for mode in Mode for house in HOUSES
+              for slot in range(len(settings.rows))]
+    with ThreadPoolExecutor(max_workers=len(places)) as pool:
+        for _ in range(20):
+            list(pool.map(lambda p: review.save(folder, *p, review.Mark(ok=True), settings),
+                          places))
+    assert set(review.marks(folder)) == {review.key(*p) for p in places}

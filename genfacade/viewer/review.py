@@ -10,8 +10,11 @@
 доме рядом ответы обоих режимов и настоящий, все вслепую (gf#272).
 """
 
+import fcntl
 import hashlib
 import json
+import os
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 
@@ -23,6 +26,7 @@ from genfacade.metrics import calibrate, realtest
 from genfacade.schema import FacadeSheet, Mode
 
 MARKS = "review.json"
+LOCK = "review.lock"  # запись отметок — по одной на папку, во всех процессах смотрелки
 
 
 class Mark(BaseModel):
@@ -99,10 +103,24 @@ def save(root: Path, mode: Mode, house: str, slot: int, mark: Mark, cfg: Review)
     order = slots(root, mode, house, cfg)
     if not 0 <= slot < len(order):
         raise Missing(f"нет места {slot} у дома {house!r}")
-    found = marks(root)
-    found[key(mode, house, slot)] = {**mark.model_dump(), "row": order[slot],
-                                     "date": date.today().isoformat()}
-    (root / MARKS).write_text(json.dumps(found, ensure_ascii=False, indent=2))
+    with _locked(root):
+        found = marks(root)
+        found[key(mode, house, slot)] = {**mark.model_dump(), "row": order[slot],
+                                         "date": date.today().isoformat()}
+        tmp = root / f"{MARKS}.tmp"
+        tmp.write_text(json.dumps(found, ensure_ascii=False, indent=2))
+        os.replace(tmp, root / MARKS)
+
+
+@contextmanager
+def _locked(root: Path):
+    """Отметки пишутся по одной: «Не годен» и причина уходят двумя запросами сразу, а на папку
+    смотрят два сервера (локальный и наружный) — без блокировки записи перемешались и испортили
+    файл (04.11, gf#272). Замена готовым файлом (`os.replace`): оборванная запись не оставит
+    полфайла."""
+    with (root / LOCK).open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
 
 
 def summary(root: Path, cfg: Review) -> str:
