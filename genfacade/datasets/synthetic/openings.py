@@ -13,6 +13,7 @@ from genfacade.config import Config, FacadeRules, Windows
 from genfacade.datasets.synthetic import plan
 from genfacade.datasets.synthetic.house import Look
 from genfacade.schema import (
+    DOOR_OPENING_KINDS,
     EPS,
     Element,
     ElementClass,
@@ -43,7 +44,7 @@ Placer = Callable[[Opening, float], Slot]  # окно ряда и отметка
 
 def doors(side: Side, spec: HouseSpec, look: Look, rules: FacadeRules) -> list[Element]:
     """Вход — из плана, от пола первого этажа; вид двери — один на дом."""
-    found = [o for o in side.openings if o.kind is not OpeningKind.WINDOW]
+    found = [o for o in side.openings if o.kind in DOOR_OPENING_KINDS]
     variant = _door(look, rules)
     return [
         Element(id=f"d{i}", cls=ElementClass.DOOR, x_m=o.x_m, y_m=spec.plinth_m, w_m=o.width_m,

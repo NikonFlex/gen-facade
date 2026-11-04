@@ -61,6 +61,17 @@ class OpeningKind(StrEnum):
     ENTRANCE = "entrance"
 
 
+# Виды проёма плана, которые на фасаде — дверь. Набор явный, а не «всё, что не окно»: новый вид
+# проёма не должен молча попасть в двери — тест в test_schema.py падает, пока вид не разнесён.
+DOOR_OPENING_KINDS = frozenset({OpeningKind.DOOR, OpeningKind.ENTRANCE})
+# Класс проёма стены → вид проёма плана (вход — одна из дверей, его выбирает сторона отдельно).
+PLAN_KIND = {
+    ElementClass.WINDOW: OpeningKind.WINDOW,
+    ElementClass.DOOR: OpeningKind.DOOR,
+    ElementClass.GARAGE_DOOR: OpeningKind.DOOR,
+}
+
+
 class Source(StrEnum):
     """Откуда данные: система, выдавшая план (Plan.source), и датасет примера (Sample.source)."""
 

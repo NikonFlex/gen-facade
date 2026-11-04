@@ -10,6 +10,7 @@ from simple_house import L_SHAPE, LEAF, before_leaf, top_right_shifted
 from genfacade.plan.gaps import find_gaps
 from genfacade.plan.genplan_svg import Box, PlanError
 from genfacade.plan.outline import straighten
+from genfacade.plan.preprocess import SEALED_IN_BLIND
 from genfacade.schema import OpeningKind
 
 WINDOW, ENTRANCE = OpeningKind.WINDOW, OpeningKind.ENTRANCE
@@ -154,3 +155,9 @@ def test_l_shaped_outline_has_six_sides(simple_svg, preprocess_svg):
     """Непрямоугольный контур препроцессор режет на стороны; отказывает развёртка (шаг 3)."""
     plan = preprocess_svg(simple_svg(*L_SHAPE))
     assert [s.length_m for s in plan.sides] == pytest.approx([10, 5, 7.3, 2, 2.7, 3])
+
+
+def test_every_opening_kind_is_sealed_in_blind_or_entrance():
+    """Новый вид проёма не попадает молча под заделку или мимо неё: решение — явное (gf#293)."""
+    assert SEALED_IN_BLIND | {ENTRANCE} == set(OpeningKind)
+    assert ENTRANCE not in SEALED_IN_BLIND

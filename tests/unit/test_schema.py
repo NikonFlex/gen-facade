@@ -1,7 +1,16 @@
 import pytest
 from pydantic import ValidationError
 
-from genfacade.schema import ElementClass, FacadeSheet, Plan, VariantKind
+from genfacade.schema import (
+    DOOR_OPENING_KINDS,
+    OPENINGS,
+    PLAN_KIND,
+    ElementClass,
+    FacadeSheet,
+    OpeningKind,
+    Plan,
+    VariantKind,
+)
 
 
 def test_fixtures_load(house):
@@ -105,3 +114,14 @@ def test_variant_kind_must_fit_element_class(raw_house, cls, kind):
     target["variant"] = {"kind": kind, "cols": 1, "rows": 1}
     with pytest.raises(ValidationError, match=f"вид {kind} не для {cls}"):
         FacadeSheet.model_validate(raw)
+
+
+def test_every_opening_kind_is_window_or_door():
+    """Новый вид проёма плана не попадает молча в двери: его надо разнести явно (gf#293)."""
+    assert DOOR_OPENING_KINDS | {OpeningKind.WINDOW} == set(OpeningKind)
+    assert not DOOR_OPENING_KINDS & {OpeningKind.WINDOW}
+
+
+def test_every_wall_opening_class_has_plan_kind():
+    """Каждому классу проёма стены — вид проёма плана, и только им."""
+    assert set(PLAN_KIND) == set(OPENINGS)

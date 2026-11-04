@@ -24,6 +24,9 @@ from genfacade.schema import EPS, Element, ElementClass, FacadeSheet, SideFacade
 OPENINGS = (ElementClass.WINDOW, ElementClass.DOOR, ElementClass.GARAGE_DOOR)
 DOORS = (ElementClass.DOOR, ElementClass.GARAGE_DOOR)
 SECOND_FINISH = (ZoneRole.ACCENT, ZoneRole.BAND)
+# Зоны, которые не основная отделка: явный набор, а не «не MAIN» — новая роль не должна молча
+# попасть в скрытые зоны (тест в test_wall_features.py падает, пока роль не разнесена).
+NOT_MAIN = (ZoneRole.PLINTH, *SECOND_FINISH)
 
 
 class Wall(NamedTuple):
@@ -264,7 +267,7 @@ def hidden_zones(w: Wall) -> float:
     """(26) доля зон второй отделки и цоколя тем же материалом, что основная зона стены:
     на чертеже их не видно."""
     main = [z.material for z in w.facade.zones if z.role is ZoneRole.MAIN]
-    other = [z for z in w.facade.zones if z.role is not ZoneRole.MAIN]
+    other = [z for z in w.facade.zones if z.role in NOT_MAIN]
     if not main or not other:
         return 0.0
     return sum(z.material == main[0] for z in other) / len(other)
