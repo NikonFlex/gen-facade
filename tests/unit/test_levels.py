@@ -1,12 +1,22 @@
-"""Карниз, цоколь и низ двери — по параметрам дома (gf#272, `facade: Высоты цоколя и карниза — из
-параметров`, `facade: Нуль отметок — земля`): шаг 5 ставит их на отметки дома, что бы ни
-ответила модель шага 4. Дом — простой из conftest: цоколь 0,5 м, карниз 3,25 м, дверь на стороне 0.
+"""Окна, карниз, цоколь и низ двери — по параметрам дома (gf#272, gf#275, `facade: Высоты цоколя
+и карниза — из параметров`, `facade: Нуль отметок — земля`, `generation: Привязка к сетке`): шаг 5
+ставит их на отметки дома, что бы ни ответила модель шага 4. Дом — простой из conftest: цоколь
+0,5 м, карниз 3,25 м, дверь на стороне 0.
 """
 
 import pytest
 from simple_house import whole_main, with_side
 
-from genfacade.schema import EPS, Element, ElementClass, MaterialZone, PaletteRole, ZoneRole
+from genfacade.schema import (
+    EPS,
+    Element,
+    ElementClass,
+    MaterialZone,
+    OpeningVariant,
+    PaletteRole,
+    VariantKind,
+    ZoneRole,
+)
 from genfacade.snap import snap
 from genfacade.validate import errors, validate
 
@@ -133,3 +143,77 @@ def test_garage_door_stays_on_ground(house, cfg):
     sheet = with_side(house, DOOR_SIDE, elements=elements)
     [got] = _of(snap(sheet, cfg.checks).facades[DOOR_SIDE], ElementClass.GARAGE_DOOR)
     assert abs(got.y_m) < EPS
+
+
+def _moved_window(house, side: int, **update):
+    """Лист, где окно стороны side (с подоконником) сдвинуто: поля update у окна, подоконник —
+    на столько же по высоте."""
+    f = house.facades[side]
+    w = _of(f, ElementClass.WINDOW)[0]
+    moved = w.model_copy(update=update)
+    dy = moved.y_m - w.y_m
+    elements = [moved if e.id == w.id else
+                e.model_copy(update={"y_m": e.y_m + dy}) if e.parent == w.id else e
+                for e in f.elements]
+    return with_side(house, side, elements=elements), w
+
+
+def _window_of(sheet, side: int, cfg) -> tuple[Element, Element]:
+    """Окно стороны side после шага 5 и его подоконник."""
+    f = _clean(snap(sheet, cfg.checks), cfg).facades[side]
+    [w] = _of(f, ElementClass.WINDOW)
+    [s] = _of(f, ElementClass.SILL)
+    return w, s
+
+
+def test_window_off_the_floor_line_joins_it(house, cfg):
+    """gf#275: окно, чей верх отскочил от общей линии этажа по дому на 0,5 м, — на линию, той же
+    высоты; подоконник — за ним. Отскок меньше `window_jump_m` остаётся — у настоящих домов верх
+    окон этажа на разных стенах расходится на сантиметры."""
+    sheet, w = _moved_window(house, 1, y_m=house.facades[1].elements[0].y_m + 0.5)
+    got, sill = _window_of(sheet, 1, cfg)
+    assert got.y_m + got.h_m == pytest.approx(w.y_m + w.h_m)
+    assert got.h_m == pytest.approx(w.h_m)
+    assert sill.y_m + sill.h_m == pytest.approx(got.y_m)
+    small = cfg.checks.window_jump_m / 2
+    sheet, w = _moved_window(house, 1, y_m=w.y_m + small)
+    got, _ = _window_of(sheet, 1, cfg)
+    assert got.y_m == pytest.approx(w.y_m + small)
+
+
+def test_window_in_plinth_rises_above_it(house, cfg):
+    """Окно, заходящее в цоколь (низ 0,2 м при цоколе 0,5 м), а верхом — у линии этажа, — низом на
+    пол этажа той же высоты."""
+    w = _of(house.facades[2], ElementClass.WINDOW)[0]
+    sheet, _ = _moved_window(house, 2, y_m=0.2, h_m=w.y_m + w.h_m - 0.2 - 0.1)
+    got, sill = _window_of(sheet, 2, cfg)
+    assert got.y_m == pytest.approx(house.spec.plinth_m)
+    assert got.h_m == pytest.approx(w.y_m + w.h_m - 0.3)
+    assert sill.y_m + sill.h_m == pytest.approx(got.y_m)
+
+
+def test_window_to_the_floor_keeps_its_top(house, cfg):
+    """Окно в пол линии верха не держит: его верх на 0,5 м выше линии остаётся."""
+    f = house.facades[1]
+    w = _of(f, ElementClass.WINDOW)[0]
+    panoramic = OpeningVariant(kind=VariantKind.PANORAMIC)
+    tall = w.model_copy(update={"y_m": house.spec.plinth_m, "h_m": w.y_m + w.h_m + 0.5
+                                - house.spec.plinth_m, "variant": panoramic})
+    elements = [tall if e.id == w.id else e for e in f.elements if e.parent != w.id]
+    got = snap(with_side(house, 1, elements=elements), cfg.checks).facades[1]
+    [kept] = _of(got, ElementClass.WINDOW)
+    assert (kept.y_m, kept.h_m) == (pytest.approx(tall.y_m), pytest.approx(tall.h_m))
+
+
+def test_window_stays_if_its_line_is_taken(house, cfg):
+    """Окно, которое на линии налезло бы на другой проём, остаётся где было."""
+    f = house.facades[DOOR_SIDE]
+    w = _of(f, ElementClass.WINDOW)[0]
+    low = w.model_copy(update={"y_m": w.y_m - 1.0})
+    door = _of(f, ElementClass.DOOR)[0]
+    blocker = door.model_copy(update={"id": "d9", "x_m": w.x_m, "y_m": w.y_m + w.h_m - 0.6,
+                                      "w_m": w.w_m, "h_m": 0.5, "fixed": []})
+    elements = [low if e.id == w.id else e for e in f.elements if e.parent != w.id] + [blocker]
+    got = snap(with_side(house, DOOR_SIDE, elements=elements), cfg.checks).facades[DOOR_SIDE]
+    [kept] = [e for e in got.elements if e.id == w.id]
+    assert kept.y_m == pytest.approx(low.y_m)

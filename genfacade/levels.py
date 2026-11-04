@@ -1,4 +1,4 @@
-"""Шаг 5: карниз, цоколь и низ двери — на отметки параметров дома (gf#272,
+"""Шаг 5: окна, карниз, цоколь и низ двери — на отметки параметров дома (gf#272, gf#275,
 `facade: Высоты цоколя и карниза — из параметров`, `facade: Нуль отметок — земля`).
 
 Параметры дома одни на все стены, а модель шага 4 ставит эти уровни на каждой стене по-своему:
@@ -14,8 +14,12 @@
   всех стенах от земли до `plinth_m`, материал — самый частый у цоколя модели. У 9 из 27 настоящих
   домов реального теста `plinth_m > 0` (пол поднят), а зоны цоколя нет — её не добавляем, если
   модель её не ставила. Зона «цоколь» модели до самого карниза — основная отделка, а не цоколь;
-- остальные зоны модели упираются в края дверей, карниза и цоколя (`validate._anchored`): эти
-  края едут на новые отметки вместе с ними, а что ниже верха цоколя — поднимается до него.
+- окно — низ не ниже пола своего этажа (не в цоколе); верх, отскочивший от общей линии этажа
+  дальше `window_jump_m`, — на линию (gf#275). Линия — медиана верха окон этажа на всех стенах
+  дома: окна разных стен видны вместе на углу и в 3D, а настоящие дома держат их на одной высоте с
+  разбросом в сантиметры. Окно в пол линии не держит; подоконник, наличник, ставни — за окном;
+- остальные зоны модели упираются в края окон, дверей, карниза и цоколя (`validate._anchored`):
+  эти края едут на новые отметки вместе с ними, а что ниже верха цоколя — поднимается до него.
 """
 
 from collections import Counter
@@ -34,6 +38,7 @@ from genfacade.schema import (
     HouseSpec,
     MaterialZone,
     SideFacade,
+    VariantKind,
     ZoneRole,
 )
 
@@ -45,16 +50,17 @@ class House(NamedTuple):
 
     spec: HouseSpec
     plinth: str | None  # материал цоколя; None — цоколя у дома нет
+    heads: dict[int, float]  # этаж → общая линия верха окон по дому
     cfg: Checks
 
 
 def levels(sheet: FacadeSheet, cfg: Checks) -> FacadeSheet:
-    house = House(sheet.spec, _plinth_material(sheet, cfg), cfg)
+    house = House(sheet.spec, _plinth_material(sheet, cfg), _heads(sheet), cfg)
     return sheet.model_copy(update={"facades": [_wall(f, house) for f in sheet.facades]})
 
 
 def _wall(f: SideFacade, house: House) -> SideFacade:
-    leveled = _cornice(_doors(f, house), house)
+    leveled = _cornice(_doors(_windows(f, house), house), house)
     return _zones(leveled, _moves(f, leveled, house.spec), house)
 
 
@@ -75,21 +81,70 @@ def _plinth_material(sheet: FacadeSheet, cfg: Checks) -> str | None:
     return found.most_common(1)[0][0] if found else None
 
 
+def _floor(e: Element, spec: HouseSpec) -> int:
+    return min(e.floor or 1, spec.floors)
+
+
 def _floor_y(d: Element, spec: HouseSpec) -> float:
-    return spec.floor_levels()[min(d.floor or 1, spec.floors) - 1]
+    return spec.floor_levels()[_floor(d, spec) - 1]
 
 
-def _doors(f: SideFacade, house: House) -> SideFacade:
-    """Двери — на пол своего этажа, их дети — за ними. Проём, записанный ребёнком другого проёма
-    (брак разбора ответа), за ним не едет."""
-    moved = {d.id: _door(d, f, house) for d in f.elements if d.cls is ElementClass.DOOR
-             and abs(d.y_m - _floor_y(d, house.spec)) > house.cfg.eps_m}
+def _in_floor(w: Element) -> bool:
+    """Окно в пол: линии верха этажа не держит, его низ — пол."""
+    return w.variant is not None and w.variant.kind is VariantKind.PANORAMIC
+
+
+def _heads(sheet: FacadeSheet) -> dict[int, float]:
+    """Общая линия верха окон этажа — медиана верха окон этажа на всех стенах, кроме окон в пол."""
+    tops: dict[int, list[float]] = {}
+    for f in sheet.facades:
+        for w in f.elements:
+            if w.cls is ElementClass.WINDOW and not _in_floor(w):
+                tops.setdefault(_floor(w, sheet.spec), []).append(w.y_m + w.h_m)
+    return {n: median(ys) for n, ys in tops.items()}
+
+
+def _windows(f: SideFacade, house: House) -> SideFacade:
+    """Окна — не ниже пола этажа и на линии верха этажа, их дети — за ними. Окно, которое на новом
+    месте налезло бы на другой проём, остаётся где было: брак сдвига хуже неровной линии."""
+    moved = {w.id: m for w in f.elements
+             if w.cls is ElementClass.WINDOW and (m := _window(w, house)) is not None
+             and not any(hits(m, o) for o in f.elements if o.cls in OPENINGS and o.id != w.id)}
+    return _shifted(f, moved)
+
+
+def _window(w: Element, house: House) -> Element | None:
+    """Окно на отметках этажа или None, если оно на них и стоит. Вверх из цоколя оно едет целиком;
+    к линии верха — тоже целиком, но не ниже пола, тогда низ остаётся на полу."""
+    spec, cfg = house.spec, house.cfg
+    floor = _floor_y(w, spec)
+    y, h = max(w.y_m, floor), w.h_m
+    line = house.heads.get(_floor(w, spec))
+    if (line is not None and not _in_floor(w) and abs(y + h - line) > cfg.window_jump_m
+            and line - floor > cfg.eps_m):
+        y = max(line - h, floor)
+        h = line - y
+    if abs(y - w.y_m) <= cfg.eps_m and abs(h - w.h_m) <= cfg.eps_m:
+        return None
+    return w.model_copy(update={"y_m": y, "h_m": h})
+
+
+def _shifted(f: SideFacade, moved: dict[str, Element]) -> SideFacade:
+    """Сдвинутые проёмы на место, их дети — за ними; ребёнок, налезший на чужой проём, пропадает.
+    Проём, записанный ребёнком другого проёма (брак разбора ответа), за ним не едет."""
     if not moved:
         return f
     out = [moved.get(e.id) or (e if e.cls in OPENINGS else _child(e, moved, f.elements))
            for e in f.elements]
     out = [e for e in out if e is not None]
     return f.model_copy(update={"elements": [e for e in out if not _blocked(e, moved, out)]})
+
+
+def _doors(f: SideFacade, house: House) -> SideFacade:
+    """Двери — на пол своего этажа, их дети — за ними."""
+    moved = {d.id: _door(d, f, house) for d in f.elements if d.cls is ElementClass.DOOR
+             and abs(d.y_m - _floor_y(d, house.spec)) > house.cfg.eps_m}
+    return _shifted(f, moved)
 
 
 def _door(d: Element, f: SideFacade, house: House) -> Element:
@@ -113,7 +168,7 @@ def _child(e: Element, moved: dict[str, Element], before: list[Element]) -> Elem
 
 
 def _blocked(e: Element, moved: dict[str, Element], elements: list[Element]) -> bool:
-    """Выводимый элемент сдвинутой двери налез на чужой проём или его выводимый элемент —
+    """Выводимый элемент сдвинутого проёма налез на чужой проём или его выводимый элемент —
     элементу без места его нет, как в derive.py (gf#242)."""
     if e.parent not in moved or e.cls not in TRIM_OF:
         return False
@@ -154,10 +209,12 @@ def _edges(e: Element) -> Move:
 
 
 def _moves(before: SideFacade, after: SideFacade, spec: HouseSpec) -> list[Move]:
-    """Куда уехали низ и верх дверей и карнизов стены; карнизы, слитые в один, — к нему. Земля и
-    отметка карниза — края самой стены: они не двигаются, даже если на них стоял край двери."""
+    """Куда уехали низ и верх окон, дверей и карнизов стены; карнизы, слитые в один, — к нему.
+    Земля и отметка карниза — края самой стены: они не двигаются, даже если на них стоял край
+    проёма."""
     now = {e.id: e for e in after.elements}
-    out = [(a, b) for d in before.elements if d.cls is ElementClass.DOOR and d.id in now
+    shifted = (ElementClass.WINDOW, ElementClass.DOOR)
+    out = [(a, b) for d in before.elements if d.cls in shifted and d.id in now
            for a, b in zip(_edges(d), _edges(now[d.id]), strict=True)]
     out += [(a, b) for c in _cornices(before) for one in _cornices(after)
             for a, b in zip(_edges(c), _edges(one), strict=True)]
@@ -165,8 +222,8 @@ def _moves(before: SideFacade, after: SideFacade, spec: HouseSpec) -> list[Move]
 
 
 def _zones(f: SideFacade, moves: list[Move], house: House) -> SideFacade:
-    """Цоколь стены — от земли до `plinth_m`; края остальных зон — за краями дверей, карниза и
-    цоколя модели."""
+    """Цоколь стены — от земли до `plinth_m`; края остальных зон — за краями окон, дверей,
+    карниза и цоколя модели."""
     spec, cfg = house.spec, house.cfg
     top = spec.plinth_m if house.plinth is not None else 0.0
     moves = [(max(_ys(z)), top) for z in f.zones if _low(z, spec, cfg)] + moves
