@@ -10,7 +10,8 @@ from importlib.resources import files
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -21,7 +22,7 @@ from genfacade.metrics import calibrate
 from genfacade.plan.genplan_svg import PlanError
 from genfacade.render.house3d import house_3d
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import FacadeSheet, Mode, Sample, Source
+from genfacade.schema import FacadeSheet, Mode, Refusal, Sample, Source, refusal_record
 from genfacade.viewer import review
 
 STATIC = files(__package__).joinpath("static")
@@ -41,6 +42,7 @@ def create_app(cfg: Config, checked: Path | None = None) -> FastAPI:
     runs_dir.mkdir(parents=True, exist_ok=True)
     app = FastAPI(title="GenFacade · смотрелка")
     app.middleware("http")(_revalidate_page)
+    app.exception_handler(RequestValidationError)(_invalid_request)
     _api(app, cfg, runs_dir)
     _samples_api(app, cfg)
     _review_api(app, cfg, checked)
@@ -68,6 +70,20 @@ async def _revalidate_page(request: Request, call_next):
     return response
 
 
+def refuse(status: int, code: Refusal, detail: str = "") -> HTTPException:
+    """Отказ смотрелки: detail — `{code, text, detail}`, страница рисует его как есть и своих
+    списков кодов не держит (docs/clean-contour.md, п. 17)."""
+    return HTTPException(status, refusal_record(code, detail))
+
+
+async def _invalid_request(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Ошибки схемы запроса — тем же отказом, по строке на поле; «Value error, » — служебная
+    приставка pydantic, человеку она ничего не говорит."""
+    lines = [f"{'.'.join(str(p) for p in e['loc'] if p not in ('body', 'sheet'))}: "
+             f"{e['msg'].removeprefix('Value error, ')}" for e in exc.errors()]
+    return JSONResponse({"detail": refusal_record(Refusal.INVALID_REQUEST, lines)}, 422)
+
+
 def _api(app: FastAPI, cfg: Config, runs_dir: Path) -> None:
     @app.get("/api/runs")
     def runs() -> list[dict]:
@@ -93,7 +109,7 @@ def _api(app: FastAPI, cfg: Config, runs_dir: Path) -> None:
     def plan_file(name: str) -> FileResponse:
         found = _plans(cfg)
         if name not in found:
-            raise HTTPException(404, f"нет плана {name!r}")
+            raise refuse(404, Refusal.NO_PLAN, name)
         return FileResponse(str(found[name]), media_type="image/svg+xml")
 
     @app.post("/api/runs")
@@ -136,7 +152,7 @@ def _review_api(app: FastAPI, cfg: Config, root: Path | None) -> None:
 
     @app.get("/api/review/{mode}/{house}/{slot}/sheet.svg")
     def review_sheet(mode: Mode, house: str, slot: str) -> Response:
-        """Лист места (A, B… — номер) или настоящий (`ref`); отказ модели — 422 с текстом."""
+        """Лист места (A, B… — номер) или настоящий (`ref`); отказ модели — 422 с её кодом."""
         place = (mode, house, slot)
         return Response(sheet_svg(_sheet(root, place, settings), cfg),
                         media_type="image/svg+xml")
@@ -147,7 +163,7 @@ def _review_api(app: FastAPI, cfg: Config, root: Path | None) -> None:
         try:
             return house_3d(_sheet(root, (mode, house, slot), settings), cfg)
         except PlanError as e:
-            raise HTTPException(404, f"дом не собрать по контуру: {e}") from e
+            raise refuse(404, Refusal.HOUSE_NOT_BUILT, str(e)) from e
 
     @app.put("/api/review/{mode}/{house}/{slot}")
     def review_mark(mode: Mode, house: str, slot: int, mark: review.Mark) -> dict:
@@ -156,11 +172,11 @@ def _review_api(app: FastAPI, cfg: Config, root: Path | None) -> None:
 
 
 def _sheet(root: Path | None, place: tuple[Mode, str, str], settings: Review) -> FacadeSheet:
-    """Лист места проверки (режим, дом, место); отказ модели — 422 с её текстом."""
+    """Лист места проверки (режим, дом, место); отказ модели — 422 с её кодом."""
     mode, house, slot = place
     row = _row(root, place, settings)
     got = _guarded(lambda: review.sheet(_root(root), mode, house, row))
-    if isinstance(got, str):
+    if not isinstance(got, FacadeSheet):
         raise HTTPException(422, got)
     return got
 
@@ -172,13 +188,13 @@ def _row(root: Path | None, place: tuple[Mode, str, str], settings: Review) -> s
         return calibrate.REFERENCE
     order = _guarded(lambda: review.slots(_root(root), mode, house, settings))
     if not slot.isdigit() or int(slot) >= len(order):
-        raise HTTPException(404, f"нет места {slot!r}")
+        raise refuse(404, Refusal.NO_REVIEW_ITEM, f"нет места {slot!r}")
     return order[int(slot)]
 
 
 def _root(root: Path | None) -> Path:
     if root is None:
-        raise HTTPException(404, "проверка не включена: genfacade serve --review <папка realtest>")
+        raise refuse(404, Refusal.NO_REVIEW)
     return root
 
 
@@ -186,7 +202,7 @@ def _guarded(call):
     try:
         return call()
     except review.Missing as e:
-        raise HTTPException(404, str(e)) from e
+        raise HTTPException(404, e.record()) from e
 
 
 def _public(mark: dict | None) -> dict | None:
@@ -204,7 +220,7 @@ def _samples(cfg: Config) -> list[dict]:
 def _sample(source: Source, sample_id: str, cfg: Config) -> Sample:
     root = cfg.data.paths.samples_dir
     if sample_id not in store.ids(root, source):
-        raise HTTPException(404, f"нет примера {source}/{sample_id}")
+        raise refuse(404, Refusal.NO_SAMPLE, f"{source}/{sample_id}")
     return store.read(root, source, sample_id)
 
 
@@ -221,12 +237,12 @@ def _house(folder: Path, cfg: Config) -> dict:
     """Дом объёмом по листу прогона; нет листа или контур не ортогональный — 404 с причиной."""
     meta = json.loads((folder / pipeline.META).read_text())
     if not meta.get("sheet_json"):
-        raise HTTPException(404, "у прогона нет листа фасадов")
+        raise refuse(404, Refusal.NO_SHEET)
     sheet = FacadeSheet.model_validate_json((folder / meta["sheet_json"]).read_text())
     try:
         return house_3d(sheet, cfg)
     except PlanError as e:
-        raise HTTPException(404, f"дом не собрать по контуру: {e}") from e
+        raise refuse(404, Refusal.HOUSE_NOT_BUILT, str(e)) from e
 
 
 def _plans(cfg: Config) -> dict[str, Path]:
@@ -242,13 +258,13 @@ def _start_plan(run: pipeline.PlanRun, svg: str | None, cfg: Config) -> Path:
     с meta.json остаётся в списке прогонов."""
     plans = _plans(cfg)
     if svg is None and run.plan not in plans:
-        raise HTTPException(404, f"нет плана {run.plan!r}")
+        raise refuse(404, Refusal.NO_PLAN, run.plan)
     text = svg if svg is not None else plans[run.plan].read_text()
     out = pipeline.new_run_dir(cfg.viewer.paths.runs_dir, Path(run.plan).stem)
     try:
         return pipeline.generate(run, text, out, cfg)
-    except tuple(pipeline.REFUSALS) as e:
-        raise HTTPException(400, f"{pipeline.REFUSALS[type(e)]}: {e}") from e
+    except pipeline.REFUSALS as e:
+        raise HTTPException(400, e.record()) from e
 
 
 def _runs(runs_dir: Path) -> list[dict]:
@@ -266,5 +282,5 @@ def _runs(runs_dir: Path) -> list[dict]:
 def _run_dir(runs_dir: Path, run_id: str) -> Path:
     path = runs_dir / run_id
     if not pipeline.RUN_ID.match(run_id) or not (path / pipeline.META).exists():
-        raise HTTPException(404, f"нет прогона {run_id!r}")
+        raise refuse(404, Refusal.NO_RUN, run_id)
     return path

@@ -23,7 +23,7 @@ from pydantic import BaseModel
 
 from genfacade.config import Review
 from genfacade.metrics import calibrate, realtest
-from genfacade.schema import FacadeSheet, Mode
+from genfacade.schema import FacadeSheet, Mode, Refusal, Refused
 
 MARKS = "review.json"
 LOCK = "review.lock"  # запись отметок — по одной на папку, во всех процессах смотрелки
@@ -36,8 +36,11 @@ class Mark(BaseModel):
     why: str = ""
 
 
-class Missing(LookupError):
+class Missing(Refused):
     """Нет такого дома, места или папки строки; текст — что именно."""
+
+    def __init__(self, detail: str):
+        super().__init__(Refusal.NO_REVIEW_ITEM, detail)
 
 
 def houses(root: Path) -> list[str]:
@@ -76,8 +79,8 @@ def slots(root: Path, mode: Mode, house: str, cfg: Review) -> list[str]:
     return [order[i] for i in rng.permutation(len(order))]
 
 
-def sheet(root: Path, mode: Mode, house: str, row: str) -> FacadeSheet | str:
-    """Лист строки дома или текст отказа (`{"error": …}` в ответах модели)."""
+def sheet(root: Path, mode: Mode, house: str, row: str) -> FacadeSheet | dict:
+    """Лист строки дома или отказ модели — `Refused.record()` под `realtest.REFUSED`."""
     if house not in houses(root):
         raise Missing(f"нет дома {house!r}")
     path = _folder(root, mode, row) / f"{house}.json"

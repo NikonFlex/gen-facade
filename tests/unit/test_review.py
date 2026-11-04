@@ -9,12 +9,18 @@ from fastapi.testclient import TestClient
 
 from genfacade import config
 from genfacade.datasets.synthetic import build
-from genfacade.metrics import calibrate
-from genfacade.schema import Mode
+from genfacade.metrics import calibrate, realtest
+from genfacade.models.stub import ModelError
+from genfacade.schema import Mode, Refusal
 from genfacade.viewer import review
 from genfacade.viewer.app import create_app
 
 ROWS = ("model-run1", "random", "genplan")
+
+
+def refusal_json(detail: str) -> str:
+    """Ответ-отказ модели так, как его пишет `genfacade realtest`."""
+    return json.dumps({realtest.REFUSED: ModelError(Refusal.MODEL_NO_ANSWER, detail).record()})
 HOUSES = ("ffh-a", "sd-b")
 
 
@@ -22,7 +28,7 @@ HOUSES = ("ffh-a", "sd-b")
 def folder(tmp_path, cfg):
     """Папка как у `genfacade realtest`: настоящие листы и три строки; у модели на sd-b — отказ."""
     sheet = build.sample(0, cfg).sheet.model_dump_json()
-    refusal = json.dumps({"error": "за 5 попыток нет годного ответа"})
+    refusal = refusal_json("за 5 попыток нет годного ответа")
     for mode in Mode:
         for row in (calibrate.REFERENCE, *ROWS, "half-a"):
             (tmp_path / mode / row).mkdir(parents=True)
@@ -63,8 +69,9 @@ def test_sheets_of_reference_and_slots_are_svg(client):
     for slot in ("ref", "0", "1", "2"):
         got = client.get(f"/api/review/{mode}/{house}/{slot}/sheet.svg")
         assert got.status_code == 200 and got.text.startswith("<svg"), slot
-    assert client.get(f"/api/review/{mode}/{house}/7/sheet.svg").status_code == 404
-    assert client.get(f"/api/review/{mode}/nope/0/sheet.svg").status_code == 404
+    for slot, house_ in (("7", house), ("0", "nope")):
+        got = client.get(f"/api/review/{mode}/{house_}/{slot}/sheet.svg")
+        assert got.status_code == 404 and got.json()["detail"]["code"] == Refusal.NO_REVIEW_ITEM
 
 
 def test_houses_of_reference_and_slots_in_3d(client):
@@ -75,12 +82,12 @@ def test_houses_of_reference_and_slots_in_3d(client):
         assert got.status_code == 200 and got.json()["walls"], slot
 
 
-def test_refusal_is_shown_as_text(client, folder, cfg):
+def test_refusal_is_shown_with_its_code(client, folder, cfg):
     mode, house = Mode.BLIND, HOUSES[1]
     slot = review.slots(folder, mode, house, cfg.viewer.review).index(ROWS[0])
     for view in ("sheet.svg", "house3d"):
-        got = client.get(f"/api/review/{mode}/{house}/{slot}/{view}")
-        assert got.status_code == 422 and "нет годного ответа" in got.json()["detail"], view
+        got = client.get(f"/api/review/{mode}/{house}/{slot}/{view}").json()["detail"]
+        assert got["code"] == Refusal.MODEL_NO_ANSWER and "нет годного ответа" in got["detail"]
 
 
 def test_marks_saved_with_row_and_counted(client, folder, cfg):
@@ -104,7 +111,7 @@ def test_marks_saved_with_row_and_counted(client, folder, cfg):
 
 def test_mark_of_unknown_house_refused(client, folder):
     got = client.put(f"/api/review/{Mode.BLIND}/nope/0", json={"ok": True})
-    assert got.status_code == 404
+    assert got.status_code == 404 and got.json()["detail"]["code"] == Refusal.NO_REVIEW_ITEM
     assert review.marks(folder) == {}
 
 
@@ -112,7 +119,8 @@ def test_without_folder_review_is_off(tmp_path):
     (tmp_path / "viewer.toml").write_text(f'[paths]\nruns_dir = "{tmp_path / "runs"}"\n')
     client = TestClient(create_app(config.load(tmp_path)))
     assert client.get("/api/review").json() == {"folder": None, "items": []}
-    assert client.get(f"/api/review/{Mode.BLIND}/x/0/sheet.svg").status_code == 404
+    got = client.get(f"/api/review/{Mode.BLIND}/x/0/sheet.svg")
+    assert got.status_code == 404 and got.json()["detail"]["code"] == Refusal.NO_REVIEW
     assert "Проверка" in client.get("/review").text
 
 
@@ -130,7 +138,7 @@ def mixed(folder, tmp_path_factory):
     for house in HOUSES:
         (blind / f"{house}.json").write_text((folder / Mode.BLIND / ROWS[1] / f"{house}.json")
                                              .read_text())
-    (blind / f"{HOUSES[0]}.json").write_text(json.dumps({"error": "глухой: нет годного ответа"}))
+    (blind / f"{HOUSES[0]}.json").write_text(refusal_json("глухой: нет годного ответа"))
     cfg_dir = tmp_path_factory.mktemp("mixed")
     rows = ", ".join(f'"{r}"' for r in MIXED)
     (cfg_dir / "viewer.toml").write_text(
@@ -154,7 +162,7 @@ def test_mixed_review_shows_both_modes_and_real_house_blind(mixed, folder):
     order = review.slots(folder, mode, house, settings)
     blind = order.index(f"{Mode.BLIND}/{BLIND_ONLY}")
     got = client.get(f"/api/review/{mode}/{house}/{blind}/sheet.svg")
-    assert got.status_code == 422 and "глухой" in got.json()["detail"]
+    assert got.status_code == 422 and "глухой" in got.json()["detail"]["detail"]
     real = order.index(f"{Mode.WITH_OPENINGS}/{calibrate.REFERENCE}")
     assert client.get(f"/api/review/{mode}/{house}/{real}/sheet.svg").text.startswith("<svg")
 

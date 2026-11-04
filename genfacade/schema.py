@@ -20,6 +20,59 @@ class Mode(StrEnum):
     BLIND = "blind"                  # режим 1 «глухой куб»
 
 
+class Refusal(StrEnum):
+    """Код отказа, который доходит до человека: в ответе смотрелки (`detail.code`), в
+    meta.json прогона и в ответе модели строки realtest («refusal»). Текст — REFUSAL_TEXT;
+    разные причины — разные коды (docs/clean-contour.md, п. 6, 17)."""
+
+    PLAN_REJECTED = "plan_rejected"            # план не читается или дефектен (PlanError)
+    MODEL_NO_ANSWER = "model_no_answer"        # за все попытки ни одного годного ответа
+    MODEL_MISSING = "model_missing"            # нет чекпойнта
+    MODEL_MISMATCH = "model_mismatch"          # модель учили на другой записи токенов
+    HOUSE_OUT_OF_MODEL = "house_out_of_model"  # дом модель не прочтёт: стаб, окно, словарь
+    HOUSE_NOT_BUILT = "house_not_built"        # 3D: контур не собирается в дом
+    INVALID_REQUEST = "invalid_request"        # запрос не прошёл проверку схемы
+    NO_PLAN = "no_plan"
+    NO_RUN = "no_run"
+    NO_SHEET = "no_sheet"                      # у прогона нет листа фасадов
+    NO_SAMPLE = "no_sample"
+    NO_REVIEW = "no_review"                    # смотрелка запущена без --review
+    NO_REVIEW_ITEM = "no_review_item"          # нет дома, места или листа проверки
+
+
+REFUSAL_TEXT = {
+    Refusal.PLAN_REJECTED: "план отклонён",
+    Refusal.MODEL_NO_ANSWER: "модель не ответила",
+    Refusal.MODEL_MISSING: "модели нет",
+    Refusal.MODEL_MISMATCH: "модель не подходит к записи токенов",
+    Refusal.HOUSE_OUT_OF_MODEL: "дом модели не по силам",
+    Refusal.HOUSE_NOT_BUILT: "дом не собрать по контуру",
+    Refusal.INVALID_REQUEST: "запрос не прошёл проверку",
+    Refusal.NO_PLAN: "нет плана",
+    Refusal.NO_RUN: "нет прогона",
+    Refusal.NO_SHEET: "у прогона нет листа фасадов",
+    Refusal.NO_SAMPLE: "нет примера",
+    Refusal.NO_REVIEW: "проверка не включена: genfacade serve --review <папка realtest>",
+    Refusal.NO_REVIEW_ITEM: "нет в проверке",
+}
+
+
+class Refused(ValueError):
+    """Отказ с кодом из Refusal; текст исключения — подробность к тексту кода."""
+
+    def __init__(self, code: Refusal, detail: str):
+        super().__init__(detail)
+        self.code = code
+
+    def record(self) -> dict:
+        """Отказ в JSON — одинаково в ответе API, meta.json и ответе модели."""
+        return refusal_record(self.code, str(self))
+
+
+def refusal_record(code: Refusal, detail: str | list[str]) -> dict:
+    return {"code": code, "text": REFUSAL_TEXT[code], "detail": detail}
+
+
 class ElementClass(StrEnum):
     """11 классов объектов CMP + классы коттеджей (спека facade, «Элемент», класс)."""
 

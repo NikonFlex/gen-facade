@@ -37,6 +37,7 @@ from genfacade.schema import (
     HouseSpec,
     Mode,
     Plan,
+    Refusal,
     Rule,
     SideFacade,
     Violation,
@@ -78,8 +79,8 @@ STEPS = (
     Step(5, "Сетка и проверка", SNAPPED, SNAPPED_JSON, SNAPPED),
     Step(6, "Лист фасадов", SHEET, SHEET_JSON, SHEET),
 )
-# Отказ прогона → с чего начинается его причина: в CLI, в смотрелке и в meta.json одинаково.
-REFUSALS = {PlanError: "план отклонён", ModelError: "модель не ответила"}
+# Отказы прогона: код и текст — в CLI, в смотрелке и в meta.json одинаково (Refused.record).
+REFUSALS = (PlanError, ModelError)
 RUN_ID = re.compile(r"^[\w.-]+$")  # имя папки прогона: без / и .., чтобы не выйти из runs_dir
 
 
@@ -119,8 +120,8 @@ def generate(req: PlanRun, svg: str, out: Path, cfg: Config) -> Path:
             "request": req.model_dump()}
     try:
         raw, sheet, violations, trace = layout(_prepare(req, svg, out, cfg), req, cfg)
-    except tuple(REFUSALS) as e:
-        write_meta(out, cfg, {**base, "refusal": f"{REFUSALS[type(e)]}: {e}"})
+    except REFUSALS as e:
+        write_meta(out, cfg, {**base, "refusal": e.record()})
         raise
     _write(out, 4, raw, sheet_svg(raw, cfg, violations=[], annotations=False))
     _write(out, 5, sheet, sheet_svg(sheet, cfg, violations=violations, annotations=False))
@@ -169,7 +170,8 @@ def layout(bare: FacadeSheet, req: PlanRun, cfg: Config) -> Checked:
     good = list(islice(_good(model, model.prompt(bare, req.mode, cfg), bare, cfg, trace),
                        settings.best_of))
     if not good:
-        raise ModelError(f"за {len(trace['attempts'])} попыток нет годного ответа; причины — "
+        raise ModelError(Refusal.MODEL_NO_ANSWER,
+                         f"за {len(trace['attempts'])} попыток нет годного ответа; причины — "
                          f"{_reasons(trace['attempts'])}", trace["attempts"])
     return good[0] if len(good) == 1 else _likeliest(good, Path(req.plan).stem, cfg)
 

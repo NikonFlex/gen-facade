@@ -10,6 +10,8 @@
 // одного: у смешанной проверки на доме оба режима сразу.
 
 import { HouseStage } from "/static/house3d.js";
+import { refusedFrom } from "/static/refusal.js";
+import { serial } from "/static/serial.js";
 
 const $ = (id) => document.getElementById(id);
 const LETTERS = "ABCDEFGH";
@@ -40,7 +42,7 @@ const refusal = (text) => el("div", { className: "review-refusal" }, text);
 async function sheetInto(box, url) {
   const res = await fetch(url);
   if (res.ok) return box.replaceChildren(el("img", { src: url, alt: "" }));
-  box.replaceChildren(refusal(`Нет листа: ${(await res.json()).detail ?? res.statusText}`));
+  box.replaceChildren(refusal(`Нет листа: ${(await refusedFrom(res)).message}`));
 }
 
 async function houseInto(box, url) {
@@ -61,11 +63,16 @@ function viewOf(item, slot) {
   return box;
 }
 
-async function save(item, slot, mark) {
+// Отметки одного места — по очереди: «Не годен» и причина уходят двумя запросами подряд, и без
+// очереди сервер мог записать раньше то, что сделано позже (C13, gf#293).
+const queue = serial();
+const save = (item, slot, mark) => queue(`${keyOf(item)}/${slot}`, () => send(item, slot, mark));
+
+async function send(item, slot, mark) {
   const res = await fetch(`${base(item)}/${slot}`, {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(mark),
   });
-  if (!res.ok) return toast(`Не сохранено: ${(await res.json()).detail}`, "error");
+  if (!res.ok) return toast(`Не сохранено: ${(await refusedFrom(res)).message}`, "error");
   item.marks[slot] = mark;
   progress();
 }
@@ -82,10 +89,13 @@ function slotCard(item, slot) {
     ok.classList.toggle("on-ok", mark?.ok === true);
     bad.classList.toggle("on-bad", mark?.ok === false);
   };
-  const put = (value) => save(item, slot, { ok: value, why: why.value }).then(paint);
+  // Карточка красится по подтверждённой отметке (item.marks), а причина уходит с последним
+  // выбором пользователя: подтверждение «Не годен» может ещё не вернуться.
+  let chosen = item.marks[slot]?.ok;
+  const put = (value) => { chosen = value; return save(item, slot, { ok: value, why: why.value }).then(paint); };
   ok.addEventListener("click", () => put(true));
   bad.addEventListener("click", () => put(false));
-  why.addEventListener("change", () => { if (item.marks[slot]) put(item.marks[slot].ok); });
+  why.addEventListener("change", () => { if (chosen !== undefined) put(chosen); });
   const row = el("div", { className: "review-mark" });
   row.append(ok, bad, why);
   card.append(el("h3", {}, `Вариант ${LETTERS[slot]}`), viewOf(item, slot), row);
