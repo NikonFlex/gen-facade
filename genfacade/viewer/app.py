@@ -122,15 +122,17 @@ def _review_api(app: FastAPI, cfg: Config, root: Path | None) -> None:
 
     @app.get("/api/review")
     def review_items() -> dict:
-        """Дома × режимы: сколько мест и отметки; чья строка на месте — не отдаётся."""
+        """Дома × режимы: сколько мест и отметки; чья строка на месте — не отдаётся. reference —
+        показывать ли настоящий дом отдельно, modes — сколько режимов у проверки."""
         if root is None:
             return {"folder": None, "items": []}
         found = review.marks(root)
         n = len(settings.rows)
         items = [{"mode": m, "house": h, "slots": n,
                   "marks": {s: _public(found.get(review.key(m, h, s))) for s in range(n)}}
-                 for m in Mode for h in review.houses(root)]
-        return {"folder": str(root), "items": items}
+                 for m in settings.modes for h in review.houses(root)]
+        return {"folder": str(root), "items": items, "reference": settings.reference,
+                "modes": len(settings.modes)}
 
     @app.get("/api/review/{mode}/{house}/{slot}/sheet.svg")
     def review_sheet(mode: Mode, house: str, slot: str) -> Response:
