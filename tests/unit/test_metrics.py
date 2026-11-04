@@ -26,6 +26,18 @@ def calibrated(half_val, tmp_path_factory):
                 json.loads((out / m / table.METRICS).read_text())["rows"].items()} for m in Mode}
 
 
+@pytest.fixture(scope="module")
+def fid_at_module_setup() -> bool:
+    """Включён ли FID, когда поднимается фикстура модуля, — как `calibrated`."""
+    return visual.available()
+
+
+def test_fid_is_off_before_module_fixtures(fid_at_module_setup):
+    """gf#282: при подмене FID на тест фикстура модуля успевала посчитать его через Inception —
+    9,5 минут хука перед коммитом."""
+    assert fid_at_module_setup is False
+
+
 @pytest.mark.parametrize("mode", list(Mode))
 def test_generator_passes_every_check(calibrated, mode):
     r = calibrated[mode]["generator"]
