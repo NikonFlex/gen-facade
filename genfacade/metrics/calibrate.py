@@ -20,7 +20,7 @@ import numpy
 from genfacade.config import Config
 from genfacade.datasets import store
 from genfacade.metrics import measures, table
-from genfacade.schema import FacadeSheet, Mode, SideFacade, Source, Split
+from genfacade.schema import CalibrationRow, FacadeSheet, Mode, SideFacade, Source, Split
 from genfacade.train.tokens import given_sides
 
 REFERENCE = "reference"
@@ -79,8 +79,9 @@ def empty(sheets: list[FacadeSheet], rng: numpy.random.Generator) -> list[Facade
     return [_walls(s, [_with(f, [], f.zones) for f in s.facades]) for s in sheets]
 
 
-ROWS: dict[str, Substitute] = {"generator": generator, "random": random, "foreign": foreign,
-                               "constant": constant, "empty": empty}
+ROWS: dict[CalibrationRow, Substitute] = {
+    CalibrationRow.GENERATOR: generator, CalibrationRow.RANDOM: random,
+    CalibrationRow.FOREIGN: foreign, CalibrationRow.CONSTANT: constant, CalibrationRow.EMPTY: empty}
 
 
 def houses(source: Source, split: Split, count: int, cfg: Config) -> dict[str, FacadeSheet]:

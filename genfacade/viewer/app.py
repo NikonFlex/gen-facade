@@ -273,7 +273,7 @@ def _runs(runs_dir: Path) -> list[dict]:
     result = []
     for meta_path in sorted(runs_dir.glob(f"*/{pipeline.META}"), reverse=True):
         meta = json.loads(meta_path.read_text())
-        if "steps" in meta and "sample" not in meta:
+        if "steps" in meta and not preview.is_preview(meta):
             result.append({"id": meta_path.parent.name, "source": meta["source"],
                            "date": meta["date"], "preview": meta["preview"]})
     return result

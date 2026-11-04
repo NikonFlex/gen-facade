@@ -11,7 +11,7 @@ import pytest
 from genfacade import pipeline
 from genfacade.metrics import calibrate, realtest
 from genfacade.models.stub import ModelError
-from genfacade.schema import Mode
+from genfacade.schema import CalibrationRow, Mode
 
 NO_ROWS = realtest.Rows({}, {})
 
@@ -89,3 +89,9 @@ def test_missing_sheets_refused_before_any_work(real, cfg, tmp_path):
     with pytest.raises(FileNotFoundError, match="нет листов модели"):
         realtest.run(cfg, tmp_path / "out", 0, realtest.Rows({}, {"old": tmp_path / "none"}))
     assert not (tmp_path / "out").exists()
+
+
+def test_substitutes_are_calibration_rows():
+    """Набор подмен realtest — члены списка строк калибровки, а не его копия строками (C9)."""
+    assert all(isinstance(n, CalibrationRow) for n in realtest.SUBSTITUTES)
+    assert set(realtest.SUBSTITUTES) <= set(calibrate.ROWS)

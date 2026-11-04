@@ -118,17 +118,18 @@ def generate(req: PlanRun, svg: str, out: Path, cfg: Config) -> Path:
     (out / REQUEST).write_text(req.model_dump_json(indent=2))
     base = {"source": req.plan, "input": REQUEST, "plan_input": INPUT_PLAN,
             "request": req.model_dump()}
+    done: list[int] = []  # шаги, которые прогон записал: их и только их называет meta.json
     try:
-        raw, sheet, violations, trace = layout(_prepare(req, svg, out, cfg), req, cfg)
+        raw, sheet, violations, trace = layout(_prepare(req, svg, out, cfg, done), req, cfg)
     except REFUSALS as e:
-        write_meta(out, cfg, {**base, "refusal": e.record()})
+        write_meta(out, cfg, {**base, "steps": _steps(done), "refusal": e.record()})
         raise
     _write(out, 4, raw, sheet_svg(raw, cfg, violations=[], annotations=False))
     _write(out, 5, sheet, sheet_svg(sheet, cfg, violations=violations, annotations=False))
     (out / VIOLATIONS).write_text(json.dumps(
         [v.model_dump() for v in violations], ensure_ascii=False, indent=2))
-    extra = {
-        **base, "violations": VIOLATIONS, "layout": trace,
+    extra = {  # шаги 4–5 записаны выше, шаг 6 пишет finish
+        **base, "steps": _steps([*done, 4, 5, 6]), "violations": VIOLATIONS, "layout": trace,
         "errors": len(errors(violations)), "warnings": len(violations) - len(errors(violations)),
     }
     return finish(sheet, out, cfg, extra)
@@ -291,8 +292,8 @@ def walls(spec: HouseSpec, plan: Plan) -> FacadeSheet:
     return unfold(FacadeSheet(spec=spec, facades=[SideFacade(side=s) for s in plan.sides]))
 
 
-def _prepare(req: PlanRun, svg: str, out: Path, cfg: Config) -> FacadeSheet:
-    """Шаги 1–3: параметры дома, план, развёртка — с трассой.
+def _prepare(req: PlanRun, svg: str, out: Path, cfg: Config, done: list[int]) -> FacadeSheet:
+    """Шаги 1–3: параметры дома, план, развёртка — с трассой; записанный шаг — в done.
 
     Шаг 1 — модель (пока стаб): текст → HouseSpec.
     """
@@ -302,10 +303,13 @@ def _prepare(req: PlanRun, svg: str, out: Path, cfg: Config) -> FacadeSheet:
     (out / SPEC).write_text(json.dumps({"spec": spec.model_dump(), "colors": colors},
                                        ensure_ascii=False, indent=2))
     (out / SPEC_SVG).write_text(spec_svg(spec, cfg))
+    done.append(1)
     plan = preprocess(svg, req.mode, cfg.plan)
     _write(out, 2, plan, plan_svg(plan, cfg))
+    done.append(2)
     bare = walls(spec, plan)
     _write(out, 3, bare, sheet_svg(bare, cfg, annotations=False))
+    done.append(3)
     return bare
 
 
@@ -320,12 +324,12 @@ def finish(sheet: FacadeSheet, out: Path, cfg: Config, extra: dict) -> Path:
 
 
 def write_meta(out: Path, cfg: Config, extra: dict) -> Path:
-    """meta.json прогона: шаги — те, чьи файлы есть в папке; extra заменяет общие поля."""
+    """meta.json прогона; extra заменяет общие поля и называет шаги («steps»): их пишет тот, кто
+    знает, что записал (`_steps`, datasets/preview.py), а не наличие файлов в папке."""
     meta = {
         "date": datetime.now().isoformat(timespec="seconds"),
         "git_sha": git_sha(), "genfacade": version("genfacade"),
         "sheet_json": None, "preview": None,
-        "steps": [_written(s, out)._asdict() for s in STEPS],
         **extra,
         # Итоговые настройки целиком: прогон повторяется без исходной папки конфига.
         "config": cfg.model_dump(mode="json"),
@@ -334,10 +338,10 @@ def write_meta(out: Path, cfg: Config, extra: dict) -> Path:
     return out
 
 
-def _written(step: Step, out: Path) -> Step:
-    """Шаг без файлов, которых прогон не написал."""
-    return step._replace(**{k: None for k in FILE_FIELDS
-                            if getattr(step, k) and not (out / getattr(step, k)).exists()})
+def _steps(done: list[int]) -> list[dict]:
+    """Шаги схемы для meta.json: у незаписанного — без файлов."""
+    return [(s if s.n in done else s._replace(**dict.fromkeys(FILE_FIELDS)))._asdict()
+            for s in STEPS]
 
 
 def git_sha() -> str | None:

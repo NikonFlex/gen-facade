@@ -28,13 +28,13 @@ from genfacade.baselines import Baseline
 from genfacade.config import Config
 from genfacade.metrics import calibrate, table
 from genfacade.models.stub import ModelError
-from genfacade.schema import FacadeSheet, Mode, Refusal, Source, Split
+from genfacade.schema import CalibrationRow, FacadeSheet, Mode, Refusal, Source, Split
 from genfacade.train import tokens
 from genfacade.train.tokens import bare, given_sides
 
 HALVES = ("half-a", "half-b")
 REFUSED = "refusal"  # ключ ответа-отказа модели в <дом>.json строки модели: Refused.record()
-SUBSTITUTES = ("random", "foreign", "empty")
+SUBSTITUTES = (CalibrationRow.RANDOM, CalibrationRow.FOREIGN, CalibrationRow.EMPTY)
 MODEL = "model"
 SUMMARY = "summary.md"
 REAL_HALF = "real-half"
@@ -120,12 +120,13 @@ def _folders(given: dict, synth: dict, mode: Mode, cfg: Config,
         pick = [(n, s) for n, s in zip(names, sheets, strict=True) if (n in first) == keep]
         calibrate.write(out / part, [n for n, _ in pick], [s for _, s in pick])
         halves.append(pick)
-    calibrate.write(out / "generator", list(synth), [given_sides(s, mode) for s in synth.values()])
+    calibrate.write(out / CalibrationRow.GENERATOR, list(synth),
+                    [given_sides(s, mode) for s in synth.values()])
     baselines.run(Baseline.GENPLAN, out / calibrate.REFERENCE, cfg, out / "genplan")
     own = [n for n, _ in halves[0]]
     for name in SUBSTITUTES:
         calibrate.write(out / name, own, calibrate.ROWS[name]([s for _, s in halves[0]], rng))
-    return [out / "genplan", out / "generator"], [out / n for n in SUBSTITUTES]
+    return [out / "genplan", out / CalibrationRow.GENERATOR], [out / n for n in SUBSTITUTES]
 
 
 def named_rows(out: Path, mode: Mode) -> list[tuple[str, dict]]:

@@ -20,6 +20,17 @@ class Mode(StrEnum):
     BLIND = "blind"                  # режим 1 «глухой куб»
 
 
+class CalibrationRow(StrEnum):
+    """Строка калибровки метрик — подмена ответа модели; имя папки и строки таблицы
+    (metrics/calibrate.py, metrics/realtest.py)."""
+
+    GENERATOR = "generator"
+    RANDOM = "random"
+    FOREIGN = "foreign"
+    CONSTANT = "constant"
+    EMPTY = "empty"
+
+
 class Refusal(StrEnum):
     """Код отказа, который доходит до человека: в ответе смотрелки (`detail.code`), в
     meta.json прогона и в ответе модели строки realtest («refusal»). Текст — REFUSAL_TEXT;
@@ -334,11 +345,10 @@ class GuidelineUse(StrEnum):
     """Куда включено правило свода; включает хозяин после замера (gf#209)."""
 
     METRIC = "metric"        # метрика правдоподобия, gf#210
-    SYNTHETIC = "synthetic"  # генератор синтетики, gf#211
-    DERIVE = "derive"        # вывод зависимых элементов кодом, gf#212
-    GUARD = "guard"          # страж при генерации, gf#213
-    TRAIN = "train"          # обучение
+    GUARD = "guard"          # страж при генерации и генератор синтетики, gf#213, gf#211
     VALIDATE = "validate"    # браковка валидатором шага 5, gf#242
+    # synthetic, derive, train убраны (gf#293): никто их не читал — синтетика берёт guard,
+    # вывод элементов (gf#212) — код шага 5; значение в конфиге без читателя молча не работало
 
 
 class Model(BaseModel):

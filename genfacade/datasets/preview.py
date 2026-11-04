@@ -17,6 +17,11 @@ TOKENS = "tokens.json"
 TOKENS_STEP = pipeline.Step(4, "Токены", TOKENS)
 
 
+def is_preview(meta: dict) -> bool:
+    """Папка — просмотр примера, а не прогон: так её помечает render (поле «sample»)."""
+    return "sample" in meta
+
+
 def run_id(sample: Sample) -> str:
     return f"sample-{sample.source}-{sample.id}"
 

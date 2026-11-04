@@ -6,6 +6,7 @@
 """
 
 import pytest
+from pydantic import ValidationError
 
 from genfacade import guidelines
 from genfacade.config import Guideline
@@ -154,3 +155,12 @@ def test_table_lists_every_guideline(cfg):
             for g in cfg.guidelines.guideline]
     text = guidelines.table(rows, 0)
     assert all(f"**{g.id}**" in text for g in cfg.guidelines.guideline)
+
+
+@pytest.mark.parametrize("unread", ["synthetic", "derive", "train"])
+def test_use_without_reader_is_refused(cfg, unread):
+    """Куда включено правило — только то, что код читает: значение без читателя молча не работало
+    (C14, gf#293), теперь реестр с ним не загружается."""
+    rule = cfg.guidelines.guideline[0].model_dump(mode="json")
+    with pytest.raises(ValidationError):
+        Guideline.model_validate({**rule, "use": [unread]})
