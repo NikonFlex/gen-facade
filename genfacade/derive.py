@@ -80,12 +80,13 @@ def _apart(groups: list[list[Element]], elements: list[Element]) -> set[str]:
     угла стены."""
     kept = [e for e in elements if e.cls in OPENINGS or e.cls is ElementClass.CORNICE]
     for group in groups:
-        if not any(_hits(d, o) for d in group for o in kept if (o.parent or o.id) != d.parent):
+        if not any(hits(d, o) for d in group for o in kept if (o.parent or o.id) != d.parent):
             kept += group
     return {e.id for e in kept}
 
 
-def _hits(a: Element, b: Element) -> bool:
+def hits(a: Element, b: Element) -> bool:
+    """Прямоугольники налезают друг на друга, а не касаются."""
     w = min(a.x_m + a.w_m, b.x_m + b.w_m) - max(a.x_m, b.x_m)
     h = min(a.y_m + a.h_m, b.y_m + b.h_m) - max(a.y_m, b.y_m)
     return w > EPS and h > EPS
