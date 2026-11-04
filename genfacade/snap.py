@@ -6,13 +6,16 @@
 одну высоту.
 Элемент «задан планом», которому проёма плана не досталось, — лишний: модель повторила проём
 плана (gf#153, окно GenPlan не на сетке токенов), он убирается вместе с подоконником и наличником.
-Подоконник, наличник, ставни и козырёк едут вместе со своим проёмом. Заготовки стаба шага 4 уже
-ровные — привязка нужна модели, её выход неточный.
+Подоконник, наличник, ставни и козырёк едут вместе со своим проёмом (follow.py). Затем карниз,
+цоколь и низ двери встают на отметки параметров дома (levels.py, gf#272). Заготовки стаба шага 4
+уже ровные — привязка нужна модели, её выход неточный.
 """
 
 from statistics import median
 
 from genfacade.config import Checks
+from genfacade.follow import follow
+from genfacade.levels import levels
 from genfacade.schema import (
     EPS,
     Element,
@@ -30,7 +33,8 @@ PLAN_CLASS = {OpeningKind.WINDOW: ElementClass.WINDOW, OpeningKind.DOOR: Element
 
 
 def snap(sheet: FacadeSheet, cfg: Checks) -> FacadeSheet:
-    return sheet.model_copy(update={"facades": [snap_side(f, cfg) for f in sheet.facades]})
+    snapped = sheet.model_copy(update={"facades": [snap_side(f, cfg) for f in sheet.facades]})
+    return levels(snapped, cfg)
 
 
 def snap_side(f: SideFacade, cfg: Checks) -> SideFacade:
@@ -50,7 +54,7 @@ def snap_side(f: SideFacade, cfg: Checks) -> SideFacade:
             near = abs(e.y_m - y) <= cfg.snap_m and abs(e.h_m - h) <= cfg.snap_m
             if near and _differs((e.y_m, e.h_m), (y, h)):
                 moved[e.id] = e.model_copy(update={"y_m": y, "h_m": h})
-    elements = [moved.get(e.id) or _follow(e, moved, f.elements) for e in f.elements]
+    elements = [moved.get(e.id) or follow(e, moved, f.elements) for e in f.elements]
     return f.model_copy(update={"elements": elements})
 
 
@@ -112,49 +116,3 @@ def _target(group: list[Element]) -> tuple[float, float]:
         return fixed[0].x_m, fixed[0].w_m
     w = median(e.w_m for e in group)
     return median(_center(e) for e in group) - w / 2, w
-
-
-def _follow(child: Element, moved: dict[str, Element], before: list[Element]) -> Element:
-    """Подоконник, наличник, ставни и козырёк повторяют сдвиг и растяжение своего проёма
-    (их ставит derive.py по проёму, gf#212)."""
-    if child.parent not in moved:
-        return child
-    old = next(e for e in before if e.id == child.parent)
-    new = moved[child.parent]
-    if _box(old) == _box(new):  # проём не сдвинулся — хвосты float не трогают точные числа
-        return child
-    x, w = _follow_x(child, old, new)
-    y, h = _follow_y(child, old, new)
-    return child.model_copy(update={"x_m": x, "w_m": w, "y_m": y, "h_m": h})
-
-
-def _follow_x(child: Element, old: Element, new: Element) -> tuple[float, float]:
-    """Сбоку от проёма (ставня) — тот же зазор до его края, ширина — в долю проёма; над, под
-    проёмом и вокруг него — тянется с ним. Проём сузился больше ширины элемента (окно плана
-    уже окна модели, gf#257: крыльцо у сайдлайта шириной 0,37 м) — элемент тоже в долю проёма,
-    иначе ширина уходит в минус."""
-    k = new.w_m / old.w_m
-    if child.x_m + child.w_m <= old.x_m + EPS:
-        w = child.w_m * k
-        return new.x_m - (old.x_m - child.x_m - child.w_m) - w, w
-    if child.x_m >= old.x_m + old.w_m - EPS:
-        w = child.w_m * k
-        return new.x_m + new.w_m + (child.x_m - old.x_m - old.w_m), w
-    if child.w_m + new.w_m - old.w_m > EPS:
-        return child.x_m + (new.x_m - old.x_m), child.w_m + (new.w_m - old.w_m)
-    return new.x_m + (child.x_m - old.x_m) * k, child.w_m * k
-
-
-def _box(e: Element) -> tuple[float, float, float, float]:
-    return e.x_m, e.y_m, e.w_m, e.h_m
-
-
-def _follow_y(child: Element, old: Element, new: Element) -> tuple[float, float]:
-    """Под проёмом (подоконник) — едет с низом, над ним (козырёк) — с верхом, рядом и вокруг
-    (ставни, наличник) — тянется с проёмом."""
-    dy, dh = new.y_m - old.y_m, new.h_m - old.h_m
-    if child.y_m + child.h_m <= old.y_m + EPS:
-        return child.y_m + dy, child.h_m
-    if child.y_m >= old.y_m + old.h_m - EPS:
-        return child.y_m + dy + dh, child.h_m
-    return child.y_m + dy, child.h_m + dh

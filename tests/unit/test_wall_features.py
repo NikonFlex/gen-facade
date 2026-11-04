@@ -2,6 +2,7 @@
 доме и на том же доме с изъяном, который признак должен видеть."""
 
 import pytest
+from simple_house import whole_main, with_side
 
 from genfacade.metrics import wall_features
 from genfacade.schema import ElementClass, FacadeSheet, MaterialZone, ZoneRole
@@ -14,16 +15,10 @@ def _values(sheet: FacadeSheet, cfg) -> dict[str, list[float]]:
     return {n: [r[i] for r in rows] for i, n in enumerate(settings.features)}
 
 
-def _wall(sheet: FacadeSheet, i: int, **update) -> FacadeSheet:
-    facades = list(sheet.facades)
-    facades[i] = facades[i].model_copy(update=update)
-    return sheet.model_copy(update={"facades": facades})
-
-
 def _moved(sheet: FacadeSheet, i: int, cls: ElementClass, **update) -> FacadeSheet:
     """Элементы класса cls на стене i с полями update."""
     f = sheet.facades[i]
-    return _wall(sheet, i, elements=[e.model_copy(update=update) if e.cls is cls else e
+    return with_side(sheet, i, elements=[e.model_copy(update=update) if e.cls is cls else e
                                      for e in f.elements])
 
 
@@ -32,7 +27,7 @@ def _added(sheet: FacadeSheet, i: int, cls: ElementClass, **update) -> FacadeShe
     f = sheet.facades[i]
     first = next(e for e in f.elements if e.cls is cls)
     extra = first.model_copy(update={"id": first.id + "x", **update})
-    return _wall(sheet, i, elements=[*f.elements, extra])
+    return with_side(sheet, i, elements=[*f.elements, extra])
 
 
 def test_configured_features_are_known(cfg):
@@ -44,11 +39,7 @@ def test_bare_house_is_zero_but_blind(house, cfg):
     признаки ноль, как у идеально ровной стены."""
     bare = house
     for i, f in enumerate(house.facades):
-        main = next(z for z in f.zones if z.role is ZoneRole.MAIN)
-        whole = main.model_copy(update={"shape": [(0.0, 0.0), (f.side.length_m, 0.0),
-                                                  (f.side.length_m, house.spec.eaves_m),
-                                                  (0.0, house.spec.eaves_m)]})
-        bare = _wall(bare, i, elements=[], zones=[whole])
+        bare = with_side(bare, i, elements=[], zones=[whole_main(f, house.spec.eaves_m)])
     values = _values(bare, cfg)
     assert {n for n, v in values.items() if any(v)} == {"blind_walls", "zones"}
     assert values["blind_walls"] == [1.0] * 4
@@ -59,7 +50,7 @@ def test_corner_mismatch_sees_finish_cut_at_corner(house, cfg):
     f = house.facades[0]
     accent = MaterialZone(shape=[(0.0, 0.5), (1.0, 0.5), (1.0, 3.25), (0.0, 3.25)],
                           material="accent", role=ZoneRole.ACCENT)
-    cut = _wall(house, 0, zones=[*f.zones, accent])
+    cut = with_side(house, 0, zones=[*f.zones, accent])
     assert _values(cut, cfg)["corner_mismatch"][0] > 0.0
 
 
@@ -74,7 +65,7 @@ def test_hidden_zones_sees_accent_of_wall_material(house, cfg):
     f = house.facades[0]
     hidden = [z.model_copy(update={"material": "main"}) if z.role is ZoneRole.ACCENT else z
               for z in f.zones]
-    assert _values(_wall(house, 0, zones=hidden), cfg)["hidden_zones"][0] == 0.5
+    assert _values(with_side(house, 0, zones=hidden), cfg)["hidden_zones"][0] == 0.5
 
 
 def test_sizes_floor_counts_window_sizes(house, cfg):
@@ -103,7 +94,7 @@ def test_trim_mixed_sees_sills_at_some_windows(house, cfg):
     assert _values(house, cfg)["trim_mixed"][0] == 0.0
     f = house.facades[0]
     no_sill = [e for e in f.elements if e.cls is not ElementClass.SILL]
-    half = _wall(_wall(house, 0, elements=no_sill), 2, elements=[
+    half = with_side(with_side(house, 0, elements=no_sill), 2, elements=[
         e for e in house.facades[2].elements if e.cls is not ElementClass.SILL])
     assert _values(half, cfg)["trim_mixed"] == [0.5] * 4
 
