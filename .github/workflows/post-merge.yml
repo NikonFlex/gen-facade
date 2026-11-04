@@ -1,0 +1,77 @@
+name: post-merge
+
+# Полный набор тестов на main после мержа (gf#283): долгие (slow) и с torch — то, чего нет в
+# `fast` на PR. Упавшие гоняются ещё раз; итог — комментарием в задачи из `Closes` влитых PR,
+# новый красный переоткрывает их (tools/post_merge.py). Идущий прогон не отменяется; мержи за
+# время прогона ждут одним прогоном на последнем коммите — его диапазон охватывает их все.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: post-merge-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Прошлый прогон
+        id: prev
+        run: python3 tools/post_merge.py prev >> "$GITHUB_OUTPUT"
+
+      - name: Упавшие тесты прошлого прогона
+        if: steps.prev.outputs.run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: failed-tests
+          run-id: ${{ steps.prev.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: prev
+
+      - name: Зависимости
+        # torch — сборка под CPU: на раннере нет GPU, а CUDA-сборка — гигабайты.
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[dev,train,visual]" -r tools/requirements.txt
+
+      - name: Полный набор, красные — ещё раз
+        timeout-minutes: 90
+        run: |
+          mkdir -p junit
+          python -m pytest -q --junitxml=junit/final.xml && exit 0
+          echo "повтор упавших"
+          python -m pytest -q --last-failed --junitxml=junit/final.xml || true
+
+      - name: Итог в задачи
+        if: always()
+        run: >-
+          python3 tools/post_merge.py verdict
+          --junit junit/final.xml --prev-failed prev/failed.txt --out-failed failed.txt
+          --base "${{ steps.prev.outputs.sha }}" --head "${{ github.sha }}"
+
+      - name: Список упавших для следующего прогона
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failed-tests
+          path: failed.txt
+          if-no-files-found: ignore

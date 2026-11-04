@@ -1,15 +1,18 @@
 #!/bin/sh
 # Все проверки проекта одним списком. Запускают CI и хук перед `git commit`
 # (templates/githooks/pre-commit) — список живёт в одном месте.
-#   sh tools/check.sh           полный прогон — CI
-#   sh tools/check.sh --quick   хук перед коммитом: из тестов только те, что затрагивает
-#                               изменённый код (pytest-testmon, база — .testmondata), и без
-#                               долгих (метка slow, pyproject.toml): они — в полном прогоне
+#   sh tools/check.sh           полный прогон: все тесты, и долгие
+#   sh tools/check.sh --fast    CI на PR (`fast`, gf#283): все тесты без долгих (метка slow,
+#                               pyproject.toml) — долгие идут после мержа (post-merge.yml)
+#   sh tools/check.sh --quick   хук перед коммитом: из быстрых тестов только те, что затрагивает
+#                               изменённый код (pytest-testmon, база — .testmondata)
 # Код 0 — всё прошло, 1 — что-то упало; у упавших печатается хвост вывода.
 cd "$(dirname "$0")/.." || exit 1
 failed=0
 quick=""
+fast=""
 [ "${1:-}" = "--quick" ] && quick=1
+[ "${1:-}" = "--fast" ] && fast=1
 
 run() {
     name=$1
@@ -30,6 +33,8 @@ run() {
 pytest_or_none() {
     if [ -n "$quick" ]; then
         python3 -m pytest -q --testmon -m "not slow"
+    elif [ -n "$fast" ]; then
+        python3 -m pytest -q -m "not slow"
     else
         python3 -m pytest -q
     fi
@@ -58,6 +63,8 @@ run "tg_notify.py --selftest" python3 tools/tg_notify.py --selftest
 run "tg_ping.py --selftest" python3 tools/tg_ping.py --selftest
 run "context_check.py --selftest" python3 tools/context_check.py --selftest
 run "closing_words.py --selftest" python3 tools/closing_words.py --selftest
+run "pr_link.py --selftest" python3 tools/pr_link.py --selftest
+run "post_merge.py --selftest" python3 tools/post_merge.py --selftest
 run "commit_check.py --selftest" python3 tools/commit_check.py --selftest
 run "guard.py --selftest" python3 .agents/guards/guard.py --selftest
 run "agent_rules.py --selftest" python3 tools/agent_rules.py --selftest

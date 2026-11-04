@@ -1,9 +1,12 @@
-name: check
+name: pr
 
+# Быстрые проверки PR — `fast`, обязательная для слияния вместе с `pr-link` (pr-link.yml); полный
+# набор тестов — после мержа на main (post-merge.yml, gf#283). Правка описания PR гоняет только
+# pr-link, а не эти проверки.
 on:
-  push:
   pull_request:
-    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
@@ -12,11 +15,11 @@ permissions:
 # Прогоны одного PR (и одной ветки при push) — в одну очередь, устаревший отменяется: правка
 # описания и новый коммит подряд не дают двух прогонов.
 concurrency:
-  group: check-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  group: pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  check:
+  fast:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -41,29 +44,17 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Проверки
-        # Полный прогон: локально хук гоняет `check.sh --quick` — только затронутые тесты.
-        # Проверка `check` обязательна для слияния в main (защита ветки, gf#96): PR с
-        # `gh pr merge --auto` GitHub сольёт сам, когда она зелёная.
-        # Ключей в CI нет: тест, которому нужен настоящий API, упадёт — так и задумано.
-        run: sh tools/check.sh
+        # Быстрые тесты и самопроверки: локально хук гоняет `check.sh --quick` — только
+        # затронутые тесты. `fast` и `pr-link` обязательны для слияния в main: PR с
+        # `gh pr merge --auto --squash` GitHub сольёт сам, когда они зелёные. Долгие тесты (slow)
+        # и тесты с torch — в полном наборе после мержа. Ключей в CI нет: тест, которому нужен
+        # настоящий API, упадёт — так и задумано.
+        run: sh tools/check.sh --fast
 
       - name: Номер задачи в каждом коммите
         # Хук commit-msg обходится `--no-verify` — поэтому то же правило здесь.
-        if: github.event_name == 'pull_request'
         run: python3 tools/commit_check.py range "origin/${{ github.base_ref }}..${{ github.event.pull_request.head.sha }}"
 
       - name: Ключи в коммитах
         # Хук pre-commit обходится `--no-verify` — поэтому то же по всем коммитам PR.
-        if: github.event_name == 'pull_request'
         run: python3 tools/secret_scan.py range "origin/${{ github.base_ref }}..${{ github.event.pull_request.head.sha }}"
-
-      - name: Слова, закрывающие задачу
-        # Задачу закрывает только хозяин (AGENTS.md, «Задачи»): close/fix/resolve рядом со
-        # ссылкой в заголовке, описании или коммитах PR закрыли бы её при слиянии.
-        if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh pr view ${{ github.event.pull_request.number }} --repo "${{ github.repository }}" \
-            --json title,body,commits > pr.json
-          python3 tools/closing_words.py --pr pr.json

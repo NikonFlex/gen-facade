@@ -8,7 +8,7 @@ on:
   pull_request:
     types: [opened, reopened, ready_for_review, closed]
   workflow_run:
-    workflows: [check]
+    workflows: [post-merge]
     types: [completed]
     branches: [main]
 

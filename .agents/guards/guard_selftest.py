@@ -39,6 +39,16 @@ CASES = [
     (Call(command="cat .env.example"), Verdict.ALLOW, ""),
     (Call(command="git commit -m 'Closes #12'"), Verdict.DENY, "Closes #12"),
     (Call(command="git commit -m 'Implements ab#12'"), Verdict.ALLOW, ""),
+    (Call(command="gh pr create --title t --body 'Fixes #12'"), Verdict.DENY, "Closes #N"),
+    (Call(command="gh pr create --title t --body 'Задача ab#12'"), Verdict.DENY, "Closes #N"),
+    (Call(command="gh pr create --title 'Fix #12 x' --body 'Closes #12'"), Verdict.DENY,
+     "заголовке"),
+    (Call(command="gh pr create --fill"), Verdict.DENY, "--body-file"),
+    (Call(command="git commit --no-verify -m x"), Verdict.DENY, "хуки git"),
+    (Call(command="git -c core.hooksPath=/dev/null commit -m x"), Verdict.DENY, "хуки git"),
+    (Call(command="git log --no-verify-x"), Verdict.ALLOW, ""),
+    (Call(command="git commit -q -F - <<'EOF'\nci: x\n\nСторож отбивает gh pr create\nEOF"),
+     Verdict.ALLOW, ""),
 ]
 
 
@@ -69,7 +79,7 @@ def cases(root: Path) -> list[str]:
 
 def pr_and_push(tmp: Path) -> list[str]:
     bad = []
-    pr = Call(command="gh pr create --title x --body 'Implements ab#12'")
+    pr = Call(command="gh pr create --title x --body 'Closes #12'")
     if decide(pr, project(tmp / "no-repeat", repeat=False, gated=False))[0] != Verdict.DENY:
         bad.append("PR без «Локальный повтор» не остановлен")
     if decide(pr, project(tmp / "repeat", repeat=True, gated=False))[0] != Verdict.ASK:

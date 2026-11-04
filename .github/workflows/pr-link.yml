@@ -1,0 +1,32 @@
+name: pr-link
+
+# Ссылка PR на задачу (tools/pr_link.py, gf#283): в теле строка `Closes #N` или `Part of #N`,
+# других слов закрытия нет ни в теле, ни в заголовке, ни в коммитах. Отдельно от `fast`: правка
+# описания (`edited`) перезапускает только эту проверку.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pr-link-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-link:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Заголовок, тело и коммиты PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr view ${{ github.event.pull_request.number }} --repo "${{ github.repository }}" \
+            --json title,body,commits > pr.json
+          python3 tools/closing_words.py --pr pr.json

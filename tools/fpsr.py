@@ -10,10 +10,11 @@ FPSR — доля задач, закрытых с первого промпта.
 
 PR на задачу — сколько PR понадобилось задаче, включая закрытые без слияния: больше
 одного — работу переделывали или чинили после слияния. PR относится к задаче по строке
-«Implements <префикс>#N» в описании, иначе по ссылке `<префикс>#N` в заголовке или по номеру
-в начале ветки (`12-parser`); прочие ссылки в описании не смотрим — там упоминают и другие
-задачи. PR учёта — только копии задач и журнал (`BOOKKEEPING`) —
-не в счёт: это не переделка. Нет `gh` или сети — строка об этом, FPSR считается.
+`Closes #N` или `Part of #N` в описании (tools/pr_link.py, gf#283), прежде — «Implements
+<префикс>#N», иначе по ссылке `<префикс>#N` в заголовке или по номеру в начале ветки
+(`12-parser`); прочие ссылки в описании не смотрим — там упоминают и другие задачи. PR учёта —
+только копии задач и журнал (`BOOKKEEPING`) — не в счёт: это не переделка. Нет `gh` или сети —
+строка об этом, FPSR считается.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ import tempfile
 from pathlib import Path
 
 from backlog import MARK, load_config, load_tasks, rest
+from pr_link import linked
 from project_config import backlog_config
 from script_common import report, run_script
 
@@ -53,7 +55,10 @@ def summary(rows: list[tuple[str, bool, str]]) -> str:
 
 
 def task_of(pull: dict, prefix: str) -> int | None:
-    """Задача PR — по «Implements» в описании, по ссылке в заголовке или по номеру ветки."""
+    """Задача PR — по `Closes` или `Part of` в описании, по «Implements» там же (PR до gf#283), по
+    ссылке в заголовке или по номеру ветки."""
+    if found := linked(pull.get("body") or ""):
+        return found[0]
     if m := re.search(rf"^Implements {re.escape(prefix)}#(\d+)", pull.get("body") or "", re.M):
         return int(m.group(1))
     if m := re.search(rf"(?<![\w#]){re.escape(prefix)}#(\d+)", pull["title"]):
@@ -110,12 +115,15 @@ def selftest_pulls() -> list[str]:
              {"number": 98, "title": "Схема, вторая часть", "headRefName": "agent/scheme",
               "state": "MERGED", "body": "Implements gf#78\n\nСм. также gf#76."},
              {"number": 96, "title": "ab#5: чужой префикс", "headRefName": "x", "state": "OPEN"},
+             {"number": 99, "title": "Схема, третья часть", "headRefName": "agent/scheme-3",
+              "state": "MERGED", "body": "Текст.\n\nPart of #78"},
              {"number": 97, "title": "gf#78: учёт", "headRefName": "78-sync", "state": "MERGED",
               "files": [{"path": "docs/tasks/gf-0078.md"}, {"path": "docs/journal/JOURNAL.md"}]}]
     text = pulls_summary(pulls_by_task(pulls, "gf"), "gf")
     return [why for ok, why in [
-        ("2.00 (4 PR на 2 задач)" in text, f"неверное среднее: {text!r}"),
-        ("gf#78: 2 — #81 слит, #98 слит" in text, f"«Implements» не учтён: {text!r}"),
+        ("2.50 (5 PR на 2 задач)" in text, f"неверное среднее: {text!r}"),
+        ("gf#78: 3 — #81 слит, #98 слит, #99 слит" in text,
+         f"«Implements» или «Part of» не учтён: {text!r}"),
         ("gf#76: 2 — #77 закрыт без слияния, #80 слит" in text, f"нет разбора gf#76: {text!r}"),
     ] if not ok]
 
