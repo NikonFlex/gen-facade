@@ -171,6 +171,7 @@ class Checks(Section):
     eps_m: float
     align_m: float
     snap_m: float
+    window_jump_m: float
     norms: dict[GuidelineCheck, GuidelineParams] = {}
 
 
