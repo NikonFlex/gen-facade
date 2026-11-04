@@ -28,7 +28,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 
-from closing_words import closing_hits  # noqa: E402 — tools/ добавлен в путь строкой выше
+from closing_words import closing_hits, found  # noqa: E402 — tools/ добавлен в путь выше
+from pr_link import problem as body_problem  # noqa: E402
 from project_config import backlog_config, ticket_number  # noqa: E402
 from task_links import has_local_repeat  # noqa: E402
 
@@ -121,9 +122,75 @@ def secrets(call: Call, root: Path) -> tuple[Verdict, str]:
 
 def closing(call: Call, root: Path) -> tuple[Verdict, str]:
     hits = closing_hits(call.command)
-    return (Verdict.DENY, f"{', '.join(hits)} — GitHub закроет задачу при слиянии; задачу "
-                          "закрывает человек, ссылка — «Implements <префикс>#N»") \
-        if hits else (Verdict.ALLOW, "")
+    return (Verdict.DENY, f"{', '.join(hits)} в коммите — GitHub закроет задачу при попадании в "
+                          "main; в коммите — «Implements <префикс>#N», задачу закрывает строка "
+                          "`Closes #N` в теле PR") if hits else (Verdict.ALLOW, "")
+
+
+def _pr_create_args(command: str) -> list[list[str]] | None:
+    """Аргументы каждого `gh pr create` команды; не разобрать — None. Целиком через shlex, а не
+    по строкам: тело PR в --body бывает многострочным."""
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return None
+    out = []
+    for i in range(len(words) - 2):
+        if words[i:i + 3] == ["gh", "pr", "create"]:
+            args = []
+            for w in words[i + 3:]:
+                if w in ("&&", "||", ";", "|"):
+                    break
+                args.append(w)
+            out.append(args)
+    return out
+
+
+def _flag(args: list[str], names: tuple[str, ...]) -> str | None:
+    for j, w in enumerate(args):
+        if w in names:
+            return args[j + 1] if j + 1 < len(args) else ""
+        for name in names:
+            if name.startswith("--") and w.startswith(name + "="):
+                return w.split("=", 1)[1]
+    return None
+
+
+def pr_link(call: Call, root: Path) -> tuple[Verdict, str]:
+    """Тело `gh pr create` — со строкой `Closes #N` или `Part of #N` и без других слов закрытия,
+    заголовок — без слов закрытия (tools/pr_link.py, gf#283)."""
+    # только сама команда, а не те же слова в тексте коммита или заметки
+    if not any(matches(w, ["gh", "pr", "create"]) for w in commands(call.command)):
+        return Verdict.ALLOW, ""
+    found_args = _pr_create_args(call.command)
+    if found_args is None:
+        return Verdict.DENY, "не разобрал `gh pr create`; тело PR — через --body-file <файл>"
+    for args in found_args:
+        if "--fill" in args:
+            return Verdict.DENY, "тело PR — явно, через --body-file: в нём Closes или Part of"
+        body, file = _flag(args, ("--body", "-b")), _flag(args, ("--body-file", "-F"))
+        if file is not None:
+            path = Path(file) if Path(file).is_absolute() else root / file
+            if not path.is_file():
+                return Verdict.DENY, f"файл тела PR не найден: {file}"
+            body = path.read_text(encoding="utf-8")
+        if body is None:
+            return Verdict.DENY, "тело PR — через --body или --body-file: в нём строка Closes " \
+                                 "или Part of"
+        title_hits = found(_flag(args, ("--title", "-t")) or "")
+        reason = body_problem(body) or (f"«{title_hits[0]}» в заголовке PR — при squash он станет "
+                                        "заголовком коммита в main" if title_hits else None)
+        if reason:
+            return Verdict.DENY, reason
+    return Verdict.ALLOW, ""
+
+
+def no_bypass(call: Call, root: Path) -> tuple[Verdict, str]:
+    """Хуки git не отключаются: коммит и push без них пропускают проверки и ключи."""
+    hit = any(w[:1] == ["git"] and ("--no-verify" in w or any("core.hooksPath" in x for x in w))
+              and any(x in ("commit", "push") for x in w) for w in commands(call.command))
+    return (Verdict.DENY, "хуки git не отключаются: почини то, на что они ругаются") if hit \
+        else (Verdict.ALLOW, "")
 
 
 def ticket_task(root: Path) -> Path | None:
@@ -168,7 +235,7 @@ def receipt(call: Call, root: Path) -> tuple[Verdict, str]:
 
 #: Порядок не важен: итог — самый строгий ответ (отказ > вопрос > разрешение).
 GUARDS: list[Callable[[Call, Path], tuple[Verdict, str]]] = [
-    github_write, prod, secrets, closing, local_repeat, receipt]
+    github_write, prod, secrets, closing, pr_link, no_bypass, local_repeat, receipt]
 RANK = {Verdict.ALLOW: 0, Verdict.ASK: 1, Verdict.DENY: 2}
 
 

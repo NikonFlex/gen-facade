@@ -24,7 +24,7 @@ from project_config import backlog_config
 from script_common import report, run_script
 
 SUMMARY = "## Что установлено"
-CHECK_WORKFLOW = "check"  # имя workflow из .github/workflows/check.yml
+CHECK_WORKFLOW = "post-merge"  # полный набор на main — .github/workflows/post-merge.yml
 
 
 def issue_text(payload: dict, comments: list[dict], prefix: str) -> str:

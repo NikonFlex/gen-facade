@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Слова, по которым GitHub закрывает задачу, — запрещены в коммитах и PR.
+"""Слова, по которым GitHub закрывает задачу, — только строкой `Closes #N` в теле PR (gf#283).
 
     python3 tools/closing_words.py --hook           PreToolUse Bash: JSON вызова на stdin
     python3 tools/closing_words.py --pr PR.json     CI: заголовок, описание и коммиты PR
@@ -7,8 +7,10 @@
     python3 tools/closing_words.py --selftest
 
 GitHub закрывает задачу, когда PR или коммит, попавший в основную ветку, содержит close, fix
-или resolve в любой форме рядом со ссылкой на неё. Задачу закрывает только хозяин своим
-словом (AGENTS.md, «Задачи»), поэтому ссылка пишется «Implements <префикс>#12», а не «Closes #12».
+или resolve в любой форме рядом со ссылкой на неё. Задачу закрывает мерж PR со строкой
+`Closes #N` в теле (tools/pr_link.py — там же отказ другим словам в теле); в коммите и в
+заголовке PR такие слова — отказ: при squash заголовок PR становится заголовком коммита в main,
+а ссылка в коммите — «Implements <префикс>#12».
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ import re
 import sys
 from pathlib import Path
 
+from pr_link import problem as body_problem
 from script_common import print_problems, report, run_script
 
 # Ссылка на задачу: #12, gf#12, owner/repo#12 или адрес задачи на GitHub.
@@ -26,9 +29,10 @@ KEYWORD = re.compile(rf"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:{REF}
 # Команды, текст которых уходит в историю или в PR: коммит, создание, правка и слияние PR —
 # в начале команды или после ; && | и перевода строки, а не упоминание в тексте правки.
 START = r"(?:^|[;&|\n])\s*"
-WATCHED = re.compile(rf"{START}git(?:\s+-\S+(?:\s+[^\s-]\S*)?)*\s+commit\b"
-                     rf"|{START}gh\s+pr\s+(?:create|edit|merge)\b")
-ADVICE = "задачу закрывает только хозяин; ссылка — «Implements <префикс>#12»"
+# Тело и заголовок `gh pr create` смотрит сторож по tools/pr_link.py — здесь только коммит.
+WATCHED = re.compile(rf"{START}git(?:\s+-\S+(?:\s+[^\s-]\S*)?)*\s+commit\b")
+ADVICE = "в коммите и заголовке PR — «Implements <префикс>#12»; задачу закрывает строка " \
+         "`Closes #N` в теле PR"
 
 
 def found(text: str) -> list[str]:
@@ -36,9 +40,9 @@ def found(text: str) -> list[str]:
 
 
 def closing_hits(command: str) -> list[str]:
-    """Закрывающие слова в коммите или PR, который делает команда (сторож .agents/guards/)."""
-    # Смотрим с первого коммита или PR до конца: сообщение и описание идут после команды, а
-    # текст до неё (правка файла, заметки) в историю не попадает.
+    """Закрывающие слова в коммите, который делает команда (сторож .agents/guards/)."""
+    # Смотрим с первого коммита до конца: сообщение идёт после команды, а текст до неё (правка
+    # файла, заметки) в историю не попадает.
     start = WATCHED.search(command)
     return found(command[start.start():]) if start else []
 
@@ -53,11 +57,14 @@ def hook(call: dict) -> int:
 
 
 def pr_problems(pr: dict) -> list[str]:
-    texts = {"заголовок": pr.get("title") or "", "описание": pr.get("body") or ""}
+    """Заголовок и коммиты — без слов закрытия; тело — по tools/pr_link.py."""
+    texts = {"заголовок": pr.get("title") or ""}
     for c in pr.get("commits") or []:
         texts[f"коммит {c.get('oid', '')[:7]}"] = f"{c.get('messageHeadline', '')}\n" \
                                                   f"{c.get('messageBody', '')}"
-    return [f"{where}: {hit} — {ADVICE}" for where, text in texts.items() for hit in found(text)]
+    out = [f"{where}: {hit} — {ADVICE}" for where, text in texts.items() for hit in found(text)]
+    body = body_problem(pr.get("body") or "")
+    return out + ([f"описание: {body}"] if body else [])
 
 
 CAUGHT = ["Closes #12", "fixes gf#7", "Resolved: owner/repo#3", "FIX #1",
@@ -73,17 +80,20 @@ def selftest() -> int:
     bad += [f"ложное срабатывание: {t!r}" for t in SPARED if found(t)]
     bad += [f"хук: {cmd!r} → {code}, ждали {want}" for cmd, want in [
         ('git commit -m "gf#96: итог\n\nCloses #96"', 2),
-        ("gh pr create --title t --body 'Fixes #96'", 2),
+        ("gh pr create --title t --body 'Closes #96'", 0),
         ('git commit -m "gf#96: итог\n\nЗадача gf#96"', 0),
         ("echo 'Closes #96'", 0),
         ("python3 - <<'EOF'\nтекст: хук перед `git commit`; было `Closes #12`\nEOF", 0),
         ("cd repo && git -C x commit -m 'Fixes #3'", 2),
         ("python3 - <<'EOF'\nзаметка: было «Closes #12»\nEOF\ngit commit -q -m 'Задача gf#96'", 0),
     ] if (code := hook({"tool_input": {"command": cmd}})) != want]
-    pr = {"title": "gf#96: порядок", "body": "Задача gf#96",
+    pr = {"title": "gf#96: порядок", "body": "Closes #96",
           "commits": [{"oid": "abc1234def", "messageHeadline": "x", "messageBody": "closes #96"}]}
     if [p[:15] for p in pr_problems(pr)] != ["коммит abc1234:"]:
         bad.append(f"PR: {pr_problems(pr)}")
+    if [p[:9] for p in pr_problems({"title": "Fix #3 x", "body": "Fixes #3"})] != \
+            ["заголовок", "описание:"]:
+        bad.append("PR: слово закрытия в заголовке и тело без строки Closes")
     return report(bad, f"поймано {len(CAUGHT)}, ложных нет из {len(SPARED)}, хук и PR — верно")
 
 
