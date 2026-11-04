@@ -20,8 +20,9 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+from genfacade.schema import Split
+
 URL = "https://drive.usercontent.google.com/download?id={}&export=download&confirm=t"
-SPLITS = ("train", "val", "test")
 CHUNK = 1 << 20
 
 
@@ -76,10 +77,10 @@ def main() -> None:
     a = p.parse_args()
     ids = json.loads(os.environ["BUILDINGNET_DRIVE"])
     probe = a.root / "probe" / "v1"
-    for split in SPLITS:
+    for split in Split:
         _whole(ids[split], probe / f"{split}_split.txt")
     _whole(ids["labels"], probe / "component_labels.zip")
-    models = [m for split in SPLITS for m in (probe / f"{split}_split.txt").read_text().split()
+    models = [m for split in Split for m in (probe / f"{split}_split.txt").read_text().split()
               if m.startswith(tuple(a.categories))]
     out = a.root / "v1" / "OBJ_MODELS"
     out.mkdir(parents=True, exist_ok=True)
