@@ -5,10 +5,10 @@
 Общие правила — `AGENTS.md` выше (импорт), одинаковые для Claude Code, Codex и Cursor. Здесь —
 то, что есть только у Claude Code. Рабочий язык — русский, терминология английская.
 
-- **Навыки**: в новом чате — `/catchup`; путаница в контексте — `/contradictions`; задачи —
-  `/task`; приёмка сделанного — `/accept`; журнал — `/journal`; доля задач с первого промпта —
-  `/fpsr`; переписка из Telegram — `/inbox`; сообщение научрукам — `/to-supervisors`, только
-  когда хозяин попросил.
+- **Навыки**: новый чат — `/catchup`; путаница — `/contradictions`; задачи — `/task`; приёмка —
+  `/accept`; журнал — `/journal`; FPSR — `/fpsr`; Telegram — `/inbox`; проверка кода —
+  `clean-contour-check` (`docs/agents/code.md`); научрукам — `/to-supervisors`, только когда
+  хозяин попросил.
 - **Правила по темам** подгружаются из `.claude/rules/` по путям файлов — это копии
   `docs/agents/` (`tools/agent_rules.py`). Писать код или спеку, не открыв файл через
   Read/Edit/Write, — значит работать без этих правил.

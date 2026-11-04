@@ -120,9 +120,9 @@
 
 ## Код, спеки, задачи
 
-Перед правкой кода — [docs/agents/code.md](docs/agents/code.md) и [scheme.md](docs/agents/scheme.md),
-спеки или входящего — [docs/agents/specs.md](docs/agents/specs.md), файла задачи —
-[docs/agents/tasks.md](docs/agents/tasks.md). Claude Code и Cursor подгружают их сами; в Codex — прочитать.
+Перед правкой кода — [code.md](docs/agents/code.md), [scheme.md](docs/agents/scheme.md), [чистый
+контур](docs/clean-contour.md) (проверка — `clean-contour-check`); спеки — [specs.md](docs/agents/specs.md),
+задачи — [tasks.md](docs/agents/tasks.md). Claude Code и Cursor подгружают их сами; Codex — прочитать.
 
 ## Журнал
 
