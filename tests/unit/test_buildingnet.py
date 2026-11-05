@@ -4,6 +4,8 @@ BuildingNet`): дом из компонентов-коробок в единиц
 import json
 import math
 import zipfile
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
 
 import numpy
 import pytest
@@ -176,3 +178,15 @@ def test_read_obj(tmp_path):
     parts = mesh.read(obj, mesh.labels(archive, "m"))
     assert [(p.label, len(p.faces), len(p.vertices)) for p in parts] == [
         (Label.WALL, 2, 4), (Label.WINDOW, 1, 3)]
+
+
+def test_fetch_script_takes_splits_from_schema():
+    """Скрипт выгрузки не держит свой список разбиений: он берёт `Split`, как весь код."""
+    path = Path(__file__).resolve().parents[2] / "tools" / "fetch_buildingnet.py"
+    spec = spec_from_file_location("fetch_buildingnet", path)
+    script = module_from_spec(spec)
+    spec.loader.exec_module(script)
+    values = {s.value for s in Split}
+    copies = [k for k, v in vars(script).items()
+              if isinstance(v, (tuple, list, set, frozenset)) and set(v) == values]
+    assert script.Split is Split and not copies

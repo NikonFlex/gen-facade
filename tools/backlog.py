@@ -212,6 +212,23 @@ def has_ours(path: Path) -> bool:
     return path.exists() and squash(split_ours(path)) != squash(TEMPLATE)
 
 
+#: Имя файла черновика задачи (ещё не заведённой в трекере).
+DRAFT_PREFIX = "draft-"
+
+
+def is_draft(name: str) -> bool:
+    """Единственное место, где имя файла решает, что это черновик."""
+    return name.startswith(DRAFT_PREFIX)
+
+
+def is_open_state(state: str) -> bool:
+    """Открыта ли задача по значению состояния: «OPEN» из GitHub или «OPEN…» в копии на диске.
+
+    Закрытая в копии пишется «CLOSED (completed)», поэтому сравнивается начало, без учёта регистра.
+    """
+    return state.upper().startswith("OPEN")
+
+
 def dropped(issue: dict) -> bool:
     """Закрыта как «не будем делать»: её текст на диске читался бы как действующий."""
     return (issue.get("stateReason") or "").upper() == "NOT_PLANNED"
@@ -292,9 +309,9 @@ class Task:
         self.title = next((line[2:].strip() for line in self.top.splitlines()
                            if line.startswith("# ")), self.name)
 
-    is_draft = property(lambda self: self.name.startswith("draft-"))
+    is_draft = property(lambda self: is_draft(self.name))
     state = property(lambda self: self.fields.get("Состояние", ""))
-    is_open = property(lambda self: self.state.upper().startswith("OPEN"))
+    is_open = property(lambda self: is_open_state(self.state))
     link = property(lambda self: self.fields.get("Ссылка", ""))
     updated = property(lambda self: self.fields.get("Обновлена", ""))
     has_ours = property(lambda self: has_ours(self.path))
@@ -362,7 +379,7 @@ def fetch_board(cfg: dict) -> dict[int, dict]:
 
 
 def index_page(issues: list[dict], board: dict, cfg: dict, stamp: str) -> str:
-    open_n = sum(1 for i in issues if i.get("state") == "OPEN")
+    open_n = sum(1 for i in issues if is_open_state(i.get("state") or ""))
     lines = [
         "# Задачи", "",
         f"Снято {stamp} · задач {len(issues)}: открытых {open_n}, закрытых {len(issues) - open_n}.",
@@ -373,7 +390,7 @@ def index_page(issues: list[dict], board: dict, cfg: dict, stamp: str) -> str:
     for i in sorted(issues, key=lambda x: x.get("updatedAt") or "", reverse=True):
         fname = f"{cfg['prefix']}-{i['number']:04d}.md"
         target = fname if (cfg["tasks"] / fname).exists() else i.get("url")
-        state = "открыта" if i.get("state") == "OPEN" else "закрыта"
+        state = "открыта" if is_open_state(i.get("state") or "") else "закрыта"
         ours = "есть" if has_ours(cfg["tasks"] / fname) else "—"
         title = i["title"].replace("|", "\\|")
         status = board.get(i["number"], {}).get("status") or "—"

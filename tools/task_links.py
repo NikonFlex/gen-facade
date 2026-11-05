@@ -19,7 +19,7 @@ import re
 import tempfile
 from pathlib import Path
 
-from backlog import MARK
+from backlog import MARK, Task, index_page, is_draft, is_open_state, upper_half
 from project_config import backlog_config
 from script_common import check_root, replace_once, run_script, selftest_project, write_files
 from spec_check import addresses, spec_files
@@ -27,7 +27,7 @@ from spec_check import addresses, spec_files
 LINK = re.compile(r"`openspec/specs/([\w-]+)/spec\.md` — ((?:«[^»]+»(?:, )?)+)")
 TITLE = re.compile(r"«([^»]+)»")
 NO_SCENARIO = re.compile(r"без сценария — \S", re.I)
-OPEN = re.compile(r"^\|\s*\*\*Состояние\*\*\s*\|\s*OPEN", re.M)
+STATE = re.compile(r"^\|\s*\*\*Состояние\*\*\s*\|\s*([^|\n]*)", re.M)
 #: Классификация до PR: как воспроизвели или почему повтор не нужен.
 LOCAL_REPEAT = re.compile(r"^Локальный повтор: (воспроизведён — (тест|контур|экран): \S"
                           r"|(невозможен локально|не требуется|не бага) — \S)", re.M)
@@ -54,7 +54,8 @@ def links(text: str) -> set[str]:
 
 
 def is_open(name: str, text: str) -> bool:
-    return name.startswith("draft-") or bool(OPEN.search(text))
+    state = STATE.search(text)
+    return is_draft(name) or bool(state and is_open_state(state[1]))
 
 
 def collect(root: Path) -> tuple[list[str], list[str]]:
@@ -72,7 +73,7 @@ def collect(root: Path) -> tuple[list[str], list[str]]:
     folder = backlog_config(root)["tasks"]
     no_repeat = [f"сведения: открытая задача {name} без «Локальный повтор»"
                  for name, text in task_texts(root).items()
-                 if is_open(name, text) and not name.startswith("draft-")
+                 if is_open(name, text) and not is_draft(name)
                  and not has_local_repeat(folder / f"{name}.md")]
     return problems, unlinked + orphans + no_repeat
 
@@ -136,8 +137,37 @@ def selftest_notes() -> list[str]:
     return [f"не поймано в сведениях: {w}" for w in wanted if not any(w in n for n in notes)]
 
 
+def selftest_agreement() -> list[str]:
+    """«Открыта» и «черновик» backlog.py и этот скрипт читают одинаково, на одних файлах."""
+    bad = []
+    cases = [({"state": "OPEN"}, True), ({"state": "CLOSED"}, False),
+             ({"state": "CLOSED", "stateReason": "COMPLETED"}, False),
+             ({"state": "CLOSED", "stateReason": "NOT_PLANNED"}, False)]
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        for n, (extra, want) in enumerate(cases, 1):
+            issue = {"number": n, "title": "т", "body": "", **extra}
+            path = d / f"g-{n:04d}.md"
+            path.write_text(upper_half("g", issue, {}, "т") + MARK + "\n", encoding="utf-8")
+            top = path.read_text(encoding="utf-8").split(MARK, 1)[0]
+            page = index_page([issue], {}, {"prefix": "g", "tasks": d}, "т")
+            got = {"Task": Task(path).is_open, "task_links": is_open(path.stem, top),
+                   "index_page": "| открыта |" in page}
+            bad += [f"{who} решил про {extra}: открыта={v}, а должно быть {want}"
+                    for who, v in got.items() if v != want]
+        text = "# Черновик\n\nтекст\n"
+        (d / "draft-x.md").write_text(text, encoding="utf-8")
+        (d / "g-0009.md").write_text(text, encoding="utf-8")
+        for name, want in (("draft-x", True), ("g-0009", False)):
+            got = {"Task.is_draft": Task(d / f"{name}.md").is_draft,
+                   "task_links.is_open": is_open(name, text)}
+            bad += [f"{who} про {name}: {v}, а должно быть {want}"
+                    for who, v in got.items() if v != want]
+    return bad
+
+
 def selftest() -> int:
-    missed = selftest_notes()
+    missed = selftest_notes() + selftest_agreement()
     for line in missed:
         print("✗ " + line)
     return selftest_project(make_project, lambda r: collect(r)[0], DEFECTS, replace_once) or (
