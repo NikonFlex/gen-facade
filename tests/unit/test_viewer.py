@@ -9,7 +9,7 @@ from simple_house import SIMPLE
 from genfacade import config, derive
 from genfacade.datasets import store
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import ElementClass, Mode, VariantKind, ZoneRole
+from genfacade.schema import REFUSAL_TEXT, ElementClass, Mode, Refusal, VariantKind, ZoneRole
 from genfacade.train import tokens
 from genfacade.viewer.app import STATIC, create_app
 
@@ -91,7 +91,7 @@ def test_defective_plan_explained(client):
     """Отказ — 400 с причиной, а прогон с ней и с шагом 1 — в списке смотрелки."""
     bad = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>'
     res = client.post("/api/runs", json={"plan_run": PLAN_RUN, "svg": bad})
-    assert res.status_code == 400 and "план отклонён" in res.json()["detail"]
+    assert res.status_code == 400 and res.json()["detail"]["code"] == Refusal.PLAN_REJECTED
     [run] = client.get("/api/runs").json()
     meta = client.get(f"/api/runs/{run['id']}").json()
     assert meta["refusal"] == res.json()["detail"]
@@ -179,3 +179,38 @@ def test_run_house_in_3d(client):
     assert len(house["walls"]) == 4 and all("data-cls" in w["svg"] for w in house["walls"])
     assert client.get("/api/options").json()["house3d"]["three_url"].startswith("https://")
     assert client.get("/api/runs/nope/house3d").status_code == 404
+
+
+def test_every_refusal_has_its_text():
+    """Код без текста — ошибка сборки (docs/clean-contour.md, п. 17): текст у каждого кода свой."""
+    assert set(REFUSAL_TEXT) == set(Refusal)
+    assert len(set(REFUSAL_TEXT.values())) == len(Refusal)
+
+
+@pytest.mark.parametrize(("method", "path", "code"), [
+    ("post", "/api/samples/synthetic/nope", Refusal.NO_SAMPLE),
+    ("post", "/api/samples/nope/simple_house", Refusal.INVALID_REQUEST),
+    ("get", "/api/runs/nope", Refusal.NO_RUN),
+    ("get", "/api/runs/nope/house3d", Refusal.NO_RUN),
+    ("get", "/api/plans/nope", Refusal.NO_PLAN),
+    ("get", f"/api/review/{Mode.BLIND}/x/0/sheet.svg", Refusal.NO_REVIEW),
+])
+def test_refusal_reaches_page_with_code_and_text(client, method, path, code):
+    """Страница рисует отказ из ответа: код из списка и текст к нему, своих текстов не держит."""
+    detail = getattr(client, method)(path).json()["detail"]
+    assert (detail["code"], detail["text"]) == (code, REFUSAL_TEXT[code])
+
+
+def test_invalid_request_lines_name_the_field(client):
+    got = client.post("/api/runs", json={"plan_run": {**PLAN_RUN, "mode": "nope"}}).json()
+    assert got["detail"]["code"] == Refusal.INVALID_REQUEST
+    assert any(line.startswith("plan_run.mode: ") for line in got["detail"]["detail"])
+
+
+def test_page_keeps_no_refusal_codes_or_texts():
+    """Отказ — только из ответа: кодов и текстов отказов в JS нет, `detail` не подменяется."""
+    words = [*Refusal, *REFUSAL_TEXT.values()]
+    for name in ("app.js", "review.js", "house3d.js", "refusal.js"):
+        text = STATIC.joinpath(name).read_text()
+        assert not [w for w in words if w in text], name
+        assert ".detail ??" not in text and "err.detail" not in text, name

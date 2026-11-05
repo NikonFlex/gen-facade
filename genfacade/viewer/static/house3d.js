@@ -3,6 +3,8 @@
 // ось y — вверх, поэтому точка плана (x, y) стоит в (x, высота, −y).
 // three.js грузится по адресу из config/viewer.toml только при открытии вкладки.
 
+import { refusedFrom } from "/static/refusal.js";
+
 const ROOF_M = 0.15;  // толщина плиты крыши — только чтобы край был виден
 
 let threeModule = null;
@@ -17,8 +19,8 @@ export class HouseStage {
 
   async load(url) {
     const res = await fetch(url);
+    if (!res.ok) throw await refusedFrom(res);
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail ?? "дом не собран");
     threeModule ??= await import(this.look.three_url);
     this._scene(threeModule, data);
     await Promise.all(data.walls.map((w) => this._wall(threeModule, w)));

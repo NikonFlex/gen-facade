@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from xml.etree import ElementTree
 
-from genfacade.schema import Point
+from genfacade.schema import Point, Refusal, Refused
 
 SVG_NS = "{http://www.w3.org/2000/svg}"
 WALL_FILL = "#000000"
@@ -37,9 +37,12 @@ _IGNORED_TAGS = {"svg", "defs"}  # drawsvg в GenPlan пишет только и
 SAFE_EXPAT = (2, 6, 0)
 
 
-class PlanError(ValueError):
+class PlanError(Refused):
     """План не читается или дефектен; текст — причина отказа
     (`plan-input: Отказ на дефектном плане`)."""
+
+    def __init__(self, detail: str):
+        super().__init__(Refusal.PLAN_REJECTED, detail)
 
 
 @dataclass(frozen=True)

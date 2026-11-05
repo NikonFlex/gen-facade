@@ -22,6 +22,8 @@ from genfacade.schema import (
     HouseSpec,
     MaterialZone,
     Mode,
+    Refusal,
+    Refused,
     Side,
     SideFacade,
 )
@@ -29,12 +31,13 @@ from genfacade.schema import (
 DATA = files(__package__).joinpath("stub_data")
 
 
-class ModelError(ValueError):
-    """Модель (стаб) не может ответить на этот вход; текст — причина. attempts — попытки
-    обученной модели из трассы (`pipeline.layout`), когда годного ответа за них нет."""
+class ModelError(Refused):
+    """Модель (стаб) не может ответить на этот вход; code — почему, текст — подробность.
+    attempts — попытки обученной модели из трассы (`pipeline.layout`), когда годного ответа
+    за них нет (Refusal.MODEL_NO_ANSWER)."""
 
-    def __init__(self, message: str, attempts: list[dict] | None = None):
-        super().__init__(message)
+    def __init__(self, code: Refusal, detail: str, attempts: list[dict] | None = None):
+        super().__init__(code, detail)
         self.attempts = attempts or []
 
 
@@ -72,7 +75,8 @@ def layout_model(wall: SideFacade, ctx: LayoutContext) -> SideFacade:
     side = wall.side
     ready = _facades().get(side.index)
     if ready is None or abs(ready["length_m"] - side.length_m) > EPS:
-        raise ModelError(f"стаб знает только простой дом 10 × 5 м (simple_house.svg): сторона "
+        raise ModelError(Refusal.HOUSE_OUT_OF_MODEL,
+                         f"стаб знает только простой дом 10 × 5 м (simple_house.svg): сторона "
                          f"{side.index} длиной {side.length_m:.2f} м ему не знакома")
     elements = [_planned(Element.model_validate(e), side) for e in ready["elements"]]
     return wall.model_copy(update={
@@ -92,7 +96,8 @@ def _planned(e: Element, side: Side) -> Element:
 def layout_all(sheet: FacadeSheet, ctx: LayoutContext) -> FacadeSheet:
     """Все стены дома при одном контексте (`facade: Общие параметры дома`)."""
     if len(sheet.facades) != len(_facades()):
-        raise ModelError(f"стаб знает только простой дом из {len(_facades())} стен, "
+        raise ModelError(Refusal.HOUSE_OUT_OF_MODEL,
+                         f"стаб знает только простой дом из {len(_facades())} стен, "
                          f"а у плана их {len(sheet.facades)}")
     return sheet.model_copy(update={"facades": [layout_model(f, ctx) for f in sheet.facades]})
 

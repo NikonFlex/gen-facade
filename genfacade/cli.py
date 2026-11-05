@@ -8,8 +8,7 @@ from pathlib import Path
 from genfacade import config, pipeline
 from genfacade.baselines import Baseline
 from genfacade.datasets.synthetic import batch
-from genfacade.models.stub import ModelError
-from genfacade.schema import Mode, Source, Split
+from genfacade.schema import REFUSAL_TEXT, Mode, Refused, Source, Split
 from genfacade.train import corpus
 
 
@@ -222,23 +221,22 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-# Команда → что делает и какие отказы печатаются строкой с причиной, а не трассой.
+# Команда → что делает и какие отказы, кроме Refused, печатаются строкой с причиной, а не
+# трассой. Refused (план, модель) печатается своим кодом — тем же текстом, что в смотрелке.
 COMMANDS = {
     "synth": (synth, {batch.BuildError: "сборка остановлена"}),
     "buildingnet": (buildingnet, {}),
     "manual": (markup, {}),
     "tokens": (tokens, {corpus.CorpusError: "корпус не собран"}),
     "train": (train, {corpus.CorpusError: "обучение не начато"}),
-    "eval": (eval_model, {corpus.CorpusError: "оценка не начата",
-                          ModelError: "модель не загружена"}),
+    "eval": (eval_model, {corpus.CorpusError: "оценка не начата"}),
     "metrics": (metrics_table, {}),
     "baseline": (baseline, {}),
     "calibrate": (metrics_calibrate, {}),
     "guidelines": (guidelines_table, {}),
     "stability": (stability, {FileNotFoundError: "сводка не начата"}),
-    "realtest": (realtest, {ModelError: "таблица не начата",
-                            FileNotFoundError: "таблица не начата"}),
-    "run": (run, pipeline.REFUSALS),
+    "realtest": (realtest, {FileNotFoundError: "таблица не начата"}),
+    "run": (run, {}),
     "review": (review_summary, {}),
 }
 
@@ -251,5 +249,7 @@ def main(argv: list[str] | None = None) -> None:
     command, refusals = COMMANDS[args.command]
     try:
         print(command(args))
+    except Refused as e:
+        sys.exit(f"{REFUSAL_TEXT[e.code]}: {e}")
     except tuple(refusals) as e:
         sys.exit(f"{refusals[type(e)]}: {e}")

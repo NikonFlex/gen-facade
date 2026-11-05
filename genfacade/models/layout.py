@@ -12,7 +12,7 @@ import torch
 
 from genfacade.config import Config, GPTSize, LayoutModel
 from genfacade.models.stub import ModelError
-from genfacade.schema import FacadeSheet, Mode
+from genfacade.schema import FacadeSheet, Mode, Refusal
 from genfacade.train import constraints, sampling, tokens
 from genfacade.train.tokens import Answer, Mark, TokenError
 
@@ -46,15 +46,18 @@ class Layout:
         """Условие номерами токенов. Дом, который модель не может прочесть, — ModelError: это
         не брак ответа, повтор не поможет."""
         if self.words != tokens.vocabulary(cfg):
-            raise ModelError(f"словарь модели {self.path} не совпадает с нынешней записью "
+            raise ModelError(Refusal.MODEL_MISMATCH,
+                             f"словарь модели {self.path} не совпадает с нынешней записью "
                              "токенов: модель учили на другой версии — переобучить")
         try:  # `<answer>` в корпусе — первый токен ответа: с него модель начинает отвечать
             words = [*tokens.condition(bare, mode, cfg), Mark.ANSWER]
         except TokenError as e:
-            raise ModelError(f"дом не записывается условием модели: {e}") from e
+            raise ModelError(Refusal.HOUSE_OUT_OF_MODEL,
+                             f"дом не записывается условием модели: {e}") from e
         block = self.sampler.model.config.block_size
         if len(words) >= block:  # на ответ не осталось ни токена: повтор не поможет
-            raise ModelError(f"условие дома — {len(words)} токенов, окно модели — {block}")
+            raise ModelError(Refusal.HOUSE_OUT_OF_MODEL,
+                             f"условие дома — {len(words)} токенов, окно модели — {block}")
         return Condition([self.number[t] for t in words], mode)
 
     def answer(self, prompt: Condition, bare: FacadeSheet, seed: int, cfg: Config) -> Answer:

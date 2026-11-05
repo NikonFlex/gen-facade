@@ -28,12 +28,12 @@ from genfacade.baselines import Baseline
 from genfacade.config import Config
 from genfacade.metrics import calibrate, table
 from genfacade.models.stub import ModelError
-from genfacade.schema import FacadeSheet, Mode, Source, Split
+from genfacade.schema import FacadeSheet, Mode, Refusal, Source, Split
 from genfacade.train import tokens
 from genfacade.train.tokens import bare, given_sides
 
 HALVES = ("half-a", "half-b")
-REFUSED = "error"  # ключ ответа-отказа модели в <дом>.json строки модели
+REFUSED = "refusal"  # ключ ответа-отказа модели в <дом>.json строки модели: Refused.record()
 SUBSTITUTES = ("random", "foreign", "empty")
 MODEL = "model"
 SUMMARY = "summary.md"
@@ -79,9 +79,10 @@ def _layouts(cfg: Config, models: dict[str, Path]) -> dict[str, Config]:
         settings = cfg.models.layout.model_copy(update={"checkpoint": path})
         model = pipeline.trained_model(settings)
         if model is None:
-            raise ModelError(f"нет чекпойнта {path}")
+            raise ModelError(Refusal.MODEL_MISSING, f"нет чекпойнта {path}")
         if model.words != tokens.vocabulary(cfg):
-            raise ModelError(f"словарь {path} не совпадает с нынешней записью токенов: листы "
+            raise ModelError(Refusal.MODEL_MISMATCH,
+                             f"словарь {path} не совпадает с нынешней записью токенов: листы "
                              "этой модели — её кодом, сюда — папкой прошлого прогона")
         models_cfg = cfg.models.model_copy(update={"layout": settings})
         out[f"{MODEL}-{name}"] = cfg.model_copy(update={"models": models_cfg})
@@ -160,7 +161,7 @@ def good(row: dict) -> str:
 
 
 def _answers(given: dict[str, FacadeSheet], mode: Mode, cfg: Config, out: Path) -> Path:
-    """Ответ модели на каждый дом: лист после шагов 4–5 или {"error": …, "attempts": …} — брак
+    """Ответ модели на каждый дом: лист после шагов 4–5 или {"refusal": …, "attempts": …} — брак
     после попыток; у неразобранной попытки — её слова (датчик обрыва gf#257)."""
     out.mkdir(parents=True, exist_ok=True)
     for name, sheet in given.items():
@@ -168,6 +169,6 @@ def _answers(given: dict[str, FacadeSheet], mode: Mode, cfg: Config, out: Path) 
             got = pipeline.layout(bare(sheet), pipeline.PlanRun(plan=name, text="", mode=mode), cfg)
             text = got.sheet.model_dump_json()
         except ModelError as e:
-            text = json.dumps({REFUSED: str(e), "attempts": e.attempts}, ensure_ascii=False)
+            text = json.dumps({REFUSED: e.record(), "attempts": e.attempts}, ensure_ascii=False)
         (out / f"{name}.json").write_text(text)
     return out

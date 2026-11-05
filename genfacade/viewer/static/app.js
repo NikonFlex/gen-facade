@@ -3,6 +3,7 @@
 // перезагрузка и ссылка его сохраняют, «назад» в браузере возвращает на главную.
 
 import { HouseStage } from "/static/house3d.js";
+import { refusalText, refusedFrom } from "/static/refusal.js";
 import { SvgStage, metres } from "/static/stage.js";
 
 const ROOF = { flat: "плоская" };  // пока только плоская (хозяин 01.10)
@@ -63,15 +64,8 @@ function toast(text, kind = "") {
 async function api(path, body) {
   const init = body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {};
   const res = await fetch(path, init);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(errorText(data.detail)), { detail: data.detail });
-  return data;
-}
-
-function errorText(detail) {
-  if (!Array.isArray(detail)) return detail ?? "ошибка сервера";
-  // «Value error, …» — служебная приставка pydantic, человеку она ничего не говорит.
-  return detail.map((d) => `${d.loc.filter((p) => p !== "body" && p !== "sheet").join(".")}: ${d.msg.replace(/^Value error, /, "")}`).join("\n");
+  if (!res.ok) throw await refusedFrom(res);
+  return res.json();
 }
 
 const runName = (id) => id.replace(/^\d{8}-\d{6}-/, "").replace(/-\d+$/, "");
@@ -268,8 +262,8 @@ async function route() {
   const hash = new URLSearchParams(location.hash.slice(1));
   const tab = Object.keys(TABS).find((name) => hash.has(name)) ?? "home";
   if (!hash.get("run")) return showTab(tab);
-  return openRun(hash.get("run"), hash.get("step")).catch(() => {
-    toast("Прогон из ссылки не найден", "error");
+  return openRun(hash.get("run"), hash.get("step")).catch((err) => {
+    toast(`Прогон из ссылки не открыт — ${err.message}`, "error");
     return showTab("home");
   });
 }
@@ -305,7 +299,10 @@ function renderHead() {
       : `<span class="chip" title="${m.source}">${m.source.split("/").at(-1)}</span>`,
   ].join("");
   // Причина отказа — текстом, не разметкой: в ней бывают имена тегов SVG.
-  if (m.refusal) $("run-chips").append(el("span", { className: "chip refusal", title: m.refusal, textContent: m.refusal }));
+  if (m.refusal) {
+    const text = refusalText(m.refusal);
+    $("run-chips").append(el("span", { className: "chip refusal", title: text, textContent: text }));
+  }
   const sheet = m.steps.find((s) => s.n === 6)?.file;
   const links = [[sheet, "SVG"], [m.sheet_json, "JSON"], [m.preview, "PNG"]].filter(([f]) => f)
     .map(([f, label]) => `<a class="btn" href="${file(f)}" target="_blank" rel="noopener" title="Открыть ${label}">${ICON.file}<span>${label}</span></a>`);
@@ -333,7 +330,7 @@ function renderStepper() {
   const nodes = steps.flatMap((s, i) => {
     const btn = el("button", {
       className: `step${s.key === state.step ? " active" : ""}`, disabled: !s.file,
-      title: s.file ? "" : state.meta.refusal ? `Прогон остановлен раньше — ${state.meta.refusal}`
+      title: s.file ? "" : state.meta.refusal ? `Прогон остановлен раньше — ${refusalText(state.meta.refusal)}`
         : "Шаг ещё не написан — появится на следующих этапах",
     }, `<span class="step-n">${s.n || "⌂"}</span>${s.title}`);
     btn.dataset.key = s.key;
@@ -512,11 +509,17 @@ function renderPlanSummary() {
 async function runEdited(text) {
   let input;
   try { input = JSON.parse(text); } catch (err) { return showErrors([`JSON: ${err.message}`]); }
+  // Пока прогон считается, редактор только для чтения: после ответа он перерисуется из
+  // request.json нового прогона, и набранное за это время пропало бы (C13, gf#293).
+  const editor = $("editor"), reset = $("reset");
+  editor.readOnly = reset.disabled = true;
   try {
     // Ошибки показываем под редактором, рядом с тем, что их вызвало, — без всплывашки.
     await startRun(await runBody(input), $("go"), { quiet: true });
   } catch (err) {
     showErrors(err.message.split("\n"));
+  } finally {
+    editor.readOnly = reset.disabled = false;
   }
 }
 

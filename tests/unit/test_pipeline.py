@@ -8,7 +8,16 @@ from simple_house import L_SHAPE, SIMPLE, WALL_INTO_WINDOW, before_leaf, top_rig
 from genfacade import cli, pipeline
 from genfacade.models import stub
 from genfacade.render.parse import parse_sheet_svg
-from genfacade.schema import FacadeSheet, HouseSpec, Mode, Plan, Rule
+from genfacade.schema import (
+    REFUSAL_TEXT,
+    FacadeSheet,
+    HouseSpec,
+    Mode,
+    Plan,
+    Refusal,
+    Rule,
+    refusal_record,
+)
 
 TEXT = "A simple one-storey house with a flat roof."
 
@@ -109,7 +118,8 @@ def test_cli_explains_plan_stub_does_not_know(tmp_path, simple_svg):
         ('<rect x="1085" y="100"', '<rect x="985" y="100"'),
         ('<rect x="1085" y="400"', '<rect x="985" y="400"'),
         ('<rect x="1085" y="250"', '<rect x="985" y="250"')))
-    with pytest.raises(SystemExit, match="модель не ответила: стаб знает только простой дом"):
+    stub_said = f"{REFUSAL_TEXT[Refusal.HOUSE_OUT_OF_MODEL]}: стаб знает только простой дом"
+    with pytest.raises(SystemExit, match=stub_said):
         cli.main(["run", str(shorter), "-t", "house", "-o", str(tmp_path / "run")])
 
 
@@ -148,12 +158,12 @@ def test_spec_step_svg_has_palette_and_levels(cfg, tmp_path):
 
 
 REFUSED = {
-    "shifted": ((top_right_shifted(6),), "план отклонён: разрыв 200 px"),
+    "shifted": ((top_right_shifted(6),), Refusal.PLAN_REJECTED, "разрыв 200 px"),
     # непрямоугольный контур развёртка принимает (gf#199), отказывает стаб шага 4
-    "shifted-8-sides": ((top_right_shifted(9),), "модель не ответила: стаб знает только простой "
-                                                "дом из 4 стен, а у плана их 8"),
-    "l-shape": (L_SHAPE, "модель не ответила: стаб знает только простой дом из 4 стен, а у плана "
-                         "их 6"),
+    "shifted-8-sides": ((top_right_shifted(9),), Refusal.HOUSE_OUT_OF_MODEL,
+                        "стаб знает только простой дом из 4 стен, а у плана их 8"),
+    "l-shape": (L_SHAPE, Refusal.HOUSE_OUT_OF_MODEL,
+                "стаб знает только простой дом из 4 стен, а у плана их 6"),
 }
 
 
@@ -161,14 +171,14 @@ REFUSED = {
 def test_refused_run_explained_and_traced(cfg, tmp_path, simple_svg, name):
     """Сдвинутая стена и L-контур — отказ с причиной; трасса до отказа и meta.json с ней
     остаются, смотрелка такой прогон показывает (`plan-input: Отказ на дефектном плане`)."""
-    edits, reason = REFUSED[name]
+    edits, code, reason = REFUSED[name]
     plan = tmp_path / "plan.svg"
     plan.write_text(simple_svg(*edits))
     out = tmp_path / "run"
-    with pytest.raises(SystemExit, match=reason):
+    with pytest.raises(SystemExit, match=f"{REFUSAL_TEXT[code]}: {reason}"):
         cli.main(["run", str(plan), "-t", TEXT, "-o", str(out)])
     meta = _meta(out)
-    assert meta["refusal"].startswith(reason)
+    assert meta["refusal"]["code"] == code and meta["refusal"]["detail"].startswith(reason)
     assert (meta["sheet_json"], meta["preview"]) == (None, None)
     done = [s["n"] for s in meta["steps"] if s["file"]]
     assert done == ([1] if name == "shifted" else [1, 2, 3])
@@ -180,13 +190,13 @@ def test_refused_run_explained_and_traced(cfg, tmp_path, simple_svg, name):
 def test_model_refusal_written_to_meta(cfg, tmp_path, monkeypatch):
     """Модель не ответила — в meta.json причина, шаги 1–3 есть, 4–6 нет."""
     def refuse(sheet, ctx):
-        raise stub.ModelError("нет ответа")
+        raise stub.ModelError(Refusal.MODEL_NO_ANSWER, "нет ответа")
 
     monkeypatch.setattr(stub, "layout_all", refuse)
     with pytest.raises(stub.ModelError):
         _generate(cfg, tmp_path / "run")
     meta = _meta(tmp_path / "run")
-    assert meta["refusal"] == "модель не ответила: нет ответа"
+    assert meta["refusal"] == refusal_record(Refusal.MODEL_NO_ANSWER, "нет ответа")
     assert [s["n"] for s in meta["steps"] if s["file"]] == [1, 2, 3]
 
 
