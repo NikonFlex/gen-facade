@@ -25,7 +25,7 @@ def models(cfg: Config, splits: tuple[Split, ...] = (Split.TEST,)) -> list[tuple
 def run(cfg: Config, count: int = 0, splits: tuple[Split, ...] = (Split.TEST,)) -> Path:
     """Первые count коттеджей частей splits (0 — все) → примеры и опись с отказами."""
     rules, root = cfg.data.buildingnet, cfg.data.paths.samples_dir
-    rejected, invalid = {}, Counter()
+    rejected, reasons, invalid = {}, Counter(), Counter()
     # Источник целиком — производное этой сборки: дом, отброшенный новой версией извлечения,
     # не должен остаться от прошлой.
     for old in store.ids(root, Source.BUILDINGNET):
@@ -36,11 +36,11 @@ def run(cfg: Config, count: int = 0, splits: tuple[Split, ...] = (Split.TEST,)) 
         try:
             sample = extract.house(name, parts, rules, split)
         except extract.Rejected as e:
-            rejected[name] = str(e)
+            rejected[name], reasons[e.reason] = str(e), reasons[e.reason] + 1
             continue
         invalid.update(v.rule for v in errors(validate(sample.sheet, cfg.checks)))
         store.write(sample, root)
     return store.write_manifest(root, Source.BUILDINGNET, {
         "rejected": rejected,
-        "reasons": dict(Counter(r.split(":")[0] for r in rejected.values())),
+        "reasons": dict(reasons),  # причина — полем отказа, а не началом его текста (C6)
         "invalid": dict(invalid)})

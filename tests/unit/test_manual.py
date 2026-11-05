@@ -171,6 +171,7 @@ def test_run_writes_samples_and_manifest(tmp_path):
     (ffh / "ffh-test.toml").write_text(_toml(markup()))
     three = markup().model_dump()["sides"][:3]
     (ffh / "ffh-crooked.toml").write_text(_toml(markup(id="ffh-crooked", sides=three)))
+    (ffh / "ffh-broken.toml").write_text('id = "ffh-broken"\n')  # не разметка: нет сторон
     data = CFG.data.model_copy(update={
         "paths": CFG.data.paths.model_copy(update={"samples_dir": tmp_path / "samples"}),
         "manual": CFG.data.manual.model_copy(update={
@@ -178,7 +179,9 @@ def test_run_writes_samples_and_manifest(tmp_path):
     saved = json.loads(manual.run(CFG.model_copy(update={"data": data})).read_text())
     assert store.ids(tmp_path / "samples", Source.MANUAL) == ["ffh-test"]
     assert saved["cut"] == {"ffh-test": 2}  # фронтон из описи разметчика и навес за карнизом
-    assert list(saved["rejected"]) == ["ffh-crooked"]
+    # битая разметка — отказ своего дома, остальные собраны (C10, gf#293)
+    assert sorted(saved["rejected"]) == ["ffh-broken", "ffh-crooked"]
+    assert saved["rejected"]["ffh-broken"].startswith("разметка не читается")
     assert saved["invalid"] == {}
 
 

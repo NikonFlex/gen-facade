@@ -79,7 +79,6 @@ class Run:
     """Состояние одного прогона сценария."""
 
     stand: dict
-    mode: Mode
     vars: dict[str, str] = field(default_factory=dict)
     responses: dict[str, object] = field(default_factory=dict)
 
@@ -277,9 +276,10 @@ def check_expect(run: Run, e: dict) -> None:
         raise Failed(f"«{e.get('name', e['kind'])}»: {actual!r}, ждали {wanted!r}")
 
 
-def run_scenario(scenario: dict, stand: dict, mode: Mode) -> str:
-    """Пусто — прошёл; иначе — первое несбывшееся ожидание или упавший шаг."""
-    run = Run(stand, mode, vars=dict(os.environ))
+def run_scenario(scenario: dict, stand: dict) -> str:
+    """Пусто — прошёл; иначе — первое несбывшееся ожидание или упавший шаг. Режим провайдера
+    стенд читает из SCENARIO_MODE (cmd_run), сюда он не передаётся."""
+    run = Run(stand, vars=dict(os.environ))
     try:
         for step in scenario["steps"]:
             STEPS[step["kind"]][2](run, fill(step, run))
@@ -378,7 +378,7 @@ def cmd_run(root: Path, names: list[str], mode: Mode, contour: str, record: bool
     os.environ["SCENARIO_MODE"] = mode.value
     results = []
     for name, scenario in scenarios.items():
-        failure = run_scenario(scenario, stand, mode)
+        failure = run_scenario(scenario, stand)
         print(f"{'ok  ' if not failure else 'FAIL'}  {name}" + (f" — {failure}" if failure else ""))
         results.append({"name": name, "требования": scenario.get("требования", []),
                         "итог": RunResult.FAILED if failure else RunResult.PASSED,
@@ -393,7 +393,7 @@ def cmd_run(root: Path, names: list[str], mode: Mode, contour: str, record: bool
 def cmd_control(root: Path) -> int:
     """Контрольный сценарий с невыполнимым ожиданием: раннер обязан на нём покраснеть."""
     scenario = load(root, CONTROL)
-    failure = run_scenario(scenario, {}, Mode.REPLAY)
+    failure = run_scenario(scenario, {})
     if validate(scenario, {}) or not failure:
         print("раннер не покраснел на контрольном сценарии — ему нельзя верить")
         return 1

@@ -25,7 +25,7 @@ from collections import Counter
 from pathlib import Path
 
 import numpy
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 from genfacade import derive
 from genfacade.config import Config, Manual
@@ -268,7 +268,11 @@ def run(cfg: Config) -> Path:
         store.path(root, Source.MANUAL, old).unlink()
     rejected, cut, roofs, absent, invalid = {}, {}, {}, {}, Counter()
     for path in sorted(rules.paths.markup_dir.glob("*/*.toml")):
-        m = read(path)
+        try:  # разметка, которая не читается, — отказ этого дома, а не всей сборки (C10)
+            m = read(path)
+        except (tomllib.TOMLDecodeError, ValidationError) as e:
+            rejected[path.stem] = f"разметка не читается: {e}"
+            continue
         try:
             sample, dropped = house(m, rules)
         except BadMarkup as e:

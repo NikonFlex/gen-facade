@@ -67,11 +67,16 @@ def cmd_ticket(root: Path, number: str | None) -> int:
     return 0
 
 
+def names_task(root: Path, message: str) -> bool:
+    """Ссылка не нужна (коммит git, учёт) или уже есть — одно правило для хука и CI."""
+    return message.startswith((*GIT_MADE, *WITHOUT_TASK)) or bool(ref_pattern(root).search(message))
+
+
 def fix_message(root: Path, message: str) -> tuple[str, str]:
     """Сообщение коммита → (сообщение, отказ). Ссылки нет — дописать из ticket или отказать."""
     if problem := header_problem(message):
         return message, problem
-    if message.startswith((*GIT_MADE, *WITHOUT_TASK)) or ref_pattern(root).search(message):
+    if names_task(root, message):
         return message, ""
     path = ticket_file(root)
     if not path.exists():
@@ -92,8 +97,7 @@ def cmd_msg(root: Path, file: str) -> int:
 def message_problems(root: Path, message: str) -> list[str]:
     """Что не так с сообщением уже сделанного коммита: формат и ссылка на задачу."""
     problems = [p for p in [header_problem(message)] if p]
-    exempt = message.startswith((*GIT_MADE, *WITHOUT_TASK))
-    return problems + ([] if exempt or ref_pattern(root).search(message) else [ADVICE])
+    return problems + ([] if names_task(root, message) else [ADVICE])
 
 
 def range_problems(root: Path, span: str) -> list[str]:
