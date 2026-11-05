@@ -30,7 +30,9 @@ const ICON = {
 };
 
 const $ = (id) => document.getElementById(id);
-const state = { runs: [], meta: null, runId: null, step: null, stage: null, nav: 0, options: null };
+const state = { runs: [], meta: null, runId: null, step: null, stage: null, nav: 0, shown: 0, planPick: 0, options: null };
+// Ответ шага, с которого уже ушли, экран не трогает: показан последний выбранный шаг (C13, gf#293).
+const stale = (shown) => shown !== state.shown;
 
 // ——— мелочи ———
 
@@ -106,14 +108,18 @@ function bindPlanForm() {
   const saved = store.get("plan.mode", fallback);
   const mode = modes.some((m) => m.value === saved) ? saved : fallback;
   form.querySelector(`input[name=mode][value=${mode}]`).checked = true;
+  // Выбор плана — по последнему действию: файл, который ещё читается, не перебьёт выбор из списка.
   $("plan-select").addEventListener("change", () => {
+    state.planPick += 1;
     Object.assign(planState, { svg: null, name: null });
     showPlanThumb(`/api/plans/${encodeURIComponent($("plan-select").value)}`);
   });
   $("plan-file").addEventListener("change", async () => {
-    const file = $("plan-file").files[0];
+    const file = $("plan-file").files[0], pick = ++state.planPick;
     if (!file) return;
-    Object.assign(planState, { svg: await file.text(), name: file.name.replace(/\.svg$/i, "") });
+    const svg = await file.text();
+    if (pick !== state.planPick) return;
+    Object.assign(planState, { svg, name: file.name.replace(/\.svg$/i, "") });
     showPlanThumb(URL.createObjectURL(file));
     $("plan-select").replaceChildren(el("option", { textContent: `свой: ${file.name}` }), ...$("plan-select").children);
     $("plan-select").selectedIndex = 0;
@@ -193,7 +199,9 @@ async function openSample(url, busyEl) {
 }
 
 async function startRun(body, busyEl, { quiet = false } = {}) {
+  // Кнопка выключена до ответа: второй щелчок запустил бы второй прогон.
   busyEl?.classList.add("busy");
+  if (busyEl) busyEl.disabled = true;
   const t0 = performance.now(), nav = state.nav;
   try {
     const { id } = await api("/api/runs", body);
@@ -210,6 +218,7 @@ async function startRun(body, busyEl, { quiet = false } = {}) {
     throw err;
   } finally {
     busyEl?.classList.remove("busy");
+    if (busyEl) busyEl.disabled = false;
   }
 }
 
@@ -341,6 +350,7 @@ function renderStepper() {
 }
 
 function showStep(wanted) {
+  state.shown += 1;
   if (wanted === HOUSE_STEP.key && state.meta.sheet_json) return showHouse();
   const done = state.meta.steps.filter((s) => s.file);
   // Нет такого шага — «Вход»; у примера датасета входа нет — его последний шаг.
@@ -350,8 +360,8 @@ function showStep(wanted) {
   history.replaceState(history.state, "", `#run=${encodeURIComponent(state.runId)}&step=${key}`);
   renderStepper();
   if (!step) return renderInput();
-  if (step.file === state.meta.tokens) return renderTokensStep(step);
-  return step.file.endsWith(".json") ? renderJsonStep(step) : renderSvgStep(step);
+  if (step.file === state.meta.tokens) return withData(step, renderTokensStep);
+  return step.file.endsWith(".json") ? withData(step, renderJsonStep) : renderSvgStep(step);
 }
 
 function showHouse() {
@@ -380,15 +390,16 @@ async function renderHouse() {
 }
 
 // JSON шага без чертежа: холста у такого шага нет.
-async function stepData(step) {
+// Данные шага — в отрисовку; пока грузили, ушли на другой шаг — не рисуем.
+async function withData(step, render) {
   state.stage = null;
-  return (await fetch(`/files/${state.runId}/${step.file}`)).json();
+  const shown = state.shown, data = await (await fetch(`/files/${state.runId}/${step.file}`)).json();
+  if (!stale(shown)) render(step, data);
 }
 
 // ——— шаг-JSON: параметры дома ———
 
-async function renderJsonStep(step) {
-  const data = await stepData(step);
+function renderJsonStep(step, data) {
   const view = el("div", { className: "input-view" }, `
     <div class="editor-pane">
       <div class="pane-head"><h2>${step.file}</h2><span class="pane-note">шаг ${step.n}: ${step.title}</span></div>
@@ -402,8 +413,7 @@ async function renderJsonStep(step) {
 
 // ——— шаг «Токены»: что модель шага 4 получает и что пишет, по режимам ———
 
-async function renderTokensStep(step) {
-  const data = await stepData(step);
+function renderTokensStep(step, data) {
   const view = el("div", { className: "tokens-view" });
   for (const mode of state.options.modes.filter((m) => data[m.value])) {
     const column = el("div", { className: "editor-pane" });
@@ -423,8 +433,10 @@ async function renderSvgStep(step) {
   const zoomVal = el("span", { className: "zoom-val" });
   const wrap = el("div", { className: "canvas-wrap" });
   $("stage").replaceChildren(toolbar(step.n, zoomVal), wrap);
+  const shown = state.shown;
   state.stage = new SvgStage(wrap, { tooltip: $("tooltip"), labels: state.options, onZoom: (p) => { zoomVal.textContent = `${p}%`; } });
   await state.stage.load(`/files/${state.runId}/${step.file}`);
+  if (stale(shown)) return;
   applyLayers(step.n);
   if (step.n === 5 && state.meta.violations) await violationsChip($("stage").querySelector(".toolbar"));
 }
@@ -473,7 +485,9 @@ function applyLayers(n) {
 
 async function renderInput() {
   state.stage = null;
+  const shown = state.shown;
   const text = await (await fetch(`/files/${state.runId}/${state.meta.input}`)).text();
+  if (stale(shown)) return;
   const view = el("div", { className: "input-view" }, `
     <div class="editor-pane">
       <div class="pane-head">
@@ -569,6 +583,9 @@ async function init() {
   state.options = await api("/api/options");
   bindPlanForm();
   await loadPlans();
+  // Форма неактивна (inert в index.html), пока её не заполнили ответы: иначе набранное до ответа
+  // перезаписали бы список планов и сохранённый текст (C13, gf#293).
+  $("plan-form").inert = false;
   await route();
 }
 
