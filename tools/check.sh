@@ -29,10 +29,11 @@ run() {
 # Код 5 у pytest — «тестов не найдено»: пока их нет (или testmon не нашёл затронутых), это
 # не ошибка. `python3 -m pytest`, а не `pytest`: в worktree команда `pytest` берёт
 # editable-пакет из другой папки. testmon следит за кодом на Python, а не за конфигами и
-# данными, — их ловит полный прогон в CI.
+# данными, — их ловит полный прогон в CI. `--testmon-forceselect`: с `-m` testmon сам отключает
+# отбор и гоняет все быстрые тесты — 7 минут на коммит вместо 16 с (замер 05.11, gf#293).
 pytest_or_none() {
     if [ -n "$quick" ]; then
-        python3 -m pytest -q --testmon -m "not slow"
+        python3 -m pytest -q --testmon --testmon-forceselect -m "not slow"
     elif [ -n "$fast" ]; then
         python3 -m pytest -q -m "not slow"
     else

@@ -13,7 +13,9 @@ MARK = "pytestmark = pytest.mark.slow"
 
 
 def test_quick_check_skips_slow_tests():
-    assert '--testmon -m "not slow"' in (ROOT / "tools" / "check.sh").read_text()
+    """Без --testmon-forceselect testmon при `-m` гоняет все быстрые тесты (gf#293)."""
+    quick = '--testmon --testmon-forceselect -m "not slow"'
+    assert quick in (ROOT / "tools" / "check.sh").read_text()
 
 
 @pytest.mark.parametrize("path", sorted((ROOT / "tests").rglob("test_*.py")), ids=lambda p: p.name)
