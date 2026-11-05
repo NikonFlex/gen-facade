@@ -28,7 +28,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 
-from closing_words import closing_hits, found  # noqa: E402 — tools/ добавлен в путь выше
+from backlog import task_path  # noqa: E402 — tools/ добавлен в путь выше
+from closing_words import closing_hits, found  # noqa: E402
 from pr_link import problem as body_problem  # noqa: E402
 from project_config import backlog_config, ticket_number  # noqa: E402
 from task_links import has_local_repeat  # noqa: E402
@@ -209,8 +210,7 @@ def ticket_task(root: Path) -> Path | None:
     number = ticket_number(root)
     if number is None:
         return None
-    found = sorted(backlog_config(root)["tasks"].glob(f"*-{number:04d}.md"))
-    return found[0] if found else None
+    return task_path(backlog_config(root)["tasks"], number)
 
 
 def local_repeat(call: Call, root: Path) -> tuple[Verdict, str]:
@@ -233,13 +233,11 @@ def receipt(call: Call, root: Path) -> tuple[Verdict, str]:
     gate = json.loads((root / "tools/receipt.json").read_text(encoding="utf-8"))
     if not gate.get("gated"):
         return Verdict.ALLOW, ""
-    from scenario import PUSH_MODES, Outcome, state_dir, tree_hash
+    from scenario import passing_receipt, state_dir, tree_hash
     tree = tree_hash(root)
     log = state_dir() / "receipts.jsonl"
     lines = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
-    ok = any(r["tree"] == tree and r["outcome"] == Outcome.PASSED and r["mode"] in PUSH_MODES
-             for r in map(json.loads, lines))
-    return (Verdict.ALLOW, "") if ok else (
+    return (Verdict.ALLOW, "") if passing_receipt(lines, tree) else (
         Verdict.DENY, f"нет квитанции live/record «прошло» на дереве {tree}: "
                       "python3 tools/scenario.py run --mode live")
 

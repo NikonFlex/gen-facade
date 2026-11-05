@@ -24,7 +24,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from project_config import backlog_config, git_dir, ticket_number
+from backlog import INDEX, task_path
+from project_config import backlog_config, branch_number, git_dir, ticket_number
 from script_common import report, run_script
 
 SECTIONS = ("Чем возобновлять", "Что осталось")
@@ -48,16 +49,19 @@ def section(text: str, name: str) -> str:
 
 
 def reminder(root: Path, current: str) -> str:
-    number = re.search(r"^#(\d+)$|(?:^|/)(\d+)-", current)
-    if not number:
+    ticket = re.fullmatch(r"#(\d+)", current)  # из `git ticket`; иначе — имя ветки
+    number = int(ticket[1]) if ticket else branch_number(current)
+    folder = backlog_config(root)["tasks"]
+    if number is None:
         return (f"Контекст сжат. Ветка «{current or '—'}» без номера задачи: спросить хозяина, "
-                "над чем работаем, или открыть docs/tasks/INDEX.md. Правила CLAUDE.md в силе.")
-    found = sorted(backlog_config(root)["tasks"].glob(f"*-{int(number[1] or number[2]):04d}.md"))
-    if not found:
+                f"над чем работаем, или открыть {folder.relative_to(root)}/{INDEX}. "
+                "Правила CLAUDE.md в силе.")
+    found = task_path(folder, number)
+    if found is None:
         return f"Контекст сжат. Ветка {current}: файла задачи нет — `backlog.py sync`."
-    text = found[0].read_text(encoding="utf-8")
+    text = found.read_text(encoding="utf-8")
     title = text.splitlines()[0].lstrip("# ").strip()
-    lines = [f"Контекст сжат. Работаем над {title} ({current}, файл {found[0].name})."]
+    lines = [f"Контекст сжат. Работаем над {title} ({current}, файл {found.name})."]
     for name in SECTIONS:
         if body := section(text, name):
             lines += ["", f"{name}:", body]
@@ -117,6 +121,8 @@ def selftest() -> int:
         (root / "docs/tasks/ab-0012.md").write_text(
             "# ab#12 — Парсер\n\n## Чем возобновлять\n\nЗапустить тесты.\n\n"
             "## Ход работы\n\nвсякое\n\n## Что осталось\n\n- хвост\n", encoding="utf-8")
+        # по glob `*-0012.md` этот файл встал бы первым; задача 12 — только `<буквы>-0012.md`
+        (root / "docs/tasks/aa-x-0012.md").write_text("# чужой\n", encoding="utf-8")
         text = reminder(root, "12-parser")
         bad = [why for ok, why in [
             ("ab#12 — Парсер" in text, "нет названия задачи"),

@@ -19,8 +19,13 @@ import sys
 LINK_WORDS = ("Closes", "Part of")
 _REF = r"(?P<repo>[\w.-]+/[\w.-]+)?#(?P<num>\d+)"
 RE_LINK = re.compile(rf"^(?P<word>{'|'.join(LINK_WORDS)}) {_REF}[ \t]*$", re.M)
+# Ссылка на задачу в любой форме, по которой GitHub её закроет: #12, gf#12, owner/repo#12 или
+# адрес задачи. Слово закрытия и такая ссылка — единственное объявление: tools/closing_words.py
+# и сторож берут его отсюда, чтобы тело PR и заголовок с коммитами не расходились в формах.
+ISSUE_REF = r"(?:[\w.-]+/[\w.-]+)?[\w-]*#\d+|https?://github\.com/[^\s/]+/[^\s/]+/issues/\d+"
 # Слова, по которым GitHub закрывает задачу сам.
-RE_GITHUB_CLOSE = re.compile(rf"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+{_REF}", re.I)
+RE_GITHUB_CLOSE = re.compile(rf"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:{ISSUE_REF})",
+                             re.I)
 
 
 def problem(body: str) -> str | None:
@@ -53,6 +58,9 @@ CASES = [  # тело, годится ли, задачи из Closes
     ("Closes #1\nfixes #2", False, ["acme/app#1"]),
     ("closes #5", False, []),
     ("Closes: #5", False, []),
+    ("Closes #3\nfixes https://github.com/a/b/issues/5", False, ["acme/app#3"]),
+    ("Closes #3\nResolves gf#7", False, ["acme/app#3"]),
+    ("Closes #3\nСм. https://github.com/a/b/issues/5", True, ["acme/app#3"]),
     ("ссылки нет", False, []),
     ("", False, []),
 ]

@@ -221,6 +221,17 @@ def is_draft(name: str) -> bool:
     return name.startswith(DRAFT_PREFIX)
 
 
+#: Служебные страницы папки задач: их пишет сам скрипт, это не задачи.
+INDEX = "INDEX.md"
+REVIEW = "REVIEW.md"
+SERVICE = frozenset({INDEX, REVIEW})
+
+
+def is_service(name: str) -> bool:
+    """Единственное место, где имя файла решает, что это служебная страница, а не задача."""
+    return name in SERVICE
+
+
 def is_open_state(state: str) -> bool:
     """Открыта ли задача по значению состояния: «OPEN» из GitHub или «OPEN…» в копии на диске.
 
@@ -229,9 +240,15 @@ def is_open_state(state: str) -> bool:
     return state.upper().startswith("OPEN")
 
 
+def not_planned(reason: str | None) -> bool:
+    """Причина закрытия — «не будем делать». GitHub отдаёт её как `not_planned` (REST) и как
+    `NOT_PLANNED` (копия на диске): единственное место, где это решается."""
+    return (reason or "").upper() == "NOT_PLANNED"
+
+
 def dropped(issue: dict) -> bool:
     """Закрыта как «не будем делать»: её текст на диске читался бы как действующий."""
-    return (issue.get("stateReason") or "").upper() == "NOT_PLANNED"
+    return not_planned(issue.get("stateReason"))
 
 
 def who(user) -> str:
@@ -336,21 +353,24 @@ class Task:
 
 
 def load_tasks(folder: Path) -> list[Task]:
-    return [Task(p) for p in sorted(folder.glob("*.md"))
-            if p.name not in {"INDEX.md", "REVIEW.md"}]
+    return [Task(p) for p in sorted(folder.glob("*.md")) if not is_service(p.name)]
+
+
+def task_path(folder: Path, number: int) -> Path | None:
+    """Файл задачи по номеру: единственное место, где имя файла `<префикс>-0012.md` читается
+    как номер. Черновики и служебные страницы под имя не подходят."""
+    for path in sorted(folder.glob("*.md")):
+        m = re.fullmatch(r"[a-z]+-(\d+)", path.stem)
+        if m and int(m.group(1)) == number:
+            return path
+    return None
 
 
 def find_task(folder: Path, key: str) -> Task | None:
     """По «g-0012», «g-12», «g12» или «12»."""
     m = re.fullmatch(r"(?:[a-z]+[-_]?)?0*(\d+)", key.strip().lower().removesuffix(".md"))
-    if not m:
-        return None
-    number = int(m.group(1))
-    for t in load_tasks(folder):
-        mm = re.fullmatch(r"[a-z]+-(\d+)", t.name)
-        if mm and int(mm.group(1)) == number:
-            return t
-    return None
+    path = task_path(folder, int(m.group(1))) if m else None
+    return Task(path) if path else None
 
 
 # ---------------------------------------------------------------------------
@@ -444,7 +464,7 @@ def cmd_sync(cfg: dict, check: bool) -> int:
             path.write_text(new, encoding="utf-8")
     if not check:
         page = index_page(issues, board, cfg, stamp)
-        (cfg["tasks"] / "INDEX.md").write_text(page, encoding="utf-8")
+        (cfg["tasks"] / INDEX).write_text(page, encoding="utf-8")
 
     print(f"без изменений: {kept}, {'разошлось' if check else 'обновлено'}: {len(changed)}, "
           f"новых: {len(created)}")
@@ -520,7 +540,7 @@ def cmd_review(cfg: dict) -> int:
         *table(b["drafts"],
                "Черновик — ещё не задача. Заводится `new … --confirm` после «да» владельца."),
     ]
-    out = cfg["tasks"] / "REVIEW.md"
+    out = cfg["tasks"] / REVIEW
     out.write_text("\n".join(page) + "\n", encoding="utf-8")
     labels = {"open_ends": f"с разделом «{OPEN_ENDS}»", "no_analysis": "открыта, разбора нет",
               "closed_alive": "закрыта, разбор живой", "stale": f"стоит {STALE_DAYS}+ дней",
@@ -732,6 +752,13 @@ def selftest_review(d: Path) -> list[str]:
     for key in ("g-0007", "g-7", "g7", "7"):
         if (f := find_task(d, key)) is None or f.name != "g-0007":
             bad.append(f"resume не нашёл задачу по {key!r}")
+    if task_path(d, 7) != d / "g-0007.md" or task_path(d, 99) is not None:
+        bad.append("task_path: номер → файл задачи")
+    if not (is_service(INDEX) and is_service(REVIEW)) or is_service("g-0007.md"):
+        bad.append("is_service: служебные страницы и задача")
+    if not (not_planned("not_planned") and not_planned("NOT_PLANNED")) \
+            or not_planned("completed") or not_planned(None):
+        bad.append("not_planned: REST и копия на диске")
     title, body, ours = split_draft(d / "draft-x.md")
     if (title, body) != ("Черновик", "текст") or MARK not in ours:
         bad.append("черновик без метки разобран неверно")

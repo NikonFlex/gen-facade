@@ -22,7 +22,8 @@ import tempfile
 from enum import StrEnum
 from pathlib import Path
 
-from script_common import replace_once, report, run_script, write_files
+from scenario import RunResult
+from script_common import ROOT, replace_once, report, run_script, write_files
 from spec_check import addresses, section, spec_files, tables
 
 TABLE = Path("docs/shared/product/Таблица требований.md")
@@ -99,7 +100,7 @@ def latest_verdicts(root: Path) -> dict[str, tuple[bool, str]]:
             for address in result.get("требования", []):
                 mine.setdefault(address, []).append(result)
         for address, results in mine.items():
-            failed = [r for r in results if r["итог"] != "прошёл"]
+            failed = [r for r in results if r["итог"] != RunResult.PASSED]
             names = ", ".join(r["name"] for r in results)
             verdicts[address] = (not failed, f"прогон {record['time'][:10]} {record['contour']}, "
                                  f"{names}" if not failed else
@@ -178,10 +179,11 @@ TABLE_TEXT = """# Таблица требований
 """
 
 
-def record(contour: str, results: list[tuple[str, str, str]],
+def record(contour: str, results: list[tuple[str, str, RunResult]],
            time: str = "2026-10-11T00:00") -> str:
     return json.dumps({"contour": contour, "time": time, "commits": {}, "scenarios": [
-        {"name": n, "требования": [a], "итог": v, "не сбылось": "" if v == "прошёл" else "x≠y"}
+        {"name": n, "требования": [a], "итог": v,
+         "не сбылось": "" if v is RunResult.PASSED else "x≠y"}
         for n, a, v in results]}, ensure_ascii=False)
 
 
@@ -201,16 +203,27 @@ def quiet(_: str) -> None:
     """Самопроверка печатает только итог."""
 
 
+def stored_results() -> list[str]:
+    """«итог» в записях прогона, что уже лежат в репозитории, — значение RunResult: переименуешь
+    значение — старые записи перестанут читаться."""
+    known = {r.value for r in RunResult}
+    folders = [ROOT / RUNS, ROOT / "docs/examples/project" / RUNS]
+    return [f"{path.name}: итог «{s['итог']}» не из RunResult"
+            for folder in folders for path in sorted(folder.glob("*.json"))
+            for s in json.loads(path.read_text(encoding="utf-8"))["scenarios"]
+            if s["итог"] not in known]
+
+
 def selftest() -> int:
-    green = record("dev", [("s1", "auth: Вход", "прошёл")])
-    red = record("dev", [("s2", "auth: Выход", "не прошёл")], "2026-10-11T01:00")
-    local = record(LOCAL, [("s1", "auth: Вход", "не прошёл")], "2026-10-11T02:00")
+    green = record("dev", [("s1", "auth: Вход", RunResult.PASSED)])
+    red = record("dev", [("s2", "auth: Выход", RunResult.FAILED)], "2026-10-11T01:00")
+    local = record(LOCAL, [("s1", "auth: Вход", RunResult.FAILED)], "2026-10-11T02:00")
     cases = {
         "зелёная запись → ✅": ({"1": green}, ["✅", "✅"]),
         "красная запись → 🟡": ({"1": red}, ["🚚", "🟡"]),
         "локальная запись не меняет": ({"1": local}, ["🚚", "✅"]),
-        "последняя запись важнее": ({"1": red, "2": record("dev", [("s2", "auth: Выход", "прошёл")],
-                                                            "2026-10-11T03:00")}, ["🚚", "✅"]),
+        "последняя запись важнее": ({"1": red, "2": record(
+            "dev", [("s2", "auth: Выход", RunResult.PASSED)], "2026-10-11T03:00")}, ["🚚", "✅"]),
     }
     bad = []
     with tempfile.TemporaryDirectory() as tmp:
@@ -232,8 +245,8 @@ def selftest() -> int:
             found = run(root, say=quiet)
             if not any(expected in p for p in found):
                 bad.append(f"не поймано: {name} — {found}")
-    return report(bad, "перенос: зелёная, красная, локальная, последняя запись; "
-                       "таблица: пропуск, статус, сводка")
+    return report(bad + stored_results(), "перенос: зелёная, красная, локальная, последняя "
+                  "запись; таблица: пропуск, статус, сводка; «итог» в записях — из RunResult")
 
 
 def check(root: Path) -> int:

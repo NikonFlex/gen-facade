@@ -11,10 +11,10 @@ FPSR — доля задач, закрытых с первого промпта.
 PR на задачу — сколько PR понадобилось задаче, включая закрытые без слияния: больше
 одного — работу переделывали или чинили после слияния. PR относится к задаче по строке
 `Closes #N` или `Part of #N` в описании (tools/pr_link.py, gf#283), прежде — «Implements
-<префикс>#N», иначе по ссылке `<префикс>#N` в заголовке или по номеру в начале ветки
-(`12-parser`); прочие ссылки в описании не смотрим — там упоминают и другие задачи. PR учёта —
-только копии задач и журнал (`BOOKKEEPING`) — не в счёт: это не переделка. Нет `gh` или сети —
-строка об этом, FPSR считается.
+<префикс>#N», иначе по ссылке `<префикс>#N` в заголовке или по номеру в имени ветки
+(`12-parser`, `agent/12-parser` — project_config.branch_number); прочие ссылки в описании не
+смотрим — там упоминают и другие задачи. PR учёта — только копии задач и журнал
+(`BOOKKEEPING`) — не в счёт: это не переделка. Нет `gh` или сети — строка об этом, FPSR считается.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from pathlib import Path
 
 from backlog import MARK, load_config, load_tasks, rest
 from pr_link import linked
-from project_config import backlog_config
+from project_config import backlog_config, branch_number
 from script_common import report, run_script
 
 SECTION = "Первый промпт"
@@ -63,9 +63,7 @@ def task_of(pull: dict, prefix: str) -> int | None:
         return int(m.group(1))
     if m := re.search(rf"(?<![\w#]){re.escape(prefix)}#(\d+)", pull["title"]):
         return int(m.group(1))
-    if m := re.match(r"(\d+)-", pull["headRefName"]):
-        return int(m.group(1))
-    return None
+    return branch_number(pull["headRefName"])
 
 
 def pulls_by_task(pulls: list[dict], prefix: str) -> dict[int, list[dict]]:
@@ -125,6 +123,8 @@ def selftest_pulls() -> list[str]:
         ("gf#78: 3 — #81 слит, #98 слит, #99 слит" in text,
          f"«Implements» или «Part of» не учтён: {text!r}"),
         ("gf#76: 2 — #77 закрыт без слияния, #80 слит" in text, f"нет разбора gf#76: {text!r}"),
+        (task_of({"title": "т", "headRefName": "agent/78-x"}, "gf") == 78,
+         "ветка agent/78-… не названа задачей 78"),
     ] if not ok]
 
 

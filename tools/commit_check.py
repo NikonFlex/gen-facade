@@ -22,7 +22,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from project_config import backlog_config
+from project_config import backlog_config, ticket_file
 from script_common import ROOT, output, report
 
 #: Типы заголовка — Conventional Commits и соглашение Angular. Объявлены один раз: хук, CI и
@@ -54,10 +54,6 @@ def git(root: Path, *args: str) -> str:
 def ref_pattern(root: Path) -> re.Pattern:
     prefix = backlog_config(root)["prefix"] or ""
     return re.compile(rf"(?<![\w#]){re.escape(prefix)}#\d+")
-
-
-def ticket_file(root: Path) -> Path:
-    return Path(git(root, "rev-parse", "--absolute-git-dir")) / "ticket"
 
 
 def cmd_ticket(root: Path, number: str | None) -> int:
@@ -169,6 +165,17 @@ def range_cases(root: Path, base: str) -> list[str]:
     return bad
 
 
+def worktree_case() -> list[str]:
+    """В worktree `.git` — файл со ссылкой: задача клона лежит в настоящем git-каталоге."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, real = Path(tmp) / "wt", Path(tmp) / "main/.git/worktrees/wt"
+        real.mkdir(parents=True)
+        root.mkdir()
+        (root / ".git").write_text(f"gitdir: {real}\n", encoding="utf-8")
+        return [] if ticket_file(root) == real / "ticket" \
+            else [f"worktree: ticket в {ticket_file(root)}, а не в {real}"]
+
+
 def selftest() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -176,7 +183,7 @@ def selftest() -> int:
         (root / ".backlog.json").write_text('{"prefix": "ab"}')
         commit(root, "chore: начало")
         base = git(root, "rev-parse", "HEAD")
-        bad = hook_cases(root) + range_cases(root, base)
+        bad = hook_cases(root) + range_cases(root, base) + worktree_case()
     return report(bad, f"формат заголовка ({len(HEADERS)} случаев), ticket дописывается, без "
                        "него — отказ; CI ловит коммит без номера и без типа")
 
