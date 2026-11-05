@@ -12,7 +12,7 @@ import pytest
 
 from genfacade.cli import main
 from genfacade.metrics import calibrate, measures, table, visual
-from genfacade.schema import ElementClass, ForbiddenZone, Mode, Source
+from genfacade.schema import ElementClass, ForbiddenZone, Mode, PaletteRole, Source, ZoneRole
 from genfacade.unfold import unfold
 
 HOUSES = 12
@@ -145,6 +145,22 @@ def test_one_command_prints_every_column(house, tmp_path, capsys):
     header = capsys.readouterr().out.splitlines()[0]
     assert all(c in header for c in table.COLUMNS)
     assert (tmp_path / "out" / table.METRICS).exists()
+
+
+def test_columns_are_the_keys_of_the_row(cfg, house, tmp_path):
+    """Колонки таблицы собраны из тех же объявлений, что и строка: ключ добавили в строку, а в
+    COLUMNS нет — тест красный (gf#293). count и details — подробности, не колонки."""
+    items = table.load(_folder(tmp_path / "f", [house]), cfg)
+    r = table.row(items, table.reference(items, cfg), cfg)
+    assert list(table.COLUMNS) == [k for k in r if k not in ("count", "details")]
+
+
+def test_every_zone_role_is_checked_against_palette_or_excluded():
+    """Новая роль зоны не попадает молча ни под проверку палитры, ни мимо неё: её разносят явно
+    (gf#293). Роль под проверкой — одноимённая роль палитры."""
+    assert measures.PALETTE_ZONE_ROLES | measures.UNPALETTED_ZONE_ROLES == set(ZoneRole)
+    assert not measures.PALETTE_ZONE_ROLES & measures.UNPALETTED_ZONE_ROLES
+    assert {r.value for r in measures.PALETTE_ZONE_ROLES} <= set(PaletteRole)
 
 
 def test_floor_is_taken_from_height_not_from_field(house):

@@ -35,8 +35,6 @@ function toast(text, kind = "") {
 
 const keyOf = (item) => `${item.mode}/${item.house}`;
 const base = (item) => `/api/review/${item.mode}/${encodeURIComponent(item.house)}`;
-const marked = (item) => Object.values(item.marks).filter(Boolean).length;
-const done = (item) => marked(item) === item.slots;
 const refusal = (text) => el("div", { className: "review-refusal" }, text);
 
 async function sheetInto(box, url) {
@@ -74,6 +72,9 @@ async function send(item, slot, mark) {
   });
   if (!res.ok) return toast(`Не сохранено: ${(await refusedFrom(res)).message}`, "error");
   item.marks[slot] = mark;
+  // «Дом размечен» отдаёт сервер. Отметки не снимаются, поэтому done только растёт: ответ
+  // более ранней отметки, пришедший позже, не сбросит его.
+  item.done = item.done || (await res.json()).done;
   progress();
 }
 
@@ -124,13 +125,13 @@ function show(at) {
 }
 
 function progress() {
-  const full = state.items.filter(done).length;
+  const full = state.items.filter((it) => it.done).length;
   $("progress").textContent = `дом ${state.at + 1} из ${state.items.length} · отмечено ${full}`;
 }
 
 function nextOpen() {
   const n = state.items.length;
-  const found = Array.from({ length: n }, (_, k) => (state.at + 1 + k) % n).find((i) => !done(state.items[i]));
+  const found = Array.from({ length: n }, (_, k) => (state.at + 1 + k) % n).find((i) => !state.items[i].done);
   if (found === undefined) return toast("Всё отмечено — спасибо!");
   show(found);
 }
@@ -154,7 +155,7 @@ function picked(items, params) {
   }
   const mode = params.get("mode");
   const n = Number(params.get("n")) || items.length;
-  const list = items.filter((it) => (!mode || it.mode === mode) && (params.get("open") !== "1" || !done(it)))
+  const list = items.filter((it) => (!mode || it.mode === mode) && (params.get("open") !== "1" || !it.done))
     .slice(0, n);
   try { sessionStorage.setItem(LIST_KEY, JSON.stringify(list.map(keyOf))); } catch { /* приватный режим */ }
   return list;

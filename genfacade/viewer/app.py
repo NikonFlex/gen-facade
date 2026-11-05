@@ -139,12 +139,13 @@ def _review_api(app: FastAPI, cfg: Config, root: Path | None) -> None:
     @app.get("/api/review")
     def review_items() -> dict:
         """Дома × режимы: сколько мест и отметки; чья строка на месте — не отдаётся. reference —
-        показывать ли настоящий дом отдельно, modes — сколько режимов у проверки."""
+        показывать ли настоящий дом отдельно, modes — сколько режимов у проверки, done — размечен
+        ли дом целиком (считает сервер)."""
         if root is None:
             return {"folder": None, "items": []}
         found = review.marks(root)
         n = len(settings.rows)
-        items = [{"mode": m, "house": h, "slots": n,
+        items = [{"mode": m, "house": h, "slots": n, "done": review.is_done(found, m, h, n),
                   "marks": {s: _public(found.get(review.key(m, h, s))) for s in range(n)}}
                  for m in settings.modes for h in review.houses(root)]
         return {"folder": str(root), "items": items, "reference": settings.reference,
@@ -167,8 +168,8 @@ def _review_api(app: FastAPI, cfg: Config, root: Path | None) -> None:
 
     @app.put("/api/review/{mode}/{house}/{slot}")
     def review_mark(mode: Mode, house: str, slot: int, mark: review.Mark) -> dict:
-        _guarded(lambda: review.save(_root(root), mode, house, slot, mark, settings))
-        return {"saved": True}
+        done = _guarded(lambda: review.save(_root(root), mode, house, slot, mark, settings))
+        return {"saved": True, "done": done}
 
 
 def _sheet(root: Path | None, place: tuple[Mode, str, str], settings: Review) -> FacadeSheet:

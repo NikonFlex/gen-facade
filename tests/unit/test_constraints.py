@@ -275,6 +275,15 @@ def test_plan_floor_takes_no_own_openings(cfg, vocab, keep):
     assert _allowed(floor, vocab) == {2}
 
 
+def test_sealed_wall_bans_exactly_the_door_classes(cfg, vocab, keep):
+    """Закрытая стена не берёт своей двери любого класса, окно второго этажа — берёт: запрет —
+    классы, что на плане дверь (`schema.DOOR_CLASSES`), а не «всё, кроме окна» (gf#293)."""
+    starts = {tokens.tok(c): c for c in schema.OPENINGS}
+    banned = set(starts) - keep(_sealed(cfg, vocab, (60,)))
+    assert {starts[w] for w in banned} == set(schema.DOOR_CLASSES)
+    assert starts and tokens.tok(ElementClass.WINDOW) not in banned
+
+
 def test_full_wall_takes_no_more_openings(cfg, vocab, keep):
     """Стена заполнена — своего проёма больше не начать: годного x нет, и страж пускал любой —
     модель громоздила окна, брак отсеивал такие попытки, и проходили дома с окнами 0,3 м (gf#250).

@@ -58,6 +58,14 @@ def test_page_does_not_repeat_enum_values():
     assert not re.findall('value="(' + "|".join(Mode) + ')"', html)
 
 
+def test_review_page_does_not_assemble_done_from_marks():
+    """«Дом размечен» отдаёт сервер (`done`): страница не считает отметки и не сравнивает их
+    число с числом мест (C12, gf#293)."""
+    text = STATIC.joinpath("review.js").read_text()
+    assert ".done" in text
+    assert "Object.values(item.marks)" not in text and "=== item.slots" not in text
+
+
 def test_one_plan_listed_and_served(client):
     assert client.get("/api/plans").json() == [{"name": SIMPLE.stem}]
     svg = client.get(f"/api/plans/{SIMPLE.stem}")

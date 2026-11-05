@@ -150,11 +150,18 @@ def plinth_kept(sheet: FacadeSheet) -> bool:
                for f in sheet.facades)
 
 
+# Роли зон, у которых есть одноимённая роль палитры (`PaletteRole`), и роли без неё: набор явный,
+# а не «всё, кроме пояса» — новая роль зоны не должна молча попасть под проверку палитры
+# (тест в test_metrics.py падает, пока роль не разнесена).
+PALETTE_ZONE_ROLES = frozenset({ZoneRole.PLINTH, ZoneRole.MAIN, ZoneRole.ACCENT})
+UNPALETTED_ZONE_ROLES = frozenset({ZoneRole.BAND})  # пояс палитрой не задан
+
+
 def palette_kept(sheet: FacadeSheet) -> bool:
     """Зона отделки — материалом палитры своей роли (у стаба и синтетики id материала — роль,
-    `PaletteRole`); пояс палитрой не задан."""
+    `PaletteRole`); зоны ролей без палитры не проверяются."""
     return all(z.material == z.role for f in sheet.facades for z in f.zones
-               if z.role is not ZoneRole.BAND)
+               if z.role in PALETTE_ZONE_ROLES)
 
 
 DESCRIPTION: dict[str, Callable[[FacadeSheet], bool]] = {

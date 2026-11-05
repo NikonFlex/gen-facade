@@ -46,9 +46,12 @@ from genfacade.validate import errors, validate_svg
 METRICS = "metrics.json"
 GEOMETRY = {Rule.SVG_PARSE, Rule.OUTSIDE, Rule.OVERLAP}
 PLAN = {Rule.PLAN_OPENING, Rule.FORBIDDEN, Rule.CORNER}
+# Слой «отличим ли»: ключи строки в порядке (*c2st_subsets, *density_coverage_subsets). Оценки дома
+# — по члену HouseScore: добавили оценку — колонка появилась сама, строка и COLUMNS из одного места.
+REALISM = ("c2st", "c2st_sd", "density", "coverage")
+HOUSE_COLUMNS = {s: f"house_{s}" for s in HouseScore}
 COLUMNS = ("valid", "geometry", "plan", "structure", "diversity", "description", "fid", "kid",
-           "svd", "rules", "c2st", "c2st_sd", "density", "coverage", "house_density",
-           "house_marginal", "windows_per_wall")
+           "svd", "rules", *REALISM, *HOUSE_COLUMNS.values(), "windows_per_wall")
 
 
 class Item(NamedTuple):
@@ -142,15 +145,14 @@ def _guidelines(sheets: list[FacadeSheet], cfg: Config) -> dict[str, float]:
 def _realism(sheets: list[FacadeSheet], ref: Reference, cfg: Config) -> dict:
     ours = realism.walls(sheets, cfg.metrics.realism)
     if not len(ours) or not len(ref.realism):
-        return dict.fromkeys(("c2st", "c2st_sd", "density", "coverage",
-                              *(f"house_{s}" for s in HouseScore)))
+        return dict.fromkeys((*REALISM, *HOUSE_COLUMNS.values()))
     a, b = realism.standardized(ours, ref.realism)
     settings, seed = cfg.metrics.realism, cfg.metrics.seed
     dc = realism.density_coverage_subsets(a, b, settings, numpy.random.default_rng(seed))
     c = realism.c2st_subsets(a, b, numpy.random.default_rng(seed), settings.subsets)
     dc, c = dc or (None, None), c or (None, None)
-    return {"c2st": _round(c[0]), "c2st_sd": _round(c[1]), "density": _round(dc[0]),
-            "coverage": _round(dc[1]), **_houses(sheets, ref, cfg)}
+    return {**dict(zip(REALISM, map(_round, (*c, *dc)), strict=True)),
+            **_houses(sheets, ref, cfg)}
 
 
 def _houses(sheets: list[FacadeSheet], ref: Reference, cfg: Config) -> dict:
@@ -158,7 +160,7 @@ def _houses(sheets: list[FacadeSheet], ref: Reference, cfg: Config) -> dict:
     settings = cfg.metrics.realism
     scores = [realism.house_scores(realism.walls([s], settings), ref.realism, settings)
               for s in sheets]
-    return {f"house_{k}": _round(_mean([s[k] for s in scores if s[k] is not None]))
+    return {HOUSE_COLUMNS[k]: _round(_mean([s[k] for s in scores if s[k] is not None]))
             for k in HouseScore}
 
 

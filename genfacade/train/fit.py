@@ -287,9 +287,8 @@ def sample(trainer: Trainer, source: Source, cfg: Config, rng: numpy.random.Gene
         words = [trainer.data.words[t] for t in answers[i]]
         rows.append({"sample": part.sample[i], "mode": part.mode[i], "tokens": words,
                      "error": _decode_error(words, walls, cfg)})
-    return {"count": len(rows), "parsed": sum(r["error"] is None for r in rows),
-            "by_mode": {m: _share([r for r in rows if r["mode"] is m]) for m in Mode},
-            "rows": rows}
+    by_mode = {m: _share([r for r in rows if r["mode"] is m]) for m in Mode}
+    return {**_share(rows), "by_mode": by_mode, "rows": rows}
 
 
 def _decode_error(words: list[str], walls, cfg: Config) -> str | None:
@@ -301,6 +300,7 @@ def _decode_error(words: list[str], walls, cfg: Config) -> str | None:
 
 
 def _share(rows: list[dict]) -> dict:
+    """Сколько ответов из rows разобрал decode: одно правило и для всех, и для режима."""
     return {"count": len(rows), "parsed": sum(r["error"] is None for r in rows)}
 
 
