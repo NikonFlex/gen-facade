@@ -172,6 +172,8 @@ class Checks(Section):
     align_m: float
     snap_m: float
     window_jump_m: float
+    porch_min_m: float
+    porch_pad_m: float
     norms: dict[GuidelineCheck, GuidelineParams] = {}
 
 
@@ -380,7 +382,6 @@ class Finish(Section):
 
 class Entry(Section):
     porch_p: float
-    porch_pad_m: float
 
 
 class FacadeRules(Section):

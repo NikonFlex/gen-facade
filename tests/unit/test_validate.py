@@ -6,7 +6,7 @@
 """
 
 import pytest
-from simple_house import WALL_INTO_WINDOW, before_leaf
+from simple_house import WALL_INTO_WINDOW, before_leaf, without_porches
 
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import Element, ElementClass, MaterialZone, Rule, Severity, ZoneRole
@@ -325,7 +325,8 @@ def test_snap_centers_model_windows_on_common_axis(clean, cfg):
 
 
 def test_snap_leaves_clean_sheet_alone(clean, cfg):
-    assert snap(clean, cfg.checks) == clean
+    """Привязка ничего не двигает; крыльцо у двери на поднятом полу ставит шаг 5 (gf#276)."""
+    assert without_porches(snap(clean, cfg.checks)) == clean
 
 
 def test_self_crossing_zone_is_a_defect(house, cfg):

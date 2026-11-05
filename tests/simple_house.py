@@ -7,7 +7,7 @@
 
 from pathlib import Path
 
-from genfacade.schema import FacadeSheet, MaterialZone, SideFacade, ZoneRole
+from genfacade.schema import ElementClass, FacadeSheet, MaterialZone, SideFacade, ZoneRole
 
 SIMPLE = Path(__file__).parent / "fixtures" / "simple_house.svg"
 LEAF = '<rect x="800" y="495" width="5" height="90" fill="#000000" />'  # створка входа
@@ -45,6 +45,15 @@ def with_side(sheet: FacadeSheet, i: int, **update) -> FacadeSheet:
     facades = list(sheet.facades)
     facades[i] = facades[i].model_copy(update=update)
     return sheet.model_copy(update={"facades": facades})
+
+
+def without_porches(sheet: FacadeSheet) -> FacadeSheet:
+    """Лист без крылец: шаг 5 ставит их сам у двери на поднятом полу (gf#276), а в листе,
+    который «ничего не трогает», сравнивать надо остальное."""
+    return sheet.model_copy(update={"facades": [
+        f.model_copy(update={"elements": [e for e in f.elements
+                                          if e.cls is not ElementClass.PORCH]})
+        for f in sheet.facades]})
 
 
 def whole_main(f: SideFacade, eaves_m: float) -> MaterialZone:

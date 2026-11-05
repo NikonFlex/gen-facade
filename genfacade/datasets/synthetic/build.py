@@ -78,7 +78,7 @@ def _wall(wall: SideFacade, spec: HouseSpec, look: Look, cfg: Config) -> SideFac
     rules, side, windows = cfg.synthetic.facade, wall.side, wall.elements
     doors = openings.doors(side, spec, look, rules)
     porch = look.porch and spec.plinth_m > 0  # крыльцо — на высоту цоколя: без цоколя его нет
-    porches = [decor.porch(d, spec, rules) for d in doors] if porch else []
+    porches = [decor.porch(d, spec, cfg.checks.porch_pad_m) for d in doors] if porch else []
     ctx = derive.Wall(spec, side.length_m, cfg.derive)
     laid = [*windows, *doors, *porches, decor.cornice(side.length_m, spec, look.cornice_m)]
     elements = derive.place(laid, decor.flags(windows, doors, ctx), ctx)
