@@ -22,7 +22,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from project_config import backlog_config
+from project_config import backlog_config, ticket_file
 from script_common import ROOT, output, report
 
 #: Типы заголовка — Conventional Commits и соглашение Angular. Объявлены один раз: хук, CI и
@@ -56,10 +56,6 @@ def ref_pattern(root: Path) -> re.Pattern:
     return re.compile(rf"(?<![\w#]){re.escape(prefix)}#\d+")
 
 
-def ticket_file(root: Path) -> Path:
-    return Path(git(root, "rev-parse", "--absolute-git-dir")) / "ticket"
-
-
 def cmd_ticket(root: Path, number: str | None) -> int:
     path = ticket_file(root)
     if number is None:
@@ -71,11 +67,16 @@ def cmd_ticket(root: Path, number: str | None) -> int:
     return 0
 
 
+def names_task(root: Path, message: str) -> bool:
+    """Ссылка не нужна (коммит git, учёт) или уже есть — одно правило для хука и CI."""
+    return message.startswith((*GIT_MADE, *WITHOUT_TASK)) or bool(ref_pattern(root).search(message))
+
+
 def fix_message(root: Path, message: str) -> tuple[str, str]:
     """Сообщение коммита → (сообщение, отказ). Ссылки нет — дописать из ticket или отказать."""
     if problem := header_problem(message):
         return message, problem
-    if message.startswith((*GIT_MADE, *WITHOUT_TASK)) or ref_pattern(root).search(message):
+    if names_task(root, message):
         return message, ""
     path = ticket_file(root)
     if not path.exists():
@@ -96,8 +97,7 @@ def cmd_msg(root: Path, file: str) -> int:
 def message_problems(root: Path, message: str) -> list[str]:
     """Что не так с сообщением уже сделанного коммита: формат и ссылка на задачу."""
     problems = [p for p in [header_problem(message)] if p]
-    exempt = message.startswith((*GIT_MADE, *WITHOUT_TASK))
-    return problems + ([] if exempt or ref_pattern(root).search(message) else [ADVICE])
+    return problems + ([] if names_task(root, message) else [ADVICE])
 
 
 def range_problems(root: Path, span: str) -> list[str]:
@@ -169,6 +169,17 @@ def range_cases(root: Path, base: str) -> list[str]:
     return bad
 
 
+def worktree_case() -> list[str]:
+    """В worktree `.git` — файл со ссылкой: задача клона лежит в настоящем git-каталоге."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root, real = Path(tmp) / "wt", Path(tmp) / "main/.git/worktrees/wt"
+        real.mkdir(parents=True)
+        root.mkdir()
+        (root / ".git").write_text(f"gitdir: {real}\n", encoding="utf-8")
+        return [] if ticket_file(root) == real / "ticket" \
+            else [f"worktree: ticket в {ticket_file(root)}, а не в {real}"]
+
+
 def selftest() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -176,7 +187,7 @@ def selftest() -> int:
         (root / ".backlog.json").write_text('{"prefix": "ab"}')
         commit(root, "chore: начало")
         base = git(root, "rev-parse", "HEAD")
-        bad = hook_cases(root) + range_cases(root, base)
+        bad = hook_cases(root) + range_cases(root, base) + worktree_case()
     return report(bad, f"формат заголовка ({len(HEADERS)} случаев), ticket дописывается, без "
                        "него — отказ; CI ловит коммит без номера и без типа")
 

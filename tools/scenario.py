@@ -57,6 +57,15 @@ class Outcome(StrEnum):
     FAILED = "не прошло"
 
 
+class RunResult(StrEnum):
+    """Итог одного сценария в записи прогона `openspec/runs/*.json`, поле «итог»: пишет cmd_run,
+    читает tools/req_status.py. Значения те, что уже лежат в записях, — не менять: старые записи
+    перестанут читаться. Не путать с Outcome: тот — итог всего прогона в квитанции."""
+
+    PASSED = "прошёл"
+    FAILED = "не прошёл"
+
+
 #: Режимы, квитанция которых пускает push: настоящий провайдер, а не кассета.
 PUSH_MODES = frozenset({Mode.LIVE, Mode.RECORD})
 
@@ -70,7 +79,6 @@ class Run:
     """Состояние одного прогона сценария."""
 
     stand: dict
-    mode: Mode
     vars: dict[str, str] = field(default_factory=dict)
     responses: dict[str, object] = field(default_factory=dict)
 
@@ -268,9 +276,10 @@ def check_expect(run: Run, e: dict) -> None:
         raise Failed(f"«{e.get('name', e['kind'])}»: {actual!r}, ждали {wanted!r}")
 
 
-def run_scenario(scenario: dict, stand: dict, mode: Mode) -> str:
-    """Пусто — прошёл; иначе — первое несбывшееся ожидание или упавший шаг."""
-    run = Run(stand, mode, vars=dict(os.environ))
+def run_scenario(scenario: dict, stand: dict) -> str:
+    """Пусто — прошёл; иначе — первое несбывшееся ожидание или упавший шаг. Режим провайдера
+    стенд читает из SCENARIO_MODE (cmd_run), сюда он не передаётся."""
+    run = Run(stand, vars=dict(os.environ))
     try:
         for step in scenario["steps"]:
             STEPS[step["kind"]][2](run, fill(step, run))
@@ -324,6 +333,20 @@ def write_receipt(root: Path, mode: Mode, passed: bool) -> str:
     return f"квитанция: дерево {receipt['tree']} режим {mode.value} исход {receipt['outcome']}"
 
 
+def passing_receipt(lines: list[str], tree: str) -> bool:
+    """Есть ли среди строк журнала квитанция «прошло» на этом дереве от настоящего провайдера
+    (его читает сторож push). Строка, не похожая на квитанцию, пропускается: одна битая запись не
+    отменяет годную рядом; годной нет — False, и push остановлен."""
+    for line in lines:
+        try:
+            r = json.loads(line)
+            if r["tree"] == tree and r["outcome"] == Outcome.PASSED and r["mode"] in PUSH_MODES:
+                return True
+        except (ValueError, KeyError, TypeError):
+            continue
+    return False
+
+
 def head(root: Path) -> str:
     return subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True,  # noqa: S607
                           text=True, check=False, env=git_env()).stdout.strip()
@@ -355,13 +378,14 @@ def cmd_run(root: Path, names: list[str], mode: Mode, contour: str, record: bool
     os.environ["SCENARIO_MODE"] = mode.value
     results = []
     for name, scenario in scenarios.items():
-        failure = run_scenario(scenario, stand, mode)
+        failure = run_scenario(scenario, stand)
         print(f"{'ok  ' if not failure else 'FAIL'}  {name}" + (f" — {failure}" if failure else ""))
         results.append({"name": name, "требования": scenario.get("требования", []),
-                        "итог": "прошёл" if not failure else "не прошёл", "не сбылось": failure})
+                        "итог": RunResult.FAILED if failure else RunResult.PASSED,
+                        "не сбылось": failure})
     if record:
         print(f"запись прогона: {record_run(root, contour, results).relative_to(root)}")
-    passed = all(r["итог"] == "прошёл" for r in results)
+    passed = all(r["итог"] is RunResult.PASSED for r in results)
     print(write_receipt(root, mode, passed))
     return 0 if passed else 1
 
@@ -369,7 +393,7 @@ def cmd_run(root: Path, names: list[str], mode: Mode, contour: str, record: bool
 def cmd_control(root: Path) -> int:
     """Контрольный сценарий с невыполнимым ожиданием: раннер обязан на нём покраснеть."""
     scenario = load(root, CONTROL)
-    failure = run_scenario(scenario, {}, Mode.REPLAY)
+    failure = run_scenario(scenario, {})
     if validate(scenario, {}) or not failure:
         print("раннер не покраснел на контрольном сценарии — ему нельзя верить")
         return 1

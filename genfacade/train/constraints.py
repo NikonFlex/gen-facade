@@ -52,6 +52,7 @@ from typing import NamedTuple
 from genfacade.config import Config, Tokens
 from genfacade.derive import OWNER, TRIM_OF
 from genfacade.schema import (
+    DOOR_CLASSES,
     DOOR_KINDS,
     EPS,
     ElementClass,
@@ -673,7 +674,7 @@ class WallGeometry:
         (сотни пересечений), брак отсеивал такие попытки, и проходили дома с окнами 0,3 м
         (реальный тест, gf#250). Своя дверь закрытой стены — тоже лишняя: двери задаёт план."""
         v, wall = self.vocab, self.walls[self.at]
-        full = {c for c in OPENINGS if c is not ElementClass.WINDOW} if wall.sealed else set()
+        full = set(DOOR_CLASSES) if wall.sealed else set()
         if not any(self._fits(x) for x in range(wall.length - self._narrowest() + 1)):
             full |= set(OPENINGS)
         return {i for i, c in v.cls.items() if c in full}

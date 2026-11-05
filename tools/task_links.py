@@ -19,7 +19,7 @@ import re
 import tempfile
 from pathlib import Path
 
-from backlog import MARK, Task, index_page, is_draft, is_open_state, upper_half
+from backlog import MARK, Task, index_page, is_draft, is_open_state, is_service, upper_half
 from project_config import backlog_config
 from script_common import check_root, replace_once, run_script, selftest_project, write_files
 from spec_check import addresses, spec_files
@@ -31,7 +31,6 @@ STATE = re.compile(r"^\|\s*\*\*Состояние\*\*\s*\|\s*([^|\n]*)", re.M)
 #: Классификация до PR: как воспроизвели или почему повтор не нужен.
 LOCAL_REPEAT = re.compile(r"^Локальный повтор: (воспроизведён — (тест|контур|экран): \S"
                           r"|(невозможен локально|не требуется|не бага) — \S)", re.M)
-SERVICE = {"INDEX.md", "REVIEW.md"}
 
 
 def task_texts(root: Path) -> dict[str, str]:
@@ -39,7 +38,7 @@ def task_texts(root: Path) -> dict[str, str]:
     folder = backlog_config(root)["tasks"]
     files = sorted(folder.glob("*.md")) if folder.is_dir() else []
     return {p.stem: p.read_text(encoding="utf-8").split(MARK, 1)[0]
-            for p in files if p.name not in SERVICE}
+            for p in files if not is_service(p.name)}
 
 
 def has_local_repeat(task_file: Path) -> bool:

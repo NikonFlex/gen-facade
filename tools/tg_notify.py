@@ -20,6 +20,7 @@ import json
 import sys
 from pathlib import Path
 
+from backlog import not_planned
 from project_config import backlog_config
 from script_common import report, run_script
 
@@ -32,7 +33,7 @@ def issue_text(payload: dict, comments: list[dict], prefix: str) -> str:
     name = f"{prefix}#{issue['number']} {issue['title']}"
     if payload["action"] == "opened":
         return f"📌 Новая задача {name}\n{issue['html_url']}"
-    if issue.get("state_reason") == "not_planned":
+    if not_planned(issue.get("state_reason")):
         return f"⏹ Закрыта без выполнения {name}\n{issue['html_url']}"
     summaries = [c["body"] for c in comments if c["body"].startswith(SUMMARY)]
     summary = "\n\n" + summaries[-1].removeprefix(SUMMARY).strip() if summaries else ""

@@ -20,12 +20,10 @@ import re
 import sys
 from pathlib import Path
 
+from pr_link import RE_GITHUB_CLOSE
 from pr_link import problem as body_problem
 from script_common import print_problems, report, run_script
 
-# Ссылка на задачу: #12, gf#12, owner/repo#12 или адрес задачи на GitHub.
-REF = r"(?:[\w.-]+/[\w.-]+)?[\w-]*#\d+|https?://github\.com/[^\s/]+/[^\s/]+/issues/\d+"
-KEYWORD = re.compile(rf"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:{REF})", re.I)
 # Команды, текст которых уходит в историю или в PR: коммит, создание, правка и слияние PR —
 # в начале команды или после ; && | и перевода строки, а не упоминание в тексте правки.
 START = r"(?:^|[;&|\n])\s*"
@@ -36,7 +34,7 @@ ADVICE = "в коммите и заголовке PR — «Implements <преф�
 
 
 def found(text: str) -> list[str]:
-    return [m.group(0) for m in KEYWORD.finditer(text)]
+    return [m.group(0) for m in RE_GITHUB_CLOSE.finditer(text)]
 
 
 def closing_hits(command: str) -> list[str]:
@@ -68,7 +66,8 @@ def pr_problems(pr: dict) -> list[str]:
 
 
 CAUGHT = ["Closes #12", "fixes gf#7", "Resolved: owner/repo#3", "FIX #1",
-          "close https://github.com/a/b/issues/5", "Задача сделана.\n\nCloses gf#96"]
+          "close https://github.com/a/b/issues/5", "Задача сделана.\n\nCloses gf#96",
+          "fixes https://github.com/a/b/issues/5"]
 SPARED = ["Implements gf#12", "Задача gf#12", "fix: пустая строка источника",
           "fix(parser): разбор\n\nImplements gf#12", "fix the bug in #12", "closed issue",
           "fixture #1", "prefix #3",
@@ -87,6 +86,9 @@ def selftest() -> int:
         ("cd repo && git -C x commit -m 'Fixes #3'", 2),
         ("python3 - <<'EOF'\nзаметка: было «Closes #12»\nEOF\ngit commit -q -m 'Задача gf#96'", 0),
     ] if (code := hook({"tool_input": {"command": cmd}})) != want]
+    # тело PR и заголовок с коммитами понимают слово закрытия и ссылку одинаково (одно объявление)
+    bad += [f"тело PR и заголовок разошлись в {t!r}" for t in [*CAUGHT, *SPARED]
+            if (body_problem(f"Closes #1\nтекст {t}") is None) == bool(found(t))]
     pr = {"title": "gf#96: порядок", "body": "Closes #96",
           "commits": [{"oid": "abc1234def", "messageHeadline": "x", "messageBody": "closes #96"}]}
     if [p[:15] for p in pr_problems(pr)] != ["коммит abc1234:"]:

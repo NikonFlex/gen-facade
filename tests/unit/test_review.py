@@ -109,6 +109,26 @@ def test_marks_saved_with_row_and_counted(client, folder, cfg):
     assert f"| genplan | {Mode.BLIND} | — | 2 |" in table
 
 
+def test_house_done_comes_from_server(client, folder):
+    """«Дом размечен» считает сервер: в списке и в ответе на отметку; страница не сравнивает
+    число отметок с числом мест (C12, gf#293)."""
+    mode, house = Mode.WITH_OPENINGS, HOUSES[0]
+
+    def item() -> dict:
+        got = client.get("/api/review").json()["items"]
+        return next(i for i in got if (i["mode"], i["house"]) == (mode, house))
+
+    assert item()["done"] is False
+    for slot in range(len(ROWS)):
+        assert item()["done"] is False                 # пока не на каждом месте
+        got = client.put(f"/api/review/{mode}/{house}/{slot}", json={"ok": True}).json()
+        assert got["done"] is (slot == len(ROWS) - 1)
+    assert item()["done"] is True
+    other = next(i for i in client.get("/api/review").json()["items"] if i["house"] != house
+                 or i["mode"] != mode)
+    assert other["done"] is False                      # соседний дом и режим — свои отметки
+
+
 def test_mark_of_unknown_house_refused(client, folder):
     got = client.put(f"/api/review/{Mode.BLIND}/nope/0", json={"ok": True})
     assert got.status_code == 404 and got.json()["detail"]["code"] == Refusal.NO_REVIEW_ITEM

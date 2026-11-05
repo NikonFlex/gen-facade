@@ -15,7 +15,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-from scenario import CONTROL, RECEIPT_CONFIG, Mode, load, run_scenario, tree_hash, validate
+from scenario import CONTROL, RECEIPT_CONFIG, load, run_scenario, tree_hash, validate
 from script_common import ROOT, git_env, report
 
 
@@ -67,15 +67,15 @@ def against_stub() -> list[str]:
     os.environ["admin_email"] = "anna@example.com"
     bad = []
     try:
-        if failure := run_scenario(SCENARIO, stand, Mode.REPLAY):
+        if failure := run_scenario(SCENARIO, stand):
             bad.append(f"сценарий на заглушке не прошёл: {failure}")
         spoiled = json.loads(json.dumps(SCENARIO))
         spoiled["expect"][0]["expect"] = "boris@example.com"
-        if "почта из профиля" not in run_scenario(spoiled, stand, Mode.REPLAY):
+        if "почта из профиля" not in run_scenario(spoiled, stand):
             bad.append("испорченное ожидание не покраснело")
         spoiled = json.loads(json.dumps(SCENARIO))
         spoiled["steps"][0]["body"]["password"] = "wrong"  # noqa: S105 — не ключ, порча входа
-        if "код 401" not in run_scenario(spoiled, stand, Mode.REPLAY):
+        if "код 401" not in run_scenario(spoiled, stand):
             bad.append("неверный код ответа не покраснел")
     finally:
         server.shutdown()
@@ -96,14 +96,14 @@ def refusals() -> list[str]:
         if not any(expected in p for p in validate(scenario, {"base_url": "x"})):
             bad.append(f"не отказал: {name}")
     if run_scenario({**SCENARIO, "steps": [{**SCENARIO["steps"][0], "path": "/{nope}"}]},
-                    {"base_url": "http://127.0.0.1:9"}, Mode.REPLAY).find("{nope}") < 0:
+                    {"base_url": "http://127.0.0.1:9"}).find("{nope}") < 0:
         bad.append("незаданная переменная не остановила прогон")
     return bad
 
 
 def control() -> list[str]:
     scenario = load(ROOT, CONTROL)
-    failure = run_scenario(scenario, {}, Mode.REPLAY)
+    failure = run_scenario(scenario, {})
     return [] if failure and not validate(scenario, {}) else ["контрольный сценарий не покраснел"]
 
 

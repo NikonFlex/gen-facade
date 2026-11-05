@@ -58,6 +58,14 @@ def test_page_does_not_repeat_enum_values():
     assert not re.findall('value="(' + "|".join(Mode) + ')"', html)
 
 
+def test_review_page_does_not_assemble_done_from_marks():
+    """«Дом размечен» отдаёт сервер (`done`): страница не считает отметки и не сравнивает их
+    число с числом мест (C12, gf#293)."""
+    text = STATIC.joinpath("review.js").read_text()
+    assert ".done" in text
+    assert "Object.values(item.marks)" not in text and "=== item.slots" not in text
+
+
 def test_one_plan_listed_and_served(client):
     assert client.get("/api/plans").json() == [{"name": SIMPLE.stem}]
     svg = client.get(f"/api/plans/{SIMPLE.stem}")
@@ -214,3 +222,14 @@ def test_page_keeps_no_refusal_codes_or_texts():
         text = STATIC.joinpath(name).read_text()
         assert not [w for w in words if w in text], name
         assert ".detail ??" not in text and "err.detail" not in text, name
+
+
+def test_page_waits_for_its_own_answers():
+    """Гонки страницы (C13, gf#293; проверено в браузере с задержанными ответами): форма плана
+    неактивна до ответов, ответ шага, с которого ушли, экран не трогает."""
+    html, js = STATIC.joinpath("index.html").read_text(), STATIC.joinpath("app.js").read_text()
+    assert '<form class="plan-form" id="plan-form" inert>' in html
+    assert '$("plan-form").inert = false;' in js
+    # withData (шаги JSON и токенов), renderSvgStep, renderInput сверяют шаг после ответа
+    assert js.count("stale(shown)") == 3
+    assert "withData(step, renderJsonStep)" in js and "withData(step, renderTokensStep)" in js

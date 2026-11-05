@@ -43,6 +43,9 @@ CASES = [
     (Call(command="gh pr create --title t --body 'Задача ab#12'"), Verdict.DENY, "Closes #N"),
     (Call(command="gh pr create --title 'Fix #12 x' --body 'Closes #12'"), Verdict.DENY,
      "заголовке"),
+    # GitHub закрывает задачу и по адресу, и по gf#N — как по `#N`
+    (Call(command="gh pr create --title t --body 'Closes #12\nfixes https://github.com/a/b/issues/5'"),
+     Verdict.DENY, "по этому слову"),
     (Call(command="gh pr create --fill"), Verdict.DENY, "--body-file"),
     # `;` вплотную к слову: до gf#293 тело PR такой команды сторож не проверял
     (Call(command="gh pr create;ls"), Verdict.DENY, "--body"),
@@ -67,6 +70,8 @@ def project(root: Path, repeat: bool, gated: bool) -> Path:
         "docs/tasks/ab-0012.md": f"# ab#12\n\n<!-- ↓↓↓ ниже наше: скрипт эту часть не трогает "
                                  f"↓↓↓ -->\n\n{bottom}",
         "app.py": "x = 1\n",
+        # похожее имя: по glob `*-0012.md` оно встало бы первым, но это не файл задачи 12
+        "docs/tasks/aa-x-0012.md": "# чужой файл без метки и повтора\n",
     }
     write_files(root, files)
     subprocess.run(["git", "init", "-q"], cwd=root, check=True, env=git_env())  # noqa: S607
@@ -112,6 +117,25 @@ def pr_and_push(tmp: Path) -> list[str]:
     return bad
 
 
+def corrupt_receipts(tmp: Path) -> list[str]:
+    """Битая строка журнала квитанций не отменяет годную рядом; без годной push остановлен."""
+    from scenario import Mode, state_dir, write_receipt
+    root = project(tmp / "corrupt", repeat=True, gated=True)
+    os.environ["STAND_STATE_DIR"] = str(tmp / "state-corrupt")
+    log = state_dir() / "receipts.jsonl"
+    log.parent.mkdir(parents=True)
+    log.write_text("{битая строка\n[]\n", encoding="utf-8")
+    push, bad = Call(command="git push"), []
+    if decide(push, root)[0] != Verdict.DENY:
+        bad.append("журнал из одних битых строк пропустил push")
+    write_receipt(root, Mode.LIVE, passed=True)
+    with log.open("a", encoding="utf-8") as fh:
+        fh.write("{ещё одна битая\n")
+    if decide(push, root)[0] != Verdict.ASK:
+        bad.append("битые строки рядом с годной квитанцией остановили push")
+    return bad
+
+
 def formats() -> list[str]:
     bad = []
     out, err = io.StringIO(), io.StringIO()
@@ -143,10 +167,12 @@ def selftest() -> int:
     state = os.environ.get("STAND_STATE_DIR")
     with tempfile.TemporaryDirectory() as tmp:
         root = project(Path(tmp) / "base", repeat=True, gated=False)
-        bad = cases(root) + pr_and_push(Path(tmp)) + formats()
+        bad = (cases(root) + pr_and_push(Path(tmp)) + corrupt_receipts(Path(tmp))
+               + formats())
     if state is None:
         os.environ.pop("STAND_STATE_DIR", None)
     else:
         os.environ["STAND_STATE_DIR"] = state
     return report(bad, f"{len(CASES)} входов сторожей, PR без «Локального повтора», квитанция "
-                       "push, форматы Claude Code / Codex / Cursor, правила Codex")
+                       "push (и битые строки журнала), форматы Claude Code / Codex / Cursor, "
+                       "правила Codex")

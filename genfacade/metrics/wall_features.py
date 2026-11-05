@@ -19,10 +19,17 @@ from shapely.ops import unary_union
 
 from genfacade.config import Realism
 from genfacade.metrics import measures
-from genfacade.schema import EPS, Element, ElementClass, FacadeSheet, SideFacade, ZoneRole
+from genfacade.schema import (
+    DOOR_CLASSES,
+    EPS,
+    OPENINGS,
+    Element,
+    ElementClass,
+    FacadeSheet,
+    SideFacade,
+    ZoneRole,
+)
 
-OPENINGS = (ElementClass.WINDOW, ElementClass.DOOR, ElementClass.GARAGE_DOOR)
-DOORS = (ElementClass.DOOR, ElementClass.GARAGE_DOOR)
 SECOND_FINISH = (ZoneRole.ACCENT, ZoneRole.BAND)
 # Зоны, которые не основная отделка: явный набор, а не «не MAIN» — новая роль не должна молча
 # попасть в скрытые зоны (тест в test_wall_features.py падает, пока роль не разнесена).
@@ -90,12 +97,12 @@ def opening_share(w: Wall) -> float:
 
 def house_doors(w: Wall) -> float:
     """(10) дом: дверей всего."""
-    return float(sum(len(_of(f, DOORS)) for f in w.sheet.facades))
+    return float(sum(len(_of(f, DOOR_CLASSES)) for f in w.sheet.facades))
 
 
 def front_door(w: Wall) -> float:
     """(10) дом: на стене входа есть дверь — 1, нет или стены входа нет — 0."""
-    return float(any(f.side.has_entrance and _of(f, DOORS) for f in w.sheet.facades))
+    return float(any(f.side.has_entrance and _of(f, DOOR_CLASSES) for f in w.sheet.facades))
 
 
 def _floor_rows(f: SideFacade) -> list[list[Element]]:

@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from genfacade.schema import (
+    DOOR_CLASSES,
     DOOR_OPENING_KINDS,
     OPENINGS,
     PLAN_KIND,
@@ -125,3 +126,12 @@ def test_every_opening_kind_is_window_or_door():
 def test_every_wall_opening_class_has_plan_kind():
     """Каждому классу проёма стены — вид проёма плана, и только им."""
     assert set(PLAN_KIND) == set(OPENINGS)
+
+
+def test_door_classes_are_the_openings_that_are_doors_on_the_plan():
+    """Двери стены — по таблицам PLAN_KIND и DOOR_OPENING_KINDS: каждый проём стены — либо окно
+    плана, либо дверь, третьего нет, и класс не пропадает из обоих наборов (gf#293)."""
+    windows = {c for c in OPENINGS if PLAN_KIND[c] is OpeningKind.WINDOW}
+    assert set(DOOR_CLASSES) | windows == set(OPENINGS)
+    assert not set(DOOR_CLASSES) & windows
+    assert ElementClass.GARAGE_DOOR in DOOR_CLASSES

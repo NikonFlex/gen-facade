@@ -55,7 +55,6 @@ CLASSES = ("служебное", "покрыто", "вне объёма")
 class Ref:
     """Ссылка на строки источника: «ТЗ ST02 (стр. 420)»."""
 
-    where: str
     name: str
     what: str
     first: int
@@ -197,7 +196,7 @@ def check_ref(where: str, text: str, project: Project) -> tuple[str, Ref | None]
     match = REF.match(text)
     if not match:
         return f"{where}: ссылка «{text}» не по форме openspec/README.md", None
-    ref = Ref(where, match["name"], match["what"], int(match["first"]),
+    ref = Ref(match["name"], match["what"], int(match["first"]),
               int(match["last"] or match["first"]))
     if ref.name not in project.sources:
         return f"{where}: источника «{ref.name}» нет в «Источники и старшинство»", None

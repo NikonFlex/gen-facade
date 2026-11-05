@@ -134,6 +134,8 @@ PLAN_KIND = {
     ElementClass.DOOR: OpeningKind.DOOR,
     ElementClass.GARAGE_DOOR: OpeningKind.DOOR,
 }
+# Классы проёмов стены, которые на плане — дверь: из двух таблиц выше, а не вторым списком.
+DOOR_CLASSES = tuple(c for c in OPENINGS if PLAN_KIND[c] in DOOR_OPENING_KINDS)
 
 
 class Source(StrEnum):
