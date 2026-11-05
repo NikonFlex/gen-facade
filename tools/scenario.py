@@ -50,6 +50,17 @@ class Mode(StrEnum):
     LIVE = "live"       # настоящий провайдер без записи; приёмка перед push
 
 
+class Outcome(StrEnum):
+    """Исход прогона в квитанции; читает сторож push (.agents/guards/guard.py)."""
+
+    PASSED = "прошло"
+    FAILED = "не прошло"
+
+
+#: Режимы, квитанция которых пускает push: настоящий провайдер, а не кассета.
+PUSH_MODES = frozenset({Mode.LIVE, Mode.RECORD})
+
+
 class Failed(Exception):
     """Ожидание не сбылось или шаг не прошёл: текст — что именно."""
 
@@ -304,8 +315,9 @@ def state_dir() -> Path:
 
 
 def write_receipt(root: Path, mode: Mode, passed: bool) -> str:
-    receipt = {"tree": tree_hash(root), "mode": mode.value, "outcome": "прошло" if passed
-               else "не прошло", "time": datetime.now(UTC).isoformat(timespec="seconds")}
+    receipt = {"tree": tree_hash(root), "mode": mode.value,
+               "outcome": Outcome.PASSED if passed else Outcome.FAILED,
+               "time": datetime.now(UTC).isoformat(timespec="seconds")}
     state_dir().mkdir(parents=True, exist_ok=True)
     with (state_dir() / "receipts.jsonl").open("a", encoding="utf-8") as log:
         log.write(json.dumps(receipt, ensure_ascii=False) + "\n")

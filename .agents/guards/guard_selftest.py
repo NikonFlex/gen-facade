@@ -44,6 +44,10 @@ CASES = [
     (Call(command="gh pr create --title 'Fix #12 x' --body 'Closes #12'"), Verdict.DENY,
      "заголовке"),
     (Call(command="gh pr create --fill"), Verdict.DENY, "--body-file"),
+    # `;` вплотную к слову: до gf#293 тело PR такой команды сторож не проверял
+    (Call(command="gh pr create;ls"), Verdict.DENY, "--body"),
+    (Call(command="echo ok;gh pr create --fill"), Verdict.DENY, "--body-file"),
+    (Call(command="cat x.pem"), Verdict.DENY, "ключами"),
     (Call(command="git commit --no-verify -m x"), Verdict.DENY, "хуки git"),
     (Call(command="git -c core.hooksPath=/dev/null commit -m x"), Verdict.DENY, "хуки git"),
     (Call(command="git log --no-verify-x"), Verdict.ALLOW, ""),
@@ -56,7 +60,9 @@ def project(root: Path, repeat: bool, gated: bool) -> Path:
     bottom = "Локальный повтор: не требуется — настройка\n" if repeat else ""
     files = {
         ".backlog.json": '{"prefix": "ab"}',
-        ".agents/guards/config.json": json.dumps({"prod": [r"\bssh\s+\S*prod"]}),
+        ".agents/guards/config.json": json.dumps({
+            "prod": [r"\bssh\s+\S*prod"], "secret_files": [r"^\.env(\..+)?$", r"\.pem$"],
+            "secret_allow": [".env.example"]}),
         "tools/receipt.json": json.dumps({"exclude": [], "gated": gated}),
         "docs/tasks/ab-0012.md": f"# ab#12\n\n<!-- ↓↓↓ ниже наше: скрипт эту часть не трогает "
                                  f"↓↓↓ -->\n\n{bottom}",
@@ -99,6 +105,10 @@ def pr_and_push(tmp: Path) -> list[str]:
     (root / "app.py").write_text("x = 2\n")
     if decide(push, root)[0] != Verdict.DENY:
         bad.append("правка кода после квитанции не сбросила её")
+    (root / ".agents/guards/config.json").unlink()
+    verdict, why = decide(Call(command="git log"), root)
+    if verdict != Verdict.DENY or "упал" not in why:
+        bad.append("без config.json сторож пропустил команду — ждали отказ «сторож … упал»")
     return bad
 
 
