@@ -10,6 +10,7 @@ TOML сливается с умолчаниями поключно, sheet.css д
 import tomllib
 from importlib.resources import files
 from pathlib import Path
+from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -49,10 +50,39 @@ class Fill(Section):
     other: str
 
 
+class Course(Section):
+    """Ряд рисунка материала: высота и места вертикальных швов внутри периода рисунка."""
+
+    h_m: float
+    joints_m: list[float]
+
+
+class Hatch(Section):
+    """Рисунок вида материала на листе (SVG `<pattern>` в метрах фасада): ряды снизу вверх,
+    повторяются по высоте и по ширине `width_m`. vertical — рисунок повёрнут: ряды стоят
+    вертикально (доска с планкой, фальц), швы идут поперёк них."""
+
+    vertical: bool
+    line_m: float     # толщина линии шва
+    groove_m: float   # вторая линия рядом с каждым швом — нахлёст обшивки, планка; 0 — нет
+    width_m: float    # период по ряду; без швов в ряду — любой
+    courses: list[Course]
+
+
 class Library(Section):
     kinds: dict[str, str]
+    patterns: dict[str, Hatch]  # вид → рисунок; вида нет — зона и элемент сплошным цветом
+    pattern_darken: float       # линии рисунка: каждый канал цвета материала × (1 − это)
+    unhatched_cls: list[ElementClass]  # элементы этих классов рисуют себя сами
     fill: Fill
     class_fill: dict[ElementClass, str]  # опечатка в классе элемента — ошибка загрузки
+
+    @model_validator(mode="after")
+    def _patterns_of_known_kinds(self) -> Self:
+        unknown = self.patterns.keys() - self.kinds.keys()
+        if unknown:
+            raise ValueError(f"рисунок у вида, которого нет в [kinds]: {sorted(unknown)}")
+        return self
 
 
 class SheetLayout(Section):

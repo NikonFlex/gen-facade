@@ -14,7 +14,7 @@ from xml.etree import ElementTree
 import shapely
 
 from genfacade.config import Axes, Config, DoorLook, Levels, Sheet, SheetLayout, TrimLook
-from genfacade.render import sheet_format
+from genfacade.render import hatch, sheet_format
 from genfacade.render.sheet_format import num
 from genfacade.schema import (
     EPS,
@@ -40,11 +40,13 @@ class Pen(NamedTuple):
 
     cfg: Config
     colors: dict[str, str]  # id материала палитры → цвет
+    kinds: dict[str, str]  # id материала палитры → вид из библиотеки
     trim: HouseTrim = HouseTrim()
 
 
 def pen_for(sheet: FacadeSheet, cfg: Config) -> Pen:
-    return Pen(cfg, palette_colors(sheet.spec, cfg), sheet.spec.trim)
+    kinds = {m.id: m.kind for m in sheet.spec.materials}
+    return Pen(cfg, palette_colors(sheet.spec, cfg), kinds, sheet.spec.trim)
 
 
 class Marks(NamedTuple):
@@ -71,11 +73,14 @@ def add_text(g: ElementTree.Element, css_class: str, at: Point, text: str) -> No
     node.text = text
 
 
-def canvas(width: float, height: float, css: str) -> ElementTree.Element:
-    """Корень SVG в метрах: стиль и белый фон."""
+def canvas(width: float, height: float, css: str,
+           patterns: list[ElementTree.Element] = ()) -> ElementTree.Element:
+    """Корень SVG в метрах: стиль, рисунки материалов (`<defs>`) и белый фон."""
     root = ElementTree.Element("svg", {"xmlns": sheet_format.SVG_NS,
                                        "viewBox": f"0 0 {num(width)} {num(height)}"})
     ElementTree.SubElement(root, "style").text = css
+    if patterns:
+        ElementTree.SubElement(root, "defs").extend(patterns)
     # Размер фона числом, не 100%: проценты считаются от viewBox, и при масштабе
     # в смотрелке фон обрезался бы.
     ElementTree.SubElement(root, "rect", {"class": "background",
@@ -93,10 +98,10 @@ def sheet_svg(sheet: FacadeSheet, cfg: Config, violations: list[Violation] | Non
     """
     cells, width, height = _layout(sheet, cfg.sheet.sheet)
     mm_per_m = 1000 / cfg.sheet.sheet.scale
-    root = canvas(width, height, cfg.css)
+    pen = pen_for(sheet, cfg)
+    root = canvas(width, height, cfg.css, _patterns(sheet.facades, pen))
     root.set("width", f"{width * mm_per_m:.0f}mm")
     root.set("height", f"{height * mm_per_m:.0f}mm")
-    pen = pen_for(sheet, cfg)
     axes = _axis_labels(sheet, cfg.sheet.axes.letters)
     marks_at = levels(sheet.spec, cfg.sheet.levels)
     for facade, origin in zip(sheet.facades, cells, strict=True):
@@ -114,7 +119,7 @@ def facade_svg(facade: SideFacade, pen: Pen) -> str:
     """Одна стена без подписей: SVG ровно по стене (длина × верх силуэта), левый край — x = 0.
     Для текстуры дома объёмом (render/house3d.py)."""
     top = _top(facade)
-    root = canvas(facade.side.length_m, top, pen.cfg.css)
+    root = canvas(facade.side.length_m, top, pen.cfg.css, _patterns([facade], pen))
     _facade_geometry(root, facade, (0.0, top), pen)
     return ElementTree.tostring(root, encoding="unicode")
 
@@ -128,6 +133,31 @@ def palette_colors(spec: HouseSpec, cfg: Config) -> dict[str, str]:
             raise ValueError(f"материал {m.id}: нет цвета, и вида {m.kind} нет в библиотеке")
         colors[m.id] = m.color or kinds[m.kind]
     return colors
+
+
+def paint(material: str, pen: Pen) -> str:
+    """Чем залить зону или элемент из материала палитры: рисунком вида (`url(#…)` на паттерн
+    листа), если у вида он есть в библиотеке, иначе цветом."""
+    color, kind = pen.colors[material], pen.kinds[material]
+    return f"url(#{hatch.pattern_id(kind, color)})" if kind in pen.cfg.library.patterns else color
+
+
+def _painted(facade: SideFacade, pen: Pen) -> list[str]:
+    """Материалы, которыми на этой стене красят зоны и элементы."""
+    hatched = [e.material for e in facade.elements
+               if e.material is not None and e.cls not in pen.cfg.library.unhatched_cls]
+    return [z.material for z in facade.zones] + hatched
+
+
+def _patterns(facades: list[SideFacade], pen: Pen) -> list[ElementTree.Element]:
+    """Рисунки материалов, которые нужны листу, — по одному на пару вид × цвет, а не на зону."""
+    lib, found = pen.cfg.library, {}
+    for material in (m for f in facades for m in _painted(f, pen)):
+        kind, color = pen.kinds[material], pen.colors[material]
+        if kind in lib.patterns:
+            found.setdefault(hatch.pattern_id(kind, color),
+                             hatch.pattern(kind, lib.patterns[kind], color, lib.pattern_darken))
+    return list(found.values())
 
 
 def _top(facade: SideFacade) -> float:
@@ -188,7 +218,7 @@ def _box(g: ElementTree.Element, css_class: str, box: tuple[float, ...]) -> Elem
 def _zone(g: ElementTree.Element, z: MaterialZone, pen: Pen) -> None:
     ElementTree.SubElement(g, "polygon", {
         sheet_format.ROLE: z.role, sheet_format.MATERIAL: z.material, "points": points(z.shape),
-        "fill": pen.colors[z.material],
+        "fill": paint(z.material, pen),
     })
 
 
@@ -199,12 +229,20 @@ def element_fill(e: Element, pen: Pen) -> str:
     return pen.colors.get(e.material or "", lib.class_fill.get(e.cls, lib.fill.other))
 
 
+def element_paint(e: Element, pen: Pen) -> str:
+    """Заливка прямоугольника элемента: рисунок вида его материала, а без рисунка или у класса
+    из unhatched_cls — цвет (element_fill)."""
+    if e.material is None or e.cls in pen.cfg.library.unhatched_cls:
+        return element_fill(e, pen)
+    return paint(e.material, pen)
+
+
 def _element(g: ElementTree.Element, e: Element, pen: Pen, zones: list[MaterialZone]) -> None:
     lib = pen.cfg.library
     attrs = {
         sheet_format.CLS: e.cls, sheet_format.ID: e.id,
         "x": num(e.x_m), "y": num(e.y_m), "width": num(e.w_m), "height": num(e.h_m),
-        "fill": element_fill(e, pen),
+        "fill": element_paint(e, pen),
     }
     optional = {sheet_format.FLOOR: e.floor, sheet_format.PARENT: e.parent}
     attrs |= {k: str(v) for k, v in optional.items() if v is not None} | _material(e, zones)

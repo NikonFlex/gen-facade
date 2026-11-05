@@ -115,6 +115,13 @@ function row(label, value) {
   return value == null ? "" : `<div class="tt-row"><span>${label}</span><b>${value}</b></div>`;
 }
 
+// Заливка рисунком вида (`url(#hatch-…)`, gf#304): цвет образца — фон паттерна, цвет материала.
+function paintColor(el) {
+  const paint = el.getAttribute("fill");
+  const ref = /^url\(#(.+)\)$/.exec(paint ?? "");
+  return ref ? el.getRootNode().getElementById(ref[1])?.querySelector("rect")?.getAttribute("fill") : paint;
+}
+
 function swatch(color) {
   return color ? `<span class="swatch" style="background:${color}"></span>` : "";
 }
@@ -123,7 +130,7 @@ function elementCard(el, labels) {
   const d = el.dataset;
   const [kind, cols, rows] = (d.variant ?? "").split(":");
   // Свой stroke лист пишет только окну с материалом: рама — цвет материала, заливка — стекло.
-  const color = el.getAttribute("stroke") ?? el.getAttribute("fill");
+  const color = el.getAttribute("stroke") ?? paintColor(el);
   return `<div class="tt-title">${swatch(color)}${labels.cls[d.cls] ?? d.cls}<span class="tt-id">${d.id}</span></div>`
     + row("Размер", `${metres(el.getAttribute("width"))} × ${metres(el.getAttribute("height"))}`)
     + row("Слева · снизу", `${metres(el.getAttribute("x"))} · ${metres(el.getAttribute("y"))}`)
@@ -136,7 +143,7 @@ function elementCard(el, labels) {
 
 function zoneCard(el, labels) {
   const d = el.dataset;
-  return `<div class="tt-title">${swatch(el.getAttribute("fill"))}${labels.role[d.role] ?? d.role}</div>`
+  return `<div class="tt-title">${swatch(paintColor(el))}${labels.role[d.role] ?? d.role}</div>`
     + row("Материал", d.material);
 }
 
