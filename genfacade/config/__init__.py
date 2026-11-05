@@ -217,6 +217,12 @@ class House3d(Section):
     # выступы стены (gf#268): глубина в метрах для зон этих ролей и элементов этих классов
     relief_role: dict[ZoneRole, float]
     relief_cls: dict[ElementClass, float]
+    # формы выступов (gf#305): ступень крыльца, плита с уклоном, отлив цоколя, профиль карниза
+    riser_m: float = Field(gt=0)
+    tread_m: float = Field(gt=0)
+    slope_edge: float = Field(gt=0, lt=1)
+    plinth_wash_m: float = Field(ge=0)
+    cornice_steps: list[tuple[float, float]] = Field(min_length=1)
 
 
 class Review(Section):

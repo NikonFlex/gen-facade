@@ -218,7 +218,7 @@ def test_invalid_request_lines_name_the_field(client):
 def test_page_keeps_no_refusal_codes_or_texts():
     """Отказ — только из ответа: кодов и текстов отказов в JS нет, `detail` не подменяется."""
     words = [*Refusal, *REFUSAL_TEXT.values()]
-    for name in ("app.js", "review.js", "house3d.js", "refusal.js"):
+    for name in ("app.js", "review.js", "house3d.js", "house3d_relief.js", "refusal.js"):
         text = STATIC.joinpath(name).read_text()
         assert not [w for w in words if w in text], name
         assert ".detail ??" not in text and "err.detail" not in text, name

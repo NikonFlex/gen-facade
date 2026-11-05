@@ -4,6 +4,7 @@
 // three.js грузится по адресу из config/viewer.toml только при открытии вкладки.
 
 import { refusedFrom } from "/static/refusal.js";
+import { Relief } from "/static/house3d_relief.js";
 
 const ROOF_M = 0.15;  // толщина плиты крыши — только чтобы край был виден
 
@@ -63,6 +64,8 @@ export class HouseStage {
     const mid = (v) => (Math.min(...v) + Math.max(...v)) / 2;
     this.center = new THREE.Vector3(mid(xs), data.eaves_m / 2, mid(zs));
     this.radius = Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs), data.eaves_m) / 2;
+    this.relief = new Relief(THREE, this.look, data.trim);
+    this.materials = new Map();  // цвет → материал: выступов на доме десятки, цветов — единицы
     this._roof(THREE, data);
     this._ground(THREE);
   }
@@ -87,7 +90,7 @@ export class HouseStage {
   _edges(THREE, geo, position) {
     const lines = new THREE.LineSegments(new THREE.EdgesGeometry(geo),
       new THREE.LineBasicMaterial({ color: this.look.edges }));
-    lines.position.copy(position);
+    if (position) lines.position.copy(position);
     return lines;
   }
 
@@ -108,22 +111,21 @@ export class HouseStage {
     this.render();
   }
 
-  // Выступы стены (цоколь, карниз, подоконник, козырёк): коробки перед текстурой, в осях стены —
-  // x от её левого края, y от земли, z наружу. У края стены коробка удлиняется на свою глубину:
-  // пояс соседних стен сходится на углу без щели.
+  // Выступы стены (цоколь, карниз, подоконник, козырёк, крыльцо): форму по классу и виду строит
+  // Relief (house3d_relief.js) в осях стены — x от её левого края, y от земли, z наружу.
   _relief(THREE, w, turn) {
     const frame = new THREE.Group();
     const [[lx, ly], [rx, ry]] = [w.left, w.right];
     frame.position.set((lx + rx) / 2, 0, -(ly + ry) / 2);
     frame.rotation.y = turn;
-    const EDGE = 0.01;  // м: рамка у края стены считается доходящей до угла
     for (const r of w.relief) {
-      const x0 = r.x0 <= EDGE ? -r.depth : r.x0;
-      const x1 = r.x1 >= w.length_m - EDGE ? w.length_m + r.depth : r.x1;
-      const geo = new THREE.BoxGeometry(x1 - x0, r.y1 - r.y0, r.depth);
-      const box = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: r.color }));
-      box.position.set((x0 + x1) / 2 - w.length_m / 2, (r.y0 + r.y1) / 2, r.depth / 2);
-      frame.add(box, this._edges(THREE, geo, box.position));
+      if (!this.materials.has(r.color)) {
+        this.materials.set(r.color, new THREE.MeshLambertMaterial({ color: r.color }));
+      }
+      for (const geo of this.relief.geometries(r, w)) {
+        geo.translate(-w.length_m / 2, 0, 0);
+        frame.add(new THREE.Mesh(geo, this.materials.get(r.color)), this._edges(THREE, geo));
+      }
     }
     this.scene.add(frame);
   }
