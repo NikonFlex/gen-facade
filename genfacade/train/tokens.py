@@ -37,6 +37,7 @@ from genfacade import derive
 from genfacade.config import Config, Tokens
 from genfacade.derive import Flags
 from genfacade.schema import (
+    DOOR_OPENING_KINDS,
     EPS,
     BuildingType,
     CanopyKind,
@@ -297,7 +298,7 @@ def _side(side: Side, mode: Mode, cfg: Tokens) -> list[str]:
 
 def given(kind: OpeningKind, mode: Mode) -> bool:
     """Проём плана задан модели: вход — всегда, окна — только в режиме 2."""
-    return mode is Mode.WITH_OPENINGS or kind is not OpeningKind.WINDOW
+    return mode is Mode.WITH_OPENINGS or kind in DOOR_OPENING_KINDS
 
 
 def _fixed(e: Element, mode: Mode) -> list[FixedField]:
@@ -523,14 +524,15 @@ def _read_element(r: _Reader, cls: ElementClass, index: int) -> tuple[Element, s
 def _read_box(r: _Reader, cls: ElementClass) -> dict[str, float]:
     """x y w h; у окна ширина и высота — его типоразмера."""
     x, y = r.length(), r.length()
-    if cls is not ElementClass.WINDOW:
-        return {"x_m": x, "y_m": y, "w_m": r.length(), "h_m": r.length()}
-    got = r.take()
-    name_, _, k = got.partition(":")
-    if name_ != SIZE or not k.isdigit() or int(k) >= len(r.sizes):
-        raise TokenError(f"токен {r.at}: ждали типоразмер окна из {len(r.sizes)}, пришло {got!r}")
-    w, h = r.sizes[int(k)]
-    return {"x_m": x, "y_m": y, "w_m": metres(w, r.cfg), "h_m": metres(h, r.cfg)}
+    if cls is ElementClass.WINDOW:  # особый случай протокола, как в _element при записи
+        got = r.take()
+        name_, _, k = got.partition(":")
+        if name_ != SIZE or not k.isdigit() or int(k) >= len(r.sizes):
+            raise TokenError(
+                f"токен {r.at}: ждали типоразмер окна из {len(r.sizes)}, пришло {got!r}")
+        w, h = r.sizes[int(k)]
+        return {"x_m": x, "y_m": y, "w_m": metres(w, r.cfg), "h_m": metres(h, r.cfg)}
+    return {"x_m": x, "y_m": y, "w_m": r.length(), "h_m": r.length()}
 
 
 def _read_trims(r: _Reader, cls: ElementClass) -> set[Trim]:

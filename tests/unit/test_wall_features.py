@@ -104,3 +104,9 @@ def test_front_rich_compares_entrance_wall_with_back(house, cfg):
     assert _values(house, cfg)["front_rich"][0] == pytest.approx(0.1)
     back = _added(house, 2, ElementClass.WINDOW, x_m=6.0)
     assert _values(back, cfg)["front_rich"] == [pytest.approx(0.0)] * 4
+
+
+def test_every_zone_role_is_main_or_not_main():
+    """Новая роль зоны не попадает молча в «скрытые» зоны: её надо разнести явно (gf#293)."""
+    assert {ZoneRole.MAIN, *wall_features.NOT_MAIN} == set(ZoneRole)
+    assert ZoneRole.MAIN not in wall_features.NOT_MAIN

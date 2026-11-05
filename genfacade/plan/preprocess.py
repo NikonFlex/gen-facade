@@ -20,6 +20,10 @@ from genfacade.schema import Mode, OpeningKind, Plan, PlanOpening, Rect, Source
 # DEFAULT_DOOR_WIDTH). Протокол, а не настройка: иначе фасад разойдётся с 3D-моделью.
 ENTRANCE_WIDTH_M = 0.9
 
+# Что в режиме 1 (глухой куб) заделывается: все наружные проёмы, кроме входа. Явный набор, а не
+# «не вход»: новый вид проёма получает решение осознанно — тест в test_plan.py падает, пока его нет.
+SEALED_IN_BLIND = frozenset({OpeningKind.WINDOW, OpeningKind.DOOR})
+
 
 def preprocess(svg: Path | str, mode: Mode, cfg: PlanConfig) -> Plan:
     """План GenPlan → Plan; дефектный план — PlanError с причиной (правило 7)."""
@@ -32,7 +36,7 @@ def preprocess(svg: Path | str, mode: Mode, cfg: PlanConfig) -> Plan:
     contour = sides.start_at(contour, entrance.gap.box)
     scale = ENTRANCE_WIDTH_M / entrance.gap.length_px
     blind = mode is Mode.BLIND
-    sealed = [f for f in found if blind and f.external and f.kind is not OpeningKind.ENTRANCE]
+    sealed = [f for f in found if blind and f.external and f.kind in SEALED_IN_BLIND]
     walls = raw.walls + [f.gap.box for f in sealed]
     open_ = [f for f in found if f.external and f not in sealed]
     return Plan(

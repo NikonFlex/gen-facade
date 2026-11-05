@@ -11,7 +11,9 @@ import numpy
 
 from genfacade import pipeline
 from genfacade.schema import (
+    DOOR_OPENING_KINDS,
     EPS,
+    PLAN_KIND,
     Element,
     ElementClass,
     FacadeSheet,
@@ -87,10 +89,9 @@ def floor_of(y: float, spec: HouseSpec) -> int:
 def side(index: int, w: Wall, elements: list[Element], entrance_side: bool) -> Side:
     """Проёмы первого этажа — проёмы плана; вход — самая широкая дверь стороны входа."""
     ground = _in_plan([e for e in elements if e.cls in OPENINGS and e.floor == 1])
-    doors = [e for e in ground if e.cls is not ElementClass.WINDOW]
+    doors = [e for e in ground if PLAN_KIND[e.cls] in DOOR_OPENING_KINDS]
     entrance = max(doors, key=lambda e: e.w_m) if entrance_side and doors else None
-    openings = [Opening(kind=OpeningKind.WINDOW if e.cls is ElementClass.WINDOW
-                        else OpeningKind.ENTRANCE if e is entrance else OpeningKind.DOOR,
+    openings = [Opening(kind=OpeningKind.ENTRANCE if e is entrance else PLAN_KIND[e.cls],
                         x_m=e.x_m, width_m=e.w_m) for e in ground]
     return Side(index=index, length_m=w.length, orientation=tuple(w.normal), openings=openings,
                 has_entrance=entrance is not None)
