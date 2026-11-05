@@ -45,6 +45,7 @@ class Outcome(StrEnum):
     """Что сказать в комментарии задачи; переоткрывает только REOPENED."""
 
     REOPENED = "переоткрыта"
+    STILL_OPEN = "уже открыта"
     NOT_PLANNED = "закрыта как «не будем делать», не переоткрыта"
     NO_BASELINE = "списка прошлого прогона нет, не переоткрыта"
     OLD_RED = "не переоткрыта"
@@ -118,6 +119,9 @@ def comment(outcome: Outcome, new_red: list[str], prs: str, run_url: str) -> str
     if outcome is Outcome.REOPENED:
         return (f"Переоткрыта: после мержа {prs} полный набор упал на тестах, которые в прошлом "
                 f"прогоне проходили. Прогон: {run_url}\n\n{listed(new_red)}")
+    if outcome is Outcome.STILL_OPEN:
+        return (f"После мержа {prs} полный набор упал на тестах, которые в прошлом прогоне "
+                f"проходили; задача и так открыта. Прогон: {run_url}\n\n{listed(new_red)}")
     if outcome is Outcome.NOT_PLANNED:
         return (f"После мержа {prs} полный набор упал на тестах, которые в прошлом прогоне "
                 "проходили, но задача закрыта как «не будем делать» — не переоткрыта. "
@@ -132,16 +136,16 @@ def comment(outcome: Outcome, new_red: list[str], prs: str, run_url: str) -> str
     return f"Полный набор после мержа {prs} зелёный. Прогон: {run_url}"
 
 
-def reopen(num: str) -> bool:
-    """Открыть задачу, если она закрыта. False — открывать нельзя: закрыта как «не будем делать»,
-    это решение человека, а красный набор его не отменяет. Состояние читается до записи."""
+def reopen(num: str) -> Outcome:
+    """Открыть задачу, если она закрыта; закрытую как «не будем делать» — нет: это решение
+    человека, красный набор его не отменяет. Состояние читается до записи."""
     issue = api("GET", f"/repos/{repo()}/issues/{num}")
     if issue["state"] == "open":
-        return True
+        return Outcome.STILL_OPEN
     if not_planned(issue.get("state_reason")):
-        return False
+        return Outcome.NOT_PLANNED
     api("PATCH", f"/repos/{repo()}/issues/{num}", {"state": "open"})
-    return True
+    return Outcome.REOPENED
 
 
 def read_baseline(path: Path) -> set[str] | None:
@@ -162,8 +166,8 @@ def settle(ref: str, prs: set[int], now: set[str], before: set[str] | None) -> O
     """Одна задача: переоткрыть при новом красном и оставить комментарий."""
     num = ref.split("#")[1]
     outcome = outcome_of(now, before)
-    if outcome is Outcome.REOPENED and not reopen(num):
-        outcome = Outcome.NOT_PLANNED
+    if outcome is Outcome.REOPENED:
+        outcome = reopen(num)
     new_red = sorted(now - (before or set()))
     text = comment(outcome, new_red, ", ".join(f"#{n}" for n in sorted(prs)), os.environ["RUN_URL"])
     api("POST", f"/repos/{repo()}/issues/{num}/comments", {"body": text})
@@ -212,10 +216,12 @@ class FakeApi:
     """Подмена `api`: журнал вызовов, задачи по номерам; номера из `broken` падают как сеть."""
 
     def __init__(self, issues: dict[str, dict], broken: frozenset[str] = frozenset()) -> None:
-        self.issues, self.broken, self.calls = issues, broken, []
+        self.issues, self.broken, self.calls, self.bodies = issues, broken, [], {}
 
     def __call__(self, method: str, path: str, body: dict | None = None):
         self.calls.append((method, path))
+        if method == "POST":
+            self.bodies[path.split("/")[5]] = body["body"]
         num = path.split("/")[5]
         if num in self.broken:
             raise urllib.error.URLError("сеть")
@@ -269,6 +275,8 @@ def selftest_verdict() -> list[str]:
             got = (code, written, stub.wrote("PATCH", "1"), stub.wrote("PATCH", "2"))
             if got != want:
                 bad.append(f"{name}: код, список, PATCH 1, PATCH 2 = {got}, ждали {want}")
+            if name == "уже открыта" and stub.bodies["1"].startswith("Переоткрыта"):
+                bad.append("уже открытая — в комментарии «Переоткрыта», хотя её не открывали")
     return bad
 
 
@@ -284,6 +292,8 @@ def selftest() -> int:
         bad.append("базы нет — не сказано, что списка нет")
     if "не будем делать" not in comment(Outcome.NOT_PLANNED, ["a::b"], "#1", "u"):
         bad.append("закрыта как «не будем делать» — не сказано")
+    if comment(Outcome.STILL_OPEN, ["a::b"], "#1", "u").startswith("Переоткрыта"):
+        bad.append("уже открытая — названа «Переоткрыта», хотя её не открывали")
     if "зелёный" not in comment(Outcome.GREEN, [], "#1", "u"):
         bad.append("зелёный — не «зелёный»")
     with tempfile.TemporaryDirectory() as d:
