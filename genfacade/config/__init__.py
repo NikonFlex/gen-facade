@@ -649,7 +649,14 @@ class SpecStub(Section):
             unknown = used - set(self.colors)
             if unknown:
                 raise ValueError(f"отделка {name}: нет цветов в ряду colors — {sorted(unknown)}")
+            if styles := set(finish.styles) - set(self.style_words):
+                raise ValueError(f"отделка {name}: нет стилей в style_words — {sorted(styles)}")
         return self
+
+    def kinds(self) -> set[str]:
+        """Виды материалов, которые называет стаб: в отделках и в словах вида стен."""
+        return {m.kind for f in self.finish.values() for m in f.materials.values()} \
+            | set(self.material_words)
 
 
 class Models(Section):
@@ -762,6 +769,13 @@ class Config(Section):
     guidelines: Guidelines
     derive: Derive
     css: str
+
+    @model_validator(mode="after")
+    def _stub_kinds_in_library(self) -> "Config":
+        """Вид материала стаба шага 1 — из [kinds] library.toml: опечатка — ошибка загрузки."""
+        if unknown := self.models.spec.kinds() - set(self.library.kinds):
+            raise ValueError(f"spec: видов нет в library.toml [kinds] — {sorted(unknown)}")
+        return self
 
 
 def load(*user_dirs: Path) -> Config:
