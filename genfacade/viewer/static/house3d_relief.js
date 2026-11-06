@@ -6,8 +6,17 @@
 
 const EDGE = 0.01;  // м: рамка у края стены считается доходящей до угла
 
-// Выступ → метод формы: у зоны ключ — её роль, у элемента — класс. Остальное — коробка.
+// Выступ → метод формы: у зоны ключ — её роль ([house3d.relief_role]), у элемента — класс
+// ([house3d.relief_cls]); вид подоконника и козырька (SillKind, CanopyKind в schema) → метод формы.
+// Выступа или вида нет в таблице — ошибка: новый выступ в конфиге без формы не встаёт коробкой молча.
 const FORMS = { plinth: "plinth", cornice: "cornice", sill: "sill", canopy: "canopy", porch: "porch" };
+const SILLS = { flat: "plain", sloped: "_wedge" };
+const CANOPIES = { flat: "_wedge", gable: "_gable", bracket: "_bracketed" };
+
+function pick(table, key, what) {
+  if (!(key in table)) throw new Error(`3D: нет формы для ${what} «${key}»`);
+  return table[key];
+}
 
 export class Relief {
   // look — [house3d], trim — [trim] листа (размеры плиты и кронштейнов козырька).
@@ -19,7 +28,7 @@ export class Relief {
 
   // w — стена из данных: length_m и convex_left. Геометрии — в осях стены с началом в её левом краю.
   geometries(r, w) {
-    return this[FORMS[r.role ?? r.cls] ?? "plain"](r, w);
+    return this[pick(FORMS, r.role ?? r.cls, "выступа")](r, w);
   }
 
   // Левый край рамки. У края стены соседние выступы сходятся без щели и нахлёста: на выпуклом
@@ -55,15 +64,13 @@ export class Relief {
 
   // Подоконник: flat — тонкая полка, sloped — плита с отливом (уклон наружу).
   sill(r, w) {
-    return r.kind === "sloped" ? this._wedge(r, w) : this.plain(r, w);
+    return this[pick(SILLS, r.kind, "подоконника")](r, w);
   }
 
-  // Козырёк над дверью: gable — двускатный фронтоном наружу, bracket — плита на двух кронштейнах,
-  // иначе (flat) — плита с уклоном от стены.
+  // Козырёк над дверью: flat — плита с уклоном от стены, gable — двускатный фронтоном наружу,
+  // bracket — плита на двух кронштейнах.
   canopy(r, w) {
-    if (r.kind === "gable") return [this._gable(r)];
-    if (r.kind === "bracket") return this._bracketed(r);
-    return this._wedge(r, w);
+    return this[pick(CANOPIES, r.kind, "козырька")](r, w);
   }
 
   // Крыльцо: площадка у двери глубиной depth и ступени перед ней. Профиль — лестница: ступеней
@@ -90,7 +97,7 @@ export class Relief {
     const THREE = this.THREE;
     const shape = new THREE.Shape([new THREE.Vector2(r.x0, r.y0), new THREE.Vector2(r.x1, r.y0),
       new THREE.Vector2((r.x0 + r.x1) / 2, r.y1)]);
-    return new THREE.ExtrudeGeometry(shape, { depth: r.depth, bevelEnabled: false });
+    return [new THREE.ExtrudeGeometry(shape, { depth: r.depth, bevelEnabled: false })];
   }
 
   _bracketed(r) {
