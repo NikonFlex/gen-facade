@@ -12,7 +12,7 @@ from genfacade import config
 from genfacade.render import hatch
 from genfacade.render.house3d import house_3d
 from genfacade.render.sheet_format import ID, MATERIAL, ROLE
-from genfacade.render.svg import sheet_svg
+from genfacade.render.svg import palette_colors, sheet_svg
 from genfacade.schema import Element, ElementClass, FacadeSheet, ZoneRole
 
 URL = re.compile(r"url\(#([^)]+)\)")
@@ -51,12 +51,13 @@ def _horizontal_ys(pattern: ElementTree.Element) -> list[float]:
 
 def test_brick_zone_is_filled_with_pattern_plaster_with_color(house, cfg):
     """У зоны вида brick — заливка рисунком из <defs>, у штукатурки и бетона — сплошная."""
-    root = _root(sheet_svg(_with_kind(house, "plinth", "brick"), cfg))
+    sheet = _with_kind(house, "plinth", "brick")
+    root = _root(sheet_svg(sheet, cfg))
     patterns = _patterns(root)
     plinth = _zone_fills(root, "plinth")
     assert plinth and all(URL.fullmatch(f) and URL.fullmatch(f).group(1) in patterns
                           for f in plinth)
-    assert set(_zone_fills(root, "main")) == {cfg.library.kinds["plaster"]}
+    assert set(_zone_fills(root, "main")) == {palette_colors(sheet.spec, cfg)["main"]}
     # штукатурка без рисунка: паттерна у неё нет и в <defs>
     assert not any(i.startswith("hatch-plaster") for i in patterns)
 
@@ -141,7 +142,7 @@ def test_element_from_material_is_hatched_blind_and_window_are_not(house, cfg):
     root = _root(sheet_svg(sheet, cfg))
     fills = {r.get(ID): r.get("fill") for r in root.iterfind(".//{*}rect") if r.get(ID)}
     assert URL.fullmatch(fills[boxes[ElementClass.CORNICE].id])
-    assert fills[boxes[ElementClass.BLIND].id] == cfg.library.kinds["wood"]
+    assert fills[boxes[ElementClass.BLIND].id] == palette_colors(sheet.spec, cfg)["accent"]
     assert fills[boxes[ElementClass.WINDOW].id] == cfg.library.fill.glass
 
 
