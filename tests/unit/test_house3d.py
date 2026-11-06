@@ -9,7 +9,7 @@ from genfacade.datasets.synthetic import build
 from genfacade.render.house3d import house_3d
 from genfacade.render.sheet_format import num
 from genfacade.render.svg import element_fill, pen_for, sheet_svg
-from genfacade.schema import ElementClass, FacadeSheet, SideFacade, ZoneRole
+from genfacade.schema import CanopyKind, ElementClass, FacadeSheet, SideFacade, SillKind, ZoneRole
 from genfacade.unfold import unfold
 
 
@@ -93,3 +93,61 @@ def test_plinth_and_cornice_stand_out(cfg):
         assert len(wall["relief"]) == len(plinths) + len(raised)
         deep = look.relief_role[ZoneRole.PLINTH]
         assert sum(b["depth"] == deep for b in wall["relief"]) >= len(plinths)
+
+
+def _rich_houses(cfg) -> list[FacadeSheet]:
+    """Синтетические дома, где есть и крыльцо, и козырёк, и подоконник, и карниз, — с видами
+    козырька и подоконника на любой вкус."""
+    need = {ElementClass.PORCH, ElementClass.CANOPY, ElementClass.SILL, ElementClass.CORNICE}
+    found = [s for s in (build.sample(k, cfg).sheet for k in range(30))
+             if need <= {e.cls for f in s.facades for e in f.elements}]
+    assert {s.spec.trim.canopy for s in found} >= {*CanopyKind} - {CanopyKind.NONE}
+    assert SillKind.SLOPED in {s.spec.trim.sill for s in found}
+    return found
+
+
+def test_relief_tells_its_class_and_kind(cfg):
+    """gf#305: форму выступа строит просмотр по его классу и виду — `house_3d` отдаёт класс
+    (элемент) или роль (зона), а у козырька и подоконника — вид из параметров дома."""
+    kinds = {ElementClass.CANOPY: "canopy", ElementClass.SILL: "sill"}
+    seen = set()
+    for sheet in _rich_houses(cfg):
+        for wall, facade in zip(house_3d(sheet, cfg)["walls"], sheet.facades, strict=True):
+            raised = [e for e in facade.elements if e.cls in cfg.viewer.house3d.relief_cls]
+            got = [b for b in wall["relief"] if b["cls"] is not None]
+            assert [b["cls"] for b in got] == [e.cls for e in raised]
+            assert [b["role"] for b in wall["relief"] if b["cls"] is None] == [
+                z.role for z in facade.zones if z.role in cfg.viewer.house3d.relief_role]
+            for b in got:
+                want = getattr(sheet.spec.trim, kinds[b["cls"]]) if b["cls"] in kinds else None
+                assert b["kind"] == want, b["cls"]
+                seen.add((b["cls"], b["kind"]))
+    assert {(ElementClass.CANOPY, k) for k in CanopyKind if k is not CanopyKind.NONE} <= seen
+    assert (ElementClass.SILL, SillKind.SLOPED) in seen
+    assert {c for c, _ in seen} >= {ElementClass.CORNICE, ElementClass.PORCH}
+
+
+def _porch_of_height(cfg, height_m: float) -> dict:
+    """Крыльцо дома с высотой `height_m`, как его отдаёт `house_3d`."""
+    sheet = _rich_houses(cfg)[0]
+    facades = [f.model_copy(update={"elements": [
+        e.model_copy(update={"h_m": height_m}) if e.cls is ElementClass.PORCH else e
+        for e in f.elements]}) for f in sheet.facades]
+    walls = house_3d(sheet.model_copy(update={"facades": facades}), cfg)["walls"]
+    return next(b for w in walls for b in w["relief"] if b["cls"] is ElementClass.PORCH)
+
+
+@pytest.mark.parametrize(("height_m", "steps"), [(0.61, 4), (7 * 0.17, 7), (0.17, 1), (0.18, 2)])
+def test_porch_steps_from_height(cfg, height_m, steps):
+    """Число ступеней — высота крыльца, поделённая на высоту ступени (0,17 м), вверх: 0,61 м —
+    четыре; ровно семь ступеней (7 × 0,17 = 1,1900000000000002 в двоичной дроби) не становятся
+    восемью."""
+    assert cfg.viewer.house3d.riser_m == 0.17
+    assert _porch_of_height(cfg, height_m)["steps"] == steps
+
+
+def test_corner_is_convex_or_not(sheet, cfg):
+    """Выпуклость левого угла стены — от неё зависит стык карнизов на углу: у прямоугольника все
+    углы выпуклые, у Г-образного дома внутренний угол — левый у четвёртой стороны (индекс 3)."""
+    got = [w["convex_left"] for w in house_3d(sheet, cfg)["walls"]]
+    assert got == ([True] * 4 if len(got) == 4 else [True, True, True, False, True, True])
