@@ -122,6 +122,46 @@ def test_l_shaped_house(tmp_path):
     assert errors(validate(sample.sheet, CFG.checks)) == []
 
 
+GABLE_FT = 14.0  # конёк над чистым полом
+
+
+def drawn(left: dict | None = None) -> Markup:
+    """Тот же дом, размеченный целиком (gf#323): у левой стены фронтон до конька, крыша на виде,
+    участок карниза и окно во фронтоне; `left` меняет поля левой стены."""
+    raw = markup().model_dump(mode="json")
+    wall, line = raw["sides"][1]["wall"], pt_y(EAVE_FT)
+    raw["sides"][1] |= {
+        "outline": [[wall[0], pt_y(-PLINTH_FT)], [wall[0], line], [sum(wall) / 2, pt_y(GABLE_FT)],
+                    [wall[1], line], [wall[1], pt_y(-PLINTH_FT)]],
+        "roof": [[[wall[0] - 18, line + 9], [sum(wall) / 2, pt_y(GABLE_FT + 1)],
+                  [wall[1] + 18, line + 9]]],
+        "eaves": [{"x": wall, "y": line, "floors": 1}]} | (left or {})
+    raw["sides"][1]["elements"].append({"cls": "window", "box": box(9, 9.5, 2, 2.5)})
+    return Markup.model_validate(raw)
+
+
+def test_drawing_above_eaves_is_cut_as_before():
+    """Силуэт, крыша и карниз по участкам не меняют пример: окно во фронтоне срезано по карнизу и
+    идёт в счёт срезанного (`data: Стена до карниза в данных`)."""
+    plain, dropped = manual.house(markup(), CFG.data.manual)
+    full, dropped_full = manual.house(drawn(), CFG.data.manual)
+    assert full == plain
+    assert dropped_full == dropped + 1
+
+
+def test_house_with_parts_of_different_height_waits():
+    """Участок карниза над другой этажностью или на другой отметке — у дома части разной высоты:
+    модуль держит один карниз на дом, пример не пишется (gf#322)."""
+    wall = markup().sides[1].wall
+    for eaves in ({"x": wall, "y": pt_y(EAVE_FT), "floors": 2},
+                  {"x": [wall[0], wall[0] + 5 * PT], "y": pt_y(EAVE_FT - 2), "floors": 1}):
+        with pytest.raises(manual.Unsupported, match="gf#322"):
+            manual.house(drawn({"eaves": [eaves]}), CFG.data.manual)
+    beyond = {"x": [wall[0], wall[1] + 2 * PT], "y": pt_y(EAVE_FT), "floors": 1}
+    with pytest.raises(manual.BadMarkup, match="за краем стены"):
+        manual.house(drawn({"eaves": [beyond]}), CFG.data.manual)
+
+
 def finished(**changes) -> Markup:
     """Тот же дом с отделкой с листа (gf#245): кирпичный цоколь, карниз под отметкой карниза на
     стороне входа и камень в нижней части левой стены, заходящий за её край."""
@@ -172,6 +212,8 @@ def test_run_writes_samples_and_manifest(tmp_path):
     three = markup().model_dump()["sides"][:3]
     (ffh / "ffh-crooked.toml").write_text(_toml(markup(id="ffh-crooked", sides=three)))
     (ffh / "ffh-broken.toml").write_text('id = "ffh-broken"\n')  # не разметка: нет сторон
+    annex = {"eaves": [{"x": markup().sides[1].wall, "y": pt_y(EAVE_FT - 2), "floors": 1}]}
+    (ffh / "ffh-annex.toml").write_text(_toml(drawn(annex).model_copy(update={"id": "ffh-annex"})))
     data = CFG.data.model_copy(update={
         "paths": CFG.data.paths.model_copy(update={"samples_dir": tmp_path / "samples"}),
         "manual": CFG.data.manual.model_copy(update={
@@ -182,6 +224,8 @@ def test_run_writes_samples_and_manifest(tmp_path):
     # битая разметка — отказ своего дома, остальные собраны (C10, gf#293)
     assert sorted(saved["rejected"]) == ["ffh-broken", "ffh-crooked"]
     assert saved["rejected"]["ffh-broken"].startswith("разметка не читается")
+    # дом с частями разной высоты размечен верно — ждёт модуля, а не отказ (gf#323)
+    assert list(saved["waiting"]) == ["ffh-annex"]
     assert saved["invalid"] == {}
 
 

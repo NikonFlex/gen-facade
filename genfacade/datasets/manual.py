@@ -6,9 +6,12 @@
 стороны входа, контур ортогональный: у каждой — левый и правый край стены и отметка чистого пола в
 pt, и внутренний ли угол после неё (Г-, Т-контур, gf#199).
 
-Что выше карниза и чего формат не держит (скаты, фронтоны, мансарды), разметчик не размечает, а
-перечисляет в `cut` — это идёт в опись (`data: Стена до карниза в данных`); элемент, заходящий
-за карниз или угол, обрезается по стене.
+Разметка — запись чертежа целиком, а не подгонка под модуль (gf#323): силуэт стены с фронтоном или
+ступенью (`outline`), участки карниза со своей этажностью (`eaves`), крыша на виде (`roof`) и
+элементы выше карниза. Сборщик берёт то, что модуль держит: элемент, заходящий за карниз или угол,
+обрезается по стене, целиком срезанный идёт в счёт `cut` описи (`data: Стена до карниза в
+данных`); дом с частями разной высоты — не пример, а строка `waiting` описи: модуль держит один
+карниз на дом (gf#322). Чего разметчик не размечает (веранда, ступени), он перечисляет в `cut`.
 
 Отделка (gf#245): цоколь — зона от земли до чистого пола (`plinth_ft`) материалом `plinth_material`,
 основная — от цоколя до карниза, вторая отделка (акцент, пояс) — прямоугольниками стороны; карниз —
@@ -65,6 +68,11 @@ class BadContour(BadMarkup):
     """Стороны разметки не складываются в замкнутый ортогональный контур по часовой."""
 
 
+class Unsupported(Exception):
+    """Разметка верна, но такого дома модуль пока не держит: пример не пишется, дом — в `waiting`
+    описи с задачей, которая его включит."""
+
+
 class Mark(Model):
     """Элемент на листе: прямоугольник x0, верх, x1, низ в pt."""
 
@@ -82,6 +90,18 @@ class ZoneMark(Model):
     box: tuple[float, float, float, float]
 
 
+class EavesMark(Model):
+    """Участок карниза на виде: от x0 до x1 и отметка карниза y (верх стены под свесом) в pt,
+    этажей под ним."""
+
+    x: tuple[float, float]
+    y: float
+    floors: int = Field(ge=1)
+
+
+Point = tuple[float, float]
+
+
 class Elevation(Model):
     view: str            # подпись вида на листе: по ней разметку сверяют с PDF
     page: int = Field(ge=1)
@@ -90,6 +110,11 @@ class Elevation(Model):
     elements: list[Mark] = []
     zones: list[ZoneMark] = []
     inner_corner: bool = False  # угол после этой стороны — внутренний (Г-, Т-контур, gf#199)
+    # Запись чертежа выше карниза и по участкам (gf#323): пусто — стена прямоугольником до карниза
+    # дома. Сборщик сейчас читает только участки карниза; силуэт и крыша — для сверки и gf#320–322.
+    outline: list[Point] = []      # силуэт стены в pt без свесов крыши: фронтон, ступень
+    eaves: list[EavesMark] = []
+    roof: list[list[Point]] = []   # крыша на виде — многоугольники в pt
 
 
 class Markup(Model):
@@ -113,6 +138,7 @@ def read(path: Path) -> Markup:
 
 def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
     """Пример дома и сколько элементов обрезано целиком (за карнизом или углом)."""
+    _one_eaves(m, cfg)
     fp = _outline(m, cfg)
     lengths = [w.length for w in fp.walls]
     spec = _spec(m)
@@ -128,6 +154,21 @@ def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
                for f, e in zip(sheet.facades, m.sides, strict=True)]
     sheet = sheet.model_copy(update={"facades": facades})
     return Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet), dropped
+
+
+def _one_eaves(m: Markup, cfg: Manual) -> None:
+    """Участки карниза — на стене своей стороны; у всех этажность и отметка дома, иначе у дома
+    части разной высоты, а модуль держит один карниз на дом (`facade: Общие параметры дома`)."""
+    floors, tol = len(m.floor_heights_ft), cfg.length_tol_m / M_PER_FT * m.pt_per_ft
+    for e in m.sides:
+        line = e.floor - sum(m.floor_heights_ft) * m.pt_per_ft
+        for s in e.eaves:
+            if s.x[0] < e.wall[0] - tol or s.x[1] > e.wall[1] + tol:
+                raise BadMarkup(f"{m.id}: {e.view}: участок карниза за краем стены")
+            off = abs(s.y - line) / m.pt_per_ft * M_PER_FT
+            if s.floors != floors or off > cfg.eaves_tol_m:
+                raise Unsupported(f"{m.id}: части разной высоты — {e.view}: карниз над {s.floors} "
+                                  f"эт., {off:.2f} м от карниза дома; модуль держит один (gf#322)")
 
 
 def _outline(m: Markup, cfg: Manual) -> rect_house.Footprint:
@@ -266,7 +307,7 @@ def run(cfg: Config) -> Path:
     # Источник целиком — производное разметки: удалённая разметка не должна оставить пример.
     for old in store.ids(root, Source.MANUAL):
         store.path(root, Source.MANUAL, old).unlink()
-    rejected, cut, roofs, absent, invalid = {}, {}, {}, {}, Counter()
+    rejected, waiting, cut, roofs, absent, invalid = {}, {}, {}, {}, {}, Counter()
     for path in sorted(rules.paths.markup_dir.glob("*/*.toml")):
         try:  # разметка, которая не читается, — отказ этого дома, а не всей сборки (C10)
             m = read(path)
@@ -278,9 +319,12 @@ def run(cfg: Config) -> Path:
         except BadMarkup as e:
             rejected[m.id] = str(e)
             continue
+        except Unsupported as e:
+            waiting[m.id] = str(e)
+            continue
         cut[m.id], roofs[m.id], absent[m.id] = len(m.cut) + dropped, m.roof, m.absent
         invalid.update(v.rule for v in errors(validate(sample.sheet, cfg.checks)))
         store.write(sample, root)
     return store.write_manifest(root, Source.MANUAL, {
-        "rejected": rejected, "cut": cut, "roofs": roofs, "absent": absent,
+        "rejected": rejected, "waiting": waiting, "cut": cut, "roofs": roofs, "absent": absent,
         "invalid": dict(invalid)})
