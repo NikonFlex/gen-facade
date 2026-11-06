@@ -7,13 +7,11 @@
 """
 
 import hashlib
-import re
 from dataclasses import dataclass, field
 
 from genfacade.config import Finish, SpecStub
+from genfacade.models import words as text_words
 from genfacade.schema import HouseTrim, Material, PaletteRole, Trim
-
-WORD = re.compile(r"[^\W\d_]+")
 
 
 @dataclass(frozen=True)
@@ -36,7 +34,7 @@ class Mentions:
 
 def look(text: str, style: str, cfg: SpecStub) -> Look:
     """Отделка дома по тексту; описания нет — отделка по умолчанию и первые цвета рядов."""
-    tokens = WORD.findall(text.lower())
+    tokens = text_words.tokens(text)
     mentioned = _mentions(tokens, cfg)
     digest = hashlib.sha256(" ".join(tokens).encode()).digest()
     name = cfg.default_finish if not tokens else _choose(mentioned, style, digest, cfg)
@@ -47,8 +45,7 @@ def look(text: str, style: str, cfg: SpecStub) -> Look:
 
 
 def _stem(token: str, stems: list[str], cfg: SpecStub) -> bool:
-    """Слово совпало с основой: начинается с неё, и дальше не больше `stem_tail` букв."""
-    return any(token.startswith(s) and len(token) - len(s) <= cfg.stem_tail for s in stems)
+    return text_words.named(token, stems, cfg.stem_tail)
 
 
 def _mentions(tokens: list[str], cfg: SpecStub) -> Mentions:

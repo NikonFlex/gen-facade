@@ -8,8 +8,8 @@ from xml.etree import ElementTree
 
 import pytest
 
-from genfacade.config import SpecStub
-from genfacade.models import finish, stub
+from genfacade.config import Config, SpecStub
+from genfacade.models import finish, stub, words
 from genfacade.models.stub import LayoutContext, ModelError
 from genfacade.render import sheet_format
 from genfacade.render.svg import paint, pen_for, sheet_svg
@@ -32,6 +32,9 @@ from genfacade.schema import (
     ("Двухэтажный коттедж", 2),
     ("A three-story house, not a bungalow", 3),   # слово раньше других
     ("Five-storey apartment block.", 1),          # слова нет — как у заготовки
+    ("A red brick cottage, three storeys.", 3),   # без дефиса и во множественном — то же слово
+    ("Дом в два этажа", 2),                       # сочетание слов
+    ("A 2-storey house", 2),
     ("", 1),
 ])
 def test_spec_stub_floors_from_text(cfg, text, floors):
@@ -51,11 +54,25 @@ def test_spec_stub_style_from_text(cfg):
     """Стиль — по слову в тексте, нет слова — стиль заготовки; отделка без слов — из тех, что
     подходят стилю (`generation: Отделка без слов — от текста`)."""
     rules = cfg.models.spec
-    for text in ("A classic house", "A classic two-storey house", "Классический дом у реки"):
+    for text in ("A classic house", "A classic two-storey house", "Классический дом у реки",
+                 "Neoclassical villa"):
         spec = stub.spec_model(text, rules)
         assert spec.style == "classic"
         assert spec.style in rules.finish[finish.look(text, spec.style, rules).finish].styles
     assert stub.spec_model("A house", rules).style == stub.spec_model("", rules).style
+
+
+def test_word_is_named_by_its_stem_not_inside_another_word():
+    """Одно правило слова для этажности, стиля и отделки (models/words.py): основа в начале слова
+    текста и не больше tail знаков после неё; сочетание — слова подряд."""
+    modern = {"m": ["modern"]}
+    assert words.first("A modernist house", modern, 5) == "m"
+    assert words.first("An unmodern house", modern, 5) is None        # не в начале слова
+    assert words.first("Modernisation works", modern, 5) is None      # хвост длиннее пяти
+    pair = {2: ["в два этажа"]}
+    assert words.first("Дом в два этажа", pair, 5) == 2
+    assert words.first("Дом в два больших этажа", pair, 5) is None    # не подряд
+    assert words.first("Дом в", pair, 5) is None                      # сочетание обрезано текстом
 
 
 def test_finish_library_is_consistent(cfg):
@@ -82,6 +99,19 @@ def test_finish_typo_is_a_load_error(cfg):
     del short["finish"]["brick_red"]["materials"]["roof"]
     with pytest.raises(ValueError, match="роли"):
         SpecStub(**short)
+    style = json.loads(json.dumps(raw))
+    style["finish"]["brick_red"]["styles"] = ["clasic"]
+    with pytest.raises(ValueError, match="нет стилей в style_words"):
+        SpecStub(**style)
+
+
+def test_finish_kind_typo_is_a_load_error(cfg):
+    """Вид материала отделки, которого нет в library.toml [kinds], — ошибка загрузки настроек."""
+    raw = cfg.models.spec.model_dump(mode="json")
+    raw["finish"]["brick_red"]["materials"]["main"]["kind"] = "brik"
+    models = cfg.models.model_copy(update={"spec": SpecStub(**raw)})
+    with pytest.raises(ValueError, match="видов нет в library.toml"):
+        Config(**{**dict(cfg), "models": models})
 
 
 def test_brick_house_with_white_casings(cfg):

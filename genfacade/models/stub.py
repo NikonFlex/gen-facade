@@ -15,7 +15,7 @@ from functools import cache
 from importlib.resources import files
 
 from genfacade.config import SpecStub
-from genfacade.models import finish
+from genfacade.models import finish, words
 from genfacade.schema import (
     EPS,
     Element,
@@ -56,21 +56,14 @@ def spec_model(text: str, cfg: SpecStub) -> HouseSpec:
     палитра и виды выводимых элементов — отделка дома по тексту (models/finish.py); высота этажа
     и цоколь — заготовки, карниз — над последним этажом."""
     base = json.loads(DATA.joinpath("house.json").read_text())
-    floors = _first(text, cfg.floors_words) or base["floors"]
-    style = _first(text, cfg.style_words) or base["style"]
+    floors = words.first(text, cfg.floors_words, cfg.stem_tail) or base["floors"]
+    style = words.first(text, cfg.style_words, cfg.stem_tail) or base["style"]
     height = base["floor_heights_m"][0]
     house = finish.look(text, style, cfg)
     return HouseSpec.model_validate(base | {
         "floors": floors, "floor_heights_m": [height] * floors, "style": style,
         "eaves_m": round(base["plinth_m"] + height * floors, 3),
         "trim": house.trim.model_dump(), "materials": [m.model_dump() for m in house.materials]})
-
-
-def _first[T](text: str, words: dict[T, list[str]]) -> T | None:
-    """Значение по слову, которое в тексте раньше других; слова нет — None."""
-    low = text.lower()
-    found = [(low.find(w.lower()), n) for n, ws in words.items() for w in ws if w.lower() in low]
-    return min(found, key=lambda f: f[0])[1] if found else None
 
 
 def layout_model(wall: SideFacade, ctx: LayoutContext) -> SideFacade:
