@@ -178,3 +178,26 @@ def test_zone_roles_are_all_hatched(house, cfg):
     hatched = [p for p in root.iterfind(".//{*}polygon") if URL.fullmatch(p.get("fill", ""))]
     roles = {p.get(ROLE) for p in hatched}
     assert {ZoneRole.MAIN, ZoneRole.PLINTH} <= roles
+
+
+def test_new_kinds_have_default_color_and_pattern(cfg):
+    """Бревно, доска с планкой и клинкерная плитка — виды библиотеки с цветом и рисунком."""
+    for kind in ("log", "board_batten", "clinker"):
+        assert hatch.HEX.fullmatch(cfg.library.kinds[kind]) and kind in cfg.library.patterns
+
+
+def test_plaster_concrete_and_metal_stay_solid(cfg):
+    assert not {"plaster", "concrete", "metal"} & cfg.library.patterns.keys()
+
+
+@pytest.mark.parametrize("kind", config.load().library.patterns)
+def test_every_pattern_draws_inside_its_cell(house, cfg, kind):
+    """Швы любого рисунка лежат внутри ячейки паттерна, а лист с ним — разбираемый XML."""
+    look = cfg.library.patterns[kind]
+    assert all(0 <= x < look.width_m for c in look.courses for x in c.joints_m)
+    root = _root(sheet_svg(_with_kind(house, "main", kind), cfg))
+    pattern = next(p for i, p in _patterns(root).items() if i.startswith(f"hatch-{kind}-"))
+    cell = (float(pattern.get("width")), float(pattern.get("height")))
+    coords = re.findall(r"M([\d.]+),([\d.]+)L([\d.]+),([\d.]+)", pattern.find("{*}path").get("d"))
+    assert coords and all(0 <= float(v) <= limit for c in coords
+                          for v, limit in zip(c, cell * 2, strict=True))

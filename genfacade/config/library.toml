@@ -18,6 +18,9 @@ concrete = "#9a9a96"
 metal = "#33373b"
 metal_roof = "#4a4f55"
 tile_roof = "#7a3b2e"
+log = "#b88a54"          # бревно: светлее вида wood — стена из бруса и оцилиндрованного бревна
+board_batten = "#a9b5a3" # доска с планкой: окрашенные вертикальные доски
+clinker = "#6a4a40"      # клинкерная плитка: цоколь и стена, темнее кирпича
 
 [patterns]
 # Рисунок вида на листе (gf#304): SVG <pattern> в метрах фасада, один на пару вид × цвет.
@@ -40,6 +43,16 @@ stone = { vertical = false, line_m = 0.018, groove_m = 0.0, width_m = 1.2, cours
     { h_m = 0.14, joints_m = [0.4, 0.8, 1.1] },     # швы не стоят друг над другом
     { h_m = 0.25, joints_m = [0.25, 0.7] },
     { h_m = 0.17, joints_m = [0.1, 0.5, 0.9] },
+] }
+log = { vertical = false, line_m = 0.02, groove_m = 0.035, width_m = 0.22, courses = [
+    { h_m = 0.22, joints_m = [] },          # оцилиндрованное бревно 220 мм: шов и тень под ним
+] }
+board_batten = { vertical = true, line_m = 0.012, groove_m = 0.04, width_m = 0.25, courses = [
+    { h_m = 0.25, joints_m = [] },          # доски 250 мм, планка 40 мм на каждом стыке
+] }
+clinker = { vertical = false, line_m = 0.008, groove_m = 0.0, width_m = 0.25, courses = [
+    { h_m = 0.06, joints_m = [0.0625] },    # плитка 240 × 52 мм, шов 8–10 мм, вразбежку
+    { h_m = 0.06, joints_m = [0.1875] },
 ] }
 metal_roof = { vertical = true, line_m = 0.015, groove_m = 0.0, width_m = 0.5, courses = [
     { h_m = 0.5, joints_m = [] },           # фальц через 500 мм
