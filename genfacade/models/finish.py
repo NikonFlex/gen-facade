@@ -10,7 +10,7 @@ import hashlib
 from dataclasses import dataclass, field
 
 from genfacade.config import Finish, SpecStub
-from genfacade.models import words as text_words
+from genfacade.models import words
 from genfacade.schema import HouseTrim, Material, PaletteRole, Trim
 
 
@@ -34,7 +34,7 @@ class Mentions:
 
 def look(text: str, style: str, cfg: SpecStub) -> Look:
     """Отделка дома по тексту; описания нет — отделка по умолчанию и первые цвета рядов."""
-    tokens = text_words.tokens(text)
+    tokens = words.tokens(text)
     mentioned = _mentions(tokens, cfg)
     digest = hashlib.sha256(" ".join(tokens).encode()).digest()
     name = cfg.default_finish if not tokens else _choose(mentioned, style, digest, cfg)
@@ -45,7 +45,7 @@ def look(text: str, style: str, cfg: SpecStub) -> Look:
 
 
 def _stem(token: str, stems: list[str], cfg: SpecStub) -> bool:
-    return text_words.named(token, stems, cfg.stem_tail)
+    return words.named(token, stems, cfg.stem_tail)
 
 
 def _mentions(tokens: list[str], cfg: SpecStub) -> Mentions:
@@ -54,8 +54,8 @@ def _mentions(tokens: list[str], cfg: SpecStub) -> Mentions:
         if found.kind is None:
             found.kind = next((k for k, ws in cfg.material_words.items()
                                if _stem(token, ws, cfg)), None)
-        for trim, words in cfg.trim_words.items():
-            if _stem(token, words, cfg):
+        for trim, stems in cfg.trim_words.items():
+            if _stem(token, stems, cfg):
                 found.trims[trim] = not (i and tokens[i - 1] in cfg.negations)
         if names := _color_names(token, cfg):
             role = _role_after(tokens[i + 1:i + 1 + cfg.reach], cfg)
@@ -69,11 +69,11 @@ def _color_names(token: str, cfg: SpecStub) -> set[str]:
 
 def _role_after(next_tokens: list[str], cfg: SpecStub) -> PaletteRole:
     """Роль, которую красит цвет: по первому слову роли за ним; другой цвет — граница; нет — main"""
-    words = _role_words(cfg)
+    roles = _role_words(cfg)
     for token in next_tokens:
         if _color_names(token, cfg):
             break
-        for role, stems in words.items():
+        for role, stems in roles.items():
             if _stem(token, stems, cfg):
                 return role
     return PaletteRole.MAIN
@@ -81,9 +81,9 @@ def _role_after(next_tokens: list[str], cfg: SpecStub) -> PaletteRole:
 
 def _role_words(cfg: SpecStub) -> dict[PaletteRole, list[str]]:
     """Слова ролей; к роли trim относятся ещё и слова выводимых элементов."""
-    words = {role: list(stems) for role, stems in cfg.role_words.items()}
-    words.setdefault(PaletteRole.TRIM, []).extend(w for ws in cfg.trim_words.values() for w in ws)
-    return words
+    roles = {role: list(stems) for role, stems in cfg.role_words.items()}
+    roles.setdefault(PaletteRole.TRIM, []).extend(w for ws in cfg.trim_words.values() for w in ws)
+    return roles
 
 
 def _choose(found: Mentions, style: str, digest: bytes, cfg: SpecStub) -> str:
