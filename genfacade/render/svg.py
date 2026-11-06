@@ -13,7 +13,7 @@ from xml.etree import ElementTree
 
 import shapely
 
-from genfacade.config import Axes, Config, DoorLook, Levels, Sheet, SheetLayout, TrimLook
+from genfacade.config import Axes, Config, DoorLook, Hatch, Levels, Sheet, SheetLayout, TrimLook
 from genfacade.render import hatch, sheet_format
 from genfacade.render.sheet_format import num
 from genfacade.schema import (
@@ -135,28 +135,41 @@ def palette_colors(spec: HouseSpec, cfg: Config) -> dict[str, str]:
     return colors
 
 
+def _hatch_of(material: str, pen: Pen) -> Hatch | None:
+    """Рисунок вида материала палитры; вида нет в [patterns] библиотеки — None, заливка цветом.
+    Единственное место, где решается, рисунком ли залит материал: `paint` и `_patterns`."""
+    return pen.cfg.library.patterns.get(pen.kinds[material])
+
+
 def paint(material: str, pen: Pen) -> str:
     """Чем залить зону или элемент из материала палитры: рисунком вида (`url(#…)` на паттерн
     листа), если у вида он есть в библиотеке, иначе цветом."""
-    color, kind = pen.colors[material], pen.kinds[material]
-    return f"url(#{hatch.pattern_id(kind, color)})" if kind in pen.cfg.library.patterns else color
+    color = pen.colors[material]
+    if _hatch_of(material, pen) is None:
+        return color
+    return f"url(#{hatch.pattern_id(pen.kinds[material], color)})"
+
+
+def _by_material(e: Element, pen: Pen) -> bool:
+    """Элемент залит материалом палитры: материал есть, а класс не из unhatched_cls (те рисуют
+    себя сами). Одно правило на заливку элемента (`element_paint`) и на набор паттернов листа."""
+    return e.material is not None and e.cls not in pen.cfg.library.unhatched_cls
 
 
 def _painted(facade: SideFacade, pen: Pen) -> list[str]:
     """Материалы, которыми на этой стене красят зоны и элементы."""
-    hatched = [e.material for e in facade.elements
-               if e.material is not None and e.cls not in pen.cfg.library.unhatched_cls]
-    return [z.material for z in facade.zones] + hatched
+    by_material = [e.material for e in facade.elements if _by_material(e, pen)]
+    return [z.material for z in facade.zones] + by_material
 
 
 def _patterns(facades: list[SideFacade], pen: Pen) -> list[ElementTree.Element]:
     """Рисунки материалов, которые нужны листу, — по одному на пару вид × цвет, а не на зону."""
-    lib, found = pen.cfg.library, {}
+    found = {}
     for material in (m for f in facades for m in _painted(f, pen)):
         kind, color = pen.kinds[material], pen.colors[material]
-        if kind in lib.patterns:
+        if (look := _hatch_of(material, pen)) is not None:
             found.setdefault(hatch.pattern_id(kind, color),
-                             hatch.pattern(kind, lib.patterns[kind], color, lib.pattern_darken))
+                             hatch.pattern(kind, look, color, pen.cfg.library.pattern_darken))
     return list(found.values())
 
 
@@ -232,9 +245,9 @@ def element_fill(e: Element, pen: Pen) -> str:
 def element_paint(e: Element, pen: Pen) -> str:
     """Заливка прямоугольника элемента: рисунок вида его материала, а без рисунка или у класса
     из unhatched_cls — цвет (element_fill)."""
-    if e.material is None or e.cls in pen.cfg.library.unhatched_cls:
-        return element_fill(e, pen)
-    return paint(e.material, pen)
+    if _by_material(e, pen):
+        return paint(e.material, pen)
+    return element_fill(e, pen)
 
 
 def _element(g: ElementTree.Element, e: Element, pen: Pen, zones: list[MaterialZone]) -> None:
