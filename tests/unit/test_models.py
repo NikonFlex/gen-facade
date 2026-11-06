@@ -12,7 +12,7 @@ from genfacade.config import SpecStub
 from genfacade.models import finish, stub
 from genfacade.models.stub import LayoutContext, ModelError
 from genfacade.render import sheet_format
-from genfacade.render.svg import palette_colors, sheet_svg
+from genfacade.render.svg import paint, pen_for, sheet_svg
 from genfacade.schema import (
     CasingKind,
     ElementClass,
@@ -168,9 +168,9 @@ def test_one_palette_on_all_walls(cfg, lay_out):
     root = ElementTree.fromstring(sheet_svg(sheet, cfg))
     mains = [z for z in root.iter() if z.tag.endswith("polygon")
              and z.get(sheet_format.ROLE) == ZoneRole.MAIN]
-    colors = palette_colors(sheet.spec, cfg)
     assert len(mains) >= 4
-    assert {z.get("fill") for z in mains} == {colors["main"]}
+    # кирпич — рисунком цвета палитры (gf#304), штукатурка — самим цветом: заливка одна на все стены
+    assert {z.get("fill") for z in mains} == {paint("main", pen_for(sheet, cfg))}
     assert {z.get(sheet_format.MATERIAL) for z in mains} == {"main"}
 
 
