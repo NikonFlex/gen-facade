@@ -1,6 +1,12 @@
 # Модели шагов конвейера (gf#107). Путь — от папки, где запущена команда.
 
 [spec]               # шаг 1: стаб (genfacade/models/stub.py) — до модели
+# Отделка дома (gf#303) — ниже, после стиля.
+default_finish = "plaster_modern"  # описания нет — эта отделка и первые цвета рядов
+stem_tail = 5        # слово текста совпадает с основой из списков ниже, если после неё не больше букв
+reach = 3            # цвет красит роль слова, которое стоит не дальше стольких слов за ним; нет — стены
+negations = ["без", "no", "without"]   # слово перед словом элемента — элемента у дома нет
+
 # Этажность из текста (`generation: Стаб шага 1`, gf#155): число этажей — по слову, которое
 # встретилось в тексте раньше других; регистр не важен. Слова нет — этажей, как у заготовки.
 [spec.floors_words]
@@ -18,13 +24,213 @@ scandinavian = ["scandinavian", "nordic", "скандинав", "барнхау�
 chalet = ["chalet", "alpine", "шале", "альпийск"]
 classic = ["classic", "colonial", "traditional", "классическ", "классик", "колониальн"]
 
-# Виды выводимых элементов дома по стилю (gf#212, config/derive.toml): одни на все стены. Подоконник —
-# у каждого стиля: заготовка стаба шага 4 (models/stub_data/facades.json) ставит плоский подоконник.
-[spec.trim]
-modern = { sill = "flat", casing = "none", shutters = "none", canopy = "flat" }
-scandinavian = { sill = "flat", casing = "flat", shutters = "none", canopy = "gable" }
-chalet = { sill = "sloped", casing = "wide", shutters = "board", canopy = "bracket" }
-classic = { sill = "sloped", casing = "flat", shutters = "panel", canopy = "gable" }
+# ——— Отделка дома (gf#303): палитра и виды выводимых элементов — одни на все стены ———
+# Стиль выше — токен условия модели шага 4, отделка с ним не связана, кроме выбора по умолчанию:
+# без слов в тексте отделка берётся среди тех, что подходят стилю (`styles`). Цвет отделки модель
+# не выбирает: он из ряда `colors` (подобрано агентом, gf#303: готового набора с понятной лицензией
+# нет, `docs/decisions.md` 05.11), стаб — по слову цвета или от текста.
+
+# Вид материала стен → слова текста. Слово, которое встретилось раньше других, выбирает отделки с
+# этим видом стен; слова нет — отделки всех видов.
+[spec.material_words]
+plaster = ["plaster", "stucco", "штукатур"]
+brick = ["brick", "кирпич"]
+siding = ["siding", "clapboard", "weatherboard", "обшивк", "сайдинг", "вагонк"]
+wood = ["wood", "timber", "дерев", "брус"]
+
+# Элемент → слова текста: слово в тексте ставит элементу вид отделки, если у неё его нет
+# (`trim_default`), «без …» — убирает; цвет перед словом красит роль trim.
+[spec.trim_words]
+sill = ["sill", "подоконник"]
+casing = ["casing", "architrave", "наличник"]
+shutters = ["shutter", "ставн", "ставен"]
+canopy = ["canopy", "canopies", "козыр"]
+
+# Слова текста, перед которыми цвет красит роль палитры; остальные слова — стены (main). Роль trim
+# берёт ещё и слова элементов выше.
+[spec.role_words]
+trim = ["trim", "отделк", "обрамлен"]
+plinth = ["plinth", "base", "foundation", "цокол", "фундамент"]
+accent = ["accent", "акцент"]
+roof = ["roof", "крыш"]
+
+[spec.trim_default]    # вид элемента, который назвали в тексте, а у отделки его нет
+sill = "flat"
+casing = "flat"
+shutters = "panel"
+canopy = "flat"
+
+# Ряд цветов отделки: имя → цвет и слова текста (подобрано агентом, не из каталога). Слово может
+# быть у нескольких имён: ряд роли в отделке решает, какое из них подходит.
+[spec.colors.white]
+hex = "#f2efe8"
+words = ["white", "бел"]
+[spec.colors.cream]
+hex = "#eae2d0"
+words = ["cream", "ivory", "кремов", "молочн"]
+[spec.colors.beige]
+hex = "#d9c7a3"
+words = ["beige", "sand", "бежев", "песочн"]
+[spec.colors.yellow]
+hex = "#e2c577"
+words = ["yellow", "жёлт", "желт"]
+[spec.colors.grey]
+hex = "#b8bec2"
+words = ["grey", "gray", "серы", "серо"]
+[spec.colors.graphite]
+hex = "#4b4f54"
+words = ["graphite", "anthracite", "dark", "графит", "антрацит", "тёмн", "темн"]
+[spec.colors.black]
+hex = "#2c2e31"
+words = ["black", "чёрн", "черн"]
+[spec.colors.brown]
+hex = "#6a4b36"
+words = ["brown", "коричнев"]
+[spec.colors.red]
+hex = "#a94a35"
+words = ["red", "красн", "бордов"]
+[spec.colors.green]
+hex = "#7f987a"
+words = ["green", "зелён", "зелен"]
+[spec.colors.blue]
+hex = "#8ea8bc"
+words = ["blue", "голуб", "син"]
+[spec.colors.brick_red]
+hex = "#9a4a38"
+words = ["red", "красн"]
+[spec.colors.brick_brown]
+hex = "#6f4636"
+words = ["brown", "коричнев"]
+[spec.colors.brick_light]
+hex = "#d6c4a2"
+words = ["light", "светл"]
+[spec.colors.brick_sand]
+hex = "#c9a982"
+words = ["beige", "sand", "бежев", "песочн"]
+[spec.colors.wood_natural]
+hex = "#b58a58"
+words = ["natural", "натуральн"]
+[spec.colors.wood_honey]
+hex = "#c9a066"
+words = ["honey", "медов"]
+[spec.colors.wood_dark]
+hex = "#5b4130"
+words = ["dark", "тёмн", "темн"]
+[spec.colors.wood_grey]
+hex = "#8d877b"
+words = ["grey", "gray", "weathered", "серы", "серо"]
+[spec.colors.stone_grey]
+hex = "#8a857c"
+words = ["grey", "gray", "серы", "серо"]
+[spec.colors.stone_sand]
+hex = "#b9ad98"
+words = ["beige", "sand", "бежев", "песочн"]
+[spec.colors.concrete]    # без hex — цвет вида материала из library.toml
+[spec.colors.roof_steel]    # без hex — цвет вида материала из library.toml
+[spec.colors.roof_terracotta]    # без hex — цвет вида материала из library.toml
+
+# Отделки: виды и ряды цветов по ролям палитры (первый цвет ряда — по умолчанию; стены — ещё и по
+# слову цвета или от текста; `extra` — цвета только по слову), виды выводимых элементов (config/derive.toml). Виды материалов — из
+# library.toml. Стили — те, что знает модель шага 4 (config/synthetic.toml, [spec] styles).
+[spec.finish.plaster_modern]       # гладкая штукатурка, без наличников и ставен
+styles = ["modern"]
+trim = { sill = "flat", casing = "none", shutters = "none", canopy = "flat" }
+[spec.finish.plaster_modern.materials]
+main = { kind = "plaster", colors = ["cream", "white", "grey", "beige"], extra = ["graphite", "yellow"] }
+plinth = { kind = "concrete", colors = ["concrete", "graphite"] }
+accent = { kind = "wood", colors = ["wood_natural"] }
+trim = { kind = "metal", colors = ["graphite", "black", "white"] }
+roof = { kind = "metal_roof", colors = ["roof_steel"] }
+
+[spec.finish.plaster_classic]      # классика: штукатурка, белые наличники, ставни, скатный подоконник
+styles = ["classic"]
+trim = { sill = "sloped", casing = "flat", shutters = "panel", canopy = "gable" }
+[spec.finish.plaster_classic.materials]
+main = { kind = "plaster", colors = ["cream", "white", "yellow", "beige", "grey"] }
+plinth = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
+accent = { kind = "stone", colors = ["stone_sand", "stone_grey"] }
+trim = { kind = "wood", colors = ["white", "cream", "green", "brown", "graphite", "black"] }
+roof = { kind = "tile_roof", colors = ["roof_terracotta"] }
+
+[spec.finish.plaster_stone]        # штукатурка с каменным цоколем, жалюзийные ставни
+styles = ["modern", "classic"]
+trim = { sill = "sloped", casing = "flat", shutters = "louvered", canopy = "bracket" }
+[spec.finish.plaster_stone.materials]
+main = { kind = "plaster", colors = ["white", "beige", "grey", "yellow", "cream"] }
+plinth = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
+accent = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
+trim = { kind = "wood", colors = ["brown", "white", "graphite", "green", "black"] }
+roof = { kind = "metal_roof", colors = ["roof_steel"] }
+
+[spec.finish.siding_painted]       # крашеная обшивка: цвет стен — из ряда
+styles = ["scandinavian", "classic", "modern"]
+trim = { sill = "flat", casing = "flat", shutters = "louvered", canopy = "gable" }
+[spec.finish.siding_painted.materials]
+main = { kind = "siding", colors = ["blue", "white", "cream", "yellow", "grey", "green", "red", "graphite"] }
+plinth = { kind = "concrete", colors = ["concrete", "graphite"] }
+accent = { kind = "wood", colors = ["wood_natural", "wood_dark"] }
+trim = { kind = "wood", colors = ["white", "cream", "graphite", "black", "brown"] }
+roof = { kind = "metal_roof", colors = ["roof_steel"] }
+
+[spec.finish.wood_natural]         # натуральное дерево, широкие наличники, дощатые ставни
+styles = ["scandinavian", "chalet", "modern"]
+trim = { sill = "flat", casing = "wide", shutters = "board", canopy = "bracket" }
+[spec.finish.wood_natural.materials]
+main = { kind = "wood", colors = ["wood_natural", "wood_honey", "wood_grey"], extra = ["green", "red", "white", "blue", "black"] }
+plinth = { kind = "concrete", colors = ["concrete", "graphite"] }
+accent = { kind = "wood", colors = ["wood_dark", "wood_honey"] }
+trim = { kind = "wood", colors = ["wood_dark", "white", "brown", "graphite"] }
+roof = { kind = "metal_roof", colors = ["roof_steel"] }
+
+[spec.finish.wood_dark]            # тёмное дерево, скандинавский: чёрная отделка, без ставен
+styles = ["scandinavian", "modern"]
+trim = { sill = "flat", casing = "flat", shutters = "none", canopy = "gable" }
+[spec.finish.wood_dark.materials]
+main = { kind = "wood", colors = ["wood_dark", "black"], extra = ["graphite"] }
+plinth = { kind = "concrete", colors = ["graphite", "concrete"] }
+accent = { kind = "wood", colors = ["wood_natural", "wood_honey"] }
+trim = { kind = "metal", colors = ["black", "graphite", "white"] }
+roof = { kind = "metal_roof", colors = ["roof_steel"] }
+
+[spec.finish.brick_red]            # красный кирпич, белые наличники и ставни
+styles = ["classic", "modern"]
+trim = { sill = "sloped", casing = "flat", shutters = "panel", canopy = "gable" }
+[spec.finish.brick_red.materials]
+main = { kind = "brick", colors = ["brick_red", "brick_brown"] }
+plinth = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
+accent = { kind = "wood", colors = ["wood_natural", "wood_dark"] }
+trim = { kind = "wood", colors = ["white", "cream", "graphite", "brown"] }
+roof = { kind = "tile_roof", colors = ["roof_terracotta"] }
+
+[spec.finish.brick_light]          # светлый кирпич, тёмная отделка, без наличников
+styles = ["modern", "scandinavian"]
+trim = { sill = "flat", casing = "none", shutters = "none", canopy = "flat" }
+[spec.finish.brick_light.materials]
+main = { kind = "brick", colors = ["brick_light", "brick_sand"] }
+plinth = { kind = "concrete", colors = ["concrete", "graphite"] }
+accent = { kind = "wood", colors = ["wood_natural", "wood_dark"] }
+trim = { kind = "metal", colors = ["graphite", "black", "brown"] }
+roof = { kind = "metal_roof", colors = ["roof_steel"] }
+
+[spec.finish.chalet_wood_stone]    # шале: дерево и камень, широкие наличники, дощатые ставни
+styles = ["chalet"]
+trim = { sill = "sloped", casing = "wide", shutters = "board", canopy = "bracket" }
+[spec.finish.chalet_wood_stone.materials]
+main = { kind = "wood", colors = ["wood_honey", "wood_natural", "wood_dark"], extra = ["green"] }
+plinth = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
+accent = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
+trim = { kind = "wood", colors = ["wood_dark", "brown", "white", "green"] }
+roof = { kind = "metal_roof", colors = ["roof_steel"] }
+
+[spec.finish.stone_house]          # камень стен, дощатые ставни
+styles = ["classic", "chalet", "modern"]
+trim = { sill = "sloped", casing = "flat", shutters = "louvered", canopy = "gable" }
+[spec.finish.stone_house.materials]
+main = { kind = "stone", colors = ["stone_grey", "stone_sand"], extra = ["graphite"] }
+plinth = { kind = "concrete", colors = ["concrete", "graphite"] }
+accent = { kind = "wood", colors = ["wood_natural", "wood_dark"] }
+trim = { kind = "wood", colors = ["white", "wood_dark", "brown", "graphite"] }
+roof = { kind = "tile_roof", colors = ["roof_terracotta"] }
 
 [layout]             # шаг 4: обученный GPT (genfacade/models/layout.py)
 # Чекпойнт genfacade train (model.pt). Файла нет — стаб (genfacade/models/stub.py).

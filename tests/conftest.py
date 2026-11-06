@@ -111,12 +111,12 @@ def simple_svg():
 def lay_out(cfg):
     """Простой дом после шагов 1–4: стаб шага 1 → план → стены с силуэтами → стаб шага 4.
 
-    svg — план вместо простого.
+    svg — план вместо простого, text — описание дома для стаба шага 1.
     """
-    def run(mode: Mode = Mode.WITH_OPENINGS, svg=SIMPLE) -> FacadeSheet:
+    def run(mode: Mode = Mode.WITH_OPENINGS, svg=SIMPLE, text: str = "") -> FacadeSheet:
         plan = preprocess(svg, mode, cfg.plan)
-        house = stub.spec_model("", cfg.models.spec)
-        return stub.layout_all(walls(house, plan), stub.LayoutContext(house, mode, ""))
+        house = stub.spec_model(text, cfg.models.spec)
+        return stub.layout_all(walls(house, plan), stub.LayoutContext(house, mode, text))
 
     return run
 

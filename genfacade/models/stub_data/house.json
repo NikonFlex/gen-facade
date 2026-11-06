@@ -5,12 +5,5 @@
   "plinth_m": 0.5,
   "eaves_m": 3.25,
   "roof": {"kind": "flat", "material": "roof"},
-  "style": "modern",
-  "materials": [
-    {"id": "main", "kind": "plaster"},
-    {"id": "plinth", "kind": "concrete"},
-    {"id": "accent", "kind": "wood"},
-    {"id": "trim", "kind": "metal"},
-    {"id": "roof", "kind": "metal_roof"}
-  ]
+  "style": "modern"
 }
