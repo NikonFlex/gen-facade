@@ -8,7 +8,7 @@
 
 from genfacade.config import Config, House3d
 from genfacade.render.svg import Pen, element_fill, facade_svg, pen_for
-from genfacade.schema import FacadeSheet, SideFacade
+from genfacade.schema import Element, FacadeSheet, MaterialZone, SideFacade
 from genfacade.unfold import plan_corners
 
 
@@ -24,19 +24,35 @@ def house_3d(sheet: FacadeSheet, cfg: Config) -> dict:
         "normal": f.side.orientation,
         "length_m": f.side.length_m,
         "height_m": sheet.spec.eaves_m,
-        "svg": facade_svg(f, pen),
+        "svg": facade_svg(_flat(f, cfg.viewer.house3d), pen),
         "relief": _relief(f, pen, cfg.viewer.house3d),
     } for k, f in enumerate(sheet.facades)]
     return {"corners": corners, "eaves_m": sheet.spec.eaves_m, "walls": walls}
+
+
+def _is_relief(item: MaterialZone | Element, look: House3d) -> bool:
+    """Идёт ли зона (роль) или элемент (класс) выступом: один список на текстуру и на коробки."""
+    if isinstance(item, MaterialZone):
+        return item.role in look.relief_role
+    return item.cls in look.relief_cls
+
+
+def _flat(f: SideFacade, look: House3d) -> SideFacade:
+    """Стена для текстуры — без того, что 3D ставит выступом: иначе оно рисуется дважды, плоско
+    на стене и коробкой перед ней, и под углом видны оба со сдвигом (gf#277). На листе
+    фасадов (render/svg.sheet_svg) выступающее остаётся."""
+    return f.model_copy(update={
+        "zones": [z for z in f.zones if not _is_relief(z, look)],
+        "elements": [e for e in f.elements if not _is_relief(e, look)]})
 
 
 def _relief(f: SideFacade, pen: Pen, look: House3d) -> list[dict]:
     """Выступы стены — зоны ролей `relief_role` (цоколь) и элементы классов `relief_cls`
     (карниз, подоконник, козырёк): рамка в метрах фасада, глубина и цвет листа."""
     boxes = [(z.shape, look.relief_role[z.role], pen.colors[z.material])
-             for z in f.zones if z.role in look.relief_role]
+             for z in f.zones if _is_relief(z, look)]
     boxes += [([(e.x_m, e.y_m), (e.x_m + e.w_m, e.y_m + e.h_m)], look.relief_cls[e.cls],
-               element_fill(e, pen)) for e in f.elements if e.cls in look.relief_cls]
+               element_fill(e, pen)) for e in f.elements if _is_relief(e, look)]
     out = []
     for shape, depth, color in boxes:
         xs, ys = [x for x, _ in shape], [y for _, y in shape]

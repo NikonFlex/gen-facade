@@ -172,15 +172,23 @@ export class HouseStage {
   }
 }
 
-// SVG стены → canvas в px_per_m: картинка без width/height растягивается по viewBox.
+// SVG стены → canvas в px_per_m. Размер в пикселях пишем в сам SVG: без width/height у него нет
+// своего размера, Chromium растягивает его по viewBox, а WebKit (iPhone) берёт viewBox в метрах
+// как пиксели (9×3 вместо 780×300), рисует поменьше, и поля текстуры остаются прозрачными —
+// стены чёрные (gf#277).
 async function rasterize(svg, lengthM, heightM, pxPerM) {
+  const width = Math.round(lengthM * pxPerM), height = Math.round(heightM * pxPerM);
+  const root = new DOMParser().parseFromString(svg, "image/svg+xml").documentElement;
+  root.setAttribute("width", width);
+  root.setAttribute("height", height);
   const img = new Image();
-  img.src = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+  img.src = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(root)],
+    { type: "image/svg+xml" }));
   await img.decode();
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(lengthM * pxPerM);
-  canvas.height = Math.round(heightM * pxPerM);
-  canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+  canvas.width = width;
+  canvas.height = height;
+  canvas.getContext("2d").drawImage(img, 0, 0, width, height);
   URL.revokeObjectURL(img.src);
   return canvas;
 }

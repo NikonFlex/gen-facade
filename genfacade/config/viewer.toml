@@ -29,6 +29,7 @@ plinth = 0.05
 cornice = 0.25
 sill = 0.06
 canopy = 0.6
+porch = 1.0            # площадка перед дверью (gf#276): без выступа она — плашка на стене
 
 [review]
 # Слепая проверка листов глазами (gf#268): `genfacade serve --review <папка realtest>`, страница

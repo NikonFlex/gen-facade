@@ -8,7 +8,7 @@ from test_unfold import L_SIDES, sides_of
 from genfacade.datasets.synthetic import build
 from genfacade.render.house3d import house_3d
 from genfacade.render.sheet_format import num
-from genfacade.render.svg import element_fill, pen_for
+from genfacade.render.svg import element_fill, pen_for, sheet_svg
 from genfacade.schema import ElementClass, FacadeSheet, SideFacade, ZoneRole
 from genfacade.unfold import unfold
 
@@ -42,12 +42,36 @@ def test_wall_faces_outward_left_to_right(sheet, cfg):
 
 
 def test_wall_texture_is_the_facade(house, cfg):
-    """SVG стены — ровно стена (длина × карниз), с элементами листа, без подписей и осей."""
+    """SVG стены — ровно стена (длина × карниз), с элементами листа, кроме выступов, без
+    подписей и осей."""
     data = house_3d(house, cfg)
+    look = cfg.viewer.house3d
     for wall, facade in zip(data["walls"], house.facades, strict=True):
         assert f'viewBox="0 0 {num(wall["length_m"])} {num(data["eaves_m"])}"' in wall["svg"]
-        assert all(f'data-id="{e.id}"' in wall["svg"] for e in facade.elements)
+        flat = [e for e in facade.elements if e.cls not in look.relief_cls]
+        assert all(f'data-id="{e.id}"' in wall["svg"] for e in flat)
         assert "<text" not in wall["svg"]
+
+
+def test_relief_is_not_drawn_twice(cfg):
+    """gf#277: подоконник, карниз, козырёк и цоколь стоят выступом, а на текстуре стены их нет —
+    иначе под углом видны оба со сдвигом. На листе фасадов они остаются."""
+    look = cfg.viewer.house3d
+    sheet = next(s for s in (build.sample(k, cfg).sheet for k in range(20))
+                 if any(e.cls in look.relief_cls for f in s.facades for e in f.elements)
+                 and any(z.role in look.relief_role for f in s.facades for z in f.zones))
+    sheet_svg_text = sheet_svg(sheet, cfg)
+    for wall, facade in zip(house_3d(sheet, cfg)["walls"], sheet.facades, strict=True):
+        raised = [e for e in facade.elements if e.cls in look.relief_cls]
+        zones = [z for z in facade.zones if z.role in look.relief_role]
+        assert len(wall["relief"]) == len(raised) + len(zones)
+        for e in raised:
+            assert f'data-id="{e.id}"' not in wall["svg"]
+            assert f'data-id="{e.id}"' in sheet_svg_text
+        for z in zones:
+            assert f'data-role="{z.role}"' not in wall["svg"]
+    assert all(f'data-role="{z.role}"' in sheet_svg_text
+               for f in sheet.facades for z in f.zones if z.role in look.relief_role)
 
 
 def test_plinth_and_cornice_stand_out(cfg):
