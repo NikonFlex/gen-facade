@@ -110,6 +110,7 @@ class Elevation(Model):
     elements: list[Mark] = []
     zones: list[ZoneMark] = []
     inner_corner: bool = False  # угол после этой стороны — внутренний (Г-, Т-контур, gf#199)
+    pt_per_ft: float | None = Field(default=None, gt=0)  # масштаб вида, если не как у дома
     # Запись чертежа выше карниза и по участкам (gf#323): пусто — стена прямоугольником до карниза
     # дома. Сборщик сейчас читает только участки карниза; силуэт и крыша — для сверки и gf#320–322.
     outline: list[Point] = []      # силуэт стены в pt без свесов крыши: фронтон, ступень
@@ -130,6 +131,10 @@ class Markup(Model):
     absent: list[str] = []  # чего нет в источнике: «west: карниза нет — щипцовая стена»
     cut: list[str] = []  # срезанное разметчиком: что и с какой стороны
     sides: list[Elevation]
+
+    def scale(self, e: Elevation) -> float:
+        """pt на фут вида: свой у стороны, если её вид начерчен в другом масштабе (gf#323)."""
+        return e.pt_per_ft or self.pt_per_ft
 
 
 def read(path: Path) -> Markup:
@@ -159,13 +164,14 @@ def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
 def _one_eaves(m: Markup, cfg: Manual) -> None:
     """Участки карниза — на стене своей стороны; у всех этажность и отметка дома, иначе у дома
     части разной высоты, а модуль держит один карниз на дом (`facade: Общие параметры дома`)."""
-    floors, tol = len(m.floor_heights_ft), cfg.length_tol_m / M_PER_FT * m.pt_per_ft
+    floors = len(m.floor_heights_ft)
     for e in m.sides:
-        line = e.floor - sum(m.floor_heights_ft) * m.pt_per_ft
+        tol = cfg.length_tol_m / M_PER_FT * m.scale(e)
+        line = e.floor - sum(m.floor_heights_ft) * m.scale(e)
         for s in e.eaves:
             if s.x[0] < e.wall[0] - tol or s.x[1] > e.wall[1] + tol:
                 raise BadMarkup(f"{m.id}: {e.view}: участок карниза за краем стены")
-            off = abs(s.y - line) / m.pt_per_ft * M_PER_FT
+            off = abs(s.y - line) / m.scale(e) * M_PER_FT
             if s.floors != floors or off > cfg.eaves_tol_m:
                 raise Unsupported(f"{m.id}: части разной высоты — {e.view}: карниз над {s.floors} "
                                   f"эт., {off:.2f} м от карниза дома; модуль держит один (gf#322)")
@@ -181,7 +187,7 @@ def _outline(m: Markup, cfg: Manual) -> rect_house.Footprint:
         n = (-n[1] + 0.0, n[0] + 0.0) if e.inner_corner else (n[1] + 0.0, -n[0] + 0.0)
     if n != FIRST_NORMAL or len(m.sides) < 4:
         raise BadContour(f"{m.id}: повороты сторон не замыкают обход по часовой")
-    lengths = [(e.wall[1] - e.wall[0]) / m.pt_per_ft * M_PER_FT for e in m.sides]
+    lengths = [(e.wall[1] - e.wall[0]) / m.scale(e) * M_PER_FT for e in m.sides]
     steps = [numpy.array((ny, -nx)) for nx, ny in normals]  # по часовой: нормаль на −90°
     gap = sum(d * length for d, length in zip(steps, lengths, strict=True))
     if numpy.hypot(*gap) > cfg.length_tol_m:
@@ -218,8 +224,8 @@ def _metres(box: tuple[float, float, float, float], e: Elevation, m: Markup,
             spec: HouseSpec) -> tuple[float, float, float, float]:
     """Прямоугольник листа в pt (x вправо, y вниз) → x0, y0, x1, y1 стены: x от левого края,
     y от земли, метры."""
-    x0, top, x1, bottom = (v / m.pt_per_ft * M_PER_FT for v in box)
-    left, floor = (v / m.pt_per_ft * M_PER_FT for v in (e.wall[0], e.floor))
+    x0, top, x1, bottom = (v / m.scale(e) * M_PER_FT for v in box)
+    left, floor = (v / m.scale(e) * M_PER_FT for v in (e.wall[0], e.floor))
     return x0 - left, spec.plinth_m + floor - bottom, x1 - left, spec.plinth_m + floor - top
 
 

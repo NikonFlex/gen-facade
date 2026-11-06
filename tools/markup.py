@@ -43,12 +43,12 @@ def font(size: int) -> ImageFont.ImageFont:
 
 def frame(pdf: Path, e: manual.Elevation, m: manual.Markup, dpi: int) -> tuple[Image.Image, tuple]:
     """Кадр стороны: от карниза до земли и от края до края стены с полем."""
-    pad = MARGIN_FT * m.pt_per_ft
-    eaves = e.floor - sum(m.floor_heights_ft) * m.pt_per_ft
+    pad = MARGIN_FT * m.scale(e)
+    eaves = e.floor - sum(m.floor_heights_ft) * m.scale(e)
     tops = [b.box[1] for b in e.elements] + [eaves] + [y for _, y in e.outline] + [
         y for shape in e.roof for _, y in shape]
     box = (e.wall[0] - pad, min(tops) - pad, e.wall[1] + pad,
-           e.floor + m.plinth_ft * m.pt_per_ft + pad)
+           e.floor + m.plinth_ft * m.scale(e) + pad)
     with pdfplumber.open(pdf) as doc:
         page = doc.pages[e.page - 1]
         box = (max(box[0], 0), max(box[1], 0), min(box[2], page.width), min(box[3], page.height))
@@ -62,10 +62,10 @@ def draw(img: Image.Image, box: tuple, e: manual.Elevation, m: manual.Markup, dp
     def px(x: float, y: float) -> tuple[float, float]:
         return (x - box[0]) * k, (y - box[1]) * k
 
-    levels = [e.floor, e.floor + m.plinth_ft * m.pt_per_ft]
+    levels = [e.floor, e.floor + m.plinth_ft * m.scale(e)]
     y = e.floor
     for h in m.floor_heights_ft:
-        y -= h * m.pt_per_ft
+        y -= h * m.scale(e)
         levels.append(y)
     for v in levels:
         d.line([px(e.wall[0], v), px(e.wall[1], v)], fill=LEVELS, width=1)

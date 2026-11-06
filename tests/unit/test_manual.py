@@ -162,6 +162,28 @@ def test_house_with_parts_of_different_height_waits():
         manual.house(drawn({"eaves": [beyond]}), CFG.data.manual)
 
 
+def test_side_drawn_at_its_own_scale():
+    """Вид стороны в другом масштабе, чем остальные (Texas A&M 2013: север в 3/16", прочие в 1/4"):
+    свой `pt_per_ft` стороны даёт тот же дом (gf#323)."""
+    raw = markup().model_dump(mode="json")
+    left = raw["sides"][1]
+
+    def half(x: float, y: float) -> tuple[float, float]:  # тот же вид вдвое мельче от угла пола
+        return 100.0 + (x - 100.0) / 2, FLOOR - (FLOOR - y) / 2
+
+    left["wall"] = [half(x, FLOOR)[0] for x in left["wall"]]
+    for el in left["elements"]:
+        (x0, top), (x1, bottom) = half(*el["box"][:2]), half(*el["box"][2:])
+        el["box"] = [x0, top, x1, bottom]
+    left["pt_per_ft"] = PT / 2
+    plain, _ = manual.house(markup(), CFG.data.manual)
+    scaled, _ = manual.house(Markup.model_validate(raw), CFG.data.manual)
+    assert scaled.sheet.facades[1].side.length_m == pytest.approx(ft(20))
+    got, want = scaled.sheet.facades[1].elements[0], plain.sheet.facades[1].elements[0]
+    box = (want.x_m, want.y_m, want.w_m, want.h_m)
+    assert (got.x_m, got.y_m, got.w_m, got.h_m) == pytest.approx(box)
+
+
 def finished(**changes) -> Markup:
     """Тот же дом с отделкой с листа (gf#245): кирпичный цоколь, карниз под отметкой карниза на
     стороне входа и камень в нижней части левой стены, заходящий за её край."""
@@ -241,6 +263,7 @@ def _toml(m: Markup) -> str:
 
     raw = m.model_dump(mode="json", exclude={"sides"})
     head = "".join(f"{k} = {value(v)}\n" for k, v in raw.items() if v is not None)
-    sides = "".join("\n[[sides]]\n" + "".join(f"{k} = {value(v)}\n" for k, v in s.items())
+    sides = "".join("\n[[sides]]\n" + "".join(f"{k} = {value(v)}\n" for k, v in s.items()
+                                              if v is not None)
                     for s in m.model_dump(mode="json")["sides"])
     return head + sides
