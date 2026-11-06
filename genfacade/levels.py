@@ -7,6 +7,9 @@
 - дверь — низ на полу своего этажа (`floor_levels`), высота та же, но с козырьком не выше
   отметки карниза; козырёк едет с ней (follow.py) и пропадает, если налез на чужой проём, как в
   derive.py; крыльцо — от земли до её низа. Гаражные ворота стоят на земле, их не трогаем;
+- крыльцо — у двери первого этажа, чей низ выше земли больше `porch_min_m` (gf#276): площадка от
+  земли до низа двери, шире двери на `porch_pad_m`, материал цоколя. Крыльцо модели у двери не
+  дублируется, а встаёт на те же отметки; у двери на земле крыльца нет;
 - карниз — во всю стену, верх на `eaves_m`, высота — как у карниза модели на этой стене (у
   нескольких кусков — медиана), низ не ниже верха проёмов; стене без карниза он не добавляется —
   у настоящих домов карниз бывает только на части стен;
@@ -37,6 +40,7 @@ from genfacade.schema import (
     FacadeSheet,
     HouseSpec,
     MaterialZone,
+    PaletteRole,
     SideFacade,
     VariantKind,
     ZoneRole,
@@ -60,7 +64,7 @@ def levels(sheet: FacadeSheet, cfg: Checks) -> FacadeSheet:
 
 
 def _wall(f: SideFacade, house: House) -> SideFacade:
-    leveled = _cornice(_doors(_windows(f, house), house), house)
+    leveled = _porches(_cornice(_doors(_windows(f, house), house), house), house)
     return _zones(leveled, _moves(f, leveled, house.spec), house)
 
 
@@ -163,8 +167,58 @@ def _child(e: Element, moved: dict[str, Element], before: list[Element]) -> Elem
     """Крыльцо — от земли до низа двери (у двери на земле его нет), остальное — за дверью."""
     if e.cls is ElementClass.PORCH and e.parent in moved:
         y = moved[e.parent].y_m
-        return e.model_copy(update={"y_m": 0.0, "h_m": y}) if y > EPS else None
+        return _grounded(e, y) if y > EPS else None
     return follow(e, moved, before)
+
+
+def _grounded(porch: Element, door_y: float) -> Element:
+    """Крыльцо от земли до низа двери; стоит так — как было."""
+    if abs(porch.y_m) <= EPS and abs(porch.h_m - door_y) <= EPS:
+        return porch
+    return porch.model_copy(update={"y_m": 0.0, "h_m": door_y})
+
+
+def _porches(f: SideFacade, house: House) -> SideFacade:
+    """Крыльцо у каждой двери первого этажа, чей низ выше земли больше `porch_min_m`: крыльцо
+    модели у двери (по x, `parent` у разбора ответа бывает пустым или чужим) встаёт от земли до
+    низа двери, а если его нет — ставится новое."""
+    raised = [d for d in f.elements if d.cls is ElementClass.DOOR and (d.floor or 1) == 1
+              and d.y_m > house.cfg.porch_min_m]
+    fixed: dict[str, Element] = {}
+    added = []
+    for d in raised:
+        mine = [p for p in f.elements if p.cls is ElementClass.PORCH and _across(p, d)]
+        fixed |= {p.id: _grounded(p, d.y_m) for p in mine}
+        if not mine and (new := _porch(d, f.side.length_m, house)) is not None:
+            added.append(new)
+    if not fixed and not added:
+        return f
+    return f.model_copy(update={"elements": [fixed.get(e.id, e) for e in f.elements] + added})
+
+
+def _across(porch: Element, door: Element) -> bool:
+    """Крыльцо стоит у двери: они пересекаются по x."""
+    return min(porch.x_m + porch.w_m, door.x_m + door.w_m) - max(porch.x_m, door.x_m) > EPS
+
+
+def _porch(d: Element, length_m: float, house: House) -> Element | None:
+    """Новое крыльцо двери: шире двери на запас, но в пределах стены; дверь за краем стены
+    (ответ недоученной модели, gf#217) — брак валидатора, крыльца у неё нет."""
+    pad = house.cfg.porch_pad_m
+    x0, x1 = max(0.0, d.x_m - pad), min(length_m, d.x_m + d.w_m + pad)
+    if x1 - x0 <= EPS:
+        return None
+    return Element(id=f"p_{d.id}", cls=ElementClass.PORCH, x_m=x0, y_m=0.0, w_m=x1 - x0,
+                   h_m=d.y_m, floor=1, parent=d.id, material=_porch_material(house))
+
+
+def _porch_material(house: House) -> str | None:
+    """Материал крыльца — цоколь дома: тот, что у зон цоколя, а если зон нет — роль «цоколь»
+    палитры, а нет и её — материала нет (цвет по классу)."""
+    if house.plinth is not None:
+        return house.plinth
+    has = any(m.id == PaletteRole.PLINTH for m in house.spec.materials)
+    return PaletteRole.PLINTH if has else None
 
 
 def _blocked(e: Element, moved: dict[str, Element], elements: list[Element]) -> bool:

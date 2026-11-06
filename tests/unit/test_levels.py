@@ -5,7 +5,7 @@
 """
 
 import pytest
-from simple_house import whole_main, with_side
+from simple_house import whole_main, with_side, without_porches
 
 from genfacade.schema import (
     EPS,
@@ -14,6 +14,7 @@ from genfacade.schema import (
     MaterialZone,
     OpeningVariant,
     PaletteRole,
+    Rule,
     VariantKind,
     ZoneRole,
 )
@@ -41,8 +42,11 @@ def _clean(sheet, cfg):
 
 
 def test_clean_house_stays_as_is(house, cfg):
-    """У стаба шага 4 всё уже на отметках дома — шаг 5 ничего не трогает."""
-    assert snap(house, cfg.checks) == house
+    """У стаба шага 4 всё уже на отметках дома — шаг 5 ничего не трогает, кроме крыльца: у двери
+    на поднятом полу его ставит код (gf#276)."""
+    got = snap(house, cfg.checks)
+    assert without_porches(got) == house
+    assert len(_of(got.facades[DOOR_SIDE], ElementClass.PORCH)) == 1
 
 
 def test_cornice_piece_becomes_full_wall_under_eaves(house, cfg):
@@ -217,3 +221,96 @@ def test_window_stays_if_its_line_is_taken(house, cfg):
     got = snap(with_side(house, DOOR_SIDE, elements=elements), cfg.checks).facades[DOOR_SIDE]
     [kept] = [e for e in got.elements if e.id == w.id]
     assert kept.y_m == pytest.approx(low.y_m)
+
+
+# gf#276: крыльцо у двери на поднятом полу — кодом шага 5
+# (`facade: Крыльцо у двери на поднятом полу`).
+
+def _raised(house, plinth_m: float):
+    """Дом с полом, поднятым на plinth_m, и дверью стороны DOOR_SIDE, уже стоящей на нём."""
+    spec = house.spec.model_copy(update={"plinth_m": plinth_m})
+    sheet = house.model_copy(update={"spec": spec})
+    door = _of(sheet.facades[DOOR_SIDE], ElementClass.DOOR)[0].model_copy(update={"y_m": plinth_m})
+    return with_side(sheet, DOOR_SIDE, elements=[door if e.cls is ElementClass.DOOR else e
+                                                 for e in sheet.facades[DOOR_SIDE].elements])
+
+
+def _porches(sheet, cfg):
+    return _of(_clean(snap(sheet, cfg.checks), cfg).facades[DOOR_SIDE], ElementClass.PORCH)
+
+
+def test_raised_door_gets_porch_from_ground(house, cfg):
+    """Дверь на 0,61 м без крыльца: крыльцо от земли до низа двери, шире двери на запас из
+    настроек, у двери, материал — цоколь дома."""
+    sheet = _raised(house, 0.61)
+    [door] = _of(sheet.facades[DOOR_SIDE], ElementClass.DOOR)
+    [p] = _porches(sheet, cfg)
+    pad = cfg.checks.porch_pad_m
+    assert (p.y_m, p.h_m) == (0.0, pytest.approx(0.61))
+    assert (p.x_m, p.w_m) == (pytest.approx(door.x_m - pad), pytest.approx(door.w_m + 2 * pad))
+    assert (p.parent, p.floor, p.material) == (door.id, 1, PaletteRole.PLINTH)
+
+
+@pytest.mark.parametrize("plinth_m", [0.0, 0.15])
+def test_door_on_the_ground_has_no_porch(house, cfg, plinth_m):
+    """Дверь на земле и дверь на пороге `porch_min_m` (не выше него) — без крыльца."""
+    assert plinth_m <= cfg.checks.porch_min_m
+    assert _porches(_raised(house, plinth_m), cfg) == []
+
+
+@pytest.mark.parametrize("parent", [None, "e9", "door"])
+def test_model_porch_is_not_duplicated(house, cfg, parent):
+    """Крыльцо модели у двери — одно: остаётся с её x и шириной, а встаёт от земли до низа двери.
+    Разбор ответа ставит `parent` то верный, то пустой, то чужой — крыльцо ищется по x."""
+    sheet = _raised(house, 0.61)
+    [door] = _of(sheet.facades[DOOR_SIDE], ElementClass.DOOR)
+    mine = Element(id="e9", cls=ElementClass.PORCH, x_m=door.x_m - 0.5, y_m=0.0, w_m=door.w_m + 1.0,
+                   h_m=0.35, floor=1, parent=door.id if parent == "door" else parent,
+                   material=PaletteRole.PLINTH)
+    f = sheet.facades[DOOR_SIDE]
+    sheet = with_side(sheet, DOOR_SIDE, elements=[*f.elements, mine])
+    [p] = _porches(sheet, cfg)
+    assert (p.id, p.x_m, p.w_m) == (mine.id, mine.x_m, mine.w_m)
+    assert (p.y_m, p.h_m) == (0.0, pytest.approx(0.61))
+
+
+def test_porch_stays_inside_the_wall(house, cfg):
+    """Дверь у края стены: крыльцо обрезано краем, а не выходит за силуэт."""
+    f = _raised(house, 0.61).facades[DOOR_SIDE]
+    door = _of(f, ElementClass.DOOR)[0].model_copy(update={"x_m": 0.1, "fixed": []})
+    sheet = with_side(_raised(house, 0.61), DOOR_SIDE,
+                      elements=[door if e.cls is ElementClass.DOOR else e for e in f.elements])
+    got = snap(sheet, cfg.checks)
+    [p] = _of(got.facades[DOOR_SIDE], ElementClass.PORCH)
+    assert (p.x_m, p.x_m + p.w_m) == (0.0, pytest.approx(0.1 + door.w_m + cfg.checks.porch_pad_m))
+    assert [v for v in validate(got, cfg.checks) if v.rule is Rule.OUTSIDE] == []
+
+
+def test_upper_floor_door_has_no_porch(house, cfg):
+    """Крыльцо — у двери первого этажа: у двери второго этажа его нет, как бы высоко она ни
+    стояла."""
+    sheet = _raised(house, 0.61)
+    f = sheet.facades[DOOR_SIDE]
+    door = _of(f, ElementClass.DOOR)[0]
+    spec = sheet.spec.model_copy(update={"floors": 2, "floor_heights_m": [2.75, 2.75],
+                                         "eaves_m": 6.11})
+    upper = door.model_copy(update={"id": "up", "floor": 2, "x_m": door.x_m + 3.0, "y_m": 3.36,
+                                    "fixed": []})
+    sheet = with_side(sheet.model_copy(update={"spec": spec}), DOOR_SIDE,
+                      elements=[*f.elements, upper])
+    got = snap(sheet, cfg.checks).facades[DOOR_SIDE]
+    assert [p.parent for p in _of(got, ElementClass.PORCH)] == [door.id]
+
+
+@pytest.mark.parametrize(("palette_has_plinth", "material"),
+                         [(True, PaletteRole.PLINTH), (False, None)])
+def test_porch_material_without_plinth_zones(house, cfg, palette_has_plinth, material):
+    """Модель цоколя не поставила: материал крыльца — роль «цоколь» палитры, а нет и её —
+    материала нет, цвет по классу (в палитре дома только то, что в ней есть)."""
+    sheet = _raised(house, 0.61)
+    for i, f in enumerate(sheet.facades):
+        sheet = with_side(sheet, i, zones=[whole_main(f, sheet.spec.eaves_m)])
+    palette = [m for m in sheet.spec.materials if palette_has_plinth or m.id != PaletteRole.PLINTH]
+    sheet = sheet.model_copy(update={"spec": sheet.spec.model_copy(update={"materials": palette})})
+    [p] = _porches(sheet, cfg)
+    assert p.material == material

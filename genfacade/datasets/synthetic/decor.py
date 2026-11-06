@@ -7,7 +7,6 @@
 """
 
 from genfacade import derive
-from genfacade.config import FacadeRules
 from genfacade.derive import Flags
 from genfacade.schema import Element, ElementClass, HouseSpec, PaletteRole, Trim, VariantKind
 
@@ -29,11 +28,11 @@ def flags(windows: list[Element], doors: list[Element], wall: derive.Wall) -> Fl
     return out
 
 
-def porch(door: Element, spec: HouseSpec, rules: FacadeRules) -> Element:
-    """Крыльцо — площадка перед дверью на высоту цоколя."""
-    pad = rules.entry.porch_pad_m
-    return Element(id=f"p_{door.id}", cls=ElementClass.PORCH, x_m=door.x_m - pad, y_m=0.0,
-                   w_m=door.w_m + 2 * pad, h_m=spec.plinth_m, floor=1, parent=door.id,
+def porch(door: Element, spec: HouseSpec, pad_m: float) -> Element:
+    """Крыльцо — площадка перед дверью на высоту цоколя, шире двери на запас шага 5
+    (`Checks.porch_pad_m`): такое же ставит код, когда модель крыльца не поставила."""
+    return Element(id=f"p_{door.id}", cls=ElementClass.PORCH, x_m=door.x_m - pad_m, y_m=0.0,
+                   w_m=door.w_m + 2 * pad_m, h_m=spec.plinth_m, floor=1, parent=door.id,
                    material=PaletteRole.PLINTH)
 
 
