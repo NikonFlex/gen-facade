@@ -11,7 +11,7 @@ import tomllib
 from importlib.resources import files
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from genfacade.datasets.buildingnet.mesh import Label
 from genfacade.schema import (
@@ -31,6 +31,7 @@ from genfacade.schema import (
     SillKind,
     Source,
     Split,
+    Trim,
     VariantKind,
     ZoneRole,
 )
@@ -558,10 +559,61 @@ class LayoutModel(Sampling):
     reference: RealismReference
 
 
+class FinishColor(Section):
+    """Цвет из ряда цветов отделки; words — слова текста, которыми его просят. Нет hex —
+    у материала нет своего цвета, он берёт цвет вида из библиотеки (`facade: Цвет вида по
+    умолчанию`)."""
+
+    hex: str | None = Field(default=None, pattern=r"^#[0-9a-f]{6}$")
+    words: list[str] = []
+
+
+class FinishRole(Section):
+    """Материал роли палитры в отделке: вид из library.toml и ряд цветов (первый — по умолчанию).
+    extra — цвета, которые только просят словом: от текста без слов они не выпадают."""
+
+    kind: str
+    colors: list[str] = Field(min_length=1)
+    extra: list[str] = []
+
+
+class Finish(Section):
+    """Отделка дома: материалы палитры по ролям и виды выводимых элементов (gf#303);
+    styles — стили раскладки, с которыми она сочетается."""
+
+    styles: list[str] = Field(min_length=1)
+    trim: HouseTrim
+    materials: dict[PaletteRole, FinishRole]
+
+
 class SpecStub(Section):
-    floors_words: dict[int, list[str]]  # этажей → слова в тексте
-    style_words: dict[str, list[str]]   # стиль → слова в тексте
-    trim: dict[str, HouseTrim]          # стиль → виды выводимых элементов дома
+    default_finish: str                    # отделка дома без описания
+    stem_tail: int                         # букв после основы, при которых слово совпало
+    reach: int                             # слов от цвета до слова, чью роль он красит
+    negations: list[str]                   # слово перед названием элемента — элемента нет
+    floors_words: dict[int, list[str]]     # этажей → слова в тексте
+    style_words: dict[str, list[str]]      # стиль → слова в тексте
+    material_words: dict[str, list[str]]   # вид стен из библиотеки → слова в тексте
+    trim_words: dict[Trim, list[str]]      # выводимый элемент → слова в тексте
+    role_words: dict[PaletteRole, list[str]]  # роль палитры → слова, перед которыми цвет её красит
+    trim_default: HouseTrim                # вид названного в тексте элемента, если его нет
+    colors: dict[str, FinishColor]         # ряд цветов отделки по имени
+    finish: dict[str, Finish]              # библиотека отделок
+
+    @model_validator(mode="after")
+    def _check(self) -> "SpecStub":
+        """Опечатка в имени отделки или цвета — ошибка загрузки, а не молчаливый отказ."""
+        if self.default_finish not in self.finish:
+            raise ValueError(f"default_finish: нет отделки {self.default_finish}")
+        for name, finish in self.finish.items():
+            if set(finish.materials) != set(PaletteRole):
+                raise ValueError(f"отделка {name}: роли {sorted(finish.materials)}, "
+                                 f"а нужны {sorted(PaletteRole)}")
+            used = {c for m in finish.materials.values() for c in [*m.colors, *m.extra]}
+            unknown = used - set(self.colors)
+            if unknown:
+                raise ValueError(f"отделка {name}: нет цветов в ряду colors — {sorted(unknown)}")
+        return self
 
 
 class Models(Section):

@@ -1,7 +1,7 @@
 """Стабы моделей шагов 1 и 4: интерфейс — как у моделей, ответ — заготовка из stub_data/.
 
-Стаб 1: текст → HouseSpec — один и тот же дом, из текста берутся этажность и стиль, а по стилю —
-виды выводимых элементов (подоконник, наличник, ставни, козырёк, gf#212).
+Стаб 1: текст → HouseSpec — заготовка дома, из текста берутся этажность, стиль и отделка:
+палитра и виды выводимых элементов (подоконник, наличник, ставни, козырёк, gf#212, gf#303).
 Стаб 2: стена после развёртки + контекст → стена с элементами и зонами — готовые фасады
 простого дома (tests/fixtures/simple_house.svg), один набор на оба режима; «задано условием»
 (fixed) остаётся только у проёмов, которые есть на стороне плана. Заготовку один раз
@@ -15,6 +15,7 @@ from functools import cache
 from importlib.resources import files
 
 from genfacade.config import SpecStub
+from genfacade.models import finish
 from genfacade.schema import (
     EPS,
     Element,
@@ -52,15 +53,17 @@ class LayoutContext:
 
 def spec_model(text: str, cfg: SpecStub) -> HouseSpec:
     """Шаг 1: описание → параметры дома. Стаб: заготовка, этажей и стиль — по слову в тексте,
-    виды выводимых элементов — по стилю; высота этажа и цоколь — заготовки, карниз — над
-    последним этажом."""
-    spec = HouseSpec.model_validate_json(DATA.joinpath("house.json").read_text())
-    floors = _first(text, cfg.floors_words) or spec.floors
-    style = _first(text, cfg.style_words) or spec.style
-    heights = [spec.floor_heights_m[0]] * floors
-    return spec.model_copy(update={"floors": floors, "floor_heights_m": heights,
-                                   "eaves_m": round(spec.plinth_m + sum(heights), 3),
-                                   "style": style, "trim": cfg.trim[style]})
+    палитра и виды выводимых элементов — отделка дома по тексту (models/finish.py); высота этажа
+    и цоколь — заготовки, карниз — над последним этажом."""
+    base = json.loads(DATA.joinpath("house.json").read_text())
+    floors = _first(text, cfg.floors_words) or base["floors"]
+    style = _first(text, cfg.style_words) or base["style"]
+    height = base["floor_heights_m"][0]
+    house = finish.look(text, style, cfg)
+    return HouseSpec.model_validate(base | {
+        "floors": floors, "floor_heights_m": [height] * floors, "style": style,
+        "eaves_m": round(base["plinth_m"] + height * floors, 3),
+        "trim": house.trim.model_dump(), "materials": [m.model_dump() for m in house.materials]})
 
 
 def _first[T](text: str, words: dict[T, list[str]]) -> T | None:

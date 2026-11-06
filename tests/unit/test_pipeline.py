@@ -67,10 +67,12 @@ def test_marks_only_on_sheet(cfg, tmp_path):
     assert "±0,000" in sheet and "Фасад в осях" in sheet
 
 
-def test_text_does_not_change_house(cfg, tmp_path):
-    """Текст сохраняется в запросе, но до модели не читается: дом один и тот же."""
+def test_text_is_saved_and_same_text_gives_same_house(cfg, tmp_path):
+    """Текст сохраняется в запросе; шаг 1 читает его (этажность, стиль, отделка), но тот же
+    текст даёт тот же дом (`generation: Отделка без слов — от текста`)."""
     specs = []
-    for i, text in enumerate(["A one-storey flat-roofed cabin.", "Five-storey apartment block."]):
+    for i in range(2):
+        text = "A one-storey flat-roofed cabin."
         req = pipeline.PlanRun(plan=str(SIMPLE), text=text)
         out = pipeline.generate(req, SIMPLE.read_text(), tmp_path / f"run{i}", cfg)
         assert json.loads((out / pipeline.REQUEST).read_text())["text"] == text
