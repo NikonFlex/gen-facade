@@ -88,7 +88,7 @@ def _inner(found: Layout, rng: random.Random, cfg: Synthetic) -> list[Run]:
              for b in found.wings[i + 1:]]
     runs = [r for r in parts if r is not None]
     for wing in found.wings:
-        runs += _crosswise(rng, wing, cfg)
+        runs += _crosswise(rng, wing, edges, cfg)
     return runs
 
 
@@ -105,23 +105,40 @@ def _between(a: Rect, b: Rect, edges: list[_Edge], t: float) -> Run | None:
     return None
 
 
+def _collinear(axis: Axis, line: float, span: Span, edges: list[_Edge], tol: float
+               ) -> _Edge | None:
+    """Стена контура на линии line (с допуском tol), упирающаяся концом в перегородку span."""
+    for e in edges:
+        if e.axis is axis and abs(e.line - line) <= tol + EPS and any(
+                e.span[0] - EPS <= end <= e.span[1] + EPS for end in span):
+            return e
+    return None
+
+
 def _side(axis: Axis, line: float, span: Span, edges: list[_Edge]) -> int:
     """Куда смотрит дом у стены, лежащей на той же линии и упирающейся в перегородку; плюс — если
     такой стены нет."""
-    for e in edges:
-        if e.axis is axis and abs(e.line - line) < EPS and any(
-                e.span[0] - EPS <= end <= e.span[1] + EPS for end in span):
-            return e.inward
-    return 1
+    found = _collinear(axis, line, span, edges, 0.0)
+    return found.inward if found else 1
 
 
-def _crosswise(rng: random.Random, wing: Rect, cfg: Synthetic) -> list[Run]:
-    """Поперечные перегородки крыла — поперёк его длинной стороны, от одной границы до другой."""
+def _crosswise(rng: random.Random, wing: Rect, edges: list[_Edge], cfg: Synthetic) -> list[Run]:
+    """Поперечные перегородки крыла — поперёк его длинной стороны, от одной границы до другой.
+    Перегородка у линии стены выреза (ближе двух толщин) встаёт ровно на неё и в её полосу: рядом
+    стена и перегородка оставляют между собой полосу, которую шаг 2 читает разрывом."""
     lengths = (wing[2] - wing[0], wing[3] - wing[1])
     k = 0 if lengths[0] >= lengths[1] else 1  # вдоль какой оси длинная сторона крыла
     across = Axis.Y if k == 0 else Axis.X
     short = (wing[1 - k], wing[3 - k])
-    return [Run(across, round(wing[k] + c, 3), *short) for c in plan.cuts(rng, lengths[k], cfg)]
+    t = cfg.house.wall_m
+    runs = []
+    for c in plan.cuts(rng, lengths[k], cfg):
+        line = round(wing[k] + c, 3)
+        e = _collinear(across, line, short, edges, 2 * t)
+        line = e.line if e else line
+        inward = e.inward if e else 1
+        runs.append(Run(across, line if inward > 0 else line - t, *short))
+    return runs
 
 
 def _with_passage(run: Run, rng: random.Random, cfg: Synthetic) -> Run:

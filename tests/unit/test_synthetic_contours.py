@@ -13,9 +13,6 @@ SEEDS = range(24)
 # Сколько сторон нарисовано: у Г их 6, у остальных видов — 8 (вырез или выступ добавляют 4 угла).
 SIDES = {ContourKind.L: 6, ContourKind.T: 8, ContourKind.U: 8, ContourKind.ANNEX: 8,
          ContourKind.BAY: 8}
-U_LOST = pytest.mark.xfail(reason="gf#306: шаг 2 закрывает вырез П-плана", strict=True)
-KINDS = [pytest.param(k, marks=U_LOST) if k is ContourKind.U else k for k in SIDES]
-NOT_U = [k for k in SIDES if k is not ContourKind.U]
 
 
 @pytest.fixture(scope="module")
@@ -23,17 +20,27 @@ def houses(cfg):
     return {k: [build.sample(s, only(cfg, k)) for s in SEEDS] for k in ContourKind}
 
 
-@pytest.mark.parametrize("kind", KINDS)
+@pytest.mark.parametrize("kind", list(SIDES))
 def test_step2_reads_as_many_sides_as_drawn(houses, kind):
     """Препроцессор читает у Г, Т, П, пристройки и эркера столько сторон, сколько нарисовано."""
     assert {len(h.plan.sides) for h in houses[kind]} == {SIDES[kind]}
+
+
+@pytest.mark.parametrize("kind", list(ContourKind))
+def test_plan_scale_is_one_centimetre_and_one_entrance(houses, kind):
+    """Вход узнан верно — дверь 90 px, масштаб 0,01 м/px, вход один: перегородка, продолжающая
+    стену выреза, лежит в её полосе, и между ними нет ложного разрыва, который шаг 2 принял бы
+    за вход."""
+    for h in houses[kind]:
+        assert h.plan.scale_m_per_px == pytest.approx(0.01), h.id
+        assert sum(s.has_entrance for s in h.plan.sides) == 1, h.id
 
 
 def test_rect_stays_four_sided(houses):
     assert {len(h.plan.sides) for h in houses[ContourKind.RECT]} == {4}
 
 
-@pytest.mark.parametrize("kind", NOT_U)
+@pytest.mark.parametrize("kind", list(SIDES))
 def test_windows_keep_off_every_corner_and_partition(houses, cfg, kind):
     """Окно не ближе нормы к углу стороны — выпуклому и входящему — и не в запретной зоне у
     перегородки, упирающейся в стену."""
@@ -60,7 +67,7 @@ def test_house_record_decodes_back(houses, cfg, kind, mode):
         assert tokens.answer(back, mode, cfg) == written
 
 
-@pytest.mark.parametrize("kind", [k for k in ContourKind if k is not ContourKind.U])
+@pytest.mark.parametrize("kind", list(ContourKind))
 def test_houses_pass_validator(houses, cfg, kind):
     """У домов любого контура нет ошибок валидатора (их батч отбраковывает); предупреждение —
     только о скатной крыше над непрямоугольным контуром (gf#320)."""
