@@ -1,6 +1,6 @@
 # Canadian Farmhouse — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
 # archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#323 — та же лицензия.
-# Лист 22x17", масштаб 1/4" = 1'-0" (pt_per_ft 18). План 1-го этажа — стр. 2, 2-го — стр. 3; фасады —
+# Лист 22x17", масштаб 1/4" = 1'-0" (pt_per_unit 18). План 1-го этажа — стр. 2, 2-го — стр. 3; фасады —
 # стр. 7 (SOUTH), 8 (EAST), 9 (NORTH), 10 (WEST). Отметки: 1ST FLOOR +0', 2ND FLOOR +10'-0", MAIN ROOF
 # EAVE +14'-5", PORTICO EAVE +10'-6" / RIDGE +12'-5", MID-GABLE +19'-11", ROOF RIDGE +25'-5".
 # Устройство: ядро 32' x 24' (кровля 10/12, фронтоны 2:1 на южной и северной сторонах, щипцы на
@@ -13,12 +13,13 @@
 id = "ffh-canadian"
 pdf = "Canadian Farmhouse - Blueprints - by Jay Osborne.pdf"
 roof = "двускатная 10/12 с поперечными фронтонами 2:1, щипцы 10/12 на торцах; пристройки: тамбур 5/12 щипец, задний блок 5/12 щипец; фальцевая кровля"
-pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36x84 = 54x126 pt, FF1–FF2 10' = 180 pt
+unit = "ft"
+pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36x84 = 54x126 pt, FF1–FF2 10' = 180 pt
 material = "siding"       # CLAPBOARD SIDING (дерево или фиброцемент)
-plinth_ft = 1.0           # кирпичный цоколь 762.4 → 781.2 (BRICK AT FOUNDATION)
+plinth = 1.0           # кирпичный цоколь 762.4 → 781.2 (BRICK AT FOUNDATION)
 plinth_material = "brick"
 trim_material = "wood"
-floor_heights_ft = [10.0, 4.4167]   # 2ND FLOOR +10'-0", MAIN ROOF EAVE +14'-5"
+floor_heights = [10.0, 4.4167]   # 2ND FLOOR +10'-0", MAIN ROOF EAVE +14'-5"
 absent = ["west, east: карниза нет — щипцовые стены", "south, north: на части стены под фронтоном карниза нет"]
 cut = ["south: кленовый лист и орнамент фронтона, кронштейны карниза, труба выше крыши",
        "south: ступени входа, пилястры и капители портика", "east, north: кронштейны под эркером",

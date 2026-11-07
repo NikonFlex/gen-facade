@@ -18,12 +18,13 @@
 id = "ffh-western"
 pdf = "Western Farmhouse Draft Plan Set 2024-02-01.pdf"
 roof = "двускатная 10/12 (фальцевая) с поперечными щипцами 16/12; крылья и крыльцо — навесные скаты 2.5/12"
-pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"
+unit = "ft"
+pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"
 material = "siding"       # CLAPBOARD SIDING
-plinth_ft = 1.0           # FF1 над линией 847.5 pt (низ видимой части фундамента)
+plinth = 1.0           # FF1 над линией 847.5 pt (низ видимой части фундамента)
 plinth_material = "concrete"
 trim_material = "wood"    # карнизная доска с торцами стропил (RAFTER TAILS)
-floor_heights_ft = [9.9167, 10.0]   # FF2 +9'-11", ROOF EAVE / ATTIC FLOOR +19'-11" — ядро
+floor_heights = [9.9167, 10.0]   # FF2 +9'-11", ROOF EAVE / ATTIC FLOOR +19'-11" — ядро
 cut = ["south, north: кирпичные трубы по бокам стены (торчат на 2.5' за плоскость)",
        "south: крыльцо 8' на столбах 8x8 с кирпичными ступенями и кровля крыльца, перила",
        "north: колонны и ступени портика, фронтон портика",

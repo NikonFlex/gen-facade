@@ -8,12 +8,13 @@ import pytest
 
 from genfacade import config
 from genfacade.datasets import manual, store
-from genfacade.datasets.manual import M_PER_FT, Markup
+from genfacade.datasets.manual import M_PER_UNIT, Markup, Unit
 from genfacade.schema import ElementClass, Mode, OpeningKind, Source, Split, Trim
 from genfacade.train import tokens
 from genfacade.validate import errors, validate
 
 CFG = config.load()
+M_PER_FT = M_PER_UNIT[Unit.FT]
 PT = 18.0       # pt на фут: лист 1/4" = 1'-0"
 FLOOR = 500.0   # отметка чистого пола на листе, pt
 PLINTH_FT, EAVE_FT = 1.0, 8.0   # пол над землёй и карниз над полом, футы
@@ -41,8 +42,8 @@ def box(x_ft: float, bottom_ft: float, w_ft: float, h_ft: float) -> list[float]:
 def markup(**changes) -> Markup:
     """Дом 12' × 20': дверь на стороне входа, окно со ставней справа, навес над дверью выше
     карниза и окно, чуть заходящее за карниз."""
-    raw = {"id": "ffh-test", "pdf": "test.pdf", "roof": "двускатная", "pt_per_ft": PT,
-           "material": "siding", "plinth_ft": PLINTH_FT, "floor_heights_ft": [EAVE_FT],
+    raw = {"id": "ffh-test", "pdf": "test.pdf", "roof": "двускатная", "unit": "ft",
+           "pt_per_unit": PT, "material": "siding", "plinth": PLINTH_FT, "floor_heights": [EAVE_FT],
            "cut": ["front: фронтон"],
            "sides": [side("FRONT", 12,
                           {"cls": "door", "box": box(5, 0, 2, 6.75)},
@@ -162,9 +163,24 @@ def test_house_with_parts_of_different_height_waits():
         manual.house(drawn({"eaves": [beyond]}), CFG.data.manual)
 
 
+def test_metric_sheet_gives_the_same_house():
+    """Российский лист — в метрах (gf#328): те же pt листа с масштабом и отметками в метрах дают
+    тот же дом, что в футах."""
+    metric = markup(unit="m", pt_per_unit=PT / M_PER_FT, plinth=ft(PLINTH_FT),
+                    floor_heights=[ft(EAVE_FT)])
+    feet, _ = manual.house(markup(), CFG.data.manual)
+    metres, _ = manual.house(metric, CFG.data.manual)
+    assert metres.sheet.spec.eaves_m == pytest.approx(feet.sheet.spec.eaves_m)
+    for got, want in zip(metres.sheet.facades, feet.sheet.facades, strict=True):
+        assert got.side.length_m == pytest.approx(want.side.length_m)
+        assert [(x.cls, x.x_m, x.y_m, x.w_m, x.h_m) for x in got.elements] == [
+            (x.cls, pytest.approx(x.x_m), pytest.approx(x.y_m), pytest.approx(x.w_m),
+             pytest.approx(x.h_m)) for x in want.elements]
+
+
 def test_side_drawn_at_its_own_scale():
     """Вид стороны в другом масштабе, чем остальные (Texas A&M 2013: север в 3/16", прочие в 1/4"):
-    свой `pt_per_ft` стороны даёт тот же дом (gf#323)."""
+    свой `pt_per_unit` стороны даёт тот же дом (gf#323)."""
     raw = markup().model_dump(mode="json")
     left = raw["sides"][1]
 
@@ -175,7 +191,7 @@ def test_side_drawn_at_its_own_scale():
     for el in left["elements"]:
         (x0, top), (x1, bottom) = half(*el["box"][:2]), half(*el["box"][2:])
         el["box"] = [x0, top, x1, bottom]
-    left["pt_per_ft"] = PT / 2
+    left["pt_per_unit"] = PT / 2
     plain, _ = manual.house(markup(), CFG.data.manual)
     scaled, _ = manual.house(Markup.model_validate(raw), CFG.data.manual)
     assert scaled.sheet.facades[1].side.length_m == pytest.approx(ft(20))

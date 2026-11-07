@@ -14,11 +14,12 @@
 id = "sd-alabama-2017"
 pdf = "2017/alabama-drawings.pdf"
 roof = "односкатная к югу с PV (ROOF 16'-3 3/4\"), фонарь-клерестория над северной полосой кровли"
-pt_per_ft = 18.0          # 1/4" = 1'-0", проверено отметками
+unit = "ft"
+pt_per_unit = 18.0          # 1/4" = 1'-0", проверено отметками
 material = "siding"       # PAINTED FIBER CEMENT PANELS
-plinth_ft = 2.0           # FLOOR FRAMING 2'-0" над GROUND 0'-0"
+plinth = 2.0           # FLOOR FRAMING 2'-0" над GROUND 0'-0"
 trim_material = "wood"    # 2X8 WOOD BEAMS и 1X8 WOOD TRIM под навесом на отметке карниза; рядом PREFINISHED METAL GUTTER (gf#245)
-floor_heights_ft = [8.0]  # BEARING HEIGHT 10'-0"
+floor_heights = [8.0]  # BEARING HEIGHT 10'-0"
 cut = ["все: клерестория с окнами D над северной полосой кровли, односкатная кровля, PV, водостоки",
        "north, south: навесы террас на стойках 4x4, перила, посадки — вне стены; низ окон и дверей закрыт",
        "east, west: щипцовый профиль стены выше BEARING HEIGHT; низкий навес и кровельная полоса у северного угла",

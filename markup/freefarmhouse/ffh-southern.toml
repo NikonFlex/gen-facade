@@ -10,12 +10,13 @@
 id = "ffh-southern"
 pdf = "Drawing Set - Southern Farmhouse - Jay Osborne 2023-02-01.pdf"
 roof = "двускатная 10/12, коньком вдоль длинной стороны, фальцевая; галерея под вальмовой 3/12, сетчатые веранды под односкатными 2.5/12"
-pt_per_ft = 9.0           # SCALE 1/4" = 1'-0" на листе 22x17", PDF уменьшен до 11x8.5"
+unit = "ft"
+pt_per_unit = 9.0           # SCALE 1/4" = 1'-0" на листе 22x17", PDF уменьшен до 11x8.5"
 material = "siding"       # CLAPBOARD SIDING
-plinth_ft = 2.0           # APPROX. 24" [600] от земли до чистого пола, кирпичные столбы
+plinth = 2.0           # APPROX. 24" [600] от земли до чистого пола, кирпичные столбы
 plinth_material = "brick" # BRICK FOUNDATION (+ WATER TABLE BOARD — доска над кирпичом, не зона) (gf#245)
 trim_material = "wood"    # FASCIA + FRIEZE BOARD под карнизом (gf#245)
-floor_heights_ft = [10.917, 10.25]   # 2ND FLOOR +10'-11", ROOF EAVE +21'-2"
+floor_heights = [10.917, 10.25]   # 2ND FLOOR +10'-11", ROOF EAVE +21'-2"
 cut = ["west, east: фронтон с вентрешёткой (attic vent), труба выше карниза",
        "south, north: сетчатые веранды и эркер в профиль — за углом стены",
        "west, east: двухэтажная галерея в профиль — за углом стены",

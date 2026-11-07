@@ -1,6 +1,6 @@
 # Marilyn's Farmhouse (four starter farmhouses) — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
 # archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#323 — та же лицензия.
-# Лист 22x17", масштаб 1/4" = 1'-0" (pt_per_ft 18; FF1–FF2 9' = 162 pt, EAVE +17'-3" = 310.5 pt от FF1).
+# Лист 22x17", масштаб 1/4" = 1'-0" (pt_per_unit 18; FF1–FF2 9' = 162 pt, EAVE +17'-3" = 310.5 pt от FF1).
 # Планы — стр. 2 (1-й этаж 24' x 31'-8"), стр. 3 (2-й этаж 24' x 26', Г-образный); фасады — стр. 4–5.
 # Устройство: двухэтажное ядро 24' x 16' с щипцовой кровлей 7.5/12 (коньком вдоль запад–восток, щипцы
 # на западной и восточной сторонах); к северу первый этаж продолжен ещё на 15'-8" (screen porch,
@@ -12,12 +12,13 @@
 id = "ffh-marilyn"
 pdf = "Marilyn - Blueprints_compressed.pdf"
 roof = "двускатная 7.5/12 (ядро, коньком вдоль запад–восток), сзади односкатные 2/12; фальцевая кровля"
-pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36x80" = 54x120 pt, FF1–FF2 9' = 162 pt
+unit = "ft"
+pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36x80" = 54x120 pt, FF1–FF2 9' = 162 pt
 material = "siding"       # CLAPBOARD SIDING
-plinth_ft = 1.0           # кирпичная обшивка основания 799.1 → 817.1 (земля у стены), FF1 +0'-0"
+plinth = 1.0           # кирпичная обшивка основания 799.1 → 817.1 (земля у стены), FF1 +0'-0"
 plinth_material = "brick"
 trim_material = "wood"
-floor_heights_ft = [9.0, 8.25]   # FF2 +9'-0", EAVE +17'-3"
+floor_heights = [9.0, 8.25]   # FF2 +9'-0", EAVE +17'-3"
 absent = ["west, east, north: карниз только на части стены, на щипцовой части полосы нет"]
 cut = ["south: ступени и столбы портика двери", "south: фонари у двери",
        "west: screen porch в северной части (веранда с сеткой), вентрешётка во фронтоне, ступени справа",

@@ -8,11 +8,12 @@
 id = "sd-mass-2011"
 pdf = "2011/mass_cd.pdf"
 roof = "двускатная, фальцевая, конёк вдоль; щипцы на востоке и западе; южная пергола-рама с панелями"
-pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36" = 55 pt
+unit = "ft"
+pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36" = 55 pt
 material = "siding"       # горизонтальная обшивка доской
-plinth_ft = 1.5           # GRADE LEVEL -1'-6" от FFL
+plinth = 1.5           # GRADE LEVEL -1'-6" от FFL
 trim_material = "wood"    # WOOD: узкая полоса обвязки/фасции на отметке T.O. WALLS (gf#245)
-floor_heights_ft = [7.5833]   # T.O. WALLS 7'-7"
+floor_heights = [7.5833]   # T.O. WALLS 7'-7"
 cut = ["east, west: щипцы выше T.O. WALLS (с вентрешёткой на востоке)",
        "south: пергола-рама с солнечными панелями перед стеной; на east, west — её портал в профиль",
        "east, west: портальные рамы-стойки по углам стены (серые) — по краю стены",

@@ -1,6 +1,6 @@
 # Caroline's Farmhouse (four starter farmhouses) — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
 # archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#323 — та же лицензия.
-# Лист 22x17", масштаб 1/4" = 1'-0" (pt_per_ft 18). План 1-го этажа — стр. 2, фасады — стр. 4–5.
+# Лист 22x17", масштаб 1/4" = 1'-0" (pt_per_unit 18). План 1-го этажа — стр. 2, фасады — стр. 4–5.
 # Отметки: FF1 +0'-0" (y 799.1), FF2 +9'-0" (y 637.1), EAVE +17'-3" (y 488.6), RIDGE +21'-10".
 # Устройство: двухэтажное ядро 24' x 16' (кровля 7.5/12 коньком вдоль запад–восток, щипцы на торцах);
 # одноэтажные пристройки под односкатными кровлями 3/12 (стена до y 648.4, +8'-4"): SIDE ROOM
@@ -13,12 +13,13 @@
 id = "ffh-caroline"
 pdf = "Caroline - Blueprints_compressed.pdf"
 roof = "двускатная 7.5/12 (ядро, коньком вдоль запад–восток), пристройки односкатные 3/12; фальцевая кровля"
-pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36x80" = 54x120 pt, FF1–FF2 9' = 162 pt
+unit = "ft"
+pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36x80" = 54x120 pt, FF1–FF2 9' = 162 pt
 material = "siding"       # CLAPBOARD SIDING
-plinth_ft = 1.0           # кирпичное основание 799.1 → 817.1
+plinth = 1.0           # кирпичное основание 799.1 → 817.1
 plinth_material = "brick"
 trim_material = "wood"
-floor_heights_ft = [9.0, 8.25]   # FF2 +9'-0", EAVE +17'-3"
+floor_heights = [9.0, 8.25]   # FF2 +9'-0", EAVE +17'-3"
 absent = ["west, east: карниза нет — щипцовые стены"]
 cut = ["south: крыльцо 35'-4\" — столбы, балясины, ступени, кронштейны; навес крыльца размечен",
        "west: screen porch — сетчатые панели, ступень, вентрешётка во фронтоне",

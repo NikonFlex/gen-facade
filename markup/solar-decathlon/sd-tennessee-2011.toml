@@ -8,11 +8,12 @@
 id = "sd-tennessee-2011"
 pdf = "2011/tenn_cd.pdf"
 roof = "плоская, PV на раме над кровлей (T.O. PV 13'-7 1/2\")"
-pt_per_ft = 18.0          # SCALE 1/4" = 1'-0"
+unit = "ft"
+pt_per_unit = 18.0          # SCALE 1/4" = 1'-0"
 material = "wood"         # 07 42 23 WOOD WALL PANELS
-plinth_ft = 2.5           # FINISHED FLOOR 2'-6" (MAX.) над GRADE 0"
+plinth = 2.5           # FINISHED FLOOR 2'-6" (MAX.) над GRADE 0"
 plinth_material = "metal"  # 08 91 00.B1 4" FIXED ALUMINUM LOUVER: юбка-жалюзи под витражом, на торцах — гладкая полоса; ниже — открытые опоры (gf#245)
-floor_heights_ft = [9.875]    # T.O. STRUCTURE 12'-4 1/2" - FF 2'-6"
+floor_heights = [9.875]    # T.O. STRUCTURE 12'-4 1/2" - FF 2'-6"
 cut = ["все: PV-панели на раме выше карниза",
        "west, east: настилы и пандус у торцов — за углами стены, в профиль",
        "north: лестница к настилу у восточного угла — вне стены",

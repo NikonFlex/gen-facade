@@ -10,12 +10,13 @@
 id = "ffh-eastern"
 pdf = "Eastern Farmhouse - Architectural Plans.pdf"
 roof = "двускатная 10/12, коньком вдоль длинной стороны, фальцевая; навес крыльца 3/12, портик с фронтоном, крыша эркера 3/12"
-pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"
+unit = "ft"
+pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"
 material = "siding"       # CLAPBOARD SIDING
-plinth_ft = 1.85          # FINISH GRADE у стены ~1'-10" под 1ST FLOOR (кирпичный цоколь)
+plinth = 1.85          # FINISH GRADE у стены ~1'-10" под 1ST FLOOR (кирпичный цоколь)
 plinth_material = "brick" # BRICK: фундамент 847.5–862.8 в кирпичной кладке, выше — гладкая белая доска (832–847)
 trim_material = "wood"    # FRIEZE BD / FASCIA BD под карнизом (gf#245)
-floor_heights_ft = [9.917, 10.0]   # 2ND FLOOR +9'-11", ROOF EAVE +19'-11"
+floor_heights = [9.917, 10.0]   # 2ND FLOOR +9'-11", ROOF EAVE +19'-11"
 absent = ["west, east: карниза нет — щипцовые стены, на отметке карниза только угловые возвраты свеса, полосы нет"]
 cut = ["west, east: фронтон с вентрешётками (attic vent), трубы выше карниза",
        "south, north: кирпичные трубы в профиль — за углом стены",

@@ -8,10 +8,11 @@
 id = "sd-clemson-2015"
 pdf = "2015/clemson-drawings.pdf"
 roof = "односкатная, низ на юге, панели на стойках; веранда на западе под своей односкатной крышей"
-pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36" = 54 pt
+unit = "ft"
+pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36" = 54 pt
 material = "metal"        # 1/8" CNC CUT POLYMETAL PANEL SIDING
-plinth_ft = 1.6458        # TOP OF SUBFLOOR 1'-7 3/4" над GRADE LEVEL
-floor_heights_ft = [11.228]   # капельник южной стены — 202 pt над полом
+plinth = 1.6458        # TOP OF SUBFLOOR 1'-7 3/4" над GRADE LEVEL
+floor_heights = [11.228]   # капельник южной стены — 202 pt над полом
 cut = ["north, east, west: стена выше южного карниза (односкатная крыша, на севере +1'-10\")",
        "west: перфорированные металлические экраны веранды перед стеной — закрывают дверь 103 и низ стены",
        "west: крыша веранды на балках и стойках, перила",

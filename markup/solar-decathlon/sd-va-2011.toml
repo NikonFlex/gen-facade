@@ -2,7 +2,7 @@
 # 2011. U.S. DOE Solar Decathlon; штамп «PUBLIC DOMAIN» («NONE: PROJECT IS PUBLIC DOMAIN»);
 # разметка gf#323.
 # Листы: A-111..A-113 (стр. 20–22) — планы модулей A, B, C, A-211 (стр. 25: EAST, WEST),
-# A-212 (стр. 26: NORTH, SOUTH); масштаб 1/4" = 1'-0" (pt_per_ft 18; FIRST FLOOR 1'-6" ↔ GRADE 0" =
+# A-212 (стр. 26: NORTH, SOUTH); масштаб 1/4" = 1'-0" (pt_per_unit 18; FIRST FLOOR 1'-6" ↔ GRADE 0" =
 # 27 pt, PARAPET 11'-6" над землёй = 207 pt, на всех видах).
 # Устройство: Г-образный в плане одноэтажный дом (три модуля) с плоской кровлей за парапетом
 # (карниз = верх парапета, 10'-0" над чистым полом); в юго-западном углу — более высокий модуль A
@@ -18,10 +18,11 @@
 id = "sd-va-2011"
 pdf = "2011/va_cd.pdf"
 roof = "плоская за парапетом (3 модуля), над юго-западным модулем A — односкатная 3/12 с солнечными панелями (север высокий)"
-pt_per_ft = 18.0          # SCALE 1/4" = 1'-0"
+unit = "ft"
+pt_per_unit = 18.0          # SCALE 1/4" = 1'-0"
 material = "wood"         # 10" NEO-PLY WOOD SIDING, painted wood batten 1'-0" o.c.
-plinth_ft = 1.5           # FIRST FLOOR 1'-6" над GRADE LEVEL 0"
-floor_heights_ft = [10.0] # PARAPET 11'-6" − FIRST FLOOR 1'-6"
+plinth = 1.5           # FIRST FLOOR 1'-6" над GRADE LEVEL 0"
+floor_heights = [10.0] # PARAPET 11'-6" − FIRST FLOOR 1'-6"
 cut = ["all: солнечные панели и кровельный парапет с водосточными деталями, вентиляционные трубы выше парапета",
        "west, north: деревянный экран/перголы и растительные навесы (WOOD PERGOLA WITH OVERHEAD PLANTERS), пандус и ступени у западной стороны",
        "south: деревянные экраны и пергола слева от модуля A, плантеры; нижняя решётка/вентиляция цоколя",

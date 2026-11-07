@@ -6,11 +6,12 @@
 id = "ffh-carriage-1"
 pdf = "Carriage House 1 - Blueprints - Jay Osborne.pdf"
 roof = "двускатная 7.5/12, фальцевая кровля"
-pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36x80" = 54x120 pt, стена 24' = 432 pt
+unit = "ft"
+pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36x80" = 54x120 pt, стена 24' = 432 pt
 material = "siding"       # FIBER CEMENT CLAPBOARD
-plinth_ft = 0.0           # SLAB +0'-0" у ворот — на уровне земли
+plinth = 0.0           # SLAB +0'-0" у ворот — на уровне земли
 trim_material = "wood"    # TRIM: WOOD — карнизная доска под свесом боковых стен (gf#245)
-floor_heights_ft = [9.0, 8.25]   # 2ND FLOOR +9'-0", ROOF EAVE +17'-3"
+floor_heights = [9.0, 8.25]   # 2ND FLOOR +9'-0", ROOF EAVE +17'-3"
 absent = ["all: цоколя нет — обшивка до земли (SLAB на уровне земли), фундамент только пунктиром под землёй",
           "rear, front: карниза нет — щипцовые торцы, горизонтальной полосы на отметке карниза нет"]
 cut = ["front: вентиляционная решётка во фронтоне", "rear: вентиляционная решётка во фронтоне",

@@ -2,6 +2,8 @@
 
     python tools/markup.py hint <pdf> <стр> <x0,y0,x1,y1> <pt на фут>
     python tools/markup.py overlay <разметка.toml>... [-o outputs/markup] [--dpi 100]
+    python tools/markup.py grid <pdf> <стр> <x0,y0,x1,y1> [--zoom 2] [-o grid.png]  растр, gf#328
+    python tools/markup.py snap <pdf> <стр> <x0,y0,x1,y1>   края прикидки — к линиям растра
 
 overlay — кадр каждого фасада из PDF, поверх — края стены, чистый пол, земля, карниз и рамки
 элементов; картинка на дом — стороны по две в ряд.
@@ -22,12 +24,13 @@ from PIL import Image, ImageDraw, ImageFont
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from markup_hint import hint  # noqa: E402
+from markup_raster import grid, snap  # noqa: E402
 
 from genfacade.config import load  # noqa: E402
 from genfacade.datasets import manual  # noqa: E402
 
 PT = 72.0          # pt на дюйм — определение единицы
-MARGIN_FT = 3.0    # поле вокруг стены на кадре
+MARGIN_M = 0.9     # поле вокруг стены на кадре, метры
 LEVELS, WINDOW, DOOR, OTHER, ZONE = "blue", "red", "green", "orange", "magenta"
 OUTLINE, ROOF = "deepskyblue", "saddlebrown"
 DOORS = {"door", "garage_door"}
@@ -43,12 +46,12 @@ def font(size: int) -> ImageFont.ImageFont:
 
 def frame(pdf: Path, e: manual.Elevation, m: manual.Markup, dpi: int) -> tuple[Image.Image, tuple]:
     """Кадр стороны: от карниза до земли и от края до края стены с полем."""
-    pad = MARGIN_FT * m.scale(e)
-    eaves = e.floor - sum(m.floor_heights_ft) * m.scale(e)
+    pad = MARGIN_M / m.m_per_unit * m.scale(e)
+    eaves = e.floor - sum(m.floor_heights) * m.scale(e)
     tops = [b.box[1] for b in e.elements] + [eaves] + [y for _, y in e.outline] + [
         y for shape in e.roof for _, y in shape]
     box = (e.wall[0] - pad, min(tops) - pad, e.wall[1] + pad,
-           e.floor + m.plinth_ft * m.scale(e) + pad)
+           e.floor + m.plinth * m.scale(e) + pad)
     with pdfplumber.open(pdf) as doc:
         page = doc.pages[e.page - 1]
         box = (max(box[0], 0), max(box[1], 0), min(box[2], page.width), min(box[3], page.height))
@@ -62,9 +65,9 @@ def draw(img: Image.Image, box: tuple, e: manual.Elevation, m: manual.Markup, dp
     def px(x: float, y: float) -> tuple[float, float]:
         return (x - box[0]) * k, (y - box[1]) * k
 
-    levels = [e.floor, e.floor + m.plinth_ft * m.scale(e)]
+    levels = [e.floor, e.floor + m.plinth * m.scale(e)]
     y = e.floor
-    for h in m.floor_heights_ft:
+    for h in m.floor_heights:
         y -= h * m.scale(e)
         levels.append(y)
     for v in levels:
@@ -116,11 +119,29 @@ def main() -> None:
     h.add_argument("page", type=int)
     h.add_argument("box", help="x0,y0,x1,y1 в pt")
     h.add_argument("pt_per_ft", type=float)
+    for name, text in (("grid", "кадр растрового листа с линейкой в pt (gf#328)"),
+                       ("snap", "края прикидки рамки — к тёмным линиям растрового листа")):
+        r = sub.add_parser(name, help=text)
+        r.add_argument("pdf")
+        r.add_argument("page", type=int)
+        r.add_argument("box", help="x0,y0,x1,y1 в pt")
+    sub.choices["grid"].add_argument("--zoom", type=int, default=2)
+    sub.choices["grid"].add_argument("-o", "--out", type=Path,
+                                     default=Path("outputs/markup/grid.png"))
     v = sub.add_parser("overlay", help="разметка поверх исходного листа")
     v.add_argument("markup", nargs="+", type=Path)
     v.add_argument("-o", "--out", type=Path, default=Path("outputs/markup"))
     v.add_argument("--dpi", type=int, default=100)
     a = p.parse_args()
+    if a.command in ("grid", "snap"):
+        box = tuple(map(float, a.box.split(",")))
+        if a.command == "snap":
+            print(",".join(map(str, snap(a.pdf, a.page, box))))
+            return
+        a.out.parent.mkdir(parents=True, exist_ok=True)
+        grid(a.pdf, a.page, box, a.zoom).save(a.out)
+        print(a.out)
+        return
     if a.command == "hint":
         print(hint(a.pdf, a.page, tuple(map(float, a.box.split(","))), a.pt_per_ft))
         return
