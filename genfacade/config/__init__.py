@@ -727,6 +727,7 @@ class Realtest(Section):
     summary: list[str]   # колонки таблицы метрик (metrics/table.py, COLUMNS) в summary.md
     stability: list[str]  # колонки сводки по вариантам сэмплинга (metrics/stability.py)
     digits: int          # знаков после запятой в сводке по вариантам
+    slices: dict[str, str]  # срез домов (gf#328): имя → источник разметки; строки `<строка>@<имя>`
 
 
 class Metrics(Section):

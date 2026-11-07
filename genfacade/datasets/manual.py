@@ -156,6 +156,11 @@ def read(path: Path) -> Markup:
     return Markup.model_validate(tomllib.loads(path.read_text()))
 
 
+def ids(source: str, rules: Manual) -> set[str]:
+    """Дома источника — по разметкам его папки `markup/<источник>/`, а не по виду имени."""
+    return {read(p).id for p in (rules.paths.markup_dir / source).glob("*.toml")}
+
+
 def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
     """Пример дома и сколько элементов обрезано целиком (за карнизом или углом)."""
     _one_eaves(m, cfg)
