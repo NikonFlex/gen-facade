@@ -9,7 +9,16 @@ from genfacade.datasets.synthetic import build
 from genfacade.render.house3d import house_3d
 from genfacade.render.sheet_format import num
 from genfacade.render.svg import element_fill, pen_for, sheet_svg
-from genfacade.schema import CanopyKind, ElementClass, FacadeSheet, SideFacade, SillKind, ZoneRole
+from genfacade.schema import (
+    CanopyKind,
+    ElementClass,
+    FacadeSheet,
+    Roof,
+    RoofKind,
+    SideFacade,
+    SillKind,
+    ZoneRole,
+)
 from genfacade.unfold import unfold
 
 
@@ -17,6 +26,12 @@ def _l_house(house: FacadeSheet) -> FacadeSheet:
     """Простой дом на Г-образном контуре из test_unfold.py: шесть стен без элементов."""
     facades = [SideFacade(side=s) for s in sides_of(L_SIDES)]
     return unfold(house.model_copy(update={"facades": facades}))
+
+
+def _flat_roofed(sheet: FacadeSheet) -> FacadeSheet:
+    """Дом под плоской крышей: карниз у него — выступ (под скатом — полоса на стене, gf#320)."""
+    return sheet.model_copy(update={"spec": sheet.spec.model_copy(
+        update={"roof": Roof(kind=RoofKind.FLAT)})})
 
 
 @pytest.fixture(params=["rectangle", "l-shape"])
@@ -57,7 +72,7 @@ def test_relief_is_not_drawn_twice(cfg):
     """gf#277: подоконник, карниз, козырёк и цоколь стоят выступом, а на текстуре стены их нет —
     иначе под углом видны оба со сдвигом. На листе фасадов они остаются."""
     look = cfg.viewer.house3d
-    sheet = next(s for s in (build.sample(k, cfg).sheet for k in range(20))
+    sheet = next(s for s in (_flat_roofed(build.sample(k, cfg).sheet) for k in range(20))
                  if any(e.cls in look.relief_cls for f in s.facades for e in f.elements)
                  and any(z.role in look.relief_role for f in s.facades for z in f.zones))
     sheet_svg_text = sheet_svg(sheet, cfg)
@@ -77,7 +92,7 @@ def test_relief_is_not_drawn_twice(cfg):
 def test_plinth_and_cornice_stand_out(cfg):
     """Хозяин 03.11: цоколь и карниз — объёмом. У стены синтетики с карнизом и цоколем выступы —
     рамкой того же элемента или зоны, глубиной из `[house3d]` и цветом листа."""
-    sheet = next(s for s in (build.sample(k, cfg).sheet for k in range(20))
+    sheet = next(s for s in (_flat_roofed(build.sample(k, cfg).sheet) for k in range(20))
                  if any(e.cls is ElementClass.CORNICE for f in s.facades for e in f.elements)
                  and any(z.role is ZoneRole.PLINTH for f in s.facades for z in f.zones))
     look, pen = cfg.viewer.house3d, pen_for(sheet, cfg)
@@ -99,7 +114,7 @@ def _rich_houses(cfg) -> list[FacadeSheet]:
     """Синтетические дома, где есть и крыльцо, и козырёк, и подоконник, и карниз, — с видами
     козырька и подоконника на любой вкус."""
     need = {ElementClass.PORCH, ElementClass.CANOPY, ElementClass.SILL, ElementClass.CORNICE}
-    found = [s for s in (build.sample(k, cfg).sheet for k in range(30))
+    found = [s for s in (_flat_roofed(build.sample(k, cfg).sheet) for k in range(30))
              if need <= {e.cls for f in s.facades for e in f.elements}]
     assert {s.spec.trim.canopy for s in found} >= {*CanopyKind} - {CanopyKind.NONE}
     assert SillKind.SLOPED in {s.spec.trim.sill for s in found}
@@ -151,3 +166,22 @@ def test_corner_is_convex_or_not(sheet, cfg):
     углы выпуклые, у Г-образного дома внутренний угол — левый у четвёртой стороны (индекс 3)."""
     got = [w["convex_left"] for w in house_3d(sheet, cfg)["walls"]]
     assert got == ([True] * 4 if len(got) == 4 else [True, True, True, False, True, True])
+
+
+def test_cornice_under_slope_is_a_band_flat_roof_covers_it(cfg):
+    """gf#320, хозяин 07.11: «карниз выпирает за крышу». Под скатом карниз — полоса на стене под
+    свесом, а не выступ сквозь кровлю; у плоской крыши плита шире плана на вынос карниза."""
+    sheet = next(s for s in (build.sample(k, cfg).sheet for k in range(20))
+                 if any(e.cls is ElementClass.CORNICE for f in s.facades for e in f.elements))
+    gable = sheet.model_copy(update={"spec": sheet.spec.model_copy(update={
+        "roof": cfg.models.spec.roof_shape.roof(RoofKind.GABLE, "roof")})})
+    for wall, facade in zip(house_3d(gable, cfg)["walls"], gable.facades, strict=True):
+        assert all(b["cls"] is not ElementClass.CORNICE for b in wall["relief"])
+        for e in facade.elements:
+            if e.cls is ElementClass.CORNICE:
+                assert f'data-id="{e.id}"' in wall["svg"]
+    flat = house_3d(_flat_roofed(sheet), cfg)
+    out = cfg.viewer.house3d.relief_cls[ElementClass.CORNICE]
+    xs = [x for x, _ in flat["corners"]]
+    assert min(x for x, _ in flat["roof"]["flat"]) == pytest.approx(min(xs) - out)
+    assert max(x for x, _ in flat["roof"]["flat"]) == pytest.approx(max(xs) + out)

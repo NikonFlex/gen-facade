@@ -11,6 +11,8 @@
 
 import math
 
+import shapely
+
 from genfacade import roof
 from genfacade.config import Config, House3d
 from genfacade.derive import DERIVED
@@ -36,6 +38,7 @@ def house_3d(sheet: FacadeSheet, cfg: Config) -> dict:
     SVG фасада. Контур не ортогональный или не замкнут — PlanError из plan_corners."""
     corners = plan_corners([f.side for f in sheet.facades])
     pen = pen_for(sheet, cfg)
+    look = _look(sheet, cfg.viewer.house3d)
     walls = [{
         "side": f.side.index,
         "left": corners[(k + 1) % len(corners)],
@@ -44,26 +47,42 @@ def house_3d(sheet: FacadeSheet, cfg: Config) -> dict:
         "length_m": f.side.length_m,
         "convex_left": _convex(corners, (k + 1) % len(corners)),
         "height_m": sheet.spec.eaves_m,
-        "svg": facade_svg(_flat(f, cfg.viewer.house3d), pen),
-        "relief": _relief(f, pen, cfg.viewer.house3d),
+        "svg": facade_svg(_flat(f, look), pen),
+        "relief": _relief(f, pen, look),
     } for k, f in enumerate(sheet.facades)]
     return {"corners": corners, "eaves_m": sheet.spec.eaves_m,
-            "trim": cfg.sheet.trim.model_dump(), "walls": walls, "roof": _roof(sheet, pen)}
+            "trim": cfg.sheet.trim.model_dump(), "walls": walls,
+            "roof": _roof(sheet, pen, corners, look)}
 
 
-def _roof(sheet: FacadeSheet, pen: Pen) -> dict:
+def _look(sheet: FacadeSheet, look: House3d) -> House3d:
+    """Выступы дома: под скатной кровлей карниз — полоса на стене под свесом, а не коробка: у
+    кровли от края стены уклон вниз, и выступ на отметке карниза прошёл бы сквозь свес (хозяин
+    07.11: «карниз выпирает за крышу», gf#320)."""
+    if not roof.builds(sheet):
+        return look
+    return look.model_copy(update={"relief_cls": {
+        cls: depth for cls, depth in look.relief_cls.items() if cls != ElementClass.CORNICE}})
+
+
+def _roof(sheet: FacadeSheet, pen: Pen, corners: list[Point], look: House3d) -> dict:
     """Скаты и стены над карнизом в объёме: многоугольники (x, y плана, высота) и цвета; скаты
-    не строятся — пусто, просмотр кладёт плоскую крышу. Цвет кровли — материала крыши, если он в
-    палитре (нет — цвет крыши просмотра)."""
+    не строятся — пусто, просмотр кладёт плоскую крышу по контуру `flat`: он шире плана на вынос
+    карниза, если карниз на доме есть, — плита закрывает его сверху, а не он торчит из-под неё.
+    Цвет кровли — материала крыши, если он в палитре (нет — цвет крыши просмотра)."""
     line = roof.roofline(sheet)
     if line is None:
-        return {"faces": [], "above": [], "color": None, "wall": None}
+        cornice = any(e.cls is ElementClass.CORNICE for f in sheet.facades for e in f.elements)
+        out = look.relief_cls.get(ElementClass.CORNICE, 0.0) if cornice else 0.0
+        flat = shapely.Polygon(corners).buffer(out, join_style="mitre") if out else None
+        return {"faces": [], "above": [], "color": None, "wall": None,
+                "flat": list(flat.exterior.coords)[:-1] if flat else corners}
     above = []
     for k in range(len(sheet.facades)):
         if (shape := roof.above_eaves(line, k)) is not None:
             left, u, _ = roof.wall_axis(line, k)
             above.append([(left[0] + u[0] * x, left[1] + u[1] * x, y) for x, y in shape])
-    return {"faces": [face for _, face in roof.faces(line)], "above": above,
+    return {"faces": [face for _, face in roof.faces(line)], "above": above, "flat": None,
             "color": pen.colors.get(pen.roof or ""), "wall": pen.colors.get(PaletteRole.MAIN)}
 
 

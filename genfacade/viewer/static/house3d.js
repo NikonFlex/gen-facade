@@ -72,7 +72,7 @@ export class HouseStage {
 
   _roof(THREE, data) {
     if (data.roof.faces.length) return this._slopes(THREE, data.roof);
-    const shape = new THREE.Shape(data.corners.map(([x, y]) => new THREE.Vector2(x, y)));
+    const shape = new THREE.Shape(data.roof.flat.map(([x, y]) => new THREE.Vector2(x, y)));
     const geo = new THREE.ExtrudeGeometry(shape, { depth: ROOF_M, bevelEnabled: false });
     geo.rotateX(-Math.PI / 2);  // (x, y) плана → (x, −z); выдавливание — вверх
     const roof = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: this.look.roof }));
