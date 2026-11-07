@@ -9,7 +9,9 @@ gf#199).
 
 Разметка — запись чертежа целиком, а не подгонка под модуль (gf#323): силуэт стены с фронтоном или
 ступенью (`outline`), участки карниза со своей этажностью (`eaves`), крыша на виде (`roof`) и
-элементы выше карниза. Сборщик берёт то, что модуль держит: элемент, заходящий за карниз или угол,
+элементы выше карниза. Вид, уклон и свес крыши дома — полями разметки (`roof_kind`, `pitch_deg`,
+`overhang_m`, gf#336): с gf#320 вид крыши — условие модели шага 4 и решает, у каких стен
+карниз. Сборщик берёт то, что модуль держит: элемент, заходящий за карниз или угол,
 обрезается по стене, целиком срезанный идёт в счёт `cut` описи (`data: Стена до карниза в
 данных`); дом с частями разной высоты — не пример, а строка `waiting` описи: модуль держит один
 карниз на дом (gf#322). Чего разметчик не размечает (веранда, ступени), он перечисляет в `cut`.
@@ -32,7 +34,7 @@ from pathlib import Path
 import numpy
 from pydantic import Field, ValidationError
 
-from genfacade import derive
+from genfacade import derive, roof
 from genfacade.config import Config, Manual
 from genfacade.datasets import rect_house, store
 from genfacade.schema import (
@@ -40,6 +42,7 @@ from genfacade.schema import (
     BuildingType,
     Element,
     ElementClass,
+    FacadeSheet,
     HouseSpec,
     HouseTrim,
     Material,
@@ -122,7 +125,8 @@ class Elevation(Model):
     inner_corner: bool = False  # угол после этой стороны — внутренний (Г-, Т-контур, gf#199)
     pt_per_unit: float | None = Field(default=None, gt=0)  # масштаб вида, если не как у дома
     # Запись чертежа выше карниза и по участкам (gf#323): пусто — стена прямоугольником до карниза
-    # дома. Сборщик сейчас читает только участки карниза; силуэт и крыша — для сверки и gf#320–322.
+    # дома. Сборщик читает участки карниза; силуэт и крыша на виде — для сверки, крыша дома — в
+    # полях Markup (gf#336).
     outline: list[Point] = []      # силуэт стены в pt без свесов крыши: фронтон, ступень
     eaves: list[EavesMark] = []
     roof: list[list[Point]] = []   # крыша на виде — многоугольники в pt
@@ -131,7 +135,10 @@ class Elevation(Model):
 class Markup(Model):
     id: str
     pdf: str             # имя листа в pdf/ рядом с разметкой
-    roof: str            # исходный вид крыши — в опись: формат держит только плоскую
+    roof: str            # исходное описание крыши — в опись; вид, уклон и свес — полями ниже
+    roof_kind: RoofKind  # вид крыши дома в параметрах (gf#336): ближайший из строящихся модулем
+    pitch_deg: float = Field(ge=0, lt=90)  # уклон ската; у плоской 0 (проверяет `Roof`)
+    overhang_m: float = Field(ge=0)        # свес за стену по горизонтали
     unit: Unit           # единица отметок и масштаба
     pt_per_unit: float = Field(gt=0)
     material: str        # вид основной отделки из library.toml
@@ -141,6 +148,9 @@ class Markup(Model):
     trim_material: str | None = None    # вид карниза — элементов `cornice` сторон
     absent: list[str] = []  # чего нет в источнике: «west: карниза нет — щипцовая стена»
     cut: list[str] = []  # срезанное разметчиком: что и с какой стороны
+    # Где крыша дома в параметрах не совпадает с листом (gf#336): вид, которого модуль не строит
+    # (гамбрел, бабочка, составная), или конёк поперёк правила модуля. Дом остаётся в тесте.
+    roof_gaps: list[str] = []
     sides: list[Elevation]
 
     def scale(self, e: Elevation) -> float:
@@ -178,7 +188,21 @@ def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
     facades = [f.model_copy(update={"zones": _zones(e, m, spec, f.side.length_m)})
                for f, e in zip(sheet.facades, m.sides, strict=True)]
     sheet = sheet.model_copy(update={"facades": facades})
-    return Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet), dropped
+    sheet, bare = _no_eaves(sheet)
+    return (Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet),
+            dropped + bare)
+
+
+def _no_eaves(sheet: FacadeSheet) -> tuple[FacadeSheet, int]:
+    """Карниз разметки — только на стенах с краем ската (`facade: Карниз под скатом`): полосу на
+    щипцовой стене разметчик снимает с листа (фриз у конька), а модуль карниза там не строит.
+    Сколько карнизов снято — в счёт срезанного."""
+    eaves, facades, bare = roof.eave_walls(sheet), [], 0
+    for k, f in enumerate(sheet.facades):
+        keep = [x for x in f.elements if not (x.cls is ElementClass.CORNICE and k not in eaves)]
+        bare += len(f.elements) - len(keep)
+        facades.append(f.model_copy(update={"elements": keep}))
+    return sheet.model_copy(update={"facades": facades}), bare
 
 
 def _one_eaves(m: Markup, cfg: Manual) -> None:
@@ -226,7 +250,8 @@ def _spec(m: Markup) -> HouseSpec:
     plinth, heights = m.plinth * m.m_per_unit, [h * m.m_per_unit for h in m.floor_heights]
     return HouseSpec(building_type=BuildingType.COTTAGE, floors=len(heights),
                      floor_heights_m=heights, plinth_m=plinth, eaves_m=plinth + sum(heights),
-                     roof=Roof(kind=RoofKind.FLAT), materials=_palette(m))
+                     roof=Roof(kind=m.roof_kind, pitch_deg=m.pitch_deg, overhang_m=m.overhang_m),
+                     materials=_palette(m))
 
 
 def _palette(m: Markup) -> list[Material]:
@@ -328,12 +353,14 @@ def _trim(walls: list[list[Element]], kinds: HouseTrim) -> HouseTrim:
 
 
 def run(cfg: Config) -> Path:
-    """Все разметки папки → примеры и опись: срезанное, исходные крыши, ошибки валидатора."""
+    """Все разметки папки → примеры и опись: срезанное, исходные крыши, виды крыш и расхождения
+    с листом, ошибки валидатора."""
     rules, root = cfg.data.manual, cfg.data.paths.samples_dir
     # Источник целиком — производное разметки: удалённая разметка не должна оставить пример.
     for old in store.ids(root, Source.MANUAL):
         store.path(root, Source.MANUAL, old).unlink()
     rejected, waiting, cut, roofs, absent, invalid = {}, {}, {}, {}, {}, Counter()
+    kinds, gaps = {}, {}
     for path in sorted(rules.paths.markup_dir.glob("*/*.toml")):
         try:  # разметка, которая не читается, — отказ этого дома, а не всей сборки (C10)
             m = read(path)
@@ -349,8 +376,10 @@ def run(cfg: Config) -> Path:
             waiting[m.id] = str(e)
             continue
         cut[m.id], roofs[m.id], absent[m.id] = len(m.cut) + dropped, m.roof, m.absent
+        kinds[m.id], gaps[m.id] = m.roof_kind, m.roof_gaps
         invalid.update(v.rule for v in errors(validate(sample.sheet, cfg.checks)))
         store.write(sample, root)
     return store.write_manifest(root, Source.MANUAL, {
         "rejected": rejected, "waiting": waiting, "cut": cut, "roofs": roofs, "absent": absent,
+        "roof_kinds": kinds, "roof_gaps": {k: v for k, v in gaps.items() if v},
         "invalid": dict(invalid)})

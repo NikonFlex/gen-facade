@@ -18,6 +18,10 @@
 id = "sd-va-2011"
 pdf = "2011/va_cd.pdf"
 roof = "плоская за парапетом (3 модуля), над юго-западным модулем A — односкатная 3/12 с солнечными панелями (север высокий)"
+roof_kind = "flat"
+pitch_deg = 0.0
+overhang_m = 0.0
+roof_gaps = ["составная: плоская за парапетом и односкатная 3/12 над модулем A -> плоская"]
 unit = "ft"
 pt_per_unit = 18.0          # SCALE 1/4" = 1'-0"
 material = "wood"         # 10" NEO-PLY WOOD SIDING, painted wood batten 1'-0" o.c.

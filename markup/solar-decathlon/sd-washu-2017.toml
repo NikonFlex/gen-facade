@@ -12,6 +12,9 @@
 id = "sd-washu-2017"
 pdf = "2017/wash-u-st-louis-drawings.pdf"
 roof = "плоская с парапетом 11'-1\"; PV на кровле до 12'-0\"; бетонные водостоки-консоли над кровлей"
+roof_kind = "flat"
+pitch_deg = 0.0
+overhang_m = 0.0
 unit = "ft"
 pt_per_unit = 9.0           # подпись 1/4" = 1'-0" на листе половинного формата → 1/8" = 1'-0"
 material = "concrete"     # STRUCTURAL PRECAST CONCRETE WALL PANELS

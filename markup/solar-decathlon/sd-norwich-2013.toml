@@ -10,6 +10,9 @@
 id = "sd-norwich-2013"
 pdf = "2013/nu_cd.pdf"
 roof = "плоская с малым уклоном; PV и окно-фонарь (ROOF WINDOW) на кровле"
+roof_kind = "flat"
+pitch_deg = 0.0
+overhang_m = 0.0
 unit = "ft"
 pt_per_unit = 36.0          # 1/2" = 1'-0"
 material = "siding"       # горизонтальная обшивка

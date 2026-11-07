@@ -2,9 +2,13 @@
 # archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#180 — та же лицензия.
 # Контур 14'x32' на столбчатом фундаменте; спереди крыльцо во всю ширину под своей крышей
 # (вариант A, викторианский), сзади ступени и козырёк над дверью. Двери — с фрамугой.
+# Крыша (gf#336): свес — по умолчанию ([spec.roof_shape], на листе не подписан).
 id = "ffh-shotgun-14x32"
 pdf = "Shotgun 14x32 Blueprints 2024-02-01.pdf"
 roof = "двускатная 7.5/12, фальцевая; крыша крыльца 2.5/12, козырёк над задней дверью"
+roof_kind = "gable"
+pitch_deg = 32.0
+overhang_m = 0.4
 unit = "ft"
 pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36"x80" = 54x120 pt, стена 14' = 252 pt
 material = "siding"       # CLAPBOARD SIDING

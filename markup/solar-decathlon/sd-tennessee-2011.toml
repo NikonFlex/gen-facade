@@ -8,6 +8,9 @@
 id = "sd-tennessee-2011"
 pdf = "2011/tenn_cd.pdf"
 roof = "плоская, PV на раме над кровлей (T.O. PV 13'-7 1/2\")"
+roof_kind = "flat"
+pitch_deg = 0.0
+overhang_m = 0.0
 unit = "ft"
 pt_per_unit = 18.0          # SCALE 1/4" = 1'-0"
 material = "wood"         # 07 42 23 WOOD WALL PANELS

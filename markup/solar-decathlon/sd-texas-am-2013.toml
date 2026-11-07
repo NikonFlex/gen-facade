@@ -17,6 +17,9 @@
 id = "sd-texas-am-2013"
 pdf = "2013/tex_cd.pdf"
 roof = "плоская за парапетом на основном объёме; на ядре и техкомнате ниже на 2'-2\" с уклоном к югу; перфорированная кровля веранды"
+roof_kind = "flat"
+pitch_deg = 0.0
+overhang_m = 0.0
 unit = "ft"
 pt_per_unit = 18.0          # SCALE 1/4" = 1'-0": парапет − пол 13'-0" = 233,9 pt, дверь 3'-0" = 54 pt
 material = "metal"        # CORRUGATED METAL PANEL WALLS
