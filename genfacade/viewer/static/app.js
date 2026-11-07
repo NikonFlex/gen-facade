@@ -376,7 +376,7 @@ async function renderHouse() {
   const fit = el("button", { className: "icon-btn", title: "Вписать (F)", ariaLabel: "Вписать" }, ICON.fit);
   const bar = el("div", { className: "toolbar" });
   bar.append(el("div", { className: "tool-group" }), el("span", { className: "hint" },
-    "тянуть — повернуть · колесо — ближе/дальше · двойной щелчок или <kbd>F</kbd> — вписать · крыша плоская"));
+    "тянуть — повернуть · колесо — ближе/дальше · двойной щелчок или <kbd>F</kbd> — вписать"));
   bar.firstChild.append(fit);
   $("stage").replaceChildren(bar, wrap);
   state.stage = new HouseStage(wrap, state.options.house3d);

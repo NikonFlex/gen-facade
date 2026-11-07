@@ -113,8 +113,13 @@ class BuildingType(StrEnum):
 
 
 class RoofKind(StrEnum):
-    # Пока только плоская (хозяин 01.10): скатные — на этапе модели, сюда же новыми видами.
+    """Вид крыши дома (gf#320): скаты строит код развёртки (roof.py), модель ставит элементы
+    стены до карниза."""
+
     FLAT = "flat"
+    GABLE = "gable"  # двускатная: скаты от длинных сторон, фронтоны на коротких
+    HIP = "hip"      # вальмовая: скаты от всех сторон
+    SHED = "shed"    # односкатная: скат от одной длинной стороны вверх к другой
 
 
 class OpeningKind(StrEnum):
@@ -253,6 +258,7 @@ class Rule(StrEnum):
     DOOR_LOW = "door_low"          # дверь ниже нормы свода
     CORNICE = "cornice"            # карниз на проёме или его выводимом элементе
     FINISH = "finish"              # часть стены без отделки, зона обрывается посреди стены
+    ROOF_FLAT = "roof_flat"        # скатная крыша не строится над этим контуром (gf#320)
 
 
 class Trim(StrEnum):
@@ -369,6 +375,15 @@ class Material(Model):
 class Roof(Model):
     kind: RoofKind
     material: str | None = None  # покрытие из палитры
+    pitch_deg: float = Field(default=0.0, ge=0, lt=90)  # уклон ската; у плоской — 0
+    overhang_m: float = Field(default=0.0, ge=0)        # свес за стену по горизонтали
+
+    @model_validator(mode="after")
+    def _check_pitch(self) -> "Roof":
+        if (self.kind is RoofKind.FLAT) != (self.pitch_deg == 0):
+            raise ValueError(f"крыша {self.kind}: уклон {self.pitch_deg}° — у плоской 0, "
+                             "у скатной больше")
+        return self
 
 
 class HouseTrim(Model):

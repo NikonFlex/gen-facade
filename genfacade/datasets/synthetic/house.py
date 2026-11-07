@@ -16,7 +16,6 @@ from genfacade.schema import (
     HouseTrim,
     Material,
     PaletteRole,
-    Roof,
     RoofKind,
     VariantKind,
 )
@@ -58,7 +57,8 @@ def house(rng: random.Random, cfg: Config, size: Sizes) -> tuple[HouseSpec, Look
     spec = HouseSpec(
         building_type=BuildingType.COTTAGE, floors=floors, floor_heights_m=[height] * floors,
         plinth_m=plinth, eaves_m=round(plinth + floors * height, 3),
-        roof=Roof(kind=RoofKind.FLAT, material=PaletteRole.ROOF), style=style,
+        roof=cfg.models.spec.roof_shape.roof(RoofKind(_weighted(rng, rules.roof_weights)),
+                                             PaletteRole.ROOF), style=style,
         materials=[Material(id=role, kind=kind) for role, kind in _palette(rng, syn).items()],
         trim=_trim(rng, syn.facade.trim),
     )

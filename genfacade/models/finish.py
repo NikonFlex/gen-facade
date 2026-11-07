@@ -11,16 +11,17 @@ from dataclasses import dataclass, field
 
 from genfacade.config import Finish, SpecStub
 from genfacade.models import words
-from genfacade.schema import HouseTrim, Material, PaletteRole, Trim
+from genfacade.schema import HouseTrim, Material, PaletteRole, RoofKind, Trim
 
 
 @dataclass(frozen=True)
 class Look:
-    """Что отделка задаёт дому: палитра по ролям и виды выводимых элементов."""
+    """Что отделка задаёт дому: палитра по ролям, виды выводимых элементов и вид крыши."""
 
     finish: str
     materials: list[Material]
     trim: HouseTrim
+    roof: RoofKind
 
 
 @dataclass
@@ -41,7 +42,7 @@ def look(text: str, style: str, cfg: SpecStub) -> Look:
     finish = cfg.finish[name]
     materials = [_material(role, finish, mentioned, digest if tokens else None, cfg)
                  for role in PaletteRole]
-    return Look(name, materials, _trim(finish, mentioned.trims, cfg))
+    return Look(name, materials, _trim(finish, mentioned.trims, cfg), finish.roof)
 
 
 def _stem(token: str, stems: list[str], cfg: SpecStub) -> bool:

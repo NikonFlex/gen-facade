@@ -20,7 +20,6 @@ from genfacade.schema import (
     Material,
     Mode,
     PaletteRole,
-    RoofKind,
     ShutterKind,
     ZoneRole,
 )
@@ -38,15 +37,16 @@ from genfacade.schema import (
     ("", 1),
 ])
 def test_spec_stub_floors_from_text(cfg, text, floors):
-    """`generation: Стаб шага 1`: из текста — этажность, стиль и отделка; остальное — заготовка:
-    плоская крыша, палитра по ролям, высота этажа одна, карниз над последним этажом."""
+    """`generation: Стаб шага 1`: из текста — этажность, стиль, отделка и крыша (её вид —
+    `generation: Крыша по словам текста`, test_roof.py); остальное — заготовка: палитра по ролям,
+    высота этажа одна, карниз над последним этажом."""
     spec, base = stub.spec_model(text, cfg.models.spec), stub.spec_model("", cfg.models.spec)
-    assert (spec.floors, spec.roof.kind) == (floors, RoofKind.FLAT)
+    assert spec.floors == floors
     assert [m.id for m in spec.materials] == ["main", "plinth", "accent", "trim", "roof"]
     assert spec.floor_heights_m == base.floor_heights_m * floors
     assert spec.eaves_m == pytest.approx(spec.plinth_m + floors * base.floor_heights_m[0])
     same = {k: getattr(base, k) for k in ("floors", "floor_heights_m", "eaves_m", "materials",
-                                          "trim", "style")}
+                                          "trim", "style", "roof")}
     assert spec.model_copy(update=same) == base
 
 

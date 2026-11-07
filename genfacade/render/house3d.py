@@ -1,4 +1,5 @@
-"""Дом объёмом для просмотра: стены по контуру плана, фасад стороны — текстурой, крыша плоская;
+"""Дом объёмом для просмотра: стены по контуру плана, фасад стороны — текстурой, крыша — скатами
+из roof.py (над прямоугольным домом, gf#320) или плоская, стена над карнизом — цветом стены;
 выступы (цоколь, карниз, подоконник, козырёк, крыльцо) идут отдельно и несут класс и вид — форму
 по ним строит viewer/static/house3d_relief.js (gf#305).
 
@@ -10,6 +11,7 @@
 
 import math
 
+from genfacade import roof
 from genfacade.config import Config, House3d
 from genfacade.derive import DERIVED
 from genfacade.render.svg import Pen, element_fill, facade_svg, pen_for
@@ -19,6 +21,7 @@ from genfacade.schema import (
     ElementClass,
     FacadeSheet,
     MaterialZone,
+    PaletteRole,
     Point,
     SideFacade,
     signed_area,
@@ -45,7 +48,23 @@ def house_3d(sheet: FacadeSheet, cfg: Config) -> dict:
         "relief": _relief(f, pen, cfg.viewer.house3d),
     } for k, f in enumerate(sheet.facades)]
     return {"corners": corners, "eaves_m": sheet.spec.eaves_m,
-            "trim": cfg.sheet.trim.model_dump(), "walls": walls}
+            "trim": cfg.sheet.trim.model_dump(), "walls": walls, "roof": _roof(sheet, pen)}
+
+
+def _roof(sheet: FacadeSheet, pen: Pen) -> dict:
+    """Скаты и стены над карнизом в объёме: многоугольники (x, y плана, высота) и цвета; скаты
+    не строятся — пусто, просмотр кладёт плоскую крышу. Цвет кровли — материала крыши, если он в
+    палитре (нет — цвет крыши просмотра)."""
+    line = roof.roofline(sheet)
+    if line is None:
+        return {"faces": [], "above": [], "color": None, "wall": None}
+    above = []
+    for k in range(len(sheet.facades)):
+        if (shape := roof.above_eaves(line, k)) is not None:
+            left, u, _ = roof.wall_axis(line, k)
+            above.append([(left[0] + u[0] * x, left[1] + u[1] * x, y) for x, y in shape])
+    return {"faces": [face for _, face in roof.faces(line)], "above": above,
+            "color": pen.colors.get(pen.roof or ""), "wall": pen.colors.get(PaletteRole.MAIN)}
 
 
 def _convex(corners: list[Point], k: int) -> bool:

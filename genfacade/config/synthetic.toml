@@ -99,7 +99,15 @@ main = ["plaster", "brick", "siding", "wood"]
 plinth = ["concrete", "stone", "brick"]
 accent = ["wood", "stone", "brick", "siding"]
 trim = ["metal", "wood", "plaster"]
-roof = ["metal_roof"]                # плоскую крышу на фасаде не видно
+roof = ["metal_roof"]
+
+# Вид крыши дома → вес (gf#320): модель шага 4 видит вид крыши в условии, но стену раскладывает до
+# карниза — крыша в синтетике нужна, чтобы токены всех видов встречались при обучении.
+[spec.roof_weights]
+flat = 1.0
+gable = 1.0
+hip = 1.0
+shed = 1.0
 
 # ——— Раскладка стены: проёмы плана, декор, зоны отделки (`facade: Состав фасада по уровням`) ———
 [facade.windows]

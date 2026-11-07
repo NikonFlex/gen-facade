@@ -53,14 +53,17 @@ class LayoutContext:
 
 def spec_model(text: str, cfg: SpecStub) -> HouseSpec:
     """Шаг 1: описание → параметры дома. Стаб: заготовка, этажей и стиль — по слову в тексте,
-    палитра и виды выводимых элементов — отделка дома по тексту (models/finish.py); высота этажа
-    и цоколь — заготовки, карниз — над последним этажом."""
+    палитра и виды выводимых элементов — отделка дома по тексту (models/finish.py); вид крыши —
+    по слову, без слова — отделки, уклон и свес — по виду (gf#320); высота этажа и
+    цоколь — заготовки, карниз — над последним этажом."""
     base = json.loads(DATA.joinpath("house.json").read_text())
     floors = words.first(text, cfg.floors_words, cfg.stem_tail) or base["floors"]
     style = words.first(text, cfg.style_words, cfg.stem_tail) or base["style"]
     height = base["floor_heights_m"][0]
     house = finish.look(text, style, cfg)
-    return HouseSpec.model_validate(base | {
+    kind = words.first(text, cfg.roof_words, cfg.stem_tail) or house.roof
+    roof = cfg.roof_shape.roof(kind, base["roof"]["material"])
+    return HouseSpec.model_validate(base | {"roof": roof.model_dump(),
         "floors": floors, "floor_heights_m": [height] * floors, "style": style,
         "eaves_m": round(base["plinth_m"] + height * floors, 3),
         "trim": house.trim.model_dump(), "materials": [m.model_dump() for m in house.materials]})

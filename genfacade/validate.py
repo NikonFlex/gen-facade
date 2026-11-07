@@ -5,7 +5,8 @@
 пересекаются; окно в запретной зоне; проём плана пропал или смещён; отметки на углах не сходятся;
 геометрический брак листа (gf#242) — дверь ниже нормы свода, карниз на проёме, обрыв отделки.
 Предупреждения: у окон этажа верх не на одной линии, окна разных этажей почти (но не точно) на
-одной оси. Вложенность (подоконник у своего окна, наличник вокруг) — не нарушение: пересечения
+одной оси; скатная крыша над непрямоугольным контуром пока не строится (gf#320).
+Вложенность (подоконник у своего окна, наличник вокруг) — не нарушение: пересечения
 проверяются между проёмами, каждый — со своими выводимыми элементами.
 """
 
@@ -14,6 +15,7 @@ from xml.etree import ElementTree
 
 import shapely
 
+from genfacade import roof
 from genfacade.config import Checks
 from genfacade.derive import TRIM_OF
 from genfacade.render.parse import parse_sheet_svg
@@ -27,6 +29,7 @@ from genfacade.schema import (
     GuidelineCheck,
     HouseSpec,
     MaterialZone,
+    RoofKind,
     Rule,
     Severity,
     SideFacade,
@@ -34,7 +37,8 @@ from genfacade.schema import (
     ZoneRole,
 )
 
-WARNINGS = {Rule.FLOOR_ALIGN, Rule.AXIS_ALIGN, Rule.PLAN_FORBIDDEN}  # остальные — ошибки
+WARNINGS = {Rule.FLOOR_ALIGN, Rule.AXIS_ALIGN, Rule.PLAN_FORBIDDEN,
+            Rule.ROOF_FLAT}  # остальные — ошибки
 # Геометрический брак листа (gf#242, хозяин 31.10): по этим правилам считает датчик и метрика.
 DEFECTS = (Rule.DOOR_LOW, Rule.CORNICE, Rule.OUTSIDE, Rule.OVERLAP, Rule.FINISH)
 FULL_LENGTH = (ZoneRole.PLINTH, ZoneRole.MAIN, ZoneRole.BAND)  # зоны во всю длину стены
@@ -46,7 +50,18 @@ def validate(sheet: FacadeSheet, cfg: Checks) -> list[Violation]:
         out += _outside(f, cfg) + _overlaps(f, cfg) + _forbidden(f, cfg) + _plan_openings(f, cfg)
         out += _door_low(f, cfg) + _cornice(f, cfg) + _finish(f, sheet.spec, cfg)
         out += _floor_align(f, cfg) + _axis_align(f, cfg)
-    return out + _corners(sheet, cfg)
+    return out + _corners(sheet, cfg) + _roof(sheet)
+
+
+def _roof(sheet: FacadeSheet) -> list[Violation]:
+    """Скатная крыша над контуром не из четырёх сторон пока не строится (roof.py): лист без
+    скатов — предупреждение, а не брак стены."""
+    kind = sheet.spec.roof.kind
+    if kind is RoofKind.FLAT or roof.builds(sheet):
+        return []
+    return [Violation(rule=Rule.ROOF_FLAT, severity=Severity.WARNING,
+                      message=f"крыша {kind} над контуром из {len(sheet.facades)} сторон пока не "
+                              f"строится — на листе без скатов (gf#320)")]
 
 
 def defects(sheet: FacadeSheet, cfg: Checks) -> dict[Rule, list[Violation]]:

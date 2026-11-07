@@ -28,6 +28,8 @@ from genfacade.schema import (
     PaletteRole,
     Placement,
     Region,
+    Roof,
+    RoofKind,
     ShutterKind,
     SillKind,
     Source,
@@ -163,6 +165,10 @@ class TrimLook(Section):
     bracket_w_m: float
 
 
+class RoofDrawing(Section):
+    thickness_m: float  # кровля на виде: толщина ската, видного с ребра (gf#320)
+
+
 class Sheet(Section):
     sheet: SheetLayout
     ground: Ground
@@ -170,6 +176,7 @@ class Sheet(Section):
     axes: Axes
     door: DoorLook
     trim: TrimLook
+    roof: RoofDrawing
     title: Title
     preview: Preview
     plan: PlanLook
@@ -374,6 +381,7 @@ class SpecRules(Section):
     grid_m: float
     styles: list[str]
     palette: dict[PaletteRole, list[str]]  # виды — из library.toml
+    roof_weights: dict[RoofKind, float]    # вид крыши дома → вес (gf#320)
 
 
 class Windows(Section):
@@ -503,6 +511,20 @@ class CanopyKinds(Section):
         return getattr(self, kind)
 
 
+class RoofShape(Section):
+    """Крыша дома (gf#320): уклон по виду скатной крыши и свес — для стаба шага 1 и синтетики."""
+
+    pitch_deg: dict[RoofKind, float]
+    overhang_m: float
+
+    def roof(self, kind: RoofKind, material: str | None) -> Roof:
+        """Крыша вида kind: у плоской уклона и свеса нет."""
+        if kind is RoofKind.FLAT:
+            return Roof(kind=kind, material=material)
+        return Roof(kind=kind, material=material, pitch_deg=self.pitch_deg[kind],
+                    overhang_m=self.overhang_m)
+
+
 class Derive(Section):
     """Выводимые элементы проёма (config/derive.toml, gf#212): размеры по виду дома."""
 
@@ -620,6 +642,7 @@ class Finish(Section):
 
     styles: list[str] = Field(min_length=1)
     trim: HouseTrim
+    roof: RoofKind  # вид крыши отделки, если в тексте его нет (gf#320)
     materials: dict[PaletteRole, FinishRole]
 
 
@@ -632,6 +655,8 @@ class SpecStub(Section):
     style_words: dict[str, list[str]]      # стиль → слова в тексте
     material_words: dict[str, list[str]]   # вид стен из библиотеки → слова в тексте
     trim_words: dict[Trim, list[str]]      # выводимый элемент → слова в тексте
+    roof_words: dict[RoofKind, list[str]]  # вид крыши → слова в тексте (gf#320)
+    roof_shape: RoofShape                  # уклон и свес по виду крыши — и синтетике
     role_words: dict[PaletteRole, list[str]]  # роль палитры → слова, перед которыми цвет её красит
     trim_default: HouseTrim                # вид названного в тексте элемента, если его нет
     colors: dict[str, FinishColor]         # ряд цветов отделки по имени
