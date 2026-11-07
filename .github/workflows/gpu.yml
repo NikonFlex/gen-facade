@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       job:
-        description: "probe — проверить GPU; train — обучить модель шага 4; finetune — дообучить её на коттеджах BuildingNet; eval — оценить на val; visual — таблица метрик с FID и KID; realtest — таблица против реального теста с FID и KID; retrain — всё сразу: корпус, обучение, дообучение по флагу, реальный тест новой и прежней модели одной таблицей; stability — реальный тест модели по вариантам сэмплинга (variants) и сводка с разбросом по seed"
+        description: "probe — проверить GPU; train — обучить модель шага 4; finetune — дообучить её на коттеджах BuildingNet; eval — оценить на val; visual — таблица метрик с FID и KID; realtest — таблица против реального теста с FID и KID; retrain — всё сразу: корпус, обучение, дообучение по флагу, реальный тест новой и прежней модели одной таблицей; stability — реальный тест модели по вариантам сэмплинга (variants) и сводка с разбросом по seed; plans — genfacade run на непрямоугольных планах в обоих режимах моделью model_run (gf#306)"
         type: choice
-        options: [probe, train, finetune, eval, visual, realtest, retrain, stability]
+        options: [probe, train, finetune, eval, visual, realtest, retrain, stability, plans]
         default: probe
       houses:
         description: "train, retrain: сколько синтетических домов в корпусе (собранные раньше не пересобираются)"
@@ -176,7 +176,7 @@ jobs:
           path: base-code
 
       - name: Модель для реального теста
-        if: (inputs.job == 'realtest' || inputs.job == 'stability') && inputs.model_artifact != 'pretrain'
+        if: (inputs.job == 'realtest' || inputs.job == 'stability' || inputs.job == 'plans') && inputs.model_artifact != 'pretrain'
         uses: actions/download-artifact@v8
         with:
           name: train-${{ inputs.model_run }}
@@ -185,7 +185,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Модель для реального теста без дообучения
-        if: (inputs.job == 'realtest' || inputs.job == 'stability') && inputs.model_artifact != 'train'
+        if: (inputs.job == 'realtest' || inputs.job == 'stability' || inputs.job == 'plans') && inputs.model_artifact != 'train'
         uses: actions/download-artifact@v8
         with:
           name: pretrain-${{ inputs.model_run }}
@@ -246,6 +246,38 @@ jobs:
               fi ;;
           esac
           sh tools/retrain.sh $stages
+
+      - name: Непрямоугольные планы
+        # gf#306: девять планов tests/fixtures/make_nonrect_houses.py в обоих режимах; модель —
+        # одна из model_artifact (both — train). Сводка: план, режим, код выхода, секунды.
+        if: inputs.job == 'plans'
+        env:
+          TEXT: "A brick cottage with white trim."
+        run: |
+          kind=${{ inputs.model_artifact == 'pretrain' && 'pretrain' || 'train' }}
+          mkdir -p "$OUT/plans/svg" "$OUT/plans/runs" cfg
+          printf '[layout]\ncheckpoint = "%s"\n' "$PWD/model/$kind/model.pt" > cfg/models.toml
+          python tests/fixtures/make_nonrect_houses.py "$OUT/plans/svg"
+          : > "$OUT/plans/runs.tsv"
+          for p in "$OUT"/plans/svg/*.svg; do
+            n=$(basename "$p" .svg)
+            for m in with_openings blind; do
+              s=$(date +%s)
+              code=0
+              genfacade -c cfg run "$p" -t "$TEXT" -m "$m" -o "$OUT/plans/runs/$n-$m" \
+                > "$OUT/plans/runs/$n-$m.log" 2>&1 || code=$?
+              printf '%s\t%s\t%s\t%s\n' "$n" "$m" "$code" "$(( $(date +%s) - s ))" >> "$OUT/plans/runs.tsv"
+            done
+          done
+          cat "$OUT/plans/runs.tsv"
+
+      - name: Листы непрямоугольных планов
+        if: always() && inputs.job == 'plans'
+        uses: actions/upload-artifact@v7
+        with:
+          name: plans-${{ github.run_id }}
+          path: ${{ env.OUT }}/plans
+          retention-days: 30
 
       - name: Загрузка GPU рядом с моделью
         if: always() && (inputs.job == 'train' || inputs.job == 'finetune' || inputs.job == 'retrain')

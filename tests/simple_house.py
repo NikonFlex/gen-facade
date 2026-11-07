@@ -39,6 +39,19 @@ L_SHAPE = (
      '<rect x="1085" y="300" width="15" height="300" fill="#000000" />'),
 )
 
+# Замены для simple_svg: П-контур — посреди верха двор 3,7 × 2 м, открытый наружу. Концы крыльев —
+# на одной линии y = 100, пустой промежуток между ними — не окно: верхнее окно снято.
+U_SHAPE = (
+    ('<rect x="100" y="100" width="500" height="15" fill="#000000" />',
+     '<rect x="100" y="100" width="315" height="15" fill="#000000" />'
+     '<rect x="400" y="100" width="15" height="215" fill="#000000" />'
+     '<rect x="400" y="300" width="400" height="15" fill="#000000" />'
+     '<rect x="785" y="100" width="15" height="215" fill="#000000" />'),
+    ('<rect x="800" y="100" width="300" height="15" fill="#000000" />',
+     '<rect x="785" y="100" width="315" height="15" fill="#000000" />'),
+    ('<rect x="600" y="100" width="200" height="15" fill="#99ccff" />', ""),
+)
+
 
 def with_side(sheet: FacadeSheet, i: int, **update) -> FacadeSheet:
     """Лист, у которого фасад стороны i — с полями update."""
