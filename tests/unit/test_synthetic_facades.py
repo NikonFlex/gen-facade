@@ -36,8 +36,8 @@ SVOD = {"window_head_line", "window_head_to_eaves", "door_head_line",
 
 
 @pytest.fixture(scope="module")
-def houses(cfg):
-    return [build.sample(s, cfg) for s in SEEDS]
+def houses(rect_cfg):
+    return [build.sample(s, rect_cfg) for s in SEEDS]
 
 
 @pytest.fixture(scope="module")

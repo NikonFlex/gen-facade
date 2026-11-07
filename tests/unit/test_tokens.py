@@ -26,8 +26,9 @@ SEEDS = range(40)
 
 
 @pytest.fixture(scope="module")
-def sheets(cfg):
-    return [build.sample(s, cfg).sheet for s in SEEDS]
+def sheets(rect_cfg):
+    """Прямоугольные дома: у непрямоугольных валидатор предупреждает о скатной крыше (gf#320)."""
+    return [build.sample(s, rect_cfg).sheet for s in SEEDS]
 
 
 def _on_grid(v: float, cfg) -> float:

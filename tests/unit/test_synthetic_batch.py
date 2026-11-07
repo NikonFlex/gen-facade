@@ -5,10 +5,11 @@ import shutil
 import subprocess
 
 import pytest
+from contours import only_toml
 
 from genfacade.datasets import store
 from genfacade.datasets.synthetic import batch, build
-from genfacade.schema import Rule, Severity, Source, Split, Violation
+from genfacade.schema import ContourKind, Rule, Severity, Source, Split, Violation
 
 
 def _files(cfg) -> dict[str, str]:
@@ -44,8 +45,8 @@ def test_ready_houses_are_not_rebuilt(at):
 
 
 def test_other_settings_stop_the_build_until_overwrite(at):
-    batch.run(range(3), at("data"))
-    changed = at("data", "[house]\nwall_m = 0.2\n")
+    batch.run(range(3), at("data", only_toml(ContourKind.RECT)))
+    changed = at("data", only_toml(ContourKind.RECT) + "[house]\nwall_m = 0.2\n")
     with pytest.raises(batch.BuildError, match="другими настройками"):
         batch.run(range(5), changed)
     assert len(_files(changed)) == 3  # отказ ничего не тронул

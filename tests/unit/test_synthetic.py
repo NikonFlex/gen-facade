@@ -5,6 +5,7 @@ import json
 import re
 
 import pytest
+from contours import only_toml
 from simple_house import SIMPLE
 
 from genfacade import cli, config
@@ -15,7 +16,7 @@ from genfacade.datasets.synthetic.plan import draft
 from genfacade.plan import genplan_svg
 from genfacade.plan.gaps import Axis
 from genfacade.plan.preprocess import ENTRANCE_WIDTH_M
-from genfacade.schema import OpeningKind, Source
+from genfacade.schema import ContourKind, OpeningKind, Source
 from genfacade.train import tokens
 
 SEEDS = range(60)
@@ -32,9 +33,10 @@ SIMPLE_DRAFT = PlanDraft(10.0, 5.0, 0.15, (
 
 
 @pytest.fixture(scope="module")
-def houses(cfg):
-    """Черновик и готовый пример для каждого seed."""
-    return [(draft(s, build.with_norms(cfg).synthetic), build.sample(s, cfg)) for s in SEEDS]
+def houses(rect_cfg):
+    """Черновик и готовый пример для каждого seed — прямоугольные дома, ступень 1."""
+    return [(draft(s, build.with_norms(rect_cfg).synthetic), build.sample(s, rect_cfg))
+            for s in SEEDS]
 
 
 def _holes(sketch: PlanDraft, hole: Hole) -> list[Opening]:
@@ -216,6 +218,7 @@ def test_seed_makes_the_house(cfg):
 
 def test_synth_command_writes_samples_and_manifest(tmp_path, capsys):
     (tmp_path / "data.toml").write_text(f'[paths]\nsamples_dir = "{tmp_path / "samples"}"\n')
+    (tmp_path / "synthetic.toml").write_text(only_toml(ContourKind.RECT))
     cli.main(["-c", str(tmp_path), "synth", "-n", "3", "--first-seed", "5"])
     manifest = json.loads(open(capsys.readouterr().out.strip()).read())
     assert store.ids(tmp_path / "samples", Source.SYNTHETIC) == [

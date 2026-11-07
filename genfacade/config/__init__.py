@@ -18,6 +18,7 @@ from genfacade.datasets.buildingnet.mesh import Label
 from genfacade.schema import (
     CanopyKind,
     CasingKind,
+    ContourKind,
     Device,
     ElementClass,
     GuidelineCheck,
@@ -376,6 +377,19 @@ class Partitions(Section):
     passage_m: float
 
 
+class Contours(Section):
+    """Непрямоугольные контуры (config/synthetic.toml, [contours], `data: Ступени данных`)."""
+
+    weights: dict[ContourKind, float]  # вид контура → вес; доля непрямоугольных — всё, кроме rect
+    wing_min_m: float                  # крыло (прямоугольная часть дома) не уже
+    arm_min_m: float                   # уступ у пристройки, ножки и эркера — от угла не меньше
+    stem_depth_m: Range                # ножка T
+    annex_width_m: Range
+    annex_depth_m: Range
+    bay_width_m: Range
+    bay_depth_m: Range                 # эркер глубже 0,6 м — часть контура (gf#199)
+
+
 class SpecRules(Section):
     floors_weights: list[float]
     grid_m: float
@@ -475,6 +489,7 @@ class Synthetic(Section):
     sizes: SizeMix
     openings: OpeningRules
     partitions: Partitions
+    contours: Contours
     spec: SpecRules
     facade: FacadeRules
 
