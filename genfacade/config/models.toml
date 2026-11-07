@@ -57,6 +57,20 @@ plinth = ["plinth", "base", "foundation", "цокол", "фундамент"]
 accent = ["accent", "акцент"]
 roof = ["roof", "крыш"]
 
+# Вид крыши → слова текста (gf#320): по слову, которое встретилось раньше других; слова нет — вид
+# крыши отделки (`roof` у [spec.finish.*]). Скаты строит код развёртки над прямоугольным домом.
+[spec.roof_words]
+flat = ["flat roof", "flat-roofed", "плоская крыша", "плоской крышей", "плоская кровля", "плоской кровлей"]
+gable = ["gable roof", "gabled", "pitched roof", "двускатн", "щипцов"]
+hip = ["hip roof", "hipped", "вальмов", "четырёхскатн", "четырехскатн"]
+shed = ["shed roof", "lean-to", "mono-pitch", "односкатн"]
+
+# Уклон ската по виду крыши и свес за стену по горизонтали (gf#320); их же берёт синтетика.
+# Числа — типичные для коттеджей [не проверено: источник по своду правил — gf#320].
+[spec.roof_shape]
+pitch_deg = { gable = 35.0, hip = 25.0, shed = 12.0 }
+overhang_m = 0.4
+
 [spec.trim_default]    # вид элемента, который назвали в тексте, а у отделки его нет
 sill = "flat"
 casing = "flat"
@@ -137,6 +151,7 @@ words = ["beige", "sand", "бежев", "песочн"]
 # library.toml. Стили — те, что знает модель шага 4 (config/synthetic.toml, [spec] styles).
 [spec.finish.plaster_modern]       # гладкая штукатурка, без наличников и ставен
 styles = ["modern"]
+roof = "flat"
 trim = { sill = "flat", casing = "none", shutters = "none", canopy = "flat" }
 [spec.finish.plaster_modern.materials]
 main = { kind = "plaster", colors = ["cream", "white", "grey", "beige"], extra = ["graphite", "yellow"] }
@@ -147,6 +162,7 @@ roof = { kind = "metal_roof", colors = ["roof_steel"] }
 
 [spec.finish.plaster_classic]      # классика: штукатурка, белые наличники, ставни, скатный подоконник
 styles = ["classic"]
+roof = "hip"
 trim = { sill = "sloped", casing = "flat", shutters = "panel", canopy = "gable" }
 [spec.finish.plaster_classic.materials]
 main = { kind = "plaster", colors = ["cream", "white", "yellow", "beige", "grey"] }
@@ -157,6 +173,7 @@ roof = { kind = "tile_roof", colors = ["roof_terracotta"] }
 
 [spec.finish.plaster_stone]        # штукатурка с каменным цоколем, жалюзийные ставни
 styles = ["modern", "classic"]
+roof = "hip"
 trim = { sill = "sloped", casing = "flat", shutters = "louvered", canopy = "bracket" }
 [spec.finish.plaster_stone.materials]
 main = { kind = "plaster", colors = ["white", "beige", "grey", "yellow", "cream"] }
@@ -167,6 +184,7 @@ roof = { kind = "metal_roof", colors = ["roof_steel"] }
 
 [spec.finish.siding_painted]       # крашеная обшивка: цвет стен — из ряда
 styles = ["scandinavian", "classic", "modern"]
+roof = "gable"
 trim = { sill = "flat", casing = "flat", shutters = "louvered", canopy = "gable" }
 [spec.finish.siding_painted.materials]
 main = { kind = "siding", colors = ["blue", "white", "cream", "yellow", "grey", "green", "red", "graphite"] }
@@ -177,6 +195,7 @@ roof = { kind = "metal_roof", colors = ["roof_steel"] }
 
 [spec.finish.wood_natural]         # натуральное дерево, широкие наличники, дощатые ставни
 styles = ["scandinavian", "chalet", "modern"]
+roof = "gable"
 trim = { sill = "flat", casing = "wide", shutters = "board", canopy = "bracket" }
 [spec.finish.wood_natural.materials]
 main = { kind = "wood", colors = ["wood_natural", "wood_honey", "wood_grey"], extra = ["green", "red", "white", "blue", "black"] }
@@ -187,6 +206,7 @@ roof = { kind = "metal_roof", colors = ["roof_steel"] }
 
 [spec.finish.wood_dark]            # тёмное дерево, скандинавский: чёрная отделка, без ставен
 styles = ["scandinavian", "modern"]
+roof = "gable"
 trim = { sill = "flat", casing = "flat", shutters = "none", canopy = "gable" }
 [spec.finish.wood_dark.materials]
 main = { kind = "wood", colors = ["wood_dark", "black"], extra = ["graphite"] }
@@ -197,6 +217,7 @@ roof = { kind = "metal_roof", colors = ["roof_steel"] }
 
 [spec.finish.brick_red]            # красный кирпич, белые наличники и ставни
 styles = ["classic", "modern"]
+roof = "gable"
 trim = { sill = "sloped", casing = "flat", shutters = "panel", canopy = "gable" }
 [spec.finish.brick_red.materials]
 main = { kind = "brick", colors = ["brick_red", "brick_brown"] }
@@ -207,6 +228,7 @@ roof = { kind = "tile_roof", colors = ["roof_terracotta"] }
 
 [spec.finish.brick_light]          # светлый кирпич, тёмная отделка, без наличников
 styles = ["modern", "scandinavian"]
+roof = "shed"
 trim = { sill = "flat", casing = "none", shutters = "none", canopy = "flat" }
 [spec.finish.brick_light.materials]
 main = { kind = "brick", colors = ["brick_light", "brick_sand"] }
@@ -217,6 +239,7 @@ roof = { kind = "metal_roof", colors = ["roof_steel"] }
 
 [spec.finish.chalet_wood_stone]    # шале: дерево и камень, широкие наличники, дощатые ставни
 styles = ["chalet"]
+roof = "gable"
 trim = { sill = "sloped", casing = "wide", shutters = "board", canopy = "bracket" }
 [spec.finish.chalet_wood_stone.materials]
 main = { kind = "wood", colors = ["wood_honey", "wood_natural", "wood_dark"], extra = ["green"] }
@@ -227,6 +250,7 @@ roof = { kind = "metal_roof", colors = ["roof_steel"] }
 
 [spec.finish.stone_house]          # камень стен, дощатые ставни
 styles = ["classic", "chalet", "modern"]
+roof = "gable"
 trim = { sill = "sloped", casing = "flat", shutters = "louvered", canopy = "gable" }
 [spec.finish.stone_house.materials]
 main = { kind = "stone", colors = ["stone_grey", "stone_sand"], extra = ["graphite"] }

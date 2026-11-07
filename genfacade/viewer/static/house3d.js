@@ -71,12 +71,30 @@ export class HouseStage {
   }
 
   _roof(THREE, data) {
+    if (data.roof.faces.length) return this._slopes(THREE, data.roof);
     const shape = new THREE.Shape(data.corners.map(([x, y]) => new THREE.Vector2(x, y)));
     const geo = new THREE.ExtrudeGeometry(shape, { depth: ROOF_M, bevelEnabled: false });
     geo.rotateX(-Math.PI / 2);  // (x, y) плана → (x, −z); выдавливание — вверх
     const roof = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: this.look.roof }));
     roof.position.y = data.eaves_m;
     this.scene.add(roof, this._edges(THREE, geo, roof.position));
+  }
+
+  // Скаты и стены над карнизом (gf#320): выпуклые многоугольники (x, y плана, высота) → веер
+  // треугольников; (x, y, h) плана → (x, h, −y) сцены, как у стен.
+  _slopes(THREE, roof) {
+    const parts = [[roof.faces, roof.color || this.look.roof], [roof.above, roof.wall || this.look.roof]];
+    for (const [shapes, color] of parts) {
+      for (const shape of shapes) {
+        const points = shape.map(([x, y, h]) => new THREE.Vector3(x, h, -y));
+        const fan = [];
+        for (let i = 1; i + 1 < points.length; i++) fan.push(points[0], points[i], points[i + 1]);
+        const geo = new THREE.BufferGeometry().setFromPoints(fan);
+        geo.computeVertexNormals();
+        const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }));
+        this.scene.add(mesh, this._edges(THREE, geo));
+      }
+    }
   }
 
   _ground(THREE) {

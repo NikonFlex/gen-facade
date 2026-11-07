@@ -13,6 +13,7 @@ from xml.etree import ElementTree
 
 import shapely
 
+from genfacade import roof
 from genfacade.config import Axes, Config, DoorLook, Hatch, Levels, Sheet, SheetLayout, TrimLook
 from genfacade.render import hatch, sheet_format
 from genfacade.render.sheet_format import num
@@ -25,6 +26,7 @@ from genfacade.schema import (
     HouseSpec,
     HouseTrim,
     MaterialZone,
+    PaletteRole,
     Point,
     Polygon,
     ShutterKind,
@@ -42,11 +44,37 @@ class Pen(NamedTuple):
     colors: dict[str, str]  # id материала палитры → цвет
     kinds: dict[str, str]  # id материала палитры → вид из библиотеки
     trim: HouseTrim = HouseTrim()
+    roof: str | None = None  # id материала кровли в палитре
 
 
 def pen_for(sheet: FacadeSheet, cfg: Config) -> Pen:
     kinds = {m.id: m.kind for m in sheet.spec.materials}
-    return Pen(cfg, palette_colors(sheet.spec, cfg), kinds, sheet.spec.trim)
+    return Pen(cfg, palette_colors(sheet.spec, cfg), kinds, sheet.spec.trim,
+               sheet.spec.roof.material)
+
+
+class Top(NamedTuple):
+    """Что над карнизом стены (roof.py, gf#320): стена выше карниза и кровля на виде."""
+
+    above: Polygon | None = None
+    roof: list[Polygon] = []
+
+    def height(self, facade: SideFacade) -> float:
+        """Верх рисунка стороны: силуэт стены, стена над карнизом и кровля."""
+        shapes = [facade.silhouette or [], self.above or [], *self.roof]
+        return max(y for shape in shapes for _, y in shape)
+
+
+NOTHING_ABOVE = Top()  # плоская крыша: над карнизом ничего
+
+
+def tops(sheet: FacadeSheet, cfg: Config) -> list[Top]:
+    """Что над карнизом у каждой стороны листа; скаты не строятся — пусто."""
+    line = roof.roofline(sheet)
+    if line is None:
+        return [NOTHING_ABOVE for _ in sheet.facades]
+    return [Top(roof.above_eaves(line, k), roof.roof_view(line, k, cfg.sheet.roof.thickness_m))
+            for k in range(len(sheet.facades))]
 
 
 class Marks(NamedTuple):
@@ -96,16 +124,18 @@ def sheet_svg(sheet: FacadeSheet, cfg: Config, violations: list[Violation] | Non
     Слой без data-cls, поэтому разбор листа его не видит. annotations — отметки, оси, земля
     и подписи: оформление листа (шаг 6), на промежуточных шагах их нет.
     """
-    cells, width, height = _layout(sheet, cfg.sheet.sheet)
+    over = tops(sheet, cfg)
+    cells, width, height = _layout(sheet, over, cfg.sheet.sheet)
     mm_per_m = 1000 / cfg.sheet.sheet.scale
     pen = pen_for(sheet, cfg)
-    root = canvas(width, height, cfg.css, _patterns(sheet.facades, pen))
+    above = [PaletteRole.MAIN, pen.roof] if any(t.roof for t in over) else []
+    root = canvas(width, height, cfg.css, _patterns(sheet.facades, pen, above))
     root.set("width", f"{width * mm_per_m:.0f}mm")
     root.set("height", f"{height * mm_per_m:.0f}mm")
     axes = _axis_labels(sheet, cfg.sheet.axes.letters)
     marks_at = levels(sheet.spec, cfg.sheet.levels)
-    for facade, origin in zip(sheet.facades, cells, strict=True):
-        g = _facade_geometry(root, facade, origin, pen)
+    for facade, origin, top in zip(sheet.facades, cells, over, strict=True):
+        g = _facade_geometry(root, facade, origin, pen, top)
         if violations is not None:
             _overlay(g, facade, [v for v in violations if v.side == facade.side.index])
         if annotations:
@@ -162,10 +192,13 @@ def _painted(facade: SideFacade, pen: Pen) -> list[str]:
     return [z.material for z in facade.zones] + by_material
 
 
-def _patterns(facades: list[SideFacade], pen: Pen) -> list[ElementTree.Element]:
-    """Рисунки материалов, которые нужны листу, — по одному на пару вид × цвет, а не на зону."""
+def _patterns(facades: list[SideFacade], pen: Pen,
+              above: list[str | None] = ()) -> list[ElementTree.Element]:
+    """Рисунки материалов, которые нужны листу, — по одному на пару вид × цвет, а не на зону;
+    `above` — материалы над карнизом (стена выше карниза и кровля, gf#320)."""
     found = {}
-    for material in (m for f in facades for m in _painted(f, pen)):
+    painted = [m for f in facades for m in _painted(f, pen)] + [m for m in above if m in pen.colors]
+    for material in painted:
         kind, color = pen.kinds[material], pen.colors[material]
         if (look := _hatch_of(material, pen)) is not None:
             found.setdefault(hatch.pattern_id(kind, color),
@@ -177,10 +210,12 @@ def _top(facade: SideFacade) -> float:
     return max(y for _, y in facade.silhouette or [])
 
 
-def _layout(sheet: FacadeSheet, lay: SheetLayout) -> tuple[list[tuple[float, float]], float, float]:
-    """Фасады рядами по lay.columns; (ox, oy) — левый край стены и уровень земли."""
+def _layout(sheet: FacadeSheet, over: list[Top],
+            lay: SheetLayout) -> tuple[list[tuple[float, float]], float, float]:
+    """Фасады рядами по lay.columns; (ox, oy) — левый край стены и уровень земли. Свес кровли
+    выходит за стену по краям — он в зазоре между фасадами."""
     col_w = max(f.side.length_m for f in sheet.facades) + lay.gap_x_m
-    row_h = max(_top(f) for f in sheet.facades) + lay.gap_y_m
+    row_h = max(t.height(f) for f, t in zip(sheet.facades, over, strict=True)) + lay.gap_y_m
     cells = []
     for i, _ in enumerate(sheet.facades):
         row, col = divmod(i, lay.columns)
@@ -191,7 +226,7 @@ def _layout(sheet: FacadeSheet, lay: SheetLayout) -> tuple[list[tuple[float, flo
 
 
 def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
-                     pen: Pen) -> ElementTree.Element:
+                     pen: Pen, top: Top = NOTHING_ABOVE) -> ElementTree.Element:
     ox, oy = origin
     g = ElementTree.SubElement(root, "g", {
         "class": sheet_format.FACADE_CLASS, sheet_format.SIDE: str(facade.side.index),
@@ -204,9 +239,26 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
         _zone(g, z, pen)
     # Контур — до элементов: карниз у края стены ложится поверх линии, а не под неё.
     ElementTree.SubElement(g, "polygon", {"class": "outline", "points": silhouette})
+    if top.above:  # стена над карнизом — основной отделкой, как стена под ним
+        ElementTree.SubElement(g, "polygon", {"class": "above-eaves", "points": points(top.above),
+                                              "fill": _main(pen)})
     for e in facade.elements:
         _element(g, e, pen, facade.zones)
+    for shape in top.roof:  # кровля — поверх: свес закрывает верх стены
+        ElementTree.SubElement(g, "polygon", {"class": "roof", "points": points(shape),
+                                              "fill": _roof_fill(pen)})
     return g
+
+
+def _main(pen: Pen) -> str:
+    main = PaletteRole.MAIN
+    return paint(main, pen) if main in pen.colors else pen.cfg.library.fill.wall
+
+
+def _roof_fill(pen: Pen) -> str:
+    """Кровля — материалом крыши дома, если он в палитре; иначе заливкой «прочее»."""
+    material = pen.roof
+    return paint(material, pen) if material in pen.colors else pen.cfg.library.fill.other
 
 
 def _overlay(g: ElementTree.Element, facade: SideFacade, violations: list[Violation]) -> None:
