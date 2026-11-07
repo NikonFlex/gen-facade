@@ -75,6 +75,16 @@ def builds(sheet: FacadeSheet) -> bool:
     return len(sides) == RECT_SIDES and bool(_eave_sides(sides, sheet.spec.roof.kind))
 
 
+def eave_walls(sheet: FacadeSheet) -> set[int]:
+    """Стены с карнизом — под нижним краем ската (`facade: Карниз под скатом`): у щипцовой стены
+    и высокой стены односкатной крыши края ската нет, свес идёт по скату или торцом. Скатов нет
+    (крыша плоская или контур не прямоугольник) — край крыши над всеми стенами."""
+    sides = [f.side for f in sheet.facades]
+    if not builds(sheet):
+        return set(range(len(sides)))
+    return _eave_sides(sides, sheet.spec.roof.kind)
+
+
 def _eave_sides(sides: list[Side], kind: RoofKind) -> set[int]:
     """Стены прямоугольника, от которых идут скаты, по виду крыши; стороны 0, 2 и 1, 3 — пары
     напротив. Односкатная: низ — у длинной стены со входом, иначе у первой из длинных."""

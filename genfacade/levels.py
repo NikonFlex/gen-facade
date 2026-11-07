@@ -12,7 +12,9 @@
   дублируется, а встаёт на те же отметки; у двери на земле крыльца нет;
 - карниз — во всю стену, верх на `eaves_m`, высота — как у карниза модели на этой стене (у
   нескольких кусков — медиана), низ не ниже верха проёмов; стене без карниза он не добавляется —
-  у настоящих домов карниз бывает только на части стен;
+  у настоящих домов карниз бывает только на части стен; на стене без края ската (щипцовая,
+  высокая стена односкатной крыши, `roof.eave_walls`) карниза нет — у настоящих домов теста его
+  там нет (gf#320, хозяин 07.11: «карниз выпирает за крышу»);
 - цоколь — если он у дома есть (`plinth_m > 0` и модель поставила его хоть на одной стене) — на
   всех стенах от земли до `plinth_m`, материал — самый частый у цоколя модели. У 9 из 27 настоящих
   домов реального теста `plinth_m > 0` (пол поднят), а зоны цоколя нет — её не добавляем, если
@@ -29,6 +31,7 @@ from collections import Counter
 from statistics import median
 from typing import NamedTuple
 
+from genfacade import roof
 from genfacade.config import Checks
 from genfacade.derive import TRIM_OF, hits
 from genfacade.follow import box, follow
@@ -55,15 +58,21 @@ class House(NamedTuple):
     spec: HouseSpec
     plinth: str | None  # материал цоколя; None — цоколя у дома нет
     heads: dict[int, float]  # этаж → общая линия верха окон по дому
+    eaves: set[int]  # стены с карнизом — под краем ската
     cfg: Checks
 
 
 def levels(sheet: FacadeSheet, cfg: Checks) -> FacadeSheet:
-    house = House(sheet.spec, _plinth_material(sheet, cfg), _heads(sheet), cfg)
-    return sheet.model_copy(update={"facades": [_wall(f, house) for f in sheet.facades]})
+    house = House(sheet.spec, _plinth_material(sheet, cfg), _heads(sheet), roof.eave_walls(sheet),
+                  cfg)
+    return sheet.model_copy(update={"facades": [_wall(k, f, house)
+                                                for k, f in enumerate(sheet.facades)]})
 
 
-def _wall(f: SideFacade, house: House) -> SideFacade:
+def _wall(k: int, f: SideFacade, house: House) -> SideFacade:
+    if k not in house.eaves:
+        f = f.model_copy(update={"elements": [e for e in f.elements
+                                              if e.cls is not ElementClass.CORNICE]})
     leveled = _porches(_cornice(_doors(_windows(f, house), house), house), house)
     return _zones(leveled, _moves(f, leveled, house.spec), house)
 

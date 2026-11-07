@@ -14,6 +14,7 @@ from genfacade.schema import (
     MaterialZone,
     OpeningVariant,
     PaletteRole,
+    RoofKind,
     Rule,
     VariantKind,
     ZoneRole,
@@ -314,3 +315,19 @@ def test_porch_material_without_plinth_zones(house, cfg, palette_has_plinth, mat
     sheet = sheet.model_copy(update={"spec": sheet.spec.model_copy(update={"materials": palette})})
     [p] = _porches(sheet, cfg)
     assert p.material == material
+
+
+@pytest.mark.parametrize(("kind", "with_cornice"), [
+    (RoofKind.GABLE, {"long"}), (RoofKind.HIP, {"long", "short"}),
+    (RoofKind.FLAT, {"long", "short"})])
+def test_cornice_only_under_the_slope(house, cfg, kind, with_cornice):
+    """`facade: Карниз под скатом`: у двускатной крыши карниз — только на длинных стенах, на
+    щипцовых его нет; у вальмовой и плоской — на всех, где его поставила модель (gf#320)."""
+    roof = cfg.models.spec.roof_shape.roof(kind, "roof")
+    sheet = house.model_copy(update={"spec": house.spec.model_copy(update={"roof": roof})})
+    assert all(_of(f, ElementClass.CORNICE) for f in sheet.facades)  # модель — на всех
+    got = snap(sheet, cfg.checks)
+    longest = max(f.side.length_m for f in got.facades)
+    has = {"long" if f.side.length_m == longest else "short"
+           for f in got.facades if _of(f, ElementClass.CORNICE)}
+    assert has == with_cornice
