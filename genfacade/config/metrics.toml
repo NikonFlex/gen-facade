@@ -43,9 +43,9 @@ summary = ["rules", "c2st", "density", "coverage", "house_density", "house_margi
 # genfacade stability (gf#257): колонки сводки по вариантам сэмплинга; «годных» — первой колонкой
 stability = ["c2st", "fid", "house_density", "house_marginal", "windows_per_wall"]
 digits = 3
-# Срезы домов реального теста (gf#328): имя среза → начало имени дома (источник — в имени, как у
-# `st-55322` из markup/stroim); модель и GenPlan сравниваются с эталоном из домов среза отдельно.
-slices = { russian = "st-" }
+# Срезы домов реального теста (gf#328): имя среза → источник разметки (папка markup/<источник>/,
+# ключ [manual.paths.pdf_dirs]); модель и GenPlan сравниваются с эталоном из домов среза отдельно.
+slices = { russian = "stroim" }
 
 [calibrate]           # genfacade calibrate: эталон генератора против подмен
 reference = 1000      # домов train — эталонное распределение структуры и разнообразия

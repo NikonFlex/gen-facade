@@ -27,6 +27,7 @@ import numpy
 from genfacade import baselines, pipeline
 from genfacade.baselines import Baseline
 from genfacade.config import Config
+from genfacade.datasets import manual
 from genfacade.metrics import calibrate, table
 from genfacade.models.stub import ModelError
 from genfacade.schema import CalibrationRow, FacadeSheet, Mode, Refusal, Source, Split
@@ -135,10 +136,11 @@ def _folders(given: dict, synth: dict, mode: Mode, cfg: Config,
 def _slices(rows: list[Path], out: Path, cfg: Config) -> None:
     """Срезы домов (`[realtest] slices`): листы строк и эталона — только домов среза, таблица —
     `slices/<имя>/metrics.json`; строки синтетики и подмен — не по домам, в срез не входят."""
-    for name, prefix in cfg.metrics.realtest.slices.items():
+    for name, source in cfg.metrics.realtest.slices.items():
+        houses = manual.ids(source, cfg.data.manual)
         folder = out / SLICES / name
         for row in [*rows, out / calibrate.REFERENCE]:
-            for sheet in row.glob(f"{prefix}*.json"):
+            for sheet in (s for s in row.glob("*.json") if s.stem in houses):
                 (folder / row.name).mkdir(parents=True, exist_ok=True)
                 shutil.copy(sheet, folder / row.name / sheet.name)
         if (folder / calibrate.REFERENCE).is_dir():

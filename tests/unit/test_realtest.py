@@ -4,6 +4,8 @@
 (gf#212, tools/retrain.sh): чекпойнт или листы прошлого прогона, чужой словарь — отказ сразу."""
 
 import json
+import shutil
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -14,6 +16,8 @@ from genfacade.models.stub import ModelError
 from genfacade.schema import CalibrationRow, Mode
 
 NO_ROWS = realtest.Rows({}, {})
+MARKUP = Path(__file__).resolve().parents[2] / "markup"
+RUSSIAN = ("st-40496", "st-52299")  # разметки markup/stroim — дома среза
 
 
 @pytest.fixture
@@ -98,13 +102,22 @@ def test_substitutes_are_calibration_rows():
 
 
 def test_slice_rows_hold_only_the_houses_of_the_slice(house, cfg, tmp_path, monkeypatch):
-    """Срез `russian` (gf#328): строка `genplan@russian` — против эталона только домов `st-…`."""
-    houses = {"st-1": house, "st-2": house, "ffh-1": house, "ffh-2": house}
+    """Срез `russian` (gf#328): строка `genplan@russian` — против эталона только домов из разметки
+    папки источника; дом с похожим именем вне папки в срез не входит."""
+    marks = tmp_path / "markup"
+    (marks / "stroim").mkdir(parents=True)
+    for name in RUSSIAN:
+        shutil.copy(MARKUP / "stroim" / f"{name}.toml", marks / "stroim")
+    paths = cfg.data.manual.paths.model_copy(update={"markup_dir": marks})
+    rules = cfg.data.manual.model_copy(update={"paths": paths})
+    data = cfg.data.model_copy(update={"manual": rules})
+    cfg = cfg.model_copy(update={"data": data})
+    houses = {name: house for name in [*RUSSIAN, "st-lookalike", "ffh-1"]}
     monkeypatch.setattr(calibrate, "houses", lambda source, split, count, cfg: houses)
     realtest.run(cfg, tmp_path, 0, NO_ROWS)
     for mode in Mode:
         folder = tmp_path / mode / realtest.SLICES / "russian"
-        assert {p.stem for p in (folder / calibrate.REFERENCE).glob("*.json")} == {"st-1", "st-2"}
+        assert {p.stem for p in (folder / calibrate.REFERENCE).glob("*.json")} == set(RUSSIAN)
         rows = json.loads((folder / "metrics.json").read_text())["rows"]
         assert [r["count"] for r in rows.values()] == [2]
     lines = (tmp_path / realtest.SUMMARY).read_text().splitlines()
