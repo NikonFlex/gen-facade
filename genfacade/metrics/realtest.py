@@ -7,6 +7,7 @@ GenPlan, синтетика val, подмены; калибровка «реал
     <out>/<режим>/rows/metrics.json     строки против всех реальных домов
     <out>/<режим>/half/metrics.json     подмены из одной половины реальных и сама она — против
                                         другой половины
+    <out>/<режим>/slices/<имя>/metrics.json  то же против домов среза (`[realtest] slices`)
     <out>/summary.md                    сводка: строки обоих режимов, годных листов и колонки
                                         `[realtest] summary` (config/metrics.toml)
 
@@ -37,6 +38,7 @@ REFUSED = "refusal"  # ключ ответа-отказа модели в <до�
 SUBSTITUTES = (CalibrationRow.RANDOM, CalibrationRow.FOREIGN, CalibrationRow.EMPTY)
 MODEL = "model"
 SUMMARY = "summary.md"
+SLICES = "slices"   # <режим>/slices/<имя среза>/ — листы и metrics.json домов среза (gf#328)
 REAL_HALF = "real-half"
 GOOD = "годных"    # колонка: листов с разобранным SVG из всех домов, «k/n»
 
@@ -64,6 +66,7 @@ def run(cfg: Config, out: Path, synthetic: int, rows: Rows) -> Path:
         table.run(models + folders, out / mode / calibrate.REFERENCE, cfg, out / mode / "rows")
         table.run([*substitutes, out / mode / HALVES[0]], out / mode / HALVES[1], cfg,
                   out / mode / "half")
+        _slices(models + folders[:1], out / mode, cfg)
     (out / SUMMARY).write_text(summary(out, cfg))
     return out
 
@@ -129,6 +132,20 @@ def _folders(given: dict, synth: dict, mode: Mode, cfg: Config,
     return [out / "genplan", out / CalibrationRow.GENERATOR], [out / n for n in SUBSTITUTES]
 
 
+def _slices(rows: list[Path], out: Path, cfg: Config) -> None:
+    """Срезы домов (`[realtest] slices`): листы строк и эталона — только домов среза, таблица —
+    `slices/<имя>/metrics.json`; строки синтетики и подмен — не по домам, в срез не входят."""
+    for name, prefix in cfg.metrics.realtest.slices.items():
+        folder = out / SLICES / name
+        for row in [*rows, out / calibrate.REFERENCE]:
+            for sheet in row.glob(f"{prefix}*.json"):
+                (folder / row.name).mkdir(parents=True, exist_ok=True)
+                shutil.copy(sheet, folder / row.name / sheet.name)
+        if (folder / calibrate.REFERENCE).is_dir():
+            table.run([folder / r.name for r in rows if (folder / r.name).is_dir()],
+                      folder / calibrate.REFERENCE, cfg, folder)
+
+
 def named_rows(out: Path, mode: Mode) -> list[tuple[str, dict]]:
     """Строки таблицы режима из metrics.json (а не из summary.md): (имя строки, её метрики);
     подмены и реальные против реальных — из таблицы половин, реальные — последней, под именем
@@ -138,7 +155,9 @@ def named_rows(out: Path, mode: Mode) -> list[tuple[str, dict]]:
         return [(Path(k).name, r) for k, r in rows.items()]
 
     half = [(REAL_HALF if n == HALVES[0] else n, r) for n, r in read("half")]
-    return read("rows") + half
+    sliced = [(f"{n}@{s.name}", r) for s in sorted((out / mode / SLICES).glob("*"))
+              for n, r in read(f"{SLICES}/{s.name}")]
+    return read("rows") + sliced + half
 
 
 def summary(out: Path, cfg: Config) -> str:

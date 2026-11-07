@@ -95,3 +95,18 @@ def test_substitutes_are_calibration_rows():
     """Набор подмен realtest — члены списка строк калибровки, а не его копия строками (C9)."""
     assert all(isinstance(n, CalibrationRow) for n in realtest.SUBSTITUTES)
     assert set(realtest.SUBSTITUTES) <= set(calibrate.ROWS)
+
+
+def test_slice_rows_hold_only_the_houses_of_the_slice(house, cfg, tmp_path, monkeypatch):
+    """Срез `russian` (gf#328): строка `genplan@russian` — против эталона только домов `st-…`."""
+    houses = {"st-1": house, "st-2": house, "ffh-1": house, "ffh-2": house}
+    monkeypatch.setattr(calibrate, "houses", lambda source, split, count, cfg: houses)
+    realtest.run(cfg, tmp_path, 0, NO_ROWS)
+    for mode in Mode:
+        folder = tmp_path / mode / realtest.SLICES / "russian"
+        assert {p.stem for p in (folder / calibrate.REFERENCE).glob("*.json")} == {"st-1", "st-2"}
+        rows = json.loads((folder / "metrics.json").read_text())["rows"]
+        assert [r["count"] for r in rows.values()] == [2]
+    lines = (tmp_path / realtest.SUMMARY).read_text().splitlines()
+    names = [line.split(" | ")[0] for line in lines]
+    assert "| genplan@russian" in names
