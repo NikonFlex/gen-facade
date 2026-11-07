@@ -26,12 +26,15 @@ from pathlib import Path
 
 from PIL import Image
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from genfacade.schema import RoofKind  # noqa: E402
+
 SITE = 'https://xn--h1aieheg.xn--d1aqf.xn--p1ai'  # строим.дом.рф
 OUT = Path('data/stroim')
 HEADERS = {'User-Agent': 'GenFacade/1.0 (diploma research, ITMO)'}
 PAUSE_S = 0.5           # между запросами: не нагружать сайт
 FLOORS = '1-2'          # этажей над землёй, диапазон в формате API
-ROOFS = {1: 'flat', 2: 'shed', 3: 'gable', 4: 'hip'}  # ROOF_TYPE API → вид крыши модуля
+ROOFS = {1: RoofKind.FLAT, 2: RoofKind.SHED, 3: RoofKind.GABLE, 4: RoofKind.HIP}  # ROOF_TYPE API
 FACADES = 4             # видов в схеме фасадов
 PAGE_SIZE = 50
 PT_PER_PX = 72          # dpi листа: 1 pt = 1 px
