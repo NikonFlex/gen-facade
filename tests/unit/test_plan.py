@@ -5,7 +5,7 @@ GenPlan, шов, снятая стена. Отдельных планов нет
 """
 
 import pytest
-from simple_house import L_SHAPE, LEAF, before_leaf, top_right_shifted
+from simple_house import L_SHAPE, LEAF, U_SHAPE, before_leaf, top_right_shifted
 
 from genfacade.plan.gaps import find_gaps
 from genfacade.plan.genplan_svg import Box, PlanError
@@ -155,6 +155,22 @@ def test_l_shaped_outline_has_six_sides(simple_svg, preprocess_svg):
     """Непрямоугольный контур препроцессор режет на стороны; отказывает развёртка (шаг 3)."""
     plan = preprocess_svg(simple_svg(*L_SHAPE))
     assert [s.length_m for s in plan.sides] == pytest.approx([10, 5, 7.3, 2, 2.7, 3])
+
+
+def test_u_shaped_courtyard_is_not_an_opening(simple_svg, preprocess_svg):
+    """Промежуток между концами крыльев П-плана — вырез контура, а не окно (gf#306)."""
+    plan = preprocess_svg(simple_svg(*U_SHAPE))
+    assert [s.length_m for s in plan.sides] == pytest.approx([10, 5, 3.15, 2, 3.7, 2, 3.15, 5])
+    assert all(o.width_m < 3 for s in plan.sides for o in s.openings)
+
+
+def test_window_drawn_corner_to_corner_stays_a_window(simple_svg, preprocess_svg):
+    """Тот же промежуток с прямоугольником окна — проём по подсказке вида, а не вырез."""
+    window = ('<rect x="600" y="100" width="200" height="15" fill="#99ccff" />',
+              '<rect x="415" y="100" width="370" height="15" fill="#99ccff" />')
+    plan = preprocess_svg(simple_svg(*U_SHAPE[:2], window))
+    assert [s.length_m for s in plan.sides] == pytest.approx([10, 5, 10, 5])
+    assert (WINDOW, 3.15, 3.7) in _openings(plan.sides[2])
 
 
 def test_every_opening_kind_is_sealed_in_blind_or_entrance():

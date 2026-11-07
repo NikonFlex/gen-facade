@@ -11,7 +11,7 @@ from shapely import LinearRing, box
 
 from genfacade.config import PlanConfig
 from genfacade.plan import sides
-from genfacade.plan.gaps import Found, Gap, find_gaps
+from genfacade.plan.gaps import Found, Gap, find_gaps, is_notch
 from genfacade.plan.genplan_svg import TOL_PX, Box, DoorSwing, GenPlanSvg, PlanError, parse
 from genfacade.plan.outline import outline
 from genfacade.schema import Mode, OpeningKind, Plan, PlanOpening, Rect, Source
@@ -28,7 +28,8 @@ SEALED_IN_BLIND = frozenset({OpeningKind.WINDOW, OpeningKind.DOOR})
 def preprocess(svg: Path | str, mode: Mode, cfg: PlanConfig) -> Plan:
     """План GenPlan → Plan; дефектный план — PlanError с причиной (правило 7)."""
     raw = flip(parse(svg))
-    gaps = find_gaps(raw.walls, cfg.gaps)
+    gaps = [g for g in find_gaps(raw.walls, cfg.gaps)
+            if _hinted(raw, g) or not is_notch(g, raw.walls)]
     ring = outline(raw.walls + raw.windows + [g.box for g in gaps], cfg.outline)
     contour = sides.Contour(ring, cfg.outline.jog_px)
     found = _mark_entrance(_classify(raw, gaps, contour, cfg.gaps.min_opening_px))
@@ -76,11 +77,23 @@ def _classify(raw: GenPlanSvg, gaps: list[Gap], contour: sides.Contour,
         external = sides.on_contour(contour, g.box)
         if not external and _touches(g.box, boundary):
             raise PlanError(_off_line(g, raw.height, contour.tol_px))
-        is_door = any(g.box.contains(d.hinge) and g.box.contains(d.jamb) for d in raw.doors)
+        is_door = _has_door(raw, g)
         if is_door or external:
             kind = OpeningKind.DOOR if is_door else OpeningKind.WINDOW
             found.append(Found(kind, g, external))
     return found
+
+
+def _has_door(raw: GenPlanSvg, g: Gap) -> bool:
+    return any(g.box.contains(d.hinge) and g.box.contains(d.jamb) for d in raw.doors)
+
+
+def _hinted(raw: GenPlanSvg, g: Gap) -> bool:
+    """В разрыве створка двери или прямоугольник окна — подсказка вида: это проём, не вырез."""
+    b = g.box
+    return _has_door(raw, g) or any(
+        min(w.x1, b.x1) - max(w.x0, b.x0) > TOL_PX and min(w.y1, b.y1) - max(w.y0, b.y0) > TOL_PX
+        for w in raw.windows)
 
 
 def _touches(b: Box, boundary: LinearRing) -> bool:

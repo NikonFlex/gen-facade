@@ -59,6 +59,36 @@ def find_gaps(walls: list[Box], cfg: Gaps) -> list[Gap]:
     return gaps
 
 
+def is_notch(gap: Gap, walls: list[Box]) -> bool:
+    """Разрыв от угла до угла, где стены поворачивают в одну сторону, — вырез контура, а не проём.
+
+    Концы крыльев П-плана лежат на одной линии, и промежуток между ними пуст, как окно;
+    заполненный, он закрыл бы двор, и дом прочитался бы прямоугольником (gf#306). У выреза
+    на обоих концах стена уходит поперёк в одну сторону — вглубь выреза; у окна стена за
+    концом продолжается по линии. Разрыв со створкой или прямоугольником окна сюда не
+    передают: проём по подсказке вида — не вырез.
+    """
+    lo, hi = _span(gap.box, gap.axis)
+    sides = [_turns(gap, walls, end, at_start) for end, at_start in ((lo, True), (hi, False))]
+    return sides[0] is not None and sides[0] == sides[1]
+
+
+def _turns(gap: Gap, walls: list[Box], end: float, at_start: bool) -> int | None:
+    """Куда уходит поперечная стена у самого конца разрыва: +1, −1; None — такой стены нет."""
+    g0, g1 = _span(gap.box, gap.axis.other)
+    for w in walls:
+        if _runs_along(w, gap.axis):
+            continue
+        (w0, w1), (c0, c1) = _span(w, gap.axis), _span(w, gap.axis.other)
+        if abs((w1 if at_start else w0) - end) > TOL_PX or c1 < g0 or c0 > g1:
+            continue
+        if c1 > g1 + TOL_PX and c0 >= g0 - TOL_PX:
+            return 1
+        if c0 < g0 - TOL_PX and c1 <= g1 + TOL_PX:
+            return -1
+    return None
+
+
 def _span(box: Box, axis: Axis) -> tuple[float, float]:
     return (box.x0, box.x1) if axis is Axis.X else (box.y0, box.y1)
 
