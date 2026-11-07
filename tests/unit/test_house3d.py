@@ -168,10 +168,10 @@ def test_corner_is_convex_or_not(sheet, cfg):
     assert got == ([True] * 4 if len(got) == 4 else [True, True, True, False, True, True])
 
 
-def test_cornice_under_slope_is_a_band_flat_roof_covers_it(cfg):
+def test_cornice_under_slope_is_a_band_flat_roof_covers_it(cfg, rect_cfg):
     """gf#320, хозяин 07.11: «карниз выпирает за крышу». Под скатом карниз — полоса на стене под
     свесом, а не выступ сквозь кровлю; у плоской крыши плита шире плана на вынос карниза."""
-    sheet = next(s for s in (build.sample(k, cfg).sheet for k in range(20))
+    sheet = next(s for s in (build.sample(k, rect_cfg).sheet for k in range(20))
                  if any(e.cls is ElementClass.CORNICE for f in s.facades for e in f.elements))
     gable = sheet.model_copy(update={"spec": sheet.spec.model_copy(update={
         "roof": cfg.models.spec.roof_shape.roof(RoofKind.GABLE, "roof")})})

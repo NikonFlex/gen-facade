@@ -9,6 +9,7 @@ from importlib.util import find_spec
 from itertools import count
 
 import pytest
+from contours import only, only_toml
 from simple_house import SIMPLE
 
 from genfacade import config, pipeline
@@ -17,7 +18,16 @@ from genfacade.metrics import visual
 from genfacade.models import stub
 from genfacade.pipeline import walls
 from genfacade.plan.preprocess import preprocess
-from genfacade.schema import Description, FacadeSheet, Mode, Sample, Source, Split, TextKind
+from genfacade.schema import (
+    ContourKind,
+    Description,
+    FacadeSheet,
+    Mode,
+    Sample,
+    Source,
+    Split,
+    TextKind,
+)
 
 # Обучение и модель — в группе [train] с torch; CI её не ставит, и там эти тесты не собираются.
 collect_ignore = [] if find_spec("torch") else [
@@ -45,7 +55,8 @@ def half_val(tmp_path_factory):
         folder = root / "cfg"
         folder.mkdir()
         (folder / "data.toml").write_text(f'[paths]\nsamples_dir = "{root / "data"}"\n')
-        (folder / "synthetic.toml").write_text("[build]\nval_share = 0.5\n")
+        (folder / "synthetic.toml").write_text(
+            "[build]\nval_share = 0.5\n" + only_toml(ContourKind.RECT))
         cfg = config.load(folder)
         batch.run(range(houses), cfg)
         return cfg
@@ -66,6 +77,12 @@ def stub_layout():
 def cfg() -> config.Config:
     """Настройки пакета по умолчанию."""
     return config.load()
+
+
+@pytest.fixture(scope="session")
+def rect_cfg(cfg) -> config.Config:
+    """Настройки пакета, при которых синтетика — только прямоугольные дома (ступень 1)."""
+    return only(cfg, ContourKind.RECT)
 
 
 @pytest.fixture

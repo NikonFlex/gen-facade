@@ -7,6 +7,7 @@
 
 import random
 from dataclasses import dataclass, replace
+from typing import NamedTuple
 
 from genfacade.config import OpeningRules, Synthetic
 from genfacade.datasets.genplan_writer import Hole, Opening, PlanDraft, Run
@@ -18,36 +19,61 @@ from genfacade.schema import Placement
 
 
 @dataclass(frozen=True)
-class _Wall:
+class Wall:
     """Наружная стена до расстановки проёмов: полоса и свободные участки между комнатами."""
 
     run: Run
     bays: tuple[Span, ...]
     long: bool
+    outer: Span  # края стены вдоль оси: от угла до угла контура
+    reach: Span  # докуда вход может подойти в крайних участках (у GenPlan — ближе окна к углу)
 
 
-def draft(seed: int, cfg: Synthetic) -> PlanDraft:
+class Start(NamedTuple):
+    """Начало черновика: поток случайных чисел дома, настройки профиля и размеры основного
+    прямоугольника — общие у прямоугольного дома и у любого непрямоугольного."""
+
+    rng: random.Random
+    cfg: Synthetic
+    widths: list[float]
+    width: float
+    depth: float
+
+
+def begin(seed: int, cfg: Synthetic) -> Start:
     rng = random.Random(seed)  # noqa: S311 — воспроизводимость по seed, не криптография
     size = sizes.pick(seed, cfg)
     cfg = sizes.rules(cfg, size)  # отступ от угла и простенок — профиля
     width = on_grid(rng, size.width_m, cfg.house.grid_m)
     depth = min(width, on_grid(rng, size.depth_m, cfg.house.grid_m))
-    cuts = _cuts(rng, width, cfg)
-    walls = _walls(width, depth, cuts, cfg)
-    widths = sizes.window_widths(size)
-    while True:  # дом совсем без окон не нужен — тянем раскладку ещё раз тем же генератором
-        runs = _with_openings(rng, walls, widths, cfg.openings)
-        if any(o.hole is Hole.WINDOW for r in runs for o in r.openings):
-            break
-    inner = [_partition(rng, x, depth, cfg) for x in cuts]
+    return Start(rng, cfg, sizes.window_widths(size), width, depth)
+
+
+def draft(seed: int, cfg: Synthetic) -> PlanDraft:
+    """Прямоугольный дом, ступень 1."""
+    rng, cfg, widths, width, depth = begin(seed, cfg)
+    cuts_x = cuts(rng, width, cfg)
+    runs = with_windows(rng, _walls(width, depth, cuts_x, cfg), widths, cfg.openings)
+    inner = [partition(rng, Axis.Y, x, (cfg.house.wall_m, depth - cfg.house.wall_m), cfg)
+             for x in cuts_x]
     return PlanDraft(width, depth, cfg.house.wall_m, (*runs, *inner))
+
+
+def with_windows(rng: random.Random, walls: list[Wall], widths: list[float],
+                 cfg: OpeningRules) -> list[Run]:
+    """Вход и окна на стенах. Дом совсем без окон не нужен — раскладку тянем ещё раз тем же
+    генератором."""
+    while True:
+        runs = _with_openings(rng, walls, widths, cfg)
+        if any(o.hole is Hole.WINDOW for r in runs for o in r.openings):
+            return runs
 
 
 def on_grid(rng: random.Random, span: Span, step: float) -> float:
     return round(rng.randint(round(span[0] / step), round(span[1] / step)) * step, 3)
 
 
-def _cuts(rng: random.Random, width: float, cfg: Synthetic) -> list[float]:
+def cuts(rng: random.Random, width: float, cfg: Synthetic) -> list[float]:
     """Где стоят поперечные перегородки: комнаты не уже min_room_m."""
     room, step = cfg.partitions.min_room_m, cfg.house.grid_m
     cuts: list[float] = []
@@ -60,7 +86,7 @@ def _cuts(rng: random.Random, width: float, cfg: Synthetic) -> list[float]:
     return sorted(cuts)
 
 
-def _walls(width: float, depth: float, cuts: list[float], cfg: Synthetic) -> list[_Wall]:
+def _walls(width: float, depth: float, cuts: list[float], cfg: Synthetic) -> list[Wall]:
     """Четыре наружные стены; у длинных участки разделены перегородками, у торцов — один."""
     t, clear = cfg.house.wall_m, cfg.openings.corner_clear_m
     stops = [(0.0, t), *((x, x + t) for x in cuts), (width - t, width)]
@@ -69,11 +95,17 @@ def _walls(width: float, depth: float, cuts: list[float], cfg: Synthetic) -> lis
                             width, cfg.openings.window_corner_m)
     short_bays = off_corners([(t + clear, depth - t - clear)], depth, cfg.openings.window_corner_m)
     return [
-        _Wall(Run(Axis.X, 0.0, 0.0, width), long_bays, True),
-        _Wall(Run(Axis.X, depth - t, 0.0, width), long_bays, True),
-        _Wall(Run(Axis.Y, 0.0, 0.0, depth), short_bays, False),
-        _Wall(Run(Axis.Y, width - t, 0.0, depth), short_bays, False),
+        _side(Run(Axis.X, 0.0, 0.0, width), long_bays, True, clear),
+        _side(Run(Axis.X, depth - t, 0.0, width), long_bays, True, clear),
+        _side(Run(Axis.Y, 0.0, 0.0, depth), short_bays, False, clear),
+        _side(Run(Axis.Y, width - t, 0.0, depth), short_bays, False, clear),
     ]
+
+
+def _side(run: Run, bays: tuple[Span, ...], long: bool, clear: float) -> Wall:
+    """Стена прямоугольного дома: вход в крайнем участке подходит к углу на clear, как у GenPlan."""
+    outer = (run.start_m, run.end_m)
+    return Wall(run, bays, long, outer, (outer[0] + clear, outer[1] - clear))
 
 
 def off_corners(bays: list[Span], length: float, corner: float) -> tuple[Span, ...]:
@@ -83,18 +115,19 @@ def off_corners(bays: list[Span], length: float, corner: float) -> tuple[Span, .
     return tuple((lo, hi) for lo, hi in clamped if hi > lo)
 
 
-def _with_openings(rng: random.Random, walls: list[_Wall], choice: list[float],
+def _with_openings(rng: random.Random, walls: list[Wall], choice: list[float],
                    cfg: OpeningRules) -> list[Run]:
     """Вход на одной стене, окна — на свободных участках стен, не выбранных глухими; ширины окон
     дома — из choice (профиль размеров)."""
     widths = rng.sample(choice, min(len(choice), rng.randint(1, cfg.widths_per_house)))
     on_long = rng.random() < cfg.entrance_long_p
-    entry = rng.choice([w for w in walls if w.long is on_long])
+    able = [w for w in walls if _can_enter(w)]  # у короткой стены контура входу не хватит места
+    entry = rng.choice([w for w in able if w.long is on_long] or able)
     runs = []
     for wall in walls:
         bays, found = list(wall.bays), []
         if wall is entry:
-            door, bays = _entrance(rng, bays, (wall.run.start_m, wall.run.end_m), cfg)
+            door, bays = _entrance(rng, bays, wall.reach, cfg)
             found.append(door)
         if rng.random() >= (cfg.blind_long_p if wall.long else cfg.blind_short_p):
             found += _windows(rng, bays, widths, cfg)
@@ -111,18 +144,31 @@ def _windows(rng: random.Random, bays: list[Span], widths: list[float],
     return [o for bay in bays for o in bay_windows(rng, bay, rng.choice(widths), cfg)]
 
 
-def _entrance(rng: random.Random, bays: list[Span], outer: Span, cfg: OpeningRules):
+def _door_span(bay: Span, bays: list[Span] | tuple[Span, ...], reach: Span) -> Span:
+    """Где вход может стоять в участке: в крайних участках — до reach, в прочих — в границах."""
+    return (reach[0] if bay[0] == bays[0][0] else bay[0],
+            reach[1] if bay[1] == bays[-1][1] else bay[1])
+
+
+def _can_enter(wall: Wall) -> bool:
+    return any(_fits(b, wall.bays, wall.reach) for b in wall.bays)
+
+
+def _fits(bay: Span, bays: list[Span] | tuple[Span, ...], reach: Span) -> bool:
+    lo, hi = _door_span(bay, bays, reach)
+    return bay[1] - bay[0] >= ENTRANCE_WIDTH_M and hi - lo >= ENTRANCE_WIDTH_M
+
+
+def _entrance(rng: random.Random, bays: list[Span], reach: Span, cfg: OpeningRules):
     """Вход в случайном участке → (вход, участки): участок входа делится на два по бокам.
 
     Окно отстоит на corner_clear_m от внутренней грани поперечной стены, а вход в крайнем
-    участке — от наружного угла (outer — края стены), как у GenPlan: у входа примера 0,519 м от
-    угла. Иначе модель такого x не видела и у двери пропускает число (gf#177).
+    участке подходит к наружному углу на corner_clear_m (reach — это край стены минус отступ),
+    как у GenPlan: у входа примера 0,519 м от угла. Иначе модель такого x не видела и у двери
+    пропускает число (gf#177).
     """
-    fits = [b for b in bays if b[1] - b[0] >= ENTRANCE_WIDTH_M]
-    lo, hi = rng.choice(fits)
-    clear = cfg.corner_clear_m
-    door_lo = outer[0] + clear if lo == bays[0][0] else lo
-    door_hi = outer[1] - clear if hi == bays[-1][1] else hi
+    lo, hi = rng.choice([b for b in bays if _fits(b, bays, reach)])
+    door_lo, door_hi = _door_span((lo, hi), bays, reach)
     at = on_grid(rng, (door_lo, door_hi - ENTRANCE_WIDTH_M), cfg.grid_m)
     rest = [(lo, at - cfg.between_m), (at + ENTRANCE_WIDTH_M + cfg.between_m, hi)]
     others = [b for b in bays if b != (lo, hi)]
@@ -145,8 +191,13 @@ def bay_windows(rng: random.Random, bay: Span, width: float, cfg: OpeningRules) 
             for i in range(n)]
 
 
-def _partition(rng: random.Random, x: float, depth: float, cfg: Synthetic) -> Run:
+def passage(rng: random.Random, span: Span, cfg: Synthetic) -> Opening:
+    """Проход в перегородке от стены до стены (span — её края вдоль оси)."""
+    clear, width = cfg.openings.corner_clear_m, cfg.partitions.passage_m
+    at = on_grid(rng, (span[0] + clear, span[1] - clear - width), cfg.openings.grid_m)
+    return Opening(at, width, Hole.PASSAGE)
+
+
+def partition(rng: random.Random, axis: Axis, across: float, span: Span, cfg: Synthetic) -> Run:
     """Перегородка от стены до стены с проходом; к наружным стенам примыкает торцами."""
-    t, clear, passage = cfg.house.wall_m, cfg.openings.corner_clear_m, cfg.partitions.passage_m
-    at = on_grid(rng, (t + clear, depth - t - clear - passage), cfg.openings.grid_m)
-    return Run(Axis.Y, x, t, depth - t, (Opening(at, passage, Hole.PASSAGE),))
+    return Run(axis, across, span[0], span[1], (passage(rng, span, cfg),))

@@ -5,10 +5,11 @@ from collections import Counter
 from itertools import chain
 
 import pytest
+from contours import only_toml
 
 from genfacade import config
 from genfacade.datasets.synthetic import batch, build
-from genfacade.schema import ElementClass, Mode, OpeningKind, Placement, Source
+from genfacade.schema import ContourKind, ElementClass, Mode, OpeningKind, Placement, Source
 from genfacade.train import constraints, tokens
 from genfacade.validate import errors, validate
 
@@ -18,7 +19,8 @@ MODES = (Mode.BLIND, Mode.WITH_OPENINGS)
 
 def _config(tmp_path_factory, placement: Placement) -> config.Config:
     folder = tmp_path_factory.mktemp(f"placement-{placement}")
-    (folder / "synthetic.toml").write_text(f'[openings]\nplacement = "{placement}"\n')
+    (folder / "synthetic.toml").write_text(
+        only_toml(ContourKind.RECT) + f'[openings]\nplacement = "{placement}"\n')
     return config.load(folder)
 
 

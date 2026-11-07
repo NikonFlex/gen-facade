@@ -5,7 +5,7 @@ import random
 from genfacade import derive, pipeline
 from genfacade.config import Config, Synthetic
 from genfacade.datasets import genplan_writer
-from genfacade.datasets.synthetic import decor, openings, plan, sizes, upper, zones
+from genfacade.datasets.synthetic import contour, decor, openings, sizes, upper, zones
 from genfacade.datasets.synthetic.house import Look, house
 from genfacade.plan.preprocess import preprocess
 from genfacade.schema import (
@@ -45,7 +45,7 @@ def with_norms(cfg: Config) -> Config:
 def sample(seed: int, cfg: Config) -> Sample:
     cfg = with_norms(cfg)
     syn = cfg.synthetic
-    svg = genplan_writer.svg(plan.draft(seed, syn), syn.canvas)
+    svg = genplan_writer.svg(contour.draft(seed, syn), syn.canvas)
     floor = preprocess(svg, Mode.WITH_OPENINGS, cfg.plan).model_copy(
         update={"source": Source.SYNTHETIC})
     # Свой поток случайных чисел: правка правил плана не меняет параметры дома, и наоборот.
