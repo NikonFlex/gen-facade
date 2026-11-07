@@ -7,12 +7,13 @@
 id = "ffh-american"
 pdf = " Drawing Set - American Farmhouse - Jay Osborne.pdf"
 roof = "двускатная 12/12, коньком вдоль; кирпичная труба у западного щипца; навес крыльца 4/12"
-pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"
+unit = "ft"
+pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"
 material = "siding"       # CLAPBOARD SIDING
-plinth_ft = 2.5           # APPROX. GRADE -2'-6", кирпичный фундамент
+plinth = 2.5           # APPROX. GRADE -2'-6", кирпичный фундамент
 plinth_material = "brick" # BRICK FOUNDATION: от чистого пола 627.6 до земли 672.6 на всех листах
 trim_material = "wood"    # FRIEZE BOARD под карнизом (gf#245)
-floor_heights_ft = [10.0, 10.0]   # 2ND FLOOR +10'-0", ROOF EAVE +20'-0"
+floor_heights = [10.0, 10.0]   # 2ND FLOOR +10'-0", ROOF EAVE +20'-0"
 cut = ["west: фронтон с вентрешёткой, труба выше карниза",
        "east: фронтон с вентрешёткой",
        "south, north: кирпичная труба в профиль — за углом стены",

@@ -4,11 +4,12 @@
 id = "ffh-barnhouse"
 pdf = "Barnhouse - Blueprints - Jay Osborne.pdf"
 roof = "гамбрел (ломаная двускатная), купол; второй этаж под крышей"
-pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"
+unit = "ft"
+pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"
 material = "siding"       # CLAPBOARD SIDING
-plinth_ft = 0.0           # SLAB +0'-0" у ворот — на уровне земли
+plinth = 0.0           # SLAB +0'-0" у ворот — на уровне земли
 trim_material = "wood"    # TRIM: WOOD — карнизная доска под свесом боковых стен (gf#245)
-floor_heights_ft = [8.9167]   # EAVE +8'-11"
+floor_heights = [8.9167]   # EAVE +8'-11"
 absent = ["all: цоколя нет — обшивка до земли (SLAB на уровне земли), фундамент только пунктиром под землёй",
           "rear, front: карниза нет — торцы гамбрела, горизонтальной полосы на отметке карниза нет"]
 cut = ["rear: окно 2-го этажа во фронтоне", "rear: ставни окна 2-го этажа x2",

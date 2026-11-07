@@ -8,12 +8,13 @@
 id = "ffh-june"
 pdf = "June - Blueprints - Backyard Farmhouse - Jay Osborne.pdf"
 roof = "двускатная 10/12, коньком вдоль; дормеры 4/12 на юге и севере; мансарда; навес крыльца 3/12"
-pt_per_ft = 9.0           # SCALE: 1/8" = 1'-0"
+unit = "ft"
+pt_per_unit = 9.0           # SCALE: 1/8" = 1'-0"
 material = "siding"       # CLAPBOARD SIDING (fiber cement); фронтоны — диагональная вагонка
-plinth_ft = 0.75          # земля у стены 406.3 pt, 1ST FLOOR +0'-0" — 399.6 pt
+plinth = 0.75          # земля у стены 406.3 pt, 1ST FLOOR +0'-0" — 399.6 pt
 plinth_material = "concrete"  # «concrete slab foundation» (note 3): кромка плиты 401.8–406.3 под плинтусной доской
 trim_material = "wood"    # TRIM: WOOD OR FIBER CEMENT — карнизная доска (gf#245)
-floor_heights_ft = [11.5]     # EAVE +11'-6"; мансарда (2ND FLOOR +8'-4") — не этаж
+floor_heights = [11.5]     # EAVE +11'-6"; мансарда (2ND FLOOR +8'-4") — не этаж
 absent = ["west, east: карниза нет — щипцовые торцы, горизонтальной полосы на отметке карниза нет",
           "north, south: под дормером карниза нет — стена дормера идёт до свеса, полоса только по краям"]
 cut = ["west: окно мансарды во фронтоне", "east: окно мансарды во фронтоне",

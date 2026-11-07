@@ -11,12 +11,13 @@
 id = "sd-parsons-2011"
 pdf = "2011/pars_cd.pdf"
 roof = "плоская с парапетом 13'-9 3/4\"; надстройка-бокс над кровлей до 17'-11\""
-pt_per_ft = 18.0          # 1/4" = 1'-0"
+unit = "ft"
+pt_per_unit = 18.0          # 1/4" = 1'-0"
 material = "siding"       # 07 46 23 / 07 46 46 — горизонтальная и панельная обшивка
-plinth_ft = 2.3333        # T.O. SUB FLOOR 2'-4" над GROUND LEVEL
+plinth = 2.3333        # T.O. SUB FLOOR 2'-4" над GROUND LEVEL
 plinth_material = "plaster"  # CEMENT BOARD SIDING (07 46 46): панельная юбка между полом и землёй на N, E, S (gf#245)
 trim_material = "plaster"    # CEMENT BOARD SIDING: панельная полоса парапета под PARAPET CAP FLASHING
-floor_heights_ft = [11.4792]  # T.O. PARAPET 13'-9 3/4"
+floor_heights = [11.4792]  # T.O. PARAPET 13'-9 3/4"
 cut = ["все: надстройка-бокс с жалюзи над кровлей (T.O. BULKHEAD ROOF 17'-11\")",
        "north, east, west: вынос кровли и продолжение западной стены над входной площадкой с проёмом OPEN TO BEYOND — вне стены дома",
        "east: короб-ступень перед стеной; южная площадка под выносом кровли со скамьёй и перилами — вне стены",

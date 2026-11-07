@@ -4,12 +4,13 @@
 id = "ffh-thoreau"
 pdf = "Thoreau Blueprints 2024-11-24 By Jay Osborne.pdf"
 roof = "двускатная 10/12, спальный чердак; кирпичные столбы"
-pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"
+unit = "ft"
+pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"
 material = "wood"         # CEDAR BEVEL SIDING
-plinth_ft = 1.32          # земля у входа — FIN. FLOOR +0'-0"
+plinth = 1.32          # земля у входа — FIN. FLOOR +0'-0"
 plinth_material = "brick" # BRICK PIER (на листе: «могут быть простым бетоном»), между столбами — открытое подполье (gf#245)
 trim_material = "wood"    # 1x8 FASCIA BD под кровлей, на боковых стенах (gf#245)
-floor_heights_ft = [8.3333]   # EAVE +8'-4"
+floor_heights = [8.3333]   # EAVE +8'-4"
 cut = ["front: створчатое окно во фронтоне", "rear: створчатые окна во фронтоне x2",
        "front: ступень", "rear: труба дымохода выше карниза"]
 absent = ["front, rear: нет карнизной полосы — щипцовые стены, горизонтальной линии на отметке карниза нет (1x8 FASCIA BD идёт по скату)",

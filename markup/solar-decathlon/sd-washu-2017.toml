@@ -12,11 +12,12 @@
 id = "sd-washu-2017"
 pdf = "2017/wash-u-st-louis-drawings.pdf"
 roof = "плоская с парапетом 11'-1\"; PV на кровле до 12'-0\"; бетонные водостоки-консоли над кровлей"
-pt_per_ft = 9.0           # подпись 1/4" = 1'-0" на листе половинного формата → 1/8" = 1'-0"
+unit = "ft"
+pt_per_unit = 9.0           # подпись 1/4" = 1'-0" на листе половинного формата → 1/8" = 1'-0"
 material = "concrete"     # STRUCTURAL PRECAST CONCRETE WALL PANELS
-plinth_ft = 1.8333        # FINISH FLOOR 0" над GRADE -1'-10"
+plinth = 1.8333        # FINISH FLOOR 0" над GRADE -1'-10"
 plinth_material = "concrete"  # бетонный фундамент: гладкая полоса и бетонная штриховка между чистым полом и GRADE на всех листах (gf#245)
-floor_heights_ft = [11.0833]  # T.O. PARAPET 11'-1"
+floor_heights = [11.0833]  # T.O. PARAPET 11'-1"
 cut = ["все: PV-панели над кровлей (T.O. SOLAR ARRAY 12'-0\") и бетонные водостоки-консоли (PRECAST CONCRETE GUTTER, ABOVE)",
        "east, west: бетонные рамы водостоков за углами стены (оси A, D–G) — вне стены",
        "east, west: низ окон закрыт ящиками-клумбами (PLANTER BOX) и настилом — рамки окон до чистого пола по ведомости",

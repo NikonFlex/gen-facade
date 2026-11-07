@@ -21,12 +21,13 @@
 id = "ffh-halfstory"
 pdf = "Halfstory House - Blueprints - Jay Osborne.pdf"
 roof = "двускатная 10:12 (кедровая дранка), конёк север-юг +13'-2, поперечные щипцы 10:12 на торцах рукавов; эркеры — свои скаты"
-pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"
+unit = "ft"
+pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"
 material = "siding"       # CLAPBOARD SIDING
-plinth_ft = 1.0           # пояс кирпичного фундамента (BRICK VENEER @ FOUNDATION) под линией пола
+plinth = 1.0           # пояс кирпичного фундамента (BRICK VENEER @ FOUNDATION) под линией пола
 plinth_material = "brick"
 trim_material = "wood"
-floor_heights_ft = [4.6667]   # MAIN ROOF EAVE +4'-8" над FLOOR LEVEL — один этаж стен до карниза
+floor_heights = [4.6667]   # MAIN ROOF EAVE +4'-8" над FLOOR LEVEL — один этаж стен до карниза
 cut = ["west, east: козырьки над дверями (FRONT DOOR AWNING, BACK DOOR AWNING), металлические трубы выше конька",
        "south: боковые грани и скат эркера (грани под 45°)",
        "rear, front: боковые грани южного эркера видны с ребра",

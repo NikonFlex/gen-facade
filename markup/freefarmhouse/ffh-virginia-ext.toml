@@ -1,6 +1,6 @@
 # Virginia's Farmhouse, Extended Design (rear addition) — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
 # archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#323 — та же лицензия.
-# Лист 22x17", масштаб 1/4" = 1'-0" (pt_per_ft 18). План 1-го этажа — стр. 8, фасады — стр. 10 (WEST,
+# Лист 22x17", масштаб 1/4" = 1'-0" (pt_per_unit 18). План 1-го этажа — стр. 8, фасады — стр. 10 (WEST,
 # SOUTH) и стр. 11 (EAST, NORTH). Отметки: 1ST FLOOR +0'-0" (y 727.1), 2ND FLOOR +9'-0" (y 565.1),
 # ROOF EAVE +17'-3" (y 416.6), ROOF RIDGE +21'-10". Проект тот же, что в Virginia (virginia): не
 # размечать отдельно, размечен только этот лист с задней пристройкой.
@@ -12,12 +12,13 @@
 id = "ffh-virginia-ext"
 pdf = "Virginia - Extended Design - Jay Osborne.pdf"
 roof = "двускатная 7.5/12 (ядро, коньком вдоль запад–восток), сзади односкатная 2.5/12; фальцевая кровля"
-pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36x80" = 54x120 pt, FF1–FF2 9' = 162 pt
+unit = "ft"
+pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36x80" = 54x120 pt, FF1–FF2 9' = 162 pt
 material = "siding"       # CLAPBOARD SIDING
-plinth_ft = 1.0           # кирпичное основание 727.1 → 745.1
+plinth = 1.0           # кирпичное основание 727.1 → 745.1
 plinth_material = "brick"
 trim_material = "wood"
-floor_heights_ft = [9.0, 8.25]   # FF2 +9'-0", EAVE +17'-3"
+floor_heights = [9.0, 8.25]   # FF2 +9'-0", EAVE +17'-3"
 absent = ["west, east: карниза нет — щипцовые стены"]
 cut = ["south: крыльцо 24' x 6' — столбы, пилястры, ступени, навес размечен не как стена",
        "west: крыльцо в профиль, ступени, вентрешётка во фронтоне, труба-патрубок (optional chimney pipe)",

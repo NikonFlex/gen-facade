@@ -1,6 +1,6 @@
 # Mae's Farmhouse (Backyard Farmhouse, Mae's version) — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
 # archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#323 — та же лицензия.
-# Лист 11x8.5" (792x612 pt), масштаб 1/8" = 1'-0" (pt_per_ft 9). Планы — стр. 5 (1-й этаж), фасады —
+# Лист 11x8.5" (792x612 pt), масштаб 1/8" = 1'-0" (pt_per_unit 9). Планы — стр. 5 (1-й этаж), фасады —
 # стр. 7 (WEST, SOUTH) и стр. 8 (EAST, NORTH). Отметки: FF1 +0'-0" (y 399.6), FF2 +9'-0", EAVE +12'-0"
 # (y 291.5), GABLE AVERAGE +15'-9", RIDGE +19'-6"; T.O. WALL офиса и крыльца +7'-9" (y 329.8).
 # Устройство: полутораэтажное ядро 28' x 16' (кровля 10/12, коньком вдоль запад–восток, спереди
@@ -15,12 +15,13 @@
 id = "ffh-mae"
 pdf = "Mae - Blueprints - Backyard Farmhouse - Jay Osborne.pdf"
 roof = "двускатная 10/12 (ядро), фронтон 14/12 спереди и дормер сзади; пристройки: кабинет 3/12, мудрум щипец 10/12; фальцевая кровля"
-pt_per_ft = 9.0           # SCALE: 1/8" = 1'-0"
+unit = "ft"
+pt_per_unit = 9.0           # SCALE: 1/8" = 1'-0"
 material = "siding"       # CLAPBOARD SIDING (лист, п. 4 ELEVATION NOTES)
-plinth_ft = 2.0           # кирпичная обшивка основания 399.6 → 417.6
+plinth = 2.0           # кирпичная обшивка основания 399.6 → 417.6
 plinth_material = "brick"
 trim_material = "wood"
-floor_heights_ft = [9.0, 3.0]    # FF2 +9'-0", EAVE +12'-0"
+floor_heights = [9.0, 3.0]    # FF2 +9'-0", EAVE +12'-0"
 absent = ["west, east: карниза нет — щипцовые стены"]
 cut = ["south: крыльцо 33'-8\" — столбы, балясины, кронштейны, ступени, навес крыльца",
        "south: орнамент фронтона, резные кронштейны", "west: крыльцо (возврат), ступени, водосток",

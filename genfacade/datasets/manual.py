@@ -1,10 +1,11 @@
 """Ручная разметка реальных коттеджей → примеры теста (`data: Реальные коттеджи — тест`, gf#180).
 
 Разметка — TOML на дом. Координаты элементов — прямоугольники в pt листа PDF (x вправо, y вниз),
-как их снимает разметчик с векторного листа фасада; отметки — в футах с листа (цоколь, этажи до
-карниза). Перевод в метры — здесь, по масштабу листа `pt_per_ft`. Стороны — по часовой стрелке от
-стороны входа, контур ортогональный: у каждой — левый и правый край стены и отметка чистого пола в
-pt, и внутренний ли угол после неё (Г-, Т-контур, gf#199).
+как их снимает разметчик с листа фасада; отметки (цоколь, этажи до карниза) — в единицах листа
+`unit`: футах у американских листов, метрах у российских. Перевод в метры — здесь, по масштабу листа
+`pt_per_unit`. Стороны — по часовой стрелке от стороны входа, контур ортогональный: у каждой — левый
+и правый край стены и отметка чистого пола в pt, и внутренний ли угол после неё (Г-, Т-контур,
+gf#199).
 
 Разметка — запись чертежа целиком, а не подгонка под модуль (gf#323): силуэт стены с фронтоном или
 ступенью (`outline`), участки карниза со своей этажностью (`eaves`), крыша на виде (`roof`) и
@@ -13,7 +14,7 @@ pt, и внутренний ли угол после неё (Г-, Т-конту�
 данных`); дом с частями разной высоты — не пример, а строка `waiting` описи: модуль держит один
 карниз на дом (gf#322). Чего разметчик не размечает (веранда, ступени), он перечисляет в `cut`.
 
-Отделка (gf#245): цоколь — зона от земли до чистого пола (`plinth_ft`) материалом `plinth_material`,
+Отделка (gf#245): цоколь — зона от земли до чистого пола (`plinth`) материалом `plinth_material`,
 основная — от цоколя до карниза, вторая отделка (акцент, пояс) — прямоугольниками стороны; карниз —
 элемент `cornice` стороны рамкой с листа, материалом `trim_material`. Чего на листе нет (цоколя под
 обшивкой, карниза на щипцовой стене), разметчик перечисляет в `absent`.
@@ -25,6 +26,7 @@ pt, и внутренний ли угол после неё (Г-, Т-конту�
 import math
 import tomllib
 from collections import Counter
+from enum import StrEnum
 from pathlib import Path
 
 import numpy
@@ -55,7 +57,15 @@ from genfacade.schema import (
 )
 from genfacade.validate import errors, validate
 
-M_PER_FT = 0.3048  # международный фут — определение единицы, не настройка
+
+class Unit(StrEnum):
+    """Единица отметок листа: американские листы — в футах, российские (gf#328) — в метрах."""
+
+    FT = "ft"
+    M = "m"
+
+
+M_PER_UNIT = {Unit.FT: 0.3048, Unit.M: 1.0}  # международный фут — определение единицы, не настройка
 
 FIRST_NORMAL = (0.0, 1.0)  # сторона входа смотрит в +y плана (rect_house.NORMALS[0])
 
@@ -110,7 +120,7 @@ class Elevation(Model):
     elements: list[Mark] = []
     zones: list[ZoneMark] = []
     inner_corner: bool = False  # угол после этой стороны — внутренний (Г-, Т-контур, gf#199)
-    pt_per_ft: float | None = Field(default=None, gt=0)  # масштаб вида, если не как у дома
+    pt_per_unit: float | None = Field(default=None, gt=0)  # масштаб вида, если не как у дома
     # Запись чертежа выше карниза и по участкам (gf#323): пусто — стена прямоугольником до карниза
     # дома. Сборщик сейчас читает только участки карниза; силуэт и крыша — для сверки и gf#320–322.
     outline: list[Point] = []      # силуэт стены в pt без свесов крыши: фронтон, ступень
@@ -122,10 +132,11 @@ class Markup(Model):
     id: str
     pdf: str             # имя листа в pdf/ рядом с разметкой
     roof: str            # исходный вид крыши — в опись: формат держит только плоскую
-    pt_per_ft: float = Field(gt=0)
+    unit: Unit           # единица отметок и масштаба
+    pt_per_unit: float = Field(gt=0)
     material: str        # вид основной отделки из library.toml
-    plinth_ft: float = Field(ge=0)    # чистый пол над землёй
-    floor_heights_ft: list[float]     # этажи от чистого пола до карниза
+    plinth: float = Field(ge=0)       # чистый пол над землёй
+    floor_heights: list[float]        # этажи от чистого пола до карниза
     plinth_material: str | None = None  # вид отделки цоколя; None — цоколя на листе нет (absent)
     trim_material: str | None = None    # вид карниза — элементов `cornice` сторон
     absent: list[str] = []  # чего нет в источнике: «west: карниза нет — щипцовая стена»
@@ -133,8 +144,12 @@ class Markup(Model):
     sides: list[Elevation]
 
     def scale(self, e: Elevation) -> float:
-        """pt на фут вида: свой у стороны, если её вид начерчен в другом масштабе (gf#323)."""
-        return e.pt_per_ft or self.pt_per_ft
+        """pt на единицу вида: свой у стороны, если её вид начерчен в другом масштабе (gf#323)."""
+        return e.pt_per_unit or self.pt_per_unit
+
+    @property
+    def m_per_unit(self) -> float:
+        return M_PER_UNIT[self.unit]
 
 
 def read(path: Path) -> Markup:
@@ -164,14 +179,14 @@ def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
 def _one_eaves(m: Markup, cfg: Manual) -> None:
     """Участки карниза — на стене своей стороны; у всех этажность и отметка дома, иначе у дома
     части разной высоты, а модуль держит один карниз на дом (`facade: Общие параметры дома`)."""
-    floors = len(m.floor_heights_ft)
+    floors = len(m.floor_heights)
     for e in m.sides:
-        tol = cfg.length_tol_m / M_PER_FT * m.scale(e)
-        line = e.floor - sum(m.floor_heights_ft) * m.scale(e)
+        tol = cfg.length_tol_m / m.m_per_unit * m.scale(e)
+        line = e.floor - sum(m.floor_heights) * m.scale(e)
         for s in e.eaves:
             if s.x[0] < e.wall[0] - tol or s.x[1] > e.wall[1] + tol:
                 raise BadMarkup(f"{m.id}: {e.view}: участок карниза за краем стены")
-            off = abs(s.y - line) / m.scale(e) * M_PER_FT
+            off = abs(s.y - line) / m.scale(e) * m.m_per_unit
             if s.floors != floors or off > cfg.eaves_tol_m:
                 raise Unsupported(f"{m.id}: части разной высоты — {e.view}: карниз над {s.floors} "
                                   f"эт., {off:.2f} м от карниза дома; модуль держит один (gf#322)")
@@ -187,7 +202,7 @@ def _outline(m: Markup, cfg: Manual) -> rect_house.Footprint:
         n = (-n[1] + 0.0, n[0] + 0.0) if e.inner_corner else (n[1] + 0.0, -n[0] + 0.0)
     if n != FIRST_NORMAL or len(m.sides) < 4:
         raise BadContour(f"{m.id}: повороты сторон не замыкают обход по часовой")
-    lengths = [(e.wall[1] - e.wall[0]) / m.scale(e) * M_PER_FT for e in m.sides]
+    lengths = [(e.wall[1] - e.wall[0]) / m.scale(e) * m.m_per_unit for e in m.sides]
     steps = [numpy.array((ny, -nx)) for nx, ny in normals]  # по часовой: нормаль на −90°
     gap = sum(d * length for d, length in zip(steps, lengths, strict=True))
     if numpy.hypot(*gap) > cfg.length_tol_m:
@@ -203,7 +218,7 @@ def _outline(m: Markup, cfg: Manual) -> rect_house.Footprint:
 
 
 def _spec(m: Markup) -> HouseSpec:
-    plinth, heights = m.plinth_ft * M_PER_FT, [h * M_PER_FT for h in m.floor_heights_ft]
+    plinth, heights = m.plinth * m.m_per_unit, [h * m.m_per_unit for h in m.floor_heights]
     return HouseSpec(building_type=BuildingType.COTTAGE, floors=len(heights),
                      floor_heights_m=heights, plinth_m=plinth, eaves_m=plinth + sum(heights),
                      roof=Roof(kind=RoofKind.FLAT), materials=_palette(m))
@@ -215,7 +230,7 @@ def _palette(m: Markup) -> list[Material]:
     if len(second) > 1:  # у палитры одна роль второй отделки (`PaletteRole.ACCENT`)
         raise BadMarkup(f"{m.id}: видов второй отделки {len(second)} — у палитры один")
     kinds = {PaletteRole.MAIN: m.material, PaletteRole.ACCENT: next(iter(second), None),
-             PaletteRole.PLINTH: m.plinth_material if m.plinth_ft > 0 else None,
+             PaletteRole.PLINTH: m.plinth_material if m.plinth > 0 else None,
              PaletteRole.TRIM: m.trim_material}
     return [Material(id=role, kind=kind) for role, kind in kinds.items() if kind is not None]
 
@@ -224,8 +239,8 @@ def _metres(box: tuple[float, float, float, float], e: Elevation, m: Markup,
             spec: HouseSpec) -> tuple[float, float, float, float]:
     """Прямоугольник листа в pt (x вправо, y вниз) → x0, y0, x1, y1 стены: x от левого края,
     y от земли, метры."""
-    x0, top, x1, bottom = (v / m.scale(e) * M_PER_FT for v in box)
-    left, floor = (v / m.scale(e) * M_PER_FT for v in (e.wall[0], e.floor))
+    x0, top, x1, bottom = (v / m.scale(e) * m.m_per_unit for v in box)
+    left, floor = (v / m.scale(e) * m.m_per_unit for v in (e.wall[0], e.floor))
     return x0 - left, spec.plinth_m + floor - bottom, x1 - left, spec.plinth_m + floor - top
 
 
