@@ -22,7 +22,8 @@ plinth_material = "concrete"  # светлая полоса цоколя ниж�
 floor_heights = [2.85]
 cut = ["south: навес над входом (фронтон +4,282) на двух кирпичных столбах; west, east: столб навеса с юга-запада",
        "south: центральная вставка входа (портал) другого тона не размечена"]
-absent = ["все стороны: нет карнизной полосы — только свес кровли с торцевой доской"]
+absent = ["все стороны: нет карнизной полосы — только свес кровли с торцевой доской",
+          "все стороны: тёмная полоса под свесом — тень от крыши, а не отделка (хозяин 07.11)"]
 
 [[sides]]
 view = "Фасад 1–4 (юг, вход)"
@@ -34,9 +35,6 @@ elements = [
   { cls = "door", box = [607.0, 511.0, 684.0, 699.0], variant = { kind = "transom" } },
   { cls = "window", box = [991.0, 511.0, 1145.0, 633.0], variant = { cols = 3, rows = 1 } },
 ]
-zones = [
-  { role = "accent", material = "clinker", box = [184.0, 486.0, 1269.0, 550.0] },
-]
 
 [[sides]]
 view = "Фасад В–А (запад)"
@@ -46,9 +44,6 @@ floor = 690.0
 pt_per_unit = 86.7
 elements = [
   { cls = "door", box = [574.0, 470.0, 720.0, 690.0], variant = { kind = "transom" } },
-]
-zones = [
-  { role = "accent", material = "clinker", box = [179.0, 442.0, 1046.0, 516.0] },
 ]
 
 [[sides]]
@@ -62,9 +57,6 @@ elements = [
   { cls = "window", box = [720.0, 503.0, 846.0, 693.0], variant = { cols = 2, rows = 2 } },
   { cls = "window", box = [994.0, 503.0, 1173.0, 693.0], variant = { cols = 3, rows = 2 } },
 ]
-zones = [
-  { role = "accent", material = "clinker", box = [170.0, 481.0, 1280.0, 546.0] },
-]
 
 [[sides]]
 view = "Фасад А–В (восток)"
@@ -74,7 +66,4 @@ floor = 692.5
 pt_per_unit = 86.1
 elements = [
   { cls = "window", box = [707.0, 475.0, 785.0, 619.0] },
-]
-zones = [
-  { role = "accent", material = "clinker", box = [338.0, 447.0, 1199.0, 521.0] },
 ]
