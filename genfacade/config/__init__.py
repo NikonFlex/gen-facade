@@ -213,6 +213,9 @@ class Checks(Section):
     window_jump_m: float
     porch_min_m: float
     porch_pad_m: float
+    door_spread_m: float
+    door_min_w_m: float
+    corner_min_m: float
     norms: dict[GuidelineCheck, GuidelineParams] = {}
 
 

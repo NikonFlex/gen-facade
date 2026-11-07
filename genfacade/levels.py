@@ -1,12 +1,14 @@
-"""Шаг 5: окна, карниз, цоколь и низ двери — на отметки параметров дома (gf#272, gf#275,
+"""Шаг 5: окна, двери, карниз и цоколь — на отметки параметров дома (gf#272, gf#275, gf#313,
 `facade: Высоты цоколя и карниза — из параметров`, `facade: Нуль отметок — земля`).
 
 Параметры дома одни на все стены, а модель шага 4 ставит эти уровни на каждой стене по-своему:
 карниз куском посреди стены и ниже отметки карниза, цоколь на одной стене из четырёх и выше
 отметки цоколя, дверь на 1,85 м при поле 0,76 (листы проверки gf#268). Поэтому их ставит код:
 - дверь — низ на полу своего этажа (`floor_levels`), высота та же, но с козырьком не выше
-  отметки карниза; козырёк едет с ней (follow.py) и пропадает, если налез на чужой проём, как в
-  derive.py; крыльцо — от земли до её низа. Гаражные ворота стоят на земле, их не трогаем;
+  отметки карниза; двери этажа с разбросом высот больше `door_spread_m` — все на медиану (gf#313:
+  у настоящих домов они в пределах 0,12 м, модель ставит разные); козырёк едет с ней (follow.py)
+  и пропадает, если налез на чужой проём, как в derive.py; крыльцо — от земли до её низа.
+  Гаражные ворота стоят на земле, их не трогаем;
 - крыльцо — у двери первого этажа, чей низ выше земли больше `porch_min_m` (gf#276): площадка от
   земли до низа двери, шире двери на `porch_pad_m`, материал цоколя. Крыльцо модели у двери не
   дублируется, а встаёт на те же отметки; у двери на земле крыльца нет;
@@ -23,6 +25,8 @@
   дальше `window_jump_m`, — на линию (gf#275). Линия — медиана верха окон этажа на всех стенах
   дома: окна разных стен видны вместе на углу и в 3D, а настоящие дома держат их на одной высоте с
   разбросом в сантиметры. Окно в пол линии не держит; подоконник, наличник, ставни — за окном;
+- дверь уже `door_min_w_m` расширяется, проём ближе `corner_min_m` к углу отодвигается от него —
+  если место свободно; проём плана (`fixed`) не трогается, ребёнок едет за проёмом (gf#313);
 - остальные зоны модели упираются в края окон, дверей, карниза и цоколя (`validate._anchored`):
   эти края едут на новые отметки вместе с ними, а что ниже верха цоколя — поднимается до него.
 """
@@ -36,6 +40,7 @@ from genfacade.config import Checks
 from genfacade.derive import TRIM_OF, hits
 from genfacade.follow import box, follow
 from genfacade.schema import (
+    DOOR_KINDS,
     EPS,
     OPENINGS,
     Element,
@@ -50,6 +55,7 @@ from genfacade.schema import (
 )
 
 Move = tuple[float, float]  # прежняя отметка края → новая
+DoorGroup = tuple[int, bool]  # этаж и «с фрамугой»: дверь с фрамугой выше, это не разброс
 
 
 class House(NamedTuple):
@@ -60,11 +66,12 @@ class House(NamedTuple):
     heads: dict[int, float]  # этаж → общая линия верха окон по дому
     eaves: set[int]  # стены с карнизом — под краем ската
     cfg: Checks
+    doors: dict[DoorGroup, float]  # группы дверей с разбросом высот → общая высота
 
 
 def levels(sheet: FacadeSheet, cfg: Checks) -> FacadeSheet:
     house = House(sheet.spec, _plinth_material(sheet, cfg), _heads(sheet), roof.eave_walls(sheet),
-                  cfg)
+                  cfg, _door_heights(sheet, cfg))
     return sheet.model_copy(update={"facades": [_wall(k, f, house)
                                                 for k, f in enumerate(sheet.facades)]})
 
@@ -73,7 +80,7 @@ def _wall(k: int, f: SideFacade, house: House) -> SideFacade:
     if k not in house.eaves:
         f = f.model_copy(update={"elements": [e for e in f.elements
                                               if e.cls is not ElementClass.CORNICE]})
-    leveled = _porches(_cornice(_doors(_windows(f, house), house), house), house)
+    leveled = _porches(_cornice(_fitted(_doors(_windows(f, house), house), house), house), house)
     return _zones(leveled, _moves(f, leveled, house.spec), house)
 
 
@@ -153,30 +160,51 @@ def _shifted(f: SideFacade, moved: dict[str, Element]) -> SideFacade:
     return f.model_copy(update={"elements": [e for e in out if not _blocked(e, moved, out)]})
 
 
+def _group(d: Element, spec: HouseSpec) -> DoorGroup:
+    return _floor(d, spec), d.variant is not None and d.variant.kind is VariantKind.TRANSOM
+
+
+def _door_heights(sheet: FacadeSheet, cfg: Checks) -> dict[DoorGroup, float]:
+    """Общая высота дверей этажа по дому — медиана, но только для групп, где двери расходятся
+    больше `door_spread_m`: у настоящих домов они расходятся на сантиметры (gf#313)."""
+    heights: dict[DoorGroup, list[float]] = {}
+    for f in sheet.facades:
+        for d in f.elements:
+            if d.cls is ElementClass.DOOR:
+                heights.setdefault(_group(d, sheet.spec), []).append(d.h_m)
+    return {g: median(hs) for g, hs in heights.items() if max(hs) - min(hs) > cfg.door_spread_m}
+
+
 def _doors(f: SideFacade, house: House) -> SideFacade:
-    """Двери — на пол своего этажа, их дети — за ними."""
+    """Двери — на пол своего этажа и на общую высоту этажа, их дети — за ними."""
     moved = {d.id: _door(d, f, house) for d in f.elements if d.cls is ElementClass.DOOR
-             and abs(d.y_m - _floor_y(d, house.spec)) > house.cfg.eps_m}
+             and (abs(d.y_m - _floor_y(d, house.spec)) > house.cfg.eps_m
+                  or abs(d.h_m - _height(d, house)) > house.cfg.eps_m)}
     return _shifted(f, moved)
 
 
+def _height(d: Element, house: House) -> float:
+    return house.doors.get(_group(d, house.spec), d.h_m)
+
+
 def _door(d: Element, f: SideFacade, house: House) -> Element:
-    """Дверь на полу этажа той же высоты; вместе с козырьком над ней — не выше пола следующего
-    этажа и низа карниза стены, если он на ней есть."""
+    """Дверь на полу этажа общей высоты этажа (нет общей — прежней); вместе с козырьком над ней —
+    не выше пола следующего этажа и низа карниза стены, если он на ней есть."""
     spec, top = house.spec, d.y_m + d.h_m
     y, ceiling = _floor_y(d, spec), spec.floor_levels()[min(d.floor or 1, spec.floors)]
     if _cornices(f):
         ceiling = min(ceiling, spec.eaves_m - _cornice_h(f))
     over = max((c.y_m + c.h_m - top for c in f.elements
                 if c.parent == d.id and c.y_m >= top - EPS), default=0.0)
-    return d.model_copy(update={"y_m": y, "h_m": min(d.h_m, ceiling - over - y)})
+    return d.model_copy(update={"y_m": y, "h_m": min(_height(d, house), ceiling - over - y)})
 
 
 def _child(e: Element, moved: dict[str, Element], before: list[Element]) -> Element | None:
-    """Крыльцо — от земли до низа двери (у двери на земле его нет), остальное — за дверью."""
+    """Крыльцо — за дверью по x и от земли до её низа (у двери на земле его нет), остальное — за
+    дверью."""
     if e.cls is ElementClass.PORCH and e.parent in moved:
         y = moved[e.parent].y_m
-        return _grounded(e, y) if y > EPS else None
+        return _grounded(follow(e, moved, before), y) if y > EPS else None
     return follow(e, moved, before)
 
 
@@ -185,6 +213,81 @@ def _grounded(porch: Element, door_y: float) -> Element:
     if abs(porch.y_m) <= EPS and abs(porch.h_m - door_y) <= EPS:
         return porch
     return porch.model_copy(update={"y_m": 0.0, "h_m": door_y})
+
+
+def _fitted(f: SideFacade, house: House) -> SideFacade:
+    """Дверь — не уже нормы, проём — не ближе нормы к углу (gf#313); проём плана не трогается."""
+    return _cleared(_widened(f, house), house)
+
+
+def _widened(f: SideFacade, house: House) -> SideFacade:
+    """Дверь уже `door_min_w_m` — шире, вокруг середины; не вышло (налезет на проём или за стену) —
+    вправо, затем влево; ни так — остаётся: места нет, брак сдвига хуже узкой двери."""
+    cfg, length = house.cfg, f.side.length_m
+    moved = {}
+    for d in f.elements:
+        if d.cls is ElementClass.DOOR and not d.fixed and d.w_m < cfg.door_min_w_m - cfg.eps_m:
+            w = cfg.door_min_w_m
+            for x in (d.x_m - (w - d.w_m) / 2, d.x_m, d.x_m + d.w_m - w):
+                new = d.model_copy(update={"x_m": x, "w_m": w})
+                if -EPS <= x and x + w <= length + EPS and not _on_opening(new, f.elements):
+                    moved[d.id] = new
+                    break
+    return _shifted(f, moved)
+
+
+def _on_opening(e: Element, elements: list[Element]) -> bool:
+    return any(hits(e, o) for o in elements if o.cls in OPENINGS and o.id != e.id)
+
+
+def _cleared(f: SideFacade, house: House) -> SideFacade:
+    """Проём ближе `corner_min_m` к углу — от угла; соседи, на кого он налез, сдвигаются перед ним
+    с прежним зазором. Не вышло (сосед из плана, не хватает стены) — проём остаётся."""
+    length, gap = f.side.length_m, house.cfg.corner_min_m
+    now = {e.id: e for e in f.elements if e.cls in OPENINGS}
+    now = _flip(_from_corner(_flip(_from_corner(now, length, gap), length), length, gap), length)
+    was = {e.id: e for e in f.elements}
+    moved = {i: e for i, e in now.items()  # отражение даёт хвосты float — их за сдвиг не считаем
+             if any(abs(a - b) > EPS for a, b in zip(box(e), box(was[i]), strict=True))}
+    return _shifted(f, moved)
+
+
+def _flip(items: dict[str, Element], length: float) -> dict[str, Element]:
+    """Стена, отражённая по x: правый угол становится левым."""
+    return {i: e.model_copy(update={"x_m": length - e.x_m - e.w_m}) for i, e in items.items()}
+
+
+# Виды проёмов, что держат отступ от угла; угловое и ленточное окно стоит у угла по замыслу.
+GAP_KINDS = (VariantKind.REGULAR, VariantKind.PANORAMIC, *DOOR_KINDS)
+
+
+def _keeps_gap(e: Element) -> bool:
+    return e.variant is None or e.variant.kind in GAP_KINDS
+
+
+def _from_corner(items: dict[str, Element], length: float, gap: float) -> dict[str, Element]:
+    """Каждый проём слева ближе `gap` к левому углу — на `gap`, если получается."""
+    for e in sorted(items.values(), key=lambda e: e.x_m):
+        cur = items[e.id]
+        if not cur.fixed and _keeps_gap(cur) and cur.x_m < gap - EPS:
+            items = _pushed(items, cur, gap, length - gap) or items
+    return items
+
+
+def _pushed(items: dict[str, Element], first: Element, x: float, limit: float
+            ) -> dict[str, Element] | None:
+    """Проём first — на x, а проёмы, на которые он налез, — вправо перед ним, с прежним зазором;
+    None — если нужно сдвинуть проём плана или проём выходит за limit по правому краю."""
+    out, queue = dict(items), [(first, x)]
+    while queue:
+        e, x = queue.pop(0)
+        if (e.fixed and e is not first) or x + e.w_m > limit + EPS:
+            return None
+        before, new = out[e.id], out[e.id].model_copy(update={"x_m": x})
+        out[e.id] = new
+        queue += [(o, new.x_m + new.w_m + max(o.x_m - before.x_m - before.w_m, 0.0))
+                  for o in out.values() if o.id != e.id and hits(new, o)]
+    return out
 
 
 def _porches(f: SideFacade, house: House) -> SideFacade:
