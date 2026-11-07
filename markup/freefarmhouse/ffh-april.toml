@@ -4,9 +4,13 @@
 # окно 32x60 = 24x45 pt, RIDGE +19'-0" = 171 pt над FF1 — сходится.
 # Полутораэтажный: 2-й этаж (+8'-4") под скатом, стена до карниза +11'-6" — один этаж до карниза,
 # окна мансарды — во фронтонах, срезаны. Крыльцо во всю южную стену.
+# Крыша (gf#336): свес — по умолчанию ([spec.roof_shape], на листе не подписан).
 id = "ffh-april"
 pdf = "April - Blueprints - Backyard Farmhouse - Jay Osborne.pdf"
 roof = "двускатная 10/12, фронтоны 14/12 над югом и севером; мансарда; навес крыльца 3/12"
+roof_kind = "gable"
+pitch_deg = 39.8
+overhang_m = 0.4
 unit = "ft"
 pt_per_unit = 9.0           # SCALE: 1/8" = 1'-0"
 material = "siding"       # CLAPBOARD SIDING (fiber cement)

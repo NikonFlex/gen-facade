@@ -9,7 +9,7 @@ import pytest
 from genfacade import config
 from genfacade.datasets import manual, store
 from genfacade.datasets.manual import M_PER_UNIT, Markup, Unit
-from genfacade.schema import ElementClass, Mode, OpeningKind, Source, Split, Trim
+from genfacade.schema import ElementClass, Mode, OpeningKind, RoofKind, Source, Split, Trim
 from genfacade.train import tokens
 from genfacade.validate import errors, validate
 
@@ -18,6 +18,7 @@ M_PER_FT = M_PER_UNIT[Unit.FT]
 PT = 18.0       # pt на фут: лист 1/4" = 1'-0"
 FLOOR = 500.0   # отметка чистого пола на листе, pt
 PLINTH_FT, EAVE_FT = 1.0, 8.0   # пол над землёй и карниз над полом, футы
+PITCH, OVERHANG = 32.0, 0.5     # крыша дома из разметки: 7.5/12 и свес
 
 
 def ft(v: float) -> float:
@@ -42,7 +43,8 @@ def box(x_ft: float, bottom_ft: float, w_ft: float, h_ft: float) -> list[float]:
 def markup(**changes) -> Markup:
     """Дом 12' × 20': дверь на стороне входа, окно со ставней справа, навес над дверью выше
     карниза и окно, чуть заходящее за карниз."""
-    raw = {"id": "ffh-test", "pdf": "test.pdf", "roof": "двускатная", "unit": "ft",
+    raw = {"id": "ffh-test", "pdf": "test.pdf", "roof": "двускатная",
+           "roof_kind": "gable", "pitch_deg": PITCH, "overhang_m": OVERHANG, "unit": "ft",
            "pt_per_unit": PT, "material": "siding", "plinth": PLINTH_FT, "floor_heights": [EAVE_FT],
            "cut": ["front: фронтон"],
            "sides": [side("FRONT", 12,
@@ -76,6 +78,32 @@ def test_markup_becomes_sample_in_metres():
     assert right.elements[0].y_m + right.elements[0].h_m == pytest.approx(ft(PLINTH_FT + EAVE_FT))
     assert front.side.has_entrance and front.side.openings[0].kind is OpeningKind.ENTRANCE
     assert errors(validate(sample.sheet, CFG.checks)) == []
+
+
+def test_roof_from_markup_and_no_cornice_under_gable():
+    """Крыша дома — из полей разметки (gf#336, `data: Разметка — запись чертежа целиком`): вид,
+    уклон и свес в параметрах дома; карниз с листа остаётся на стенах под краем ската, а на
+    щипцовых (короткие стены двускатной) снят (`facade: Карниз под скатом`)."""
+    raw = finished().model_dump(mode="json")
+    raw["sides"][0]["elements"].append({"cls": "cornice", "box": box(0, EAVE_FT - 0.75, 12, 0.75)})
+    sample, dropped = manual.house(Markup.model_validate(raw), CFG.data.manual)
+    roof = sample.sheet.spec.roof
+    assert (roof.kind, roof.pitch_deg, roof.overhang_m) == (RoofKind.GABLE, PITCH, OVERHANG)
+    has = [any(e.cls is ElementClass.CORNICE for e in f.elements) for f in sample.sheet.facades]
+    assert has == [False, True, False, False]  # гребень вдоль 20': щипцы на стенах по 12'
+    assert dropped == 2  # навес за карнизом и полоса на щипцовой стене
+    assert errors(validate(sample.sheet, CFG.checks)) == []
+
+
+def test_flat_markup_keeps_cornice_on_every_wall():
+    """Плоская крыша: край крыши над всеми стенами, карниз с листа не снимается."""
+    raw = finished().model_dump(mode="json")
+    raw["sides"][0]["elements"].append({"cls": "cornice", "box": box(0, EAVE_FT - 0.75, 12, 0.75)})
+    flat = Markup.model_validate(raw | {"roof_kind": "flat", "pitch_deg": 0.0, "overhang_m": 0.0})
+    sample, _ = manual.house(flat, CFG.data.manual)
+    assert sample.sheet.spec.roof.kind is RoofKind.FLAT
+    assert [any(e.cls is ElementClass.CORNICE for e in f.elements)
+            for f in sample.sheet.facades] == [True, True, False, False]
 
 
 def test_trims_link_to_their_opening():
@@ -204,7 +232,7 @@ def finished(**changes) -> Markup:
     """Тот же дом с отделкой с листа (gf#245): кирпичный цоколь, карниз под отметкой карниза на
     стороне входа и камень в нижней части левой стены, заходящий за её край."""
     raw = markup().model_dump(mode="json")
-    raw["sides"][0]["elements"].append({"cls": "cornice", "box": box(0, EAVE_FT - 0.75, 12, 0.75)})
+    raw["sides"][1]["elements"].append({"cls": "cornice", "box": box(0, EAVE_FT - 0.4, 20, 0.4)})
     raw["sides"][1]["zones"] = [{"role": "accent", "material": "stone", "box": box(-1, 0, 25, 3)}]
     return Markup.model_validate(raw | {"plinth_material": "brick", "trim_material": "wood",
                                         "absent": ["rear: карниза нет — щипцовая стена"]} | changes)
@@ -223,7 +251,7 @@ def test_finish_from_markup():
     assert [(z.role, z.shape[0][1], z.shape[2][1]) for z in front.zones] == [
         ("plinth", 0.0, pytest.approx(ft(PLINTH_FT))),
         ("main", pytest.approx(ft(PLINTH_FT)), pytest.approx(eaves))]
-    cornice = next(e for e in front.elements if e.cls is ElementClass.CORNICE)
+    cornice = next(e for e in left.elements if e.cls is ElementClass.CORNICE)
     assert cornice.material == "trim" and cornice.y_m + cornice.h_m == pytest.approx(eaves)
     accent = left.zones[-1]
     assert accent.role == "accent" and accent.material == "accent"
