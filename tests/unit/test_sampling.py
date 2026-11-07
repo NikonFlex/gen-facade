@@ -63,6 +63,7 @@ def test_answer_stops_at_any_given_token(model):
 
 @pytest.fixture
 def checkpoint(tmp_path, cfg):
+    torch.manual_seed(0)  # веса необученной модели — одни и те же: иначе ответ порой не разбирается
     return tiny_model.save(tmp_path / "model.pt", cfg)
 
 
@@ -114,15 +115,43 @@ def test_answers_in_one_batch_each_with_own_guard(asked, cfg):
     assert model.answers(prompt, bare, 5, cfg, 1)[0] == model.answer(prompt, bare, 5, cfg)
 
 
+def _redo_changes_only(asked, cfg, old, source, wall: int) -> None:
+    """Досэмплирование стены wall по source (ответ или неразобранный ответ) меняет в доме
+    old только её."""
+    model, bare, prompt = asked
+    new = model.redo(prompt, bare, source, wall, 1, cfg)
+    same = [a == b for a, b in zip(old.sheet.facades, new.sheet.facades, strict=True)]
+    assert same == [i != wall for i in range(len(same))]
+
+
 def test_redo_changes_only_its_wall(asked, cfg):
     """Перегенерация одной стены (gf#213): слова до её `<wall>` и после неё — прежние, остальные
     стены дома не меняются, а она — сэмплирована заново."""
     model, bare, prompt = asked
     old = model.answer(prompt, bare, 0, cfg)
     for wall in range(len(bare.facades)):
-        new = model.redo(prompt, bare, old, wall, 1, cfg)
-        same = [a == b for a, b in zip(old.sheet.facades, new.sheet.facades, strict=True)]
-        assert same == [i != wall for i in range(len(same))]
+        _redo_changes_only(asked, cfg, old, old, wall)
+
+
+@pytest.mark.parametrize("wall", [0, -1])
+def test_undecodable_wall_is_named_and_redone_alone(asked, cfg, wall):
+    """gf#294: лишний `<types>` в стене — ответ не разбирается, TokenError называет эту стену
+    (в последней — тоже), а досэмплирование по нему меняет только её."""
+    model, bare, prompt = asked
+    old = model.answer(prompt, bare, 0, cfg)
+    wall %= len(bare.facades)
+    at = [i for i, w in enumerate(old.words) if w == Mark.WALL][wall] + 1
+    words = [*old.words[:at], Mark.TYPES, *old.words[at:]]
+    broken = model._tried([model.number[w] for w in words], bare, cfg)
+    assert isinstance(broken, TokenError) and broken.wall == wall and broken.words == words
+    _redo_changes_only(asked, cfg, old, broken, wall)
+
+
+def test_cut_before_first_wall_has_no_wall(asked, cfg):
+    """Обрыв до первой `<wall>` — стену не определить: wall None, брак всего ответа."""
+    model, bare, _ = asked
+    cut = model._tried([model.number[Mark.ANSWER], model.number[Mark.TYPES]], bare, cfg)
+    assert isinstance(cut, TokenError) and cut.wall is None
 
 
 def test_layout_refuses_model_with_other_vocabulary(checkpoint, cfg, lay_out):

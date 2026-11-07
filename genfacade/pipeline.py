@@ -179,8 +179,10 @@ def layout(bare: FacadeSheet, req: PlanRun, cfg: Config) -> Checked:
 
 def _good(model, prompt, bare: FacadeSheet, cfg: Config, trace: dict) -> Iterator[Checked]:
     """Годные ответы модели по очереди, до attempts раундов. Раунд k — seed + k: бракованные
-    стены прошлого раунда досэмплируются (`wall_retry`), недостающие до best_of ответы — одной
-    пачкой (`Layout.answers`). При best_of = 1 раунд — одна попытка, как до gf#213."""
+    стены прошлого раунда — с ошибкой валидатора и та, на которой ответ не разобрался
+    (`TokenError.wall`, gf#294) — досэмплируются (`wall_retry`), недостающие до best_of
+    ответы — одной пачкой (`Layout.answers`). При best_of = 1 раунд — одна попытка, как до
+    gf#213."""
     settings, redo, found = cfg.models.layout, [], 0
     for seed in range(settings.seed, settings.seed + settings.attempts):
         got = [(_redone(model, prompt, bare, old, wall, seed, cfg), wall) for old, wall in redo]
@@ -192,7 +194,7 @@ def _good(model, prompt, bare: FacadeSheet, cfg: Config, trace: dict) -> Iterato
             if result is not None and not bad:
                 found += 1
                 yield result
-            elif bad and settings.wall_retry and (at := _bad_wall(bad, answer.sheet)) is not None:
+            elif settings.wall_retry and (at := _failed_wall(answer, bad)) is not None:
                 redo.append((answer, at))
 
 
@@ -211,13 +213,30 @@ def _attempt(answer, attempt: dict, cfg: Config,
     trace["attempts"].append(attempt)
     if isinstance(answer, TokenError):
         attempt["error"] = f"ответ не разобран: {answer}"
+        _name_wall(attempt, answer, [])
         if answer.words:  # датчик обрыва (gf#257): чем ответ занял окно модели
             attempt["words"] = " ".join(answer.words)
         return None, []
     result = _check(answer.sheet, cfg, trace)
     bad = errors(result.violations)
     attempt["error"] = _rejected(bad) if bad else None
+    _name_wall(attempt, answer, bad)
     return result, bad
+
+
+def _name_wall(attempt: dict, answer, bad: list[Violation]) -> None:
+    """Стена, на которой попытка забракована, — в трассу («bad_wall»); стену не определить —
+    поля нет."""
+    if (at := _failed_wall(answer, bad)) is not None:
+        attempt["bad_wall"] = at
+
+
+def _failed_wall(answer, bad: list[Violation]) -> int | None:
+    """Стена, которую досэмплировать, или None — брак всего ответа: ответ не разобран на
+    стене `TokenError.wall`, иначе первая стена с ошибкой валидатора."""
+    if isinstance(answer, TokenError):
+        return answer.wall
+    return _bad_wall(bad, answer.sheet) if bad else None
 
 
 def _bad_wall(bad: list[Violation], sheet: FacadeSheet) -> int | None:

@@ -151,6 +151,24 @@ def test_bad_wall_is_redone_alone(run, cfg):
     assert whole.walls == []                                    # по умолчанию — весь дом
 
 
+def test_undecodable_wall_is_redone_alone(run, cfg):
+    """gf#294: ответ, не разобранный на стене 1, — досэмплируется она, а не весь дом; в трассе
+    названы стена и причина. Без стены (обрыв до первой метки) — брак целиком, как раньше."""
+    cut = TokenError("токен 9: ждали <wall>, пришло '<types>'", ["<answer>"], wall=1)
+    model = Fake(cut, _good)
+    meta, _ = run(model, _tuned(cfg, wall_retry=True))
+    assert model.walls == [1]
+    first, second = meta["layout"]["attempts"]
+    assert first["bad_wall"] == 1 and first["error"].startswith("ответ не разобран: токен 9")
+    assert second["wall"] == 1 and second["error"] is None
+    whole = Fake(TokenError("последовательность оборвалась"), _good)
+    meta, _ = run(whole, _tuned(cfg, wall_retry=True))
+    assert whole.walls == [] and "bad_wall" not in meta["layout"]["attempts"][0]
+    off = Fake(cut, _good)
+    run(off)
+    assert off.walls == []                                      # по умолчанию — весь дом
+
+
 def _short_windows(bare):
     """Годный ответ, у которого окна вдвое ниже, чем у стаба: на эталон из стабов не похож."""
     sheet = _good(bare)

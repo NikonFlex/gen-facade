@@ -86,15 +86,16 @@ class Layout:
         except TokenError as e:
             return e
 
-    def redo(self, prompt: Condition, bare: FacadeSheet, old: Answer, wall: int,
+    def redo(self, prompt: Condition, bare: FacadeSheet, old: Answer | TokenError, wall: int,
              seed: int, cfg: Config) -> Answer:
         """Тот же ответ, но стена номер wall — заново (gf#213): слова до её `<wall>` и после
         следующего `<wall>` (у последней стены — `<end>`) не меняются, страж читает префикс и
-        знает уже поставленное."""
+        знает уже поставленное. old — и неразобранный ответ (gf#294): у него те же слова, у
+        оборванного нет `<end>` — тогда хвоста нет."""
         ids = [self.number[w] for w in old.words]
         walls = [i for i, t in enumerate(ids) if t == self.vocab.wall]
         head = walls[wall] + 1  # с `<wall>` плохой стены: дальше — только её элементы
-        tail = walls[wall + 1] if wall + 1 < len(walls) else ids.index(self.vocab.end)
+        tail = walls[wall + 1] if wall + 1 < len(walls) else self._end(ids)
         guard = self._guard(bare, prompt.mode, cfg)
         for t in ids[1:head] if guard is not None else []:
             guard.step(t)
@@ -102,9 +103,12 @@ class Layout:
         prefix = torch.tensor([prompt.ids[:-1] + ids[:head]], dtype=torch.long)
         stops = frozenset({self.vocab.wall, self.vocab.end})
         new = self.sampler.answer(prefix, cfg.models.layout, [guard], stops)[0][1:]
-        if new and new[-1] in stops:  # стена кончилась — дальше прежние; иначе оборвана окном
+        if new and new[-1] in stops and tail < len(ids):  # стена кончилась — дальше прежние
             new = new[:-1] + ids[tail:]
         return self._decoded(ids[:head] + new, bare, cfg)
+
+    def _end(self, ids: list[int]) -> int:
+        return ids.index(self.vocab.end) if self.vocab.end in ids else len(ids)
 
     def _guard(self, bare: FacadeSheet, mode: Mode, cfg: Config):
         on = cfg.models.layout.constrain
@@ -117,7 +121,7 @@ class Layout:
         try:
             return Answer(words, tokens.decode(words, bare, cfg))
         except TokenError as e:
-            raise TokenError(str(e), words) from e
+            raise TokenError(str(e), words, e.wall) from e
 
 
 _loaded: dict[tuple, Layout] = {}

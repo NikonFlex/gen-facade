@@ -83,11 +83,15 @@ class Mark(StrEnum):
 class TokenError(ValueError):
     """Дом не записывается токенами или последовательность не разбирается; текст — причина.
     words — слова неразобранного ответа модели (`models.layout`): по ним видно, чем ответ
-    оборвался (gf#257, обрыв только на GPU)."""
+    оборвался (gf#257, обрыв только на GPU). wall — номер стены (порядок `walls.facades`), на
+    которой ответ не разобрался; None — стену не определить (типоразмеры, обрыв до первой
+    `<wall>`, лишнее после `<end>`): брак всего ответа. Решение о повторе стены — по этому полю,
+    а не по тексту (gf#294)."""
 
-    def __init__(self, message: str, words: list[str] | None = None):
+    def __init__(self, message: str, words: list[str] | None = None, wall: int | None = None):
         super().__init__(message)
         self.words = words or []
+        self.wall = wall
 
 
 class Answer(NamedTuple):
@@ -393,16 +397,36 @@ def decode(tokens: list[str], walls: FacadeSheet, cfg: Config) -> FacadeSheet:
     r.expect(Mark.ANSWER)
     r.sizes = _read_sizes(r, window_types(cfg))
     facades = []
-    for f in walls.facades:
-        wall, marks = _wall(r, f)
-        _check_trims(marks, walls.spec)
-        wall = _exact(wall, walls.spec, cfg.tokens)
-        ctx = derive.Wall(walls.spec, f.side.length_m, cfg.derive)
-        facades.append(wall.model_copy(update={"elements": _placed(wall, marks, ctx)}))
-    r.expect(Mark.END)
+    for n, f in enumerate(walls.facades):
+        start = r.at
+        try:
+            facades.append(_decoded_wall(r, f, walls.spec, cfg))
+        except TokenError as e:
+            raise TokenError(str(e), wall=_culprit(n, r.tokens[start:start + 1])) from e
+    try:
+        r.expect(Mark.END)
+    except TokenError as e:  # вместо `<end>` — хвост последней стены
+        raise TokenError(str(e), wall=len(facades) - 1 if facades else None) from e
     if r.at != len(tokens):
         raise TokenError(f"после {Mark.END} ещё {len(tokens) - r.at} токенов")
     return walls.model_copy(update={"facades": facades})
+
+
+def _culprit(n: int, head: list[str]) -> int | None:
+    """Стена, на которой ответ не разобрался, при ошибке в стене n: если её `<wall>` на месте —
+    она сама; если вместо `<wall>` другое — хвост предыдущей стены, а у первой стены предыдущей
+    нет (обрыв до первой метки — None)."""
+    if head == [Mark.WALL]:
+        return n
+    return n - 1 if n > 0 else None
+
+
+def _decoded_wall(r: _Reader, f: SideFacade, spec: HouseSpec, cfg: Config) -> SideFacade:
+    wall, marks = _wall(r, f)
+    _check_trims(marks, spec)
+    wall = _exact(wall, spec, cfg.tokens)
+    ctx = derive.Wall(spec, f.side.length_m, cfg.derive)
+    return wall.model_copy(update={"elements": _placed(wall, marks, ctx)})
 
 
 def _placed(wall: SideFacade, marks: Flags, ctx: derive.Wall) -> list[Element]:
