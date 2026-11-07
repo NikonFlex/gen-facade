@@ -1,0 +1,210 @@
+# Caroline's Farmhouse (four starter farmhouses) — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
+# archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#323 — та же лицензия.
+# Лист 22x17", масштаб 1/4" = 1'-0" (pt_per_ft 18). План 1-го этажа — стр. 2, фасады — стр. 4–5.
+# Отметки: FF1 +0'-0" (y 799.1), FF2 +9'-0" (y 637.1), EAVE +17'-3" (y 488.6), RIDGE +21'-10".
+# Устройство: двухэтажное ядро 24' x 16' (кровля 7.5/12 коньком вдоль запад–восток, щипцы на торцах);
+# одноэтажные пристройки под односкатными кровлями 3/12 (стена до y 648.4, +8'-4"): SIDE ROOM
+# 5'-8" x 7'-8" у западной стены, блок SCREEN PORCH + KITCHEN 16' x 10' на севере (заподлицо с
+# восточной стеной), BATHROOM 6' x 7'-9" у восточной стены; спереди крыльцо 35'-4" (в `cut`).
+# Контур 1-го этажа — 14 сторон по часовой от южной; южная стена ядра одна (ванная и кабинет
+# отступают от неё). Длины сторон — по наружным угловым доскам листов; уступы 1' у ванной (на юге)
+# и у боковой комнаты (на западе, 1') — настоящие, на плане размечены. Окна 2-го этажа за низкими
+# пристройками отнесены к стороне пристройки в той же проекции (силуэт `outline` склеивает вид).
+id = "ffh-caroline"
+pdf = "Caroline - Blueprints_compressed.pdf"
+roof = "двускатная 7.5/12 (ядро, коньком вдоль запад–восток), пристройки односкатные 3/12; фальцевая кровля"
+pt_per_ft = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36x80" = 54x120 pt, FF1–FF2 9' = 162 pt
+material = "siding"       # CLAPBOARD SIDING
+plinth_ft = 1.0           # кирпичное основание 799.1 → 817.1
+plinth_material = "brick"
+trim_material = "wood"
+floor_heights_ft = [9.0, 8.25]   # FF2 +9'-0", EAVE +17'-3"
+absent = ["west, east: карниза нет — щипцовые стены"]
+cut = ["south: крыльцо 35'-4\" — столбы, балясины, ступени, кронштейны; навес крыльца размечен",
+       "west: screen porch — сетчатые панели, ступень, вентрешётка во фронтоне",
+       "north: screen porch — сетчатые панели и дверь-сетка; ставен на задних окнах нет",
+       "east: вентрешётка во фронтоне", "west, east: крыльцо в профиль и столбы"]
+
+[[sides]]
+view = "SOUTH ELEVATION (FRONT)"
+page = 4
+wall = [925.5, 1357.5]
+floor = 799.1
+elements = [
+  { cls = "window", box = [981.7, 510.4, 1031.2, 601.9], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1116.7, 510.4, 1166.2, 601.9], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1251.7, 510.4, 1301.2, 601.9], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [981.7, 663.4, 1031.2, 772.9], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1116.7, 663.4, 1166.2, 772.9], variant = { cols = 2, rows = 2 } },
+  { cls = "door", box = [1251.0, 679.1, 1302.4, 799.1], variant = { kind = "glazed" } },
+  { cls = "blind", box = [958.1, 511.0, 980.5, 601.0], parent = 0 },
+  { cls = "blind", box = [1032.4, 511.0, 1054.9, 601.0], parent = 0 },
+  { cls = "blind", box = [1093.1, 511.0, 1115.5, 601.0], parent = 1 },
+  { cls = "blind", box = [1167.4, 511.0, 1189.9, 601.0], parent = 1 },
+  { cls = "blind", box = [1228.1, 511.0, 1250.5, 601.0], parent = 2 },
+  { cls = "blind", box = [1302.4, 511.0, 1324.9, 601.0], parent = 2 },
+  { cls = "blind", box = [958.1, 664.0, 980.5, 772.0], parent = 3 },
+  { cls = "blind", box = [1032.4, 664.0, 1054.9, 772.0], parent = 3 },
+  { cls = "blind", box = [1093.1, 664.0, 1115.5, 772.0], parent = 4 },
+  { cls = "blind", box = [1167.4, 664.0, 1189.9, 772.0], parent = 4 },
+  { cls = "canopy", box = [809.3, 616.4, 1473.7, 648.4] },
+  { cls = "porch", box = [822.5, 799.1, 1467.5, 817.1] },
+]
+eaves = [{ x = [925.5, 1357.5], y = 488.6, floors = 2 }]
+roof = [
+  [[916.5, 490.9], [916.5, 388.1], [1366.5, 388.1], [1366.5, 490.9]],
+  [[809.3, 648.4], [931.0, 616.4], [1352.0, 616.4], [1473.7, 648.4]],
+]
+
+[[sides]]
+view = "WEST ELEVATION: WEST WALL OF CORE, LOWER"
+page = 4
+wall = [488.5, 619.5]
+floor = 799.1
+inner_corner = true
+elements = [
+  { cls = "window", box = [519.7, 663.4, 569.2, 772.9], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [496.1, 664.0, 518.5, 772.0], parent = 0 },
+  { cls = "blind", box = [570.4, 664.0, 592.9, 772.0], parent = 0 },
+]
+outline = [[488.5, 817.1], [488.5, 406.7], [619.5, 488.6], [619.5, 817.1]]
+roof = [
+  [[320.6, 496.1], [475.5, 399.3], [631.5, 487.9]],
+  [[340.0, 616.4], [736.0, 616.4], [736.0, 648.4], [340.0, 648.4]],
+]
+
+[[sides]]
+view = "SOUTH ELEVATION (FRONT): SIDE ROOM"
+page = 4
+wall = [822.5, 925.5]
+floor = 799.1
+eaves = [{ x = [822.5, 925.5], y = 648.4, floors = 1 }]
+
+[[sides]]
+view = "WEST ELEVATION: SIDE ROOM"
+page = 4
+wall = [349.5, 488.5]
+floor = 799.1
+elements = [
+  { cls = "window", box = [402.7, 681.4, 440.2, 745.9], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [450.7, 510.4, 500.2, 601.9], variant = { cols = 2, rows = 2 } },   # окно щипца ядра над кровлей комнаты
+  { cls = "blind", box = [383.6, 682.0, 401.5, 745.0], parent = 0 },
+  { cls = "blind", box = [441.4, 682.0, 459.4, 745.0], parent = 0 },
+  { cls = "blind", box = [427.1, 511.0, 449.5, 601.0], parent = 1 },
+  { cls = "blind", box = [501.4, 511.0, 523.9, 601.0], parent = 1 },
+]
+eaves = [{ x = [349.5, 488.5], y = 648.4, floors = 1 }]
+outline = [[349.5, 817.1], [349.5, 477.4], [475.5, 398.6], [488.5, 406.7], [488.5, 817.1]]
+
+[[sides]]
+view = "NORTH ELEVATION (REAR): SIDE ROOM"
+page = 5
+wall = [1357.5, 1460.5]
+floor = 799.1
+inner_corner = true
+eaves = [{ x = [1357.5, 1460.5], y = 648.4, floors = 1 }]
+
+[[sides]]
+view = "WEST ELEVATION: WEST WALL OF CORE, UPPER"
+page = 4
+wall = [331.5, 349.5]
+floor = 799.1
+outline = [[331.5, 817.1], [331.5, 488.6], [349.5, 477.4], [349.5, 817.1]]
+
+[[sides]]
+view = "NORTH ELEVATION (REAR): WEST PART"
+page = 5
+wall = [1213.5, 1357.5]
+floor = 799.1
+inner_corner = true
+elements = [
+  { cls = "window", box = [1242.7, 510.4, 1292.2, 601.9], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [1242.7, 663.4, 1292.2, 754.9], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [1219.1, 511.0, 1241.5, 601.0], parent = 0 },
+  { cls = "blind", box = [1293.4, 511.0, 1315.9, 601.0], parent = 0 },
+  { cls = "blind", box = [1219.1, 664.0, 1241.5, 754.0], parent = 1 },
+  { cls = "blind", box = [1293.4, 664.0, 1315.9, 754.0], parent = 1 },
+]
+eaves = [{ x = [1213.5, 1357.5], y = 488.6, floors = 2 }]
+roof = [[[916.5, 487.9], [916.5, 388.1], [1366.5, 388.1], [1366.5, 487.9]]]
+
+[[sides]]
+view = "WEST ELEVATION: SCREEN PORCH"
+page = 4
+wall = [151.5, 331.5]
+floor = 799.1
+elements = [
+  { cls = "door", box = [228.0, 695.6, 282.0, 817.1] },
+]
+eaves = [{ x = [151.5, 331.5], y = 648.4, floors = 1 }]
+roof = [[[144.0, 609.8], [331.1, 609.8], [331.1, 648.2], [144.0, 648.2]]]
+
+[[sides]]
+view = "NORTH ELEVATION (REAR): KITCHEN BLOCK"
+page = 5
+wall = [925.5, 1213.5]
+floor = 799.1
+elements = [
+  { cls = "window", box = [1017.7, 510.4, 1067.2, 601.9], variant = { cols = 2, rows = 2 } },   # окно ядра над кровлей блока
+  { cls = "blind", box = [994.1, 511.0, 1016.5, 601.0], parent = 0 },
+  { cls = "blind", box = [1068.4, 511.0, 1090.9, 601.0], parent = 0 },
+]
+eaves = [{ x = [925.5, 1213.5], y = 648.4, floors = 1 }]
+outline = [[925.5, 817.1], [925.5, 488.6], [1213.5, 488.6], [1213.5, 817.1]]
+roof = [[[809.3, 619.6], [1213.5, 619.6], [1213.5, 648.4], [809.3, 648.4]]]
+
+[[sides]]
+view = "EAST ELEVATION"
+page = 5
+wall = [434.0, 745.1]
+floor = 799.1
+inner_corner = true
+elements = [
+  { cls = "window", box = [496.1, 510.4, 533.6, 574.9], variant = { cols = 2, rows = 2 } },
+  { cls = "window", box = [624.4, 676.9, 661.9, 741.4], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [476.9, 511.0, 495.0, 574.0], parent = 0 },
+  { cls = "blind", box = [534.7, 511.0, 552.8, 574.0], parent = 0 },
+  { cls = "blind", box = [605.2, 678.0, 623.2, 740.0], parent = 1 },
+  { cls = "blind", box = [663.0, 678.0, 681.0, 740.0], parent = 1 },
+]
+eaves = [{ x = [565.1, 745.1], y = 648.4, floors = 1 }]
+outline = [[434.0, 817.1], [434.0, 406.7], [565.1, 488.6], [565.1, 648.4], [745.1, 648.4],
+           [745.1, 817.1]]
+roof = [
+  [[261.0, 496.1], [415.9, 390.4], [571.9, 487.9]],
+  [[559.9, 609.8], [747.4, 609.8], [747.4, 648.2], [559.9, 648.2]],
+]
+
+[[sides]]
+view = "NORTH ELEVATION (REAR): BATHROOM"
+page = 5
+wall = [815.5, 925.5]
+floor = 799.1
+eaves = [{ x = [815.5, 925.5], y = 648.4, floors = 1 }]
+roof = [[[809.3, 619.6], [925.5, 619.6], [925.5, 648.4], [809.3, 648.4]]]
+
+[[sides]]
+view = "EAST ELEVATION: BATHROOM"
+page = 5
+wall = [294.1, 434.0]
+floor = 799.1
+elements = [
+  { cls = "window", box = [337.1, 681.4, 374.6, 745.9], variant = { cols = 2, rows = 2 } },
+  { cls = "blind", box = [317.9, 682.0, 336.0, 745.0], parent = 0 },
+  { cls = "blind", box = [375.7, 682.0, 393.8, 745.0], parent = 0 },
+]
+eaves = [{ x = [294.1, 434.0], y = 648.4, floors = 1 }]
+
+[[sides]]
+view = "SOUTH ELEVATION (FRONT): BATHROOM"
+page = 4
+wall = [1357.5, 1467.5]
+floor = 799.1
+inner_corner = true
+eaves = [{ x = [1357.5, 1467.5], y = 648.4, floors = 1 }]
+
+[[sides]]
+view = "EAST ELEVATION: SOUTH STEP"
+page = 5
+wall = [277.1, 294.1]
+floor = 799.1
