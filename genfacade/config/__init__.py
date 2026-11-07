@@ -319,6 +319,7 @@ class Manual(Section):
 
     paths: ManualPaths
     length_tol_m: float
+    eaves_tol_m: float
     wall_m: float
     inside_share: float
     link_tol_m: float
