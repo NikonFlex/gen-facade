@@ -10,28 +10,16 @@
 // одного: у смешанной проверки на доме оба режима сразу.
 
 import { HouseStage } from "/static/house3d.js";
+import { $, el, toast } from "/static/dom.js";
 import { refusedFrom } from "/static/refusal.js";
 import { serial } from "/static/serial.js";
 
-const $ = (id) => document.getElementById(id);
 const LETTERS = "ABCDEFGH";
 const VIEW_KEY = "review.view";
 const LIST_KEY = `review.list${location.search.replace(/[?&]k=[^&]*/, "")}`;
 const state = {
   items: [], at: 0, modes: {}, look: null, view: "3d", stages: [], reference: true, modeCount: 2,
 };
-
-function el(tag, attrs = {}, text = "") {
-  const node = Object.assign(document.createElement(tag), attrs);
-  if (text) node.textContent = text;
-  return node;
-}
-
-function toast(text, kind = "") {
-  const node = el("div", { className: `toast ${kind}` }, text);
-  $("toasts").append(node);
-  setTimeout(() => node.remove(), kind === "error" ? 7000 : 2000);
-}
 
 const keyOf = (item) => `${item.mode}/${item.house}`;
 const base = (item) => `/api/review/${item.mode}/${encodeURIComponent(item.house)}`;

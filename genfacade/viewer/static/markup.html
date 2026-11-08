@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>GenFacade · правка разметки</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/markup.css">
+</head>
+<body class="markup-page">
+  <div class="mk-top">
+  <header class="mk-bar">
+    <div class="mk-row">
+      <strong id="house">Разметка</strong>
+      <span class="mk-chip" id="chip"></span>
+    </div>
+    <div class="mk-row mk-stat">
+      <span class="mk-progress" id="progress"></span>
+      <span class="mk-progress" id="timer"></span>
+    </div>
+    <div class="mk-row mk-nav">
+      <button class="btn" id="list-open" type="button">Список</button>
+      <button class="btn" id="prev" type="button" title="Предыдущий дом">←</button>
+      <button class="btn" id="next" type="button" title="Следующий дом">→</button>
+    </div>
+  </header>
+  <section class="mk-tools" id="tools" aria-label="Инструменты">
+    <div class="mk-row" id="add-tools"></div>
+    <div class="mk-row" id="pick-tools" hidden>
+      <select id="cls" aria-label="Класс элемента"></select>
+      <span class="mk-size" id="size"></span>
+      <button class="btn" id="dup" type="button">Дубль</button>
+      <button class="btn danger" id="del" type="button">Удалить</button>
+    </div>
+  </section>
+  </div>
+  <main class="mk-sides" id="sides"></main>
+  <footer class="mk-decide">
+    <button class="btn big primary" id="good" type="button">Хорошо</button>
+    <button class="btn big danger-line" id="reject" type="button">Негоден…</button>
+  </footer>
+  <dialog id="reasons" class="mk-dialog">
+    <h2>Почему негоден</h2>
+    <div class="mk-choices" id="reason-list"></div>
+    <input id="note" type="text" placeholder="пометка (необязательно)" autocomplete="off">
+    <button class="btn" id="reasons-close" type="button">Отмена</button>
+  </dialog>
+  <dialog id="list" class="mk-dialog">
+    <h2>Очередь</h2>
+    <div class="mk-list" id="list-body"></div>
+    <button class="btn" id="list-close" type="button">Закрыть</button>
+  </dialog>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script type="module" src="/static/markup.js"></script>
+</body>
+</html>

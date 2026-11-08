@@ -7,7 +7,7 @@ import json
 import pytest
 
 from genfacade import config
-from genfacade.datasets import manual, store
+from genfacade.datasets import manual, markup_toml, store
 from genfacade.datasets.manual import M_PER_UNIT, Markup, Unit
 from genfacade.schema import ElementClass, Mode, OpeningKind, RoofKind, Source, Split, Trim
 from genfacade.train import tokens
@@ -274,12 +274,13 @@ def test_run_writes_samples_and_manifest(tmp_path):
     marks = tmp_path / "markup"
     ffh = marks / "freefarmhouse"  # папка на источник
     ffh.mkdir(parents=True)
-    (ffh / "ffh-test.toml").write_text(_toml(markup()))
+    (ffh / "ffh-test.toml").write_text(markup_toml.dumps(markup()))
     three = markup().model_dump()["sides"][:3]
-    (ffh / "ffh-crooked.toml").write_text(_toml(markup(id="ffh-crooked", sides=three)))
+    (ffh / "ffh-crooked.toml").write_text(markup_toml.dumps(markup(id="ffh-crooked", sides=three)))
     (ffh / "ffh-broken.toml").write_text('id = "ffh-broken"\n')  # не разметка: нет сторон
     annex = {"eaves": [{"x": markup().sides[1].wall, "y": pt_y(EAVE_FT - 2), "floors": 1}]}
-    (ffh / "ffh-annex.toml").write_text(_toml(drawn(annex).model_copy(update={"id": "ffh-annex"})))
+    annexed = drawn(annex).model_copy(update={"id": "ffh-annex"})
+    (ffh / "ffh-annex.toml").write_text(markup_toml.dumps(annexed))
     data = CFG.data.model_copy(update={
         "paths": CFG.data.paths.model_copy(update={"samples_dir": tmp_path / "samples"}),
         "manual": CFG.data.manual.model_copy(update={
@@ -293,21 +294,3 @@ def test_run_writes_samples_and_manifest(tmp_path):
     # дом с частями разной высоты размечен верно — ждёт модуля, а не отказ (gf#323)
     assert list(saved["waiting"]) == ["ffh-annex"]
     assert saved["invalid"] == {}
-
-
-def _toml(m: Markup) -> str:
-    """Разметка обратно в TOML — тем же видом, что пишет разметчик."""
-    def value(v: object) -> str:
-        if isinstance(v, dict):
-            pairs = (f"{k} = {value(x)}" for k, x in v.items() if x is not None)
-            return "{ " + ", ".join(pairs) + " }"
-        if isinstance(v, list | tuple):
-            return "[" + ", ".join(value(x) for x in v) + "]"
-        return json.dumps(v, ensure_ascii=False)
-
-    raw = m.model_dump(mode="json", exclude={"sides"})
-    head = "".join(f"{k} = {value(v)}\n" for k, v in raw.items() if v is not None)
-    sides = "".join("\n[[sides]]\n" + "".join(f"{k} = {value(v)}\n" for k, v in s.items()
-                                              if v is not None)
-                    for s in m.model_dump(mode="json")["sides"])
-    return head + sides

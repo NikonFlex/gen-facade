@@ -49,6 +49,11 @@ class Refusal(StrEnum):
     NO_SAMPLE = "no_sample"
     NO_REVIEW = "no_review"                    # смотрелка запущена без --review
     NO_REVIEW_ITEM = "no_review_item"          # нет дома, места или листа проверки
+    NO_MARKUP_HOUSE = "no_markup_house"        # страница правки: нет такого дома в очереди
+    NO_MARKUP_SHEET = "no_markup_sheet"        # страница правки: у дома нет листа или страницы
+    BAD_MARKUP_EDIT = "bad_markup_edit"        # правка не складывается в разметку
+    BAD_CHECK_STEP = "bad_check_step"          # решение о доме вне таблицы переходов
+    BAD_CHECK_STATE = "bad_check_state"        # файл очереди не читается или не сходится с папкой
 
 
 REFUSAL_TEXT = {
@@ -65,7 +70,40 @@ REFUSAL_TEXT = {
     Refusal.NO_SAMPLE: "нет примера",
     Refusal.NO_REVIEW: "проверка не включена: genfacade serve --review <папка realtest>",
     Refusal.NO_REVIEW_ITEM: "нет в проверке",
+    Refusal.NO_MARKUP_HOUSE: "нет дома в очереди разметки",
+    Refusal.NO_MARKUP_SHEET: "у дома нет листа",
+    Refusal.BAD_MARKUP_EDIT: "правка не складывается в разметку",
+    Refusal.BAD_CHECK_STEP: "так решить о доме нельзя",
+    Refusal.BAD_CHECK_STATE: "файл очереди разметки повреждён",
 }
+
+
+class CheckState(StrEnum):
+    """Проверка дома хозяином на странице правки разметки (gf#348): хранимое поле очереди,
+    а не вывод из наличия файла. Переходы — viewer/markup_queue.py."""
+
+    UNCHECKED = "unchecked"  # автоматика разметила, человек ещё не смотрел
+    GOOD = "good"            # посмотрел, правок нет
+    EDITED = "edited"        # посмотрел и поправил, правка записана в разметку
+    REJECTED = "rejected"    # дом негоден для набора; причина — RejectReason
+
+
+class LevelKind(StrEnum):
+    """Горизонтальная линия вида, которую тянут на странице правки (gf#348)."""
+
+    GROUND = "ground"   # земля: задаёт цоколь дома
+    FLOOR = "floor"     # чистый пол первого этажа: свой у каждого вида
+    TOP = "top"         # верх этажа (последний — карниз): задаёт высоту этажа дома
+
+
+class RejectReason(StrEnum):
+    """Почему дом негоден (закрытый список; текст — config/viewer.toml, [markup.labels.reason])."""
+
+    NO_FACADES = "no_facades"      # на листах нет четырёх читаемых фасадов
+    BAD_SCALE = "bad_scale"        # масштаб вида не определить
+    COMPLEX = "complex"            # форма дома не по силам модулю
+    BAD_DRAWING = "bad_drawing"    # чертёж нечитаем или искажён
+    OTHER = "other"
 
 
 class Refused(ValueError):

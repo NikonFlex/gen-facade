@@ -23,7 +23,7 @@ from genfacade.plan.genplan_svg import PlanError
 from genfacade.render.house3d import house_3d
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import FacadeSheet, Mode, Refusal, Sample, Source, refusal_record
-from genfacade.viewer import review
+from genfacade.viewer import markup, review
 
 STATIC = files(__package__).joinpath("static")
 REFERENCE_SLOT = "ref"  # место настоящего листа на странице проверки
@@ -36,8 +36,9 @@ class RunRequest(BaseModel):
     svg: str | None = None
 
 
-def create_app(cfg: Config, checked: Path | None = None) -> FastAPI:
-    """checked — папка `genfacade realtest` для слепой проверки; None — страница /review пуста."""
+def create_app(cfg: Config, checked: Path | None = None, marked: Path | None = None) -> FastAPI:
+    """checked — папка `genfacade realtest` для слепой проверки; None — страница /review пуста.
+    marked — папка разметки для правки в браузере (/markup, gf#348); None — из настроек."""
     runs_dir = cfg.viewer.paths.runs_dir
     runs_dir.mkdir(parents=True, exist_ok=True)
     app = FastAPI(title="GenFacade · смотрелка")
@@ -46,6 +47,7 @@ def create_app(cfg: Config, checked: Path | None = None) -> FastAPI:
     _api(app, cfg, runs_dir)
     _samples_api(app, cfg)
     _review_api(app, cfg, checked)
+    markup.api(app, cfg, marked or cfg.viewer.markup.folder)
     app.mount("/files", StaticFiles(directory=runs_dir), name="files")
     app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
@@ -56,6 +58,10 @@ def create_app(cfg: Config, checked: Path | None = None) -> FastAPI:
     @app.get("/review")
     def review_page() -> FileResponse:
         return FileResponse(str(STATIC.joinpath("review.html")))
+
+    @app.get("/markup")
+    def markup_page() -> FileResponse:
+        return FileResponse(str(STATIC.joinpath("markup.html")))
 
     return app
 
