@@ -280,3 +280,22 @@ def test_scheme_colors_come_together_and_named_color_beats_them(cfg):
     assert len(seen) > 1
     white = finish.look("A white siding house", "classic", rules)
     assert _scheme_colors(white)[PaletteRole.MAIN] == rules.colors["white"].hex
+
+
+def test_color_before_roofing_material_paints_the_roof(cfg):
+    """`generation: Отделка по словам текста`: цвет перед названием кровельного материала
+    («красной металлочерепицей») красит крышу, а не стены; «белыми наличниками» — обрамление."""
+    rules = cfg.models.spec
+    text = "Кирпичный дом из полуторного кирпича с красной металлочерепицей и белыми наличниками."
+    pal = _palette(stub.spec_model(text, rules))
+    assert pal["roof"].color == rules.colors["roof_red"].hex
+    assert pal["main"].color != rules.colors["roof_red"].hex
+    assert pal["trim"].color == rules.colors["white"].hex
+
+
+def test_specific_word_after_general_one_narrows_the_wall_kind(cfg):
+    """«кирпичный дом из полуторного кирпича»: общее слово называет все кирпичи, частное — один."""
+    rules = cfg.models.spec
+    for text in ("Кирпичный дом из полуторного кирпича", "A brick house of Norman brick"):
+        kind = _palette(stub.spec_model(text, rules))["main"].kind
+        assert kind == ("brick_1_5" if "полутор" in text else "brick_long"), text

@@ -62,10 +62,11 @@ def _stem(token: str, stems: list[str], cfg: SpecStub) -> bool:
 def _mentions(tokens: list[str], cfg: SpecStub) -> Mentions:
     found = Mentions()
     for i, token in enumerate(tokens):
-        if found.kinds is None:
-            # слово «кирпич» стоит у каждого вида кирпича, «полуторный» — только у одного
-            named = {k for k, ws in cfg.material_words.items() if _stem(token, ws, cfg)}
-            found.kinds = named | {k for k, g in cfg.material_like.items() if g in named} or None
+        named = {k for k, ws in cfg.material_words.items() if _stem(token, ws, cfg)}
+        named |= {k for k, g in cfg.material_like.items() if g in named}
+        # слово «кирпич» называет все кирпичи, а «полуторный» после него сужает до одного;
+        # слово другого вида, чем первое найденное, стены не меняет
+        found.kinds = named or None if found.kinds is None else (found.kinds & named or found.kinds)
         for trim, stems in cfg.trim_words.items():
             if _stem(token, stems, cfg):
                 found.trims[trim] = not (i and tokens[i - 1] in cfg.negations)
