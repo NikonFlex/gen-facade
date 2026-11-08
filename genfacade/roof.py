@@ -22,7 +22,16 @@ from itertools import combinations
 import shapely
 
 from genfacade.plan.genplan_svg import PlanError
-from genfacade.schema import EPS, FacadeSheet, Point, Polygon, RoofKind, Side
+from genfacade.schema import (
+    EPS,
+    Element,
+    ElementClass,
+    FacadeSheet,
+    Point,
+    Polygon,
+    RoofKind,
+    Side,
+)
 from genfacade.unfold import plan_corners
 
 RECT_SIDES = 4
@@ -203,6 +212,19 @@ def gables(sheet: FacadeSheet) -> list[Polygon | None]:
     except PlanError:
         line = None
     return [None if line is None else above_eaves(line, k) for k in range(len(sheet.facades))]
+
+
+def under_roof(e: Element, floors: int) -> bool:
+    """Элемент этажа под скатом — окно во фронтоне и его выводимые элементы — по записи: этаж
+    `floors + 1` ставят сборщик разметки, синтетика и модель, по нему ведут себя привязка, уровни
+    и раскладка синтетики. Проверки и метрики поле этажа не читают — им `over_eaves`."""
+    return (e.floor or 1) > floors
+
+
+def over_eaves(e: Element, eaves: float) -> bool:
+    """Окно во фронтоне по геометрии: верх выше карниза (стену проверяет вызывающий). Так его
+    видят валидатор, метрики и дом объёмом: поле этажа пишет сам метод."""
+    return e.cls is ElementClass.WINDOW and e.y_m + e.h_m > eaves + EPS
 
 
 def peaks(above: Polygon, eaves: float) -> list[Point]:

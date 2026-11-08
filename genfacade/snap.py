@@ -14,6 +14,7 @@
 
 from statistics import median
 
+from genfacade import roof
 from genfacade.config import Checks
 from genfacade.follow import follow
 from genfacade.levels import levels
@@ -45,7 +46,7 @@ def snap_side(f: SideFacade, cfg: Checks, floors: int | None = None) -> SideFaca
     planned = _to_plan(f)
     windows = [planned.get(e.id, e) for e in f.elements if e.cls is ElementClass.WINDOW]
     moved = planned | {w.id: w for w in windows}
-    storeys = [w for w in windows if floors is None or (w.floor or 1) <= floors]
+    storeys = [w for w in windows if floors is None or not roof.under_roof(w, floors)]
     for group in _clusters(storeys, cfg.snap_m):
         x, w = _target(group)
         for e in group:

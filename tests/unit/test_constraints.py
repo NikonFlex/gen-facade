@@ -591,3 +591,13 @@ def test_window_goes_above_the_eaves_only_into_the_gable(cfg, vocab, sizes):
     assert _allowed(floor, vocab) == {2}
     # окно этажа — как прежде: под карнизом любой типоразмер, этаж — первый
     assert sizes(_gabled(vocab, ids, Mark.WALL, WINDOW, 50, 20)) == {0, 1, 2}
+
+
+def test_plan_window_stays_below_the_gable(cfg, vocab):
+    """Проём плана одноэтажного дома с фронтоном — на первом этаже, не во фронтоне: низ ниже этажа
+    под скатом (gf#321)."""
+    ids = {w: i for i, w in enumerate(tokens.vocabulary(cfg))}
+    wall = GABLED._replace(plan=(constraints.Planned(ElementClass.WINDOW, 50, 20),),
+                           given=[(50, 70)], ground=[(50, 70)])
+    g = _two_storey(vocab, ids, Mark.WALL, WINDOW, 50, wall=wall)
+    assert max(_allowed(g, vocab)) < GABLED.attic

@@ -608,7 +608,10 @@ class WallGeometry:
             return None
         if place == W:
             return {self.current.w}
-        return {n for n in self.vocab.token if n < wall.floors[0]} if wall.floors else None
+        # первый этаж — ниже второго, а у одноэтажного дома с фронтоном — ниже этажа под скатом:
+        # проём плана выше стал бы окном во фронтоне, а валидатор ищет его на первом этаже (gf#321)
+        top = wall.floors[0] if wall.floors else wall.attic
+        return {n for n in self.vocab.token if n < top} if top else None
 
     def _point_numbers(self) -> set[int]:
         """Точка зоны — на стене (x до длины, y до карниза) и угол прямоугольника, как все зоны

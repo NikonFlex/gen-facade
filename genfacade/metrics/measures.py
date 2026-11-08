@@ -41,8 +41,7 @@ def storeys(sheet: FacadeSheet) -> FacadeSheet:
     eaves = sheet.spec.eaves_m
     facades = []
     for f, above in zip(sheet.facades, roof.gables(sheet), strict=True):
-        roofed = {e.id for e in f.elements if above is not None
-                  and e.cls is ElementClass.WINDOW and e.y_m + e.h_m > eaves + EPS}
+        roofed = {e.id for e in f.elements if above is not None and roof.over_eaves(e, eaves)}
         facades.append(f.model_copy(update={"elements": [
             e for e in f.elements if e.id not in roofed and e.parent not in roofed]}))
     return sheet.model_copy(update={"facades": facades})

@@ -6,7 +6,7 @@
 Материал карниза — роль `trim` палитры.
 """
 
-from genfacade import derive
+from genfacade import derive, roof
 from genfacade.derive import Flags
 from genfacade.schema import Element, ElementClass, HouseSpec, PaletteRole, Trim, VariantKind
 
@@ -18,7 +18,7 @@ def flags(windows: list[Element], doors: list[Element], wall: derive.Wall) -> Fl
     out: Flags = {}
     for w in windows:
         # окно во фронтоне (этажа под скатом, gf#321) — без ставен: им не место у ската
-        if w.floor is not None and w.floor > wall.spec.floors:
+        if roof.under_roof(w, wall.spec.floors):
             out[w.id] = {t for t in (Trim.SILL, Trim.CASING) if has(t)}
         elif not _panoramic(w):
             out[w.id] = {t for t in (Trim.SILL, Trim.CASING, Trim.SHUTTERS) if has(t)}

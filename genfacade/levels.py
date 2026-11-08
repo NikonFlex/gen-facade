@@ -108,18 +108,14 @@ def _in_floor(w: Element) -> bool:
     return w.variant is not None and w.variant.kind is VariantKind.PANORAMIC
 
 
-def _under_roof(e: Element, spec: HouseSpec) -> bool:
-    """Окно этажа под скатом — во фронтоне (gf#321)."""
-    return (e.floor or 1) > spec.floors
-
-
 def _heads(sheet: FacadeSheet) -> dict[int, float]:
     """Общая линия верха окон этажа — медиана верха окон этажа на всех стенах, кроме окон в пол
     и во фронтоне."""
     tops: dict[int, list[float]] = {}
     for f in sheet.facades:
         for w in f.elements:
-            if w.cls is ElementClass.WINDOW and not _in_floor(w) and not _under_roof(w, sheet.spec):
+            roofed = roof.under_roof(w, sheet.spec.floors)
+            if w.cls is ElementClass.WINDOW and not _in_floor(w) and not roofed:
                 tops.setdefault(_floor(w, sheet.spec), []).append(w.y_m + w.h_m)
     return {n: median(ys) for n, ys in tops.items()}
 
@@ -128,7 +124,7 @@ def _windows(f: SideFacade, house: House) -> SideFacade:
     """Окна — не ниже пола этажа и на линии верха этажа, их дети — за ними. Окно, которое на новом
     месте налезло бы на другой проём, остаётся где было: брак сдвига хуже неровной линии."""
     moved = {w.id: m for w in f.elements
-             if w.cls is ElementClass.WINDOW and not _under_roof(w, house.spec)
+             if w.cls is ElementClass.WINDOW and not roof.under_roof(w, house.spec.floors)
              and (m := _window(w, house)) is not None
              and not any(hits(m, o) for o in f.elements if o.cls in OPENINGS and o.id != w.id)}
     return _shifted(f, moved)
@@ -264,7 +260,7 @@ def _cornice(f: SideFacade, house: House) -> SideFacade:
         return f
     below = [e.y_m + e.h_m for e in f.elements
              if (e.cls in OPENINGS or (e.cls in TRIM_OF and e.parent is not None))
-             and not _under_roof(e, house.spec)]  # окно во фронтоне — не под карнизом
+             and not roof.under_roof(e, house.spec.floors)]  # окно во фронтоне — не под карнизом
     h = min(_cornice_h(f), eaves - max(below, default=0.0))
     one = found[0].model_copy(update={"x_m": 0.0, "w_m": f.side.length_m, "y_m": eaves - h,
                                       "h_m": h})
