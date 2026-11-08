@@ -162,11 +162,20 @@ def _finish(f: SideFacade, spec: HouseSpec, cfg: Checks) -> list[Violation]:
         out.append(_v(f, Rule.FINISH, None, f"{bare.area:.2f} м² стены без отделки"))
     for z, shape in zip(f.zones, shapes, strict=True):
         box = shape.bounds
-        whole = box[0] <= cfg.eps_m and box[2] >= f.side.length_m - cfg.eps_m
+        lo, hi = _part_span(f, box)
+        whole = box[0] <= lo + cfg.eps_m and box[2] >= hi - cfg.eps_m
         if not (whole if z.role in FULL_LENGTH else _anchored(box, f, spec, cfg)):
             out.append(_v(f, Rule.FINISH, None, f"зона {z.role} {_span(box)} обрывается "
                                                 "посреди стены"))
     return out
+
+
+def _part_span(f: SideFacade, box: tuple[float, ...]) -> tuple[float, float]:
+    """Во всю длину — части стены, где стоит зона: у стены из частей разной высоты (gf#322) зона
+    части идёт по её участку; у прямоугольной стены — вся стена."""
+    middle = (box[0] + box[2]) / 2
+    run = next((r for r in f.runs if r.x0_m <= middle <= r.x1_m), None)
+    return (run.x0_m, run.x1_m) if run else (0.0, f.side.length_m)
 
 
 def _span(box: tuple[float, ...]) -> str:
@@ -190,7 +199,9 @@ def _supports(f: SideFacade, spec: HouseSpec) -> tuple[set[float], set[float]]:
     ops = [e for e in f.elements if e.cls in OPENINGS]
     bands = [_bounds(z) for z in f.zones if z.role in FULL_LENGTH]
     xs = {0.0, f.side.length_m} | {e.x_m for e in ops} | {e.x_m + e.w_m for e in ops}
+    xs |= {x for r in f.runs for x in (r.x0_m, r.x1_m)}  # границы частей дома (gf#322)
     ys = {0.0, spec.plinth_m, *spec.floor_levels()} | {e.y_m for e in ops}
+    ys |= {r.eaves_m for r in f.runs}
     ys |= {e.y_m + e.h_m for e in ops} | {y for b in bands for y in (b[1], b[3])}
     return xs, ys
 
@@ -222,12 +233,19 @@ def _plan_openings(f: SideFacade, cfg: Checks) -> list[Violation]:
                        for e in ground)]
 
 
+def _run_of(f: SideFacade, e: Element) -> int | None:
+    """Участок стены (часть дома, gf#322), где стоит элемент; у стены без участков — None: линия
+    верха окон у каждой части своя."""
+    middle = e.x_m + e.w_m / 2
+    return next((j for j, r in enumerate(f.runs) if r.x0_m <= middle <= r.x1_m), None)
+
+
 def _floor_align(f: SideFacade, cfg: Checks) -> list[Violation]:
     """Окна одного этажа — верхом на одной линии. Низ бывает разный намеренно: маленькое
     окно санузла, окно в пол (хозяин 01.10) — за него не предупреждаем."""
     out, by_floor = [], {}
     for w in (e for e in f.elements if e.cls is ElementClass.WINDOW):
-        by_floor.setdefault(w.floor, []).append(w)
+        by_floor.setdefault((w.floor, _run_of(f, w)), []).append(w)
     for ws in by_floor.values():
         for a, b in combinations(ws, 2):
             if abs((a.y_m + a.h_m) - (b.y_m + b.h_m)) > cfg.align_m:
@@ -249,10 +267,19 @@ def _edge_height(f: SideFacade, x: float) -> float:
     return max(y for px, y in f.silhouette or [(x, 0.0)] if abs(px - x) <= EPS)
 
 
+def _edge_part(f: SideFacade, left: bool) -> int | None:
+    """Часть дома у края стены (левого или правого); у стены без участков — None."""
+    return (f.runs[0] if left else f.runs[-1]).part if f.runs else None
+
+
 def _corners(sheet: FacadeSheet, cfg: Checks) -> list[Violation]:
-    """Угол i+1: левый край стороны i (x = 0) и правый край стороны i+1 (x = длина)."""
+    """Угол i+1: левый край стороны i (x = 0) и правый край стороны i+1 (x = длина). У стен одной
+    части высоты равны. На стыке двух частей (gf#322) нижняя стена упирается в стену выше — высоты
+    разные по замыслу, угол не сверяется."""
     out, fs = [], sheet.facades
     for a, b in zip(fs, fs[1:] + fs[:1], strict=True):
+        if _edge_part(a, True) != _edge_part(b, False):
+            continue
         ha, hb = _edge_height(a, 0.0), _edge_height(b, b.side.length_m)
         if abs(ha - hb) > cfg.eps_m:
             out.append(_v(a, Rule.CORNER, None,

@@ -209,9 +209,18 @@ class Outline(Section):
     stray_area: float
 
 
+class Parts(Section):
+    """Какие крылья дома ниже главного (gf#322, `facade: Части дома`)."""
+
+    ratio: float       # крыло меньше этой доли площади главного — кандидат в нижнее
+    wing_min_m: float  # уже этого (меньшая сторона) — выступ, а не крыло: на высоте главной части
+    drop_floors: int   # на сколько этажей нижнее крыло ниже главной части, если текст молчит
+
+
 class PlanConfig(Section):
     gaps: Gaps
     outline: Outline
+    parts: Parts
 
 
 GuidelineParams = dict[str, ElementClass | float | list[float]]
@@ -754,6 +763,7 @@ class SpecStub(Section):
     reach: int                             # слов от цвета до слова, чью роль он красит
     negations: list[str]                   # слово перед названием элемента — элемента нет
     floors_words: dict[int, list[str]]     # этажей → слова в тексте
+    wing_words: dict[int, list[str]]       # этажей у нижних частей дома → слова в тексте (gf#322)
     style_words: dict[str, list[str]]      # стиль → слова в тексте
     material_words: dict[str, list[str]]   # вид стен из библиотеки → слова в тексте
     material_like: dict[str, str] = {}     # вид → общий вид: слова общего называют и этот вид

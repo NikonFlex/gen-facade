@@ -36,3 +36,14 @@ def _at(window: list[str], phrase: list[str], tail: int) -> bool:
     if len(window) != len(phrase):
         return False
     return all(named(t, [p], tail) for t, p in zip(window, phrase, strict=True))
+
+
+def without(text: str, phrases: list[str], tail: int) -> str:
+    """Текст без слов, что образуют одно из сочетаний: «one-storey wing» не должно делать
+    одноэтажным весь дом при поиске этажности."""
+    found, drop = tokens(text), set()
+    for i in range(len(found)):
+        for phrase in map(tokens, phrases):
+            if _at(found[i:i + len(phrase)], phrase, tail):
+                drop |= set(range(i, i + len(phrase)))
+    return " ".join(t for i, t in enumerate(found) if i not in drop)

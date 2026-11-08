@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32.0 16.0" width="320mm" height="160mm">
+  <style>/* Оформление листа фасадов. Единицы — метры натуры (viewBox в метрах).
+   Свой файл sheet.css в --config дописывается после этого и переопределяет его. */
+
+svg { font-family: "Golos Text", "DejaVu Sans", sans-serif; font-size: 0.3px; }
+.background { fill: #ffffff; }
+
+.facade { stroke: #2b2b2b; stroke-width: 0.02px; stroke-linejoin: round; }
+.facade [data-role] { stroke: none; }
+.outline { fill: none; stroke-width: 0.04px; }
+.facade [data-cls="window"] { stroke-width: 0.06px; }
+.mullion { stroke-width: 0.04px; }
+/* Выводимые элементы (gf#212): рисунок вида поверх прямоугольника; у двускатного козырька и
+   козырька на кронштейнах прямоугольник — только рамка разбора, его не видно */
+.trim-line { stroke-width: 0.015px; }
+.trim-frame { fill: none; stroke: none; }
+.door-glass { stroke-width: 0.03px; }
+
+.annotations { stroke: #2b2b2b; stroke-width: 0.015px; fill: #2b2b2b; }
+.annotations text { stroke: none; }
+.ground { stroke-width: 0.05px; }
+.level-marker, .axis-bubble { fill: none; }
+.level-text { font-size: 0.27px; }
+.axis-line { stroke-dasharray: 0.15 0.1; }
+.axis-text { text-anchor: middle; }
+.title { font-size: 0.42px; text-anchor: middle; }
+
+/* Трасса шага 1: образец стены и палитра дома (render/spec_svg.py) */
+.spec-swatch { stroke: #2b2b2b; stroke-width: 0.02px; }
+.spec-label { font-size: 0.27px; fill: #2b2b2b; }
+
+/* Трасса шага 2: план после препроцессора (render/plan_svg.py) */
+.plan-wall { fill: #9a9a9a; stroke: none; }
+.plan-outline { fill: none; stroke: #2b2b2b; stroke-width: 0.04px; }
+.plan-window { fill: #99ccff; }
+.plan-door { fill: #b07a4a; }
+.plan-entrance { fill: #3aa655; }
+.plan-sealed { fill: #f2a33a; }
+.plan-forbidden { stroke: #d33a2c; stroke-width: 0.12px; stroke-linecap: butt; }
+.plan-label { font-size: 0.35px; text-anchor: middle; fill: #2b2b2b; }
+.plan-legend { font-size: 0.2px; fill: #6a707a; }
+
+/* Трасса шагов 4–5: запретные зоны и нарушения валидатора поверх листа */
+.forbidden-zone { fill: #d33a2c; fill-opacity: 0.12; stroke: none; }
+.violation { fill: none; stroke-width: 0.06px; stroke-dasharray: 0.15 0.08; }
+.violation.error { stroke: #d33a2c; }
+.violation.warning { stroke: #e8a33a; }
+</style>
+  <defs>
+    <pattern id="hatch-wood-b58a58" patternUnits="userSpaceOnUse" width="0.1" height="0.1">
+      <rect width="0.1" height="0.1" fill="#b58a58" />
+      <path d="M0.0,0.005L0.1,0.005" fill="none" stroke="#765a39" stroke-width="0.01" />
+    </pattern>
+  </defs>
+  <rect class="background" width="32.0" height="16.0" />
+  <g class="facade" data-side="0" transform="translate(2.0,4.75) scale(1,-1)">
+    <polygon class="wall" points="0.0,0.0 10.0,0.0 10.0,3.25 0.0,3.25" fill="#e8e4dc" />
+    <polygon data-role="plinth" data-material="plinth" points="0.0,0.0 10.0,0.0 10.0,0.5 0.0,0.5" fill="#9a9a96" />
+    <polygon data-role="main" data-material="main" points="0.0,0.5 10.0,0.5 10.0,3.25 0.0,3.25" fill="#f2efe8" />
+    <polygon data-role="accent" data-material="accent" points="6.7,0.5 8.200000000000001,0.5 8.200000000000001,3.25 6.7,3.25" fill="url(#hatch-wood-b58a58)" />
+    <polygon class="outline" points="0.0,0.0 10.0,0.0 10.0,3.25 0.0,3.25" />
+    <rect data-cls="window" data-id="w1_1" x="1.5" y="1.05" width="1.2" height="1.925" fill="#a9c4d8" data-floor="1" data-material="main" data-zone-material="true" data-variant="regular:2:2" data-fixed="x_m,w_m" />
+    <line class="mullion" x1="2.1" y1="1.05" x2="2.1" y2="2.975" />
+    <line class="mullion" x1="1.5" y1="2.0125" x2="2.7" y2="2.0125" />
+    <rect data-cls="door" data-id="d1" x="7.0" y="0.5" width="0.9" height="2.1" fill="#7b5230" data-floor="1" data-material="accent" data-zone-material="true" data-fixed="x_m,w_m" />
+    <rect data-cls="sill" data-id="s_w1_1" x="1.45" y="0.99" width="1.3" height="0.06" fill="#4b4f54" data-floor="1" data-parent="w1_1" data-material="trim" />
+    <rect data-cls="cornice" data-id="c1" x="0.0" y="3.0" width="10.0" height="0.25" fill="#4b4f54" data-material="trim" />
+    <rect data-cls="porch" data-id="p_d1" x="6.7" y="0.0" width="1.5000000000000009" height="0.5" fill="#9a9a96" data-floor="1" data-parent="d1" data-material="plinth" />
+  </g>
+  <g class="annotations" transform="translate(2.0,4.75)">
+    <line class="ground" x1="-1.5" y1="0.0" x2="11.5" y2="0.0" />
+    <line class="level-shelf" x1="10.299999999999999" y1="-0.0" x2="12.6" y2="-0.0" />
+    <polygon class="level-marker" points="11.2,-0.0 11.049999999999999,-0.2 11.35,-0.2" />
+    <text class="level-text" x="11.45" y="0.3">±0,000</text>
+    <line class="level-shelf" x1="10.299999999999999" y1="-0.5" x2="12.6" y2="-0.5" />
+    <polygon class="level-marker" points="11.2,-0.5 11.049999999999999,-0.7 11.35,-0.7" />
+    <text class="level-text" x="11.45" y="-0.56">+0,500</text>
+    <line class="level-shelf" x1="10.299999999999999" y1="-3.25" x2="12.6" y2="-3.25" />
+    <polygon class="level-marker" points="11.2,-3.25 11.049999999999999,-3.45 11.35,-3.45" />
+    <text class="level-text" x="11.45" y="-3.31">+3,250</text>
+    <line class="axis-line" x1="0.0" y1="0.1" x2="0.0" y2="1.2" />
+    <circle class="axis-bubble" cx="0.0" cy="1.6" r="0.4" />
+    <text class="axis-text" x="0.0" y="1.7100000000000002">1</text>
+    <line class="axis-line" x1="10.0" y1="0.1" x2="10.0" y2="1.2" />
+    <circle class="axis-bubble" cx="10.0" cy="1.6" r="0.4" />
+    <text class="axis-text" x="10.0" y="1.7100000000000002">2</text>
+    <text class="title" x="5.0" y="2.6">Фасад в осях 1–2</text>
+  </g>
+  <g class="facade" data-side="1" transform="translate(17.0,4.75) scale(1,-1)">
+    <polygon class="wall" points="0.0,0.0 5.0,0.0 5.0,3.25 0.0,3.25" fill="#e8e4dc" />
+    <polygon data-role="plinth" data-material="plinth" points="0.0,0.0 5.0,0.0 5.0,0.5 0.0,0.5" fill="#9a9a96" />
+    <polygon data-role="main" data-material="main" points="0.0,0.5 5.0,0.5 5.0,3.25 0.0,3.25" fill="#f2efe8" />
+    <polygon class="outline" points="0.0,0.0 5.0,0.0 5.0,3.25 0.0,3.25" />
+    <rect data-cls="window" data-id="w1_1" x="2.5" y="1.05" width="1.0" height="1.925" fill="#a9c4d8" data-floor="1" data-material="main" data-zone-material="true" data-variant="regular:2:2" data-fixed="x_m,w_m" />
+    <line class="mullion" x1="3.0" y1="1.05" x2="3.0" y2="2.975" />
+    <line class="mullion" x1="2.5" y1="2.0125" x2="3.5" y2="2.0125" />
+    <rect data-cls="sill" data-id="s_w1_1" x="2.45" y="0.99" width="1.1" height="0.06" fill="#4b4f54" data-floor="1" data-parent="w1_1" data-material="trim" />
+    <rect data-cls="cornice" data-id="c1" x="0.0" y="3.0" width="5.0" height="0.25" fill="#4b4f54" data-material="trim" />
+  </g>
+  <g class="annotations" transform="translate(17.0,4.75)">
+    <line class="ground" x1="-1.5" y1="0.0" x2="6.5" y2="0.0" />
+    <line class="level-shelf" x1="5.3" y1="-0.0" x2="7.6" y2="-0.0" />
+    <polygon class="level-marker" points="6.2,-0.0 6.05,-0.2 6.3500000000000005,-0.2" />
+    <text class="level-text" x="6.45" y="0.3">±0,000</text>
+    <line class="level-shelf" x1="5.3" y1="-0.5" x2="7.6" y2="-0.5" />
+    <polygon class="level-marker" points="6.2,-0.5 6.05,-0.7 6.3500000000000005,-0.7" />
+    <text class="level-text" x="6.45" y="-0.56">+0,500</text>
+    <line class="level-shelf" x1="5.3" y1="-3.25" x2="7.6" y2="-3.25" />
+    <polygon class="level-marker" points="6.2,-3.25 6.05,-3.45 6.3500000000000005,-3.45" />
+    <text class="level-text" x="6.45" y="-3.31">+3,250</text>
+    <line class="axis-line" x1="0.0" y1="0.1" x2="0.0" y2="1.2" />
+    <circle class="axis-bubble" cx="0.0" cy="1.6" r="0.4" />
+    <text class="axis-text" x="0.0" y="1.7100000000000002">Б</text>
+    <line class="axis-line" x1="5.0" y1="0.1" x2="5.0" y2="1.2" />
+    <circle class="axis-bubble" cx="5.0" cy="1.6" r="0.4" />
+    <text class="axis-text" x="5.0" y="1.7100000000000002">А</text>
+    <text class="title" x="2.5" y="2.6">Фасад в осях Б–А</text>
+  </g>
+  <g class="facade" data-side="2" transform="translate(2.0,12.0) scale(1,-1)">
+    <polygon class="wall" points="0.0,0.0 10.0,0.0 10.0,3.25 0.0,3.25" fill="#e8e4dc" />
+    <polygon data-role="plinth" data-material="plinth" points="0.0,0.0 10.0,0.0 10.0,0.5 0.0,0.5" fill="#9a9a96" />
+    <polygon data-role="main" data-material="main" points="0.0,0.5 10.0,0.5 10.0,3.25 0.0,3.25" fill="#f2efe8" />
+    <polygon class="outline" points="0.0,0.0 10.0,0.0 10.0,3.25 0.0,3.25" />
+    <rect data-cls="window" data-id="w1_1" x="3.0" y="1.05" width="2.0" height="1.925" fill="#a9c4d8" data-floor="1" data-material="main" data-zone-material="true" data-variant="regular:3:2" data-fixed="x_m,w_m" />
+    <line class="mullion" x1="3.6666666666666665" y1="1.05" x2="3.6666666666666665" y2="2.975" />
+    <line class="mullion" x1="4.333333333333333" y1="1.05" x2="4.333333333333333" y2="2.975" />
+    <line class="mullion" x1="3.0" y1="2.0125" x2="5.0" y2="2.0125" />
+    <rect data-cls="sill" data-id="s_w1_1" x="2.95" y="0.99" width="2.1" height="0.06" fill="#4b4f54" data-floor="1" data-parent="w1_1" data-material="trim" />
+    <rect data-cls="cornice" data-id="c1" x="0.0" y="3.0" width="10.0" height="0.25" fill="#4b4f54" data-material="trim" />
+  </g>
+  <g class="annotations" transform="translate(2.0,12.0)">
+    <line class="ground" x1="-1.5" y1="0.0" x2="11.5" y2="0.0" />
+    <line class="level-shelf" x1="10.299999999999999" y1="-0.0" x2="12.6" y2="-0.0" />
+    <polygon class="level-marker" points="11.2,-0.0 11.049999999999999,-0.2 11.35,-0.2" />
+    <text class="level-text" x="11.45" y="0.3">±0,000</text>
+    <line class="level-shelf" x1="10.299999999999999" y1="-0.5" x2="12.6" y2="-0.5" />
+    <polygon class="level-marker" points="11.2,-0.5 11.049999999999999,-0.7 11.35,-0.7" />
+    <text class="level-text" x="11.45" y="-0.56">+0,500</text>
+    <line class="level-shelf" x1="10.299999999999999" y1="-3.25" x2="12.6" y2="-3.25" />
+    <polygon class="level-marker" points="11.2,-3.25 11.049999999999999,-3.45 11.35,-3.45" />
+    <text class="level-text" x="11.45" y="-3.31">+3,250</text>
+    <line class="axis-line" x1="0.0" y1="0.1" x2="0.0" y2="1.2" />
+    <circle class="axis-bubble" cx="0.0" cy="1.6" r="0.4" />
+    <text class="axis-text" x="0.0" y="1.7100000000000002">2</text>
+    <line class="axis-line" x1="10.0" y1="0.1" x2="10.0" y2="1.2" />
+    <circle class="axis-bubble" cx="10.0" cy="1.6" r="0.4" />
+    <text class="axis-text" x="10.0" y="1.7100000000000002">1</text>
+    <text class="title" x="5.0" y="2.6">Фасад в осях 2–1</text>
+  </g>
+  <g class="facade" data-side="3" transform="translate(17.0,12.0) scale(1,-1)">
+    <polygon class="wall" points="0.0,0.0 5.0,0.0 5.0,3.25 0.0,3.25" fill="#e8e4dc" />
+    <polygon data-role="plinth" data-material="plinth" points="0.0,0.0 5.0,0.0 5.0,0.5 0.0,0.5" fill="#9a9a96" />
+    <polygon data-role="main" data-material="main" points="0.0,0.5 5.0,0.5 5.0,3.25 0.0,3.25" fill="#f2efe8" />
+    <polygon class="outline" points="0.0,0.0 5.0,0.0 5.0,3.25 0.0,3.25" />
+    <rect data-cls="window" data-id="w1_1" x="2.0" y="1.05" width="1.5" height="1.925" fill="#a9c4d8" data-floor="1" data-material="main" data-zone-material="true" data-variant="regular:2:2" data-fixed="x_m,w_m" />
+    <line class="mullion" x1="2.75" y1="1.05" x2="2.75" y2="2.975" />
+    <line class="mullion" x1="2.0" y1="2.0125" x2="3.5" y2="2.0125" />
+    <rect data-cls="sill" data-id="s_w1_1" x="1.95" y="0.99" width="1.6" height="0.06" fill="#4b4f54" data-floor="1" data-parent="w1_1" data-material="trim" />
+    <rect data-cls="cornice" data-id="c1" x="0.0" y="3.0" width="5.0" height="0.25" fill="#4b4f54" data-material="trim" />
+  </g>
+  <g class="annotations" transform="translate(17.0,12.0)">
+    <line class="ground" x1="-1.5" y1="0.0" x2="6.5" y2="0.0" />
+    <line class="level-shelf" x1="5.3" y1="-0.0" x2="7.6" y2="-0.0" />
+    <polygon class="level-marker" points="6.2,-0.0 6.05,-0.2 6.3500000000000005,-0.2" />
+    <text class="level-text" x="6.45" y="0.3">±0,000</text>
+    <line class="level-shelf" x1="5.3" y1="-0.5" x2="7.6" y2="-0.5" />
+    <polygon class="level-marker" points="6.2,-0.5 6.05,-0.7 6.3500000000000005,-0.7" />
+    <text class="level-text" x="6.45" y="-0.56">+0,500</text>
+    <line class="level-shelf" x1="5.3" y1="-3.25" x2="7.6" y2="-3.25" />
+    <polygon class="level-marker" points="6.2,-3.25 6.05,-3.45 6.3500000000000005,-3.45" />
+    <text class="level-text" x="6.45" y="-3.31">+3,250</text>
+    <line class="axis-line" x1="0.0" y1="0.1" x2="0.0" y2="1.2" />
+    <circle class="axis-bubble" cx="0.0" cy="1.6" r="0.4" />
+    <text class="axis-text" x="0.0" y="1.7100000000000002">А</text>
+    <line class="axis-line" x1="5.0" y1="0.1" x2="5.0" y2="1.2" />
+    <circle class="axis-bubble" cx="5.0" cy="1.6" r="0.4" />
+    <text class="axis-text" x="5.0" y="1.7100000000000002">Б</text>
+    <text class="title" x="2.5" y="2.6">Фасад в осях А–Б</text>
+  </g>
+</svg>
