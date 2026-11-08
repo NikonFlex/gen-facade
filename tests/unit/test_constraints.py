@@ -601,3 +601,29 @@ def test_plan_window_stays_below_the_gable(cfg, vocab):
                            given=[(50, 70)], ground=[(50, 70)])
     g = _two_storey(vocab, ids, Mark.WALL, WINDOW, 50, wall=wall)
     assert max(_allowed(g, vocab)) < GABLED.attic
+
+
+def test_window_frame_may_cross_the_slope_only_as_a_slope_window(cfg, vocab, sizes):
+    """Окно по скату (gf#319): рамка, вышедшая за скат, годна, если внутри места не меньше
+    `slope_share` рамки, но после неё страж оставляет этаж и только вид `slope`; рамка в месте —
+    вид любой. Без `slope_share` у стены окно по скату не пускают."""
+    ids = {w: i for i, w in enumerate(tokens.vocabulary(cfg))}
+    slope = ids[tokens.tok(schema.VariantKind.SLOPE)]
+    wide = GABLED._replace(slope_share=cfg.checks.slope_share)
+    # x 2,5 м, y 2,8 м, 1,3 × 1,5 м: верхний правый угол рамки (3,8 м, 4,3 м) ближе 0,2 м к скату
+    assert wide.reaches(50, 56, 26, 30) and not wide.fits(50, 56, 26, 30)
+    assert not wide.reaches(30, 70, 12, 30)           # за скатом больше половины — не годна
+
+    def read(wall, *words):
+        return _two_storey(vocab, ids, Mark.WALL, WINDOW, 50, 56, *words, wall=wall)
+
+    assert sizes(read(wide)) == {0, 1, 2}             # рамка 1,3 м: теперь годна
+    assert sizes(read(GABLED)) == {0, 1}              # без доли — как прежде
+    g = read(wide, SIZE[2])
+    assert set(range(vocab.size)) - set(g.banned()) <= {ids[Mark.FLOOR], slope}
+    g = read(wide, SIZE[2], Mark.FLOOR, 2)
+    assert set(range(vocab.size)) - set(g.banned()) == {slope}
+    plain = read(wide, SIZE[0])                       # рамка в месте — вид любой
+    assert slope in set(range(vocab.size)) - set(plain.banned())
+    assert {i for i, k in vocab.variant.items() if k is not schema.VariantKind.SLOPE} - set(
+        plain.banned())

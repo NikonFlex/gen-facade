@@ -3,14 +3,16 @@
 
 import random
 from itertools import combinations
+from xml.etree import ElementTree
 
 import pytest
 import shapely
 
-from genfacade import guidelines, roof
+from genfacade import guidelines, roof, window_shape
 from genfacade.datasets import store
 from genfacade.datasets.synthetic import build, sizes
 from genfacade.datasets.synthetic.house import Scheme, house
+from genfacade.render import sheet_format
 from genfacade.render.parse import parse_sheet_svg
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import (
@@ -21,6 +23,7 @@ from genfacade.schema import (
     OpeningKind,
     PaletteRole,
     RoofKind,
+    Rule,
     Source,
     Trim,
     VariantKind,
@@ -111,8 +114,10 @@ def test_gable_windows_stand_in_the_gable_off_the_slope(houses, rect_cfg):
             for w in _roofed(f, spec):
                 assert spec.roof.kind is RoofKind.GABLE and above is not None, h.id
                 room = roof.room(f.side.length_m, spec.eaves_m, above, cfg.checks.slope_offset_m)
-                assert room.buffer(EPS).contains(shapely.box(w.x_m, w.y_m, w.x_m + w.w_m,
-                                                             w.y_m + w.h_m)), h.id
+                frame = shapely.box(w.x_m, w.y_m, w.x_m + w.w_m, w.y_m + w.h_m)
+                if w.variant is not None and w.variant.kind is VariantKind.SLOPE:
+                    continue  # рамка через скат — контур, `test_slope_windows_cross_the_slope`
+                assert room.buffer(EPS).contains(frame), h.id
                 low, high = rules.sill_m
                 assert low - EPS <= w.y_m - spec.eaves_m <= high + EPS
                 roofed.append(h.id)
@@ -345,3 +350,71 @@ def test_manifest_counts_blind_walls(houses, tmp_path):
         store.write(h, tmp_path)
     blind = sum(not f.side.openings for h in houses[:10] for f in h.sheet.facades)
     assert 0 < store.manifest(tmp_path, Source.SYNTHETIC)["blind_walls"] == blind < 40
+
+
+def test_slope_windows_cross_the_slope_and_zero_share_keeps_the_houses(houses, rect_cfg):
+    """`data: Синтетика своим генератором` (gf#319): окно во фронтоне вида `slope` — рамка выходит
+    за скат, контур не меньше `slope_share` рамки, дом проходит валидатор (в том числе наличник по
+    контуру); при весе `slope` ноль дома прежние байт в байт."""
+    cfg, crossed = rect_cfg, []
+    for h in houses:
+        for f, above in zip(h.sheet.facades, roof.gables(h.sheet), strict=True):
+            for w in _roofed(f, h.sheet.spec):
+                if w.variant is None or w.variant.kind is not VariantKind.SLOPE:
+                    continue
+                room = roof.room(f.side.length_m, h.sheet.spec.eaves_m, above,
+                                 cfg.checks.slope_offset_m)
+                frame = shapely.box(w.x_m, w.y_m, w.x_m + w.w_m, w.y_m + w.h_m)
+                assert not room.contains(frame)
+                assert room.intersection(frame).area >= cfg.checks.slope_share * frame.area
+                crossed.append(h.id)
+        assert not [v for v in validate(h.sheet, cfg.checks)
+                    if v.rule in (Rule.OUTSIDE, Rule.SLOPE)], h.id
+    assert crossed
+    gable = cfg.synthetic.facade.gable
+
+    def without(shapes: dict) -> object:
+        facade = cfg.synthetic.facade.model_copy(
+            update={"gable": gable.model_copy(update={"shapes": shapes})})
+        return cfg.model_copy(update={"synthetic": cfg.synthetic.model_copy(
+            update={"facade": facade})})
+
+    zero = without({k: (0.0 if k is VariantKind.SLOPE else v) for k, v in gable.shapes.items()})
+    absent = without({k: v for k, v in gable.shapes.items() if k is not VariantKind.SLOPE})
+    for h in houses:  # вес ноль — как без вида: дома прежние (сверено и со старым кодом, 08.11)
+        seed = int(h.id.split("-")[1])
+        plain = build.sample(seed, zero)
+        assert plain.sheet.model_dump_json() == build.sample(seed, absent).sheet.model_dump_json()
+        assert not any(w.variant is not None and w.variant.kind is VariantKind.SLOPE
+                       for f in plain.sheet.facades for w in _roofed(f, plain.sheet.spec))
+
+
+def test_casing_of_a_slope_window_follows_the_window_outline(houses, rect_cfg):
+    """Наличник окна по скату (gf#319): на листе — контур вокруг контура окна, прямоугольник
+    остаётся невидимой рамкой для разбора; проверка стены — по контуру, не по прямоугольнику."""
+    found = 0
+    for h in houses:
+        sheet = h.sheet
+        for k, f in enumerate(sheet.facades):
+            slopes = {w.id for w in _roofed(f, sheet.spec)
+                      if w.variant is not None and w.variant.kind is VariantKind.SLOPE}
+            casings = [e for e in f.elements
+                       if e.cls is ElementClass.MOLDING and e.parent in slopes]
+            if not casings:
+                continue
+            found += len(casings)
+            text = sheet_svg(sheet, rect_cfg)
+            assert parse_sheet_svg(text)[k][0] == f.elements
+            nodes = list(ElementTree.fromstring(text).iter())
+            above = roof.gables(sheet)[k]
+            room = roof.room(f.side.length_m, sheet.spec.eaves_m, above,
+                             rect_cfg.checks.slope_offset_m)
+            for e in casings:
+                at = next(i for i, n in enumerate(nodes) if n.get(sheet_format.ID) == e.id)
+                parent = next(w for w in f.elements if w.id == e.parent)
+                raw = nodes[at + 1].get("points").split()
+                drawn = [tuple(map(float, p.split(","))) for p in raw]
+                want = window_shape.casing(parent, e, room)
+                assert nodes[at].get("class") == "trim-frame"
+                assert shapely.Polygon(drawn).equals_exact(shapely.Polygon(want), 0.01), e.id
+    assert found

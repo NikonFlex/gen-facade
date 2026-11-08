@@ -51,7 +51,7 @@ from typing import NamedTuple
 
 import shapely
 
-from genfacade import roof
+from genfacade import roof, window_shape
 from genfacade.config import Config, Tokens
 from genfacade.derive import OWNER, TRIM_OF
 from genfacade.schema import (
@@ -111,6 +111,9 @@ class Wall(NamedTuple):
     room: shapely.Geometry | None = None
     attic: int = 0
     top: int = 0
+    # Окно вида `slope` (gf#319): рамка может выйти за скат, если внутри места — не меньше этой доли
+    # (`checks.slope_share`); 0 — окон по скату нет.
+    slope_share: float = 0
 
     def floor(self, y: int) -> int:
         """Этаж по высоте низа элемента: 1 — ниже низа второго этажа (и цоколь тоже); на стене с
@@ -126,6 +129,15 @@ class Wall(NamedTuple):
     def fits(self, x: int, y: int, w: int, h: int) -> bool:
         """Рамка окна этажа под скатом — в стене с фронтоном, с отступом от ската."""
         return self.room is not None and self.room.contains(shapely.box(x, y, x + w, y + h))
+
+    def reaches(self, x: int, y: int, w: int, h: int) -> bool:
+        """Рамка окна во фронтоне либо целиком в месте (`fits`), либо выходит за скат, но внутри не
+        меньше `slope_share` рамки — тогда окно обязано быть вида `slope` (gf#319)."""
+        if self.fits(x, y, w, h):
+            return True
+        if self.room is None or not self.slope_share:
+            return False
+        return window_shape.reach(self.room, x, y, w, h) >= self.slope_share
 
     def taken(self, floor: int, placed: list[tuple[Span, int]]) -> list[Span]:
         """Занятое на этаже: условие и проёмы, уже поставленные моделью на этом этаже. Первый
@@ -467,7 +479,7 @@ class WallGeometry:
         roof_floor = wall.under_roof(floor)  # окно во фронтоне — в стене с отступом от ската
         sizes = {i: self.grammar.sizes[k] for i, k in self.vocab.sizes.items()
                  if k < len(self.grammar.sizes) and (
-                     wall.fits(x, y, width[i], self.grammar.sizes[k][1]) if roof_floor
+                     wall.reaches(x, y, width[i], self.grammar.sizes[k][1]) if roof_floor
                      else not wall.height or y + self.grammar.sizes[k][1] <= wall.height)}
         sizes = {i: s for i, s in sizes.items()  # под карниз и не на проём (gf#242)
                  if self._under_cornice(x, width[i], y, s[1])
@@ -683,6 +695,8 @@ class WallGeometry:
             return keep & self._field_numbers()
         if self.current is not None and self.grammar.field == -1:
             return {v.floor}  # проём плана — на первом этаже (валидатор ищет его там)
+        if (slope := self._slope_only()) is not None:
+            return (keep & slope) or keep
         if self.grammar.field is not None and not self.grammar.need:
             keep = keep - set(v.fixed) - ({v.parent} if self.index <= 0 else set())
             if self.current is not None and self.fixes < len(FIX_ORDER):
@@ -699,6 +713,23 @@ class WallGeometry:
         elif keep & set(v.cls) and 0 <= self.at < len(self.walls):
             keep = (keep - self._no_room()) or keep
         return keep
+
+    def _slope_only(self) -> set[int] | None:
+        """Рамка окна во фронтоне вышла за скат (gf#319) — дальше обязательно вид `slope`: после
+        рамки и до вида годны этаж и сам вид, после этажа — только вид. Страж решает по префиксу
+        записи (`... size floor N var:…`), а рамка уже написана: решение — после типоразмера, до
+        вида. None — вид не обязателен."""
+        g, v = self.grammar, self.vocab
+        if (self.cls is not ElementClass.WINDOW or g.need or g.field not in (-1, FLOOR_FIELD)
+                or self.current is not None or not self.boxes
+                or not 0 <= self.at < len(self.walls)):
+            return None
+        wall = self.walls[self.at]
+        _, x, y, w, h = self.boxes[-1]
+        if not wall.under_roof(wall.floor(y)) or wall.fits(x, y, w, h):
+            return None
+        slope = {i for i, k in v.variant.items() if k is VariantKind.SLOPE}
+        return slope | ({v.floor} if g.field == -1 else set()) if slope else None
 
     def _no_room(self) -> set[int]:
         """Начала своих проёмов, которым на стене нет места. Без этого модель писала окна и после
@@ -736,7 +767,7 @@ class WallGeometry:
             lowest = self._lowest()
             return [n for n in numbers if wall.floor(n) in fits and (
                 not wall.under_roof(wall.floor(n))
-                or wall.fits(self.box[X], n, self._narrowest(), lowest))] if len(fits) <= len(
+                or wall.reaches(self.box[X], n, self._narrowest(), lowest))] if len(fits) <= len(
                 wall.floors) or wall.attic else numbers
         x, floor = self.box[X], wall.floor(self.box[Y])
         return [n for n in numbers if 0 < n and x + n <= wall.length - corner
@@ -748,7 +779,7 @@ class WallGeometry:
         wall, narrow = self.walls[self.at], self._narrowest()
         out = {f for f in range(1, len(wall.floors) + 2) if self._clear(x, narrow, f, strict)}
         attic = len(wall.floors) + 2
-        if wall.attic and self._clear(x, narrow, attic, strict) and wall.fits(
+        if wall.attic and self._clear(x, narrow, attic, strict) and wall.reaches(
                 x, wall.attic, narrow, self._lowest()):
             out.add(attic)
         return out
@@ -796,17 +827,17 @@ def walls(bare: FacadeSheet, mode: Mode, cfg: Config) -> list[Wall]:
 
 
 def _gable(length: float, above: list | None, bare: FacadeSheet,
-           cfg: Config) -> tuple[shapely.Geometry | None, int, int]:
+           cfg: Config) -> tuple[shapely.Geometry | None, int, int, float]:
     """Фронтон стены в шагах сетки (gf#321): место окна под скатом, низ этажа под скатом, верх
     стены. Числа места — настоящие метры в шагах, без округления: страж не строже и не мягче
     валидатора."""
     if above is None:
-        return None, 0, 0
+        return None, 0, 0, 0
     grid, eaves, checks = cfg.tokens.grid_m, bare.spec.eaves_m, cfg.checks
     room = shapely.transform(roof.room(length, eaves, above, checks.slope_offset_m),
                              lambda c: c / grid)
     top = math.floor(max(y for _, y in above) / grid + EPS)
-    return room, tokens.units(eaves - checks.attic_knee_m, cfg.tokens), top
+    return room, tokens.units(eaves - checks.attic_knee_m, cfg.tokens), top, checks.slope_share
 
 
 def _planned(o: Opening, t: Tokens) -> Planned:

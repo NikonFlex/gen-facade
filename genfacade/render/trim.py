@@ -35,6 +35,12 @@ def casing(g: ElementTree.Element, e: Element, look: CasingLook) -> ElementTree.
     return ElementTree.SubElement(g, "polygon", {"points": points(shape)})
 
 
+def casing_round(g: ElementTree.Element, shape: list[Point]) -> ElementTree.Element:
+    """Наличник окна не прямоугольником (gf#319): контур по контуру окна (`window_shape.casing`);
+    прямоугольник элемента остаётся рамкой для разбора."""
+    return ElementTree.SubElement(g, "polygon", {"points": points(shape)})
+
+
 def _dome(x0: float, x1: float, y: float, rise: float) -> list[Point]:
     """Дуга над основанием x0…x1 на высоте y: полуэллипс высотой rise, слева направо."""
     mid, half = (x0 + x1) / 2, (x1 - x0) / 2

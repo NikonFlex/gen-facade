@@ -36,6 +36,7 @@ from genfacade.schema import (
     Rule,
     Severity,
     SideFacade,
+    VariantKind,
     Violation,
     ZoneRole,
 )
@@ -121,8 +122,9 @@ def _outside(f: SideFacade, above: Polygon | None, spec: HouseSpec,
         wall = wall.union(roof.wall_shape(f.side.length_m, spec.eaves_m, above))
     wall = wall.buffer(cfg.eps_m, join_style="mitre")
     room = _room(f, above, spec, cfg)
+    by = {e.id: e for e in f.elements}
     return [_v(f, Rule.OUTSIDE, e, f"{e.cls} {e.id} выходит за силуэт стены")
-            for e in f.elements if not wall.contains(_drawn(e, room))]
+            for e in f.elements if not wall.contains(_drawn(e, room, by))]
 
 
 def _room(f: SideFacade, above: Polygon | None, spec: HouseSpec,
@@ -131,9 +133,13 @@ def _room(f: SideFacade, above: Polygon | None, spec: HouseSpec,
                                                 cfg.slope_offset_m)
 
 
-def _drawn(e: Element, room: shapely.Geometry | None) -> shapely.Polygon:
+def _drawn(e: Element, room: shapely.Geometry | None,
+           by: dict[str, Element] | None = None) -> shapely.Polygon:
     """Что элемент занимает на стене: рамка, а у окна — контур по виду (окно по скату — рамка,
-    срезанная скатом, gf#319)."""
+    срезанная скатом, gf#319), у наличника такого окна — контур наличника."""
+    if e.cls is ElementClass.MOLDING and by is not None and (w := by.get(e.parent or "")):
+        if w.cls is ElementClass.WINDOW:
+            return shapely.Polygon(window_shape.casing(w, e, room))
     if e.cls is not ElementClass.WINDOW:
         return _box(e)
     return shapely.Polygon(window_shape.outline(e, room))
@@ -142,15 +148,22 @@ def _drawn(e: Element, room: shapely.Geometry | None) -> shapely.Polygon:
 def _slope(f: SideFacade, above: Polygon | None, spec: HouseSpec,
            cfg: Checks) -> list[Violation]:
     """Окно во фронтоне (верх выше карниза) — не ближе `slope_offset_m` к скату (gf#321). Окно,
-    пересекающее скат, — ещё и `outside`."""
+    пересекающее скат, — ещё и `outside`. Окно вида `slope` (gf#319) проверяется по контуру: рамка
+    может выйти за скат, но контур — не меньше `slope_share` рамки."""
     if above is None:
         return []
     room = _room(f, above, spec, cfg)
     wide = room.buffer(cfg.eps_m)
     near = f"ближе {cfg.slope_offset_m:.2f} м к скату"
-    return [_v(f, Rule.SLOPE, e, f"окно {e.id} во фронтоне {near}")
-            for e in f.elements if roof.over_eaves(e, spec.eaves_m + cfg.eps_m)
-            and not wide.contains(_drawn(e, room))]
+    out = [_v(f, Rule.SLOPE, e, f"окно {e.id} во фронтоне {near}")
+           for e in f.elements if roof.over_eaves(e, spec.eaves_m + cfg.eps_m)
+           and not wide.contains(_drawn(e, room))]
+    small = [e for e in f.elements if window_shape.kind(e) is VariantKind.SLOPE
+             and roof.over_eaves(e, spec.eaves_m + cfg.eps_m)
+             and window_shape.reach(room, e.x_m, e.y_m, e.w_m, e.h_m) < cfg.slope_share - EPS]
+    return out + [_v(f, Rule.SLOPE, e, f"окно {e.id} по скату: за скатом больше "
+                     f"{1 - cfg.slope_share:.0%} рамки") for e in small
+                  if all(v.element != e.id for v in out)]
 
 
 def _overlaps(f: SideFacade, cfg: Checks) -> list[Violation]:

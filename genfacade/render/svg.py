@@ -234,8 +234,9 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
     room = None if not top.above else window_shape.gable_room(
         facade.side.length_m, min(y for _, y in top.above), top.above,
         pen.cfg.checks.slope_offset_m)
+    by = {e.id: e for e in facade.elements}
     for e in facade.elements:
-        _element(g, e, pen, facade, _shape(e, room))
+        _element(g, e, pen, facade, _shape(e, room), _casing_shape(e, by, room))
     for shape in top.roof:  # кровля — поверх: свес закрывает верх стены
         ElementTree.SubElement(g, "polygon", {"class": "roof", "points": points(shape),
                                               "fill": _roof_fill(pen)})
@@ -308,13 +309,26 @@ def _shape(e: Element, room: shapely.Geometry | None) -> Polygon | None:
     """Контур окна не прямоугольником — по его виду (gf#319); прямоугольное окно — None."""
     if e.cls is not ElementClass.WINDOW:
         return None
-    shape = window_shape.outline(e, room)
+    return _not_box(e, window_shape.outline(e, room))
+
+
+def _not_box(e: Element, shape: Polygon) -> Polygon | None:
+    """Контур, если он не прямоугольник рамки элемента, иначе None."""
     box = shapely.box(e.x_m, e.y_m, e.x_m + e.w_m, e.y_m + e.h_m)
     return None if shapely.Polygon(shape).equals(box) else shape
 
 
+def _casing_shape(e: Element, by: dict[str, Element],
+                  room: shapely.Geometry | None) -> Polygon | None:
+    """Контур наличника окна не прямоугольником (gf#319); наличник прямоугольного окна — None."""
+    w = by.get(e.parent or "")
+    if e.cls is not ElementClass.MOLDING or w is None or w.cls is not ElementClass.WINDOW:
+        return None
+    return _not_box(e, window_shape.casing(w, e, room))
+
+
 def _element(g: ElementTree.Element, e: Element, pen: Pen, facade: SideFacade,
-             shape: Polygon | None = None) -> None:
+             shape: Polygon | None = None, round_casing: Polygon | None = None) -> None:
     lib = pen.cfg.library
     attrs = {
         sheet_format.CLS: e.cls, sheet_format.ID: e.id,
@@ -331,7 +345,7 @@ def _element(g: ElementTree.Element, e: Element, pen: Pen, facade: SideFacade,
         attrs["fill"] = lib.fill.glass  # материал окна красит раму
         if e.material:
             attrs["stroke"] = pen.colors[e.material]
-    framed = _framed(e, pen)
+    framed = _framed(e, pen) or round_casing is not None
     if framed or shape:  # рисунок вида — не прямоугольник: прямоугольник остаётся для разбора
         attrs["class"] = "trim-frame"
     ElementTree.SubElement(g, "rect", attrs)
@@ -342,7 +356,9 @@ def _element(g: ElementTree.Element, e: Element, pen: Pen, facade: SideFacade,
     elif e.cls is ElementClass.BLIND:
         trim.shutter(g, e, pen.cfg.derive.find("shutters", pen.trim.shutters), pen.cfg.sheet.trim)
     elif framed:
-        _outline(g, e, pen, facade).set("fill", attrs["fill"])
+        drawn = (trim.casing_round(g, round_casing) if round_casing is not None
+                 else _outline(g, e, pen, facade))
+        drawn.set("fill", attrs["fill"])
 
 
 def foot_of(e: Element, elements: list[Element]) -> float:

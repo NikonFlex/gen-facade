@@ -15,6 +15,7 @@ from genfacade.schema import (
     ElementClass,
     OpeningVariant,
     RoofKind,
+    Rule,
     VariantKind,
 )
 from genfacade.unfold import unfold
@@ -77,3 +78,17 @@ def test_arch_and_round_outlines_stay_in_the_frame():
         shaped = window.model_copy(update={"variant": OpeningVariant(kind=kind)})
         outline = shapely.Polygon(window_shape.outline(shaped))
         assert frame.contains(outline) and outline.area < 1.2 * 1.5, kind
+
+
+def test_slope_window_with_most_of_the_frame_behind_the_slope_is_a_defect():
+    """Окно `slope` (gf#319): контур — не меньше `slope_share` рамки; рамка почти целиком за
+    скатом — брак `slope`, тот же порог, что у стража."""
+    sheet, k = _gabled(VariantKind.SLOPE, top=2.5)
+    [window] = sheet.facades[k].elements
+    far = window.model_copy(update={"x_m": 0.05, "y_m": sheet.spec.eaves_m + 0.1})
+    facades = list(sheet.facades)
+    facades[k] = facades[k].model_copy(update={"elements": [far]})
+    bad = sheet.model_copy(update={"facades": facades})
+    assert any(v.rule is Rule.SLOPE and "за скатом" in v.message
+               for v in validate(bad, CFG.checks) if v.element == "g1")
+    assert not any("за скатом" in v.message for v in validate(sheet, CFG.checks))

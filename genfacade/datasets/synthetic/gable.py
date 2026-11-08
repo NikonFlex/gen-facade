@@ -10,10 +10,11 @@
 """
 
 import random
+from collections.abc import Iterator
 
 import shapely
 
-from genfacade import roof
+from genfacade import roof, window_shape
 from genfacade.config import Config
 from genfacade.datasets.synthetic.plan import on_grid
 from genfacade.schema import (
@@ -51,7 +52,9 @@ def windows(rng: random.Random, sheet: FacadeSheet, cfg: Config) -> list[list[El
         room = roof.room(f.side.length_m, spec.eaves_m, above, cfg.checks.slope_offset_m)
         apex = max(above, key=lambda p: p[1])[0]
         axes = [w.x_m + w.w_m / 2 for w in f.elements if w.cls is ElementClass.WINDOW]
-        out.append(_fit(rng, k, count, (apex, y), templates, (room, axes), spec.floors + 1, cfg))
+        top = max(p[1] for p in above)
+        out.append(_fit(rng, k, count, (apex, y), templates, (room, axes, top), spec.floors + 1,
+                        cfg))
     return out
 
 
@@ -77,32 +80,73 @@ def _templates(sheet: FacadeSheet, cfg: Config) -> list[Element]:
 
 
 def _fit(rng: random.Random, k: int, count: int, at: tuple[float, float],
-         templates: list[Element], wall: tuple[shapely.Geometry, list[float]], floor: int,
+         templates: list[Element], wall: tuple[shapely.Geometry, list[float], float], floor: int,
          cfg: Config) -> list[Element]:
     """Больше всего окон, не больше count, случайного из размеров, что влезают во фронтон; at —
     ось конька и низ окна; wall — место во фронтоне и оси окон этажей стены. Края — на сетке
     синтетики, как у всех проёмов; ряд сдвигается на шаг, если ось окна почти (но не точно)
-    совпала с осью окна этажа — валидатор предупредил бы (`axis_align`)."""
-    (apex, y), (room, axes), gap = at, wall, cfg.synthetic.openings.between_m
-    grid = cfg.synthetic.spec.grid_m
+    совпала с осью окна этажа — валидатор предупредил бы (`axis_align`). Окно вида `slope` (gf#319)
+    ставится рамкой через скат (`_crossing`); не нашлось места — окно как у этажа."""
+    (apex, y), (room, axes, top) = at, wall
     for n in range(count, 0, -1):
         rows = []
         for t in templates:
-            base = [round(round(x / grid) * grid, 3) for x in _row(n, apex, t.w_m, gap)]
-            for shift in AXIS_SHIFTS:
-                xs = [round(x + shift * grid, 3) for x in base]
-                if all(room.contains(_box((x, y, t.w_m, t.h_m))) for x in xs) and not any(
-                        cfg.checks.eps_m < abs(x + t.w_m / 2 - a) <= cfg.checks.align_m + grid
-                        for x in xs for a in axes):  # запас в шаг: окна этажа сетка сдвигает
+            for xs in _shifted(n, apex, t, cfg):
+                if all(room.contains(_box((x, y, t.w_m, t.h_m))) for x in xs) and not _clash(
+                        xs, t, axes, cfg):
                     rows.append((t, xs))
                     break
         if rows:
             t, xs = rng.choice(rows)
             variant = _shaped(rng, t.variant, cfg)
+            if variant is not None and variant.kind is VariantKind.SLOPE:
+                across = _crossing(n, (apex, y, top), templates, (room, axes), cfg)
+                if across:
+                    t, xs = rng.choice(across)
+                else:
+                    variant = t.variant
             return [Element(id=f"g{k}_{i + 1}", cls=ElementClass.WINDOW, x_m=x, y_m=y,
                             w_m=t.w_m, h_m=t.h_m, floor=floor, variant=variant)
                     for i, x in enumerate(xs)]
     return []
+
+
+Row = tuple[Element, list[float]]
+
+
+def _crossing(n: int, at: tuple[float, float, float], templates: list[Element],
+              wall: tuple[shapely.Geometry, list[float]], cfg: Config) -> list[Row]:
+    """Ряды из n окон `slope` (gf#319): рамка хотя бы у одного окна выходит за скат, а контур — не
+    меньше `checks.slope_share` рамки (как держат страж и валидатор); верх рамки — не выше конька
+    `top`. Края и оси — как у окон в стене (`_fit`)."""
+    (apex, y, top), (room, axes) = at, wall
+    share = cfg.checks.slope_share
+    rows = []
+    for t in templates:
+        if y + t.h_m > top:
+            continue
+        for xs in _shifted(n, apex, t, cfg):
+            reach = all(window_shape.reach(room, x, y, t.w_m, t.h_m) >= share for x in xs)
+            crossing = any(not room.contains(_box((x, y, t.w_m, t.h_m))) for x in xs)
+            if reach and crossing and not _clash(xs, t, axes, cfg):
+                rows.append((t, xs))
+                break
+    return rows
+
+
+def _shifted(n: int, apex: float, t: Element, cfg: Config) -> Iterator[list[float]]:
+    """Левые края n окон ряда на сетке синтетики, по сдвигам `AXIS_SHIFTS` от оси конька."""
+    grid, gap = cfg.synthetic.spec.grid_m, cfg.synthetic.openings.between_m
+    base = [round(round(x / grid) * grid, 3) for x in _row(n, apex, t.w_m, gap)]
+    for shift in AXIS_SHIFTS:
+        yield [round(x + shift * grid, 3) for x in base]
+
+
+def _clash(xs: list[float], t: Element, axes: list[float], cfg: Config) -> bool:
+    """Ось окна почти (но не точно) совпала с осью окна этажа — валидатор предупредил бы
+    (`axis_align`); запас в шаг: окна этажа сетка сдвигает."""
+    return any(cfg.checks.eps_m < abs(x + t.w_m / 2 - a) <= cfg.checks.align_m
+              + cfg.synthetic.spec.grid_m for x in xs for a in axes)
 
 
 def _shaped(rng: random.Random, variant: OpeningVariant | None,

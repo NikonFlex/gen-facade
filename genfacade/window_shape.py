@@ -44,6 +44,33 @@ def outline(e: Element, gable: shapely.Geometry | None = None) -> Polygon:
     return box
 
 
+def reach(room: shapely.Geometry, x: float, y: float, w: float, h: float) -> float:
+    """Доля рамки x y w h, что остаётся в месте окна во фронтоне (`room`), если срез — один
+    многоугольник, иначе 0. Одна формула стража (в шагах сетки: доля от масштаба не зависит),
+    валидатора и синтетики: окно `slope` годно, когда доля не меньше `checks.slope_share`."""
+    if w <= 0 or h <= 0:
+        return 0.0
+    cut = room.intersection(shapely.box(x, y, x + w, y + h))
+    return cut.area / (w * h) if cut.geom_type == "Polygon" else 0.0
+
+
+def casing(w: Element, m: Element, gable: shapely.Geometry | None = None) -> Polygon:
+    """Контур наличника окна w не прямоугольником (gf#319): контур окна, расширенный на ширину
+    наличника, в пределах прямоугольника наличника m (его низ — низ окна). Прямоугольник m остаётся
+    записью и рамкой разбора; рисунок и проверка стены берут этот контур. Окно — прямоугольник:
+    сам m."""
+    box = [(m.x_m, m.y_m), (m.x_m + m.w_m, m.y_m), (m.x_m + m.w_m, m.y_m + m.h_m),
+           (m.x_m, m.y_m + m.h_m)]
+    shape = outline(w, gable)
+    if shapely.Polygon(shape).equals(shapely.box(w.x_m, w.y_m, w.x_m + w.w_m, w.y_m + w.h_m)):
+        return box
+    ring = shapely.Polygon(shape).buffer(w.x_m - m.x_m, join_style="mitre")
+    cut = ring.intersection(shapely.box(m.x_m, w.y_m, m.x_m + m.w_m, m.y_m + m.h_m))
+    parts = getattr(cut, "geoms", [cut])
+    best = max((g for g in parts if g.geom_type == "Polygon"), key=lambda g: g.area, default=None)
+    return box if best is None or best.area <= 0 else list(best.exterior.coords)[:-1]
+
+
 def gable_room(length: float, eaves: float, above: Polygon | None,
                offset: float) -> shapely.Geometry | None:
     """Место окна во фронтоне стены или None, если фронтона нет."""
