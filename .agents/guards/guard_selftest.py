@@ -59,13 +59,31 @@ CASES = [
 ]
 
 
+def agent(model: str | None, prompt: str) -> Call:
+    return Call(agent={"prompt": prompt, "description": "x", **({"model": model} if model else {})})
+
+
+#: Запуск субагента (gf#358): (вызов, ответ, кусок причины).
+AGENT_CASES = [
+    (agent("opus", "Сделай дизайн смотрелки"), Verdict.DENY, "без причины"),
+    (agent("opus", ""), Verdict.DENY, "без причины"),
+    (agent("opus", "Opus: дизайн\nсделай"), Verdict.DENY, "без причины"),
+    (agent("opus", "\n\nOpus: формат токенов\nсделай"), Verdict.ALLOW, ""),
+    (agent("opus", "Opus: Страж"), Verdict.ALLOW, ""),
+    (agent(None, "Opus: страж"), Verdict.DENY, "нет `model`"),
+    (agent("sonnet", "код"), Verdict.ALLOW, ""),
+    (agent("haiku", "прогон"), Verdict.ALLOW, ""),
+    (agent("fable", "x"), Verdict.DENY, "кому что отдавать"),
+]
+
+
 def project(root: Path, repeat: bool, gated: bool) -> Path:
     bottom = "Локальный повтор: не требуется — настройка\n" if repeat else ""
     files = {
         ".backlog.json": '{"prefix": "ab"}',
         ".agents/guards/config.json": json.dumps({
             "prod": [r"\bssh\s+\S*prod"], "secret_files": [r"^\.env(\..+)?$", r"\.pem$"],
-            "secret_allow": [".env.example"]}),
+            "secret_allow": [".env.example"], "opus_reasons": ["формат токенов", "страж"]}),
         "tools/receipt.json": json.dumps({"exclude": [], "gated": gated}),
         "docs/tasks/ab-0012.md": f"# ab#12\n\n<!-- ↓↓↓ ниже наше: скрипт эту часть не трогает "
                                  f"↓↓↓ -->\n\n{bottom}",
@@ -79,9 +97,9 @@ def project(root: Path, repeat: bool, gated: bool) -> Path:
     return root
 
 
-def cases(root: Path) -> list[str]:
+def cases(root: Path, table: list = CASES) -> list[str]:
     bad = []
-    for call, wanted, reason in CASES:
+    for call, wanted, reason in table:
         verdict, why = decide(call, root)
         if verdict != wanted or reason not in why:
             bad.append(f"{call}: {verdict} «{why}», ждали {wanted} «{reason}»")
@@ -167,12 +185,12 @@ def selftest() -> int:
     state = os.environ.get("STAND_STATE_DIR")
     with tempfile.TemporaryDirectory() as tmp:
         root = project(Path(tmp) / "base", repeat=True, gated=False)
-        bad = (cases(root) + pr_and_push(Path(tmp)) + corrupt_receipts(Path(tmp))
-               + formats())
+        bad = (cases(root) + cases(root, AGENT_CASES) + pr_and_push(Path(tmp))
+               + corrupt_receipts(Path(tmp)) + formats())
     if state is None:
         os.environ.pop("STAND_STATE_DIR", None)
     else:
         os.environ["STAND_STATE_DIR"] = state
-    return report(bad, f"{len(CASES)} входов сторожей, PR без «Локального повтора», квитанция "
-                       "push (и битые строки журнала), форматы Claude Code / Codex / Cursor, "
-                       "правила Codex")
+    return report(bad, f"{len(CASES)} входов сторожей, {len(AGENT_CASES)} запусков субагента, "
+                       "PR без «Локального повтора», квитанция push (и битые строки журнала), "
+                       "форматы Claude Code / Codex / Cursor, правила Codex")
