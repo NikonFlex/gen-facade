@@ -157,6 +157,18 @@ def facade_svg(facade: SideFacade, pen: Pen) -> str:
     return ElementTree.tostring(root, encoding="unicode")
 
 
+def facade_roof_svg(sheet: FacadeSheet, cfg: Config, k: int) -> str:
+    """Один фасад листа вместе с кровлей над ним, без подписей: то, как его рисует лист, но
+    кадр — по стене и свесу, а не по всему листу. Для образцов каталога смотрелки (gf#354)."""
+    facade, top = sheet.facades[k], tops(sheet, cfg)[k]
+    pen, pad = pen_for(sheet, cfg), sheet.spec.roof.overhang_m
+    above = [PaletteRole.MAIN, pen.roof] if top.roof else []
+    root = canvas(facade.side.length_m + 2 * pad, top.height(facade), cfg.css,
+                  _patterns([facade], pen, above))
+    _facade_geometry(root, facade, (pad, top.height(facade)), pen, top)
+    return ElementTree.tostring(root, encoding="unicode")
+
+
 def palette_colors(spec: HouseSpec, cfg: Config) -> dict[str, str]:
     """id материала палитры → цвет: свой или цвет вида из библиотеки."""
     kinds = cfg.library.kinds

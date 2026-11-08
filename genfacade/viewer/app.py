@@ -1,5 +1,5 @@
 """Сервер смотрелки: планы и прогоны, примеры датасета, режимы и подписи, файлы трассы, слепая
-проверка листов глазами (/review, gf#268).
+проверка листов глазами (/review, gf#268), каталог видов (/catalog, gf#354).
 
 Страница ничего не считает сама: SVG рисует тот же render/, что и на выходе
 (docs/decisions.md, 29.09 «трасса каждого шага и веб-смотрелка»).
@@ -23,7 +23,7 @@ from genfacade.plan.genplan_svg import PlanError
 from genfacade.render.house3d import house_3d
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import FacadeSheet, Mode, Refusal, Sample, Source, refusal_record
-from genfacade.viewer import markup, review
+from genfacade.viewer import catalog, markup, review
 
 STATIC = files(__package__).joinpath("static")
 REFERENCE_SLOT = "ref"  # место настоящего листа на странице проверки
@@ -48,6 +48,7 @@ def create_app(cfg: Config, checked: Path | None = None, marked: Path | None = N
     _samples_api(app, cfg)
     _review_api(app, cfg, checked)
     markup.api(app, cfg, marked or cfg.viewer.markup.folder)
+    catalog.api(app, cfg)
     app.mount("/files", StaticFiles(directory=runs_dir), name="files")
     app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
@@ -62,6 +63,10 @@ def create_app(cfg: Config, checked: Path | None = None, marked: Path | None = N
     @app.get("/markup")
     def markup_page() -> FileResponse:
         return FileResponse(str(STATIC.joinpath("markup.html")))
+
+    @app.get("/catalog")
+    def catalog_page() -> FileResponse:
+        return FileResponse(str(STATIC.joinpath("catalog.html")))
 
     return app
 

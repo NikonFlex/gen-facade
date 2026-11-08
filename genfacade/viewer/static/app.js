@@ -577,7 +577,7 @@ function onKey(e) {
 async function init() {
   $("back-btn").addEventListener("click", goHome);
   $("home-link").addEventListener("click", (e) => { e.preventDefault(); goHome(); });
-  for (const link of $("tabs").children) link.addEventListener("click", (e) => { e.preventDefault(); goToTab(link.dataset.tab); });
+  for (const link of $("tabs").querySelectorAll("[data-tab]")) link.addEventListener("click", (e) => { e.preventDefault(); goToTab(link.dataset.tab); });
   window.addEventListener("popstate", route);
   document.addEventListener("keydown", onKey);
   state.options = await api("/api/options");

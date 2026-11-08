@@ -47,6 +47,8 @@ class Refusal(StrEnum):
     NO_RUN = "no_run"
     NO_SHEET = "no_sheet"                      # у прогона нет листа фасадов
     NO_SAMPLE = "no_sample"
+    NO_CATALOG_ITEM = "no_catalog_item"        # каталог: нет такого раздела или вида
+    CATALOG_NOT_DRAWN = "catalog_not_drawn"    # каталог: вид в конфиге, образец с ним не строится
     NO_REVIEW = "no_review"                    # смотрелка запущена без --review
     NO_REVIEW_ITEM = "no_review_item"          # нет дома, места или листа проверки
     NO_MARKUP_HOUSE = "no_markup_house"        # страница правки: нет такого дома в очереди
@@ -68,6 +70,8 @@ REFUSAL_TEXT = {
     Refusal.NO_RUN: "нет прогона",
     Refusal.NO_SHEET: "у прогона нет листа фасадов",
     Refusal.NO_SAMPLE: "нет примера",
+    Refusal.NO_CATALOG_ITEM: "нет в каталоге",
+    Refusal.CATALOG_NOT_DRAWN: "образец с таким видом не строится",
     Refusal.NO_REVIEW: "проверка не включена: genfacade serve --review <папка realtest>",
     Refusal.NO_REVIEW_ITEM: "нет в проверке",
     Refusal.NO_MARKUP_HOUSE: "нет дома в очереди разметки",
