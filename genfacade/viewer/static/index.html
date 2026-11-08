@@ -3,73 +3,101 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#14171c">
   <title>GenFacade · смотрелка</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M4 15 16 5l12 10v13H4z' fill='%232f5d8a'/%3E%3Crect x='9' y='17' width='5' height='5' fill='%23fff'/%3E%3Crect x='18' y='17' width='5' height='11' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23f0a35b'/%3E%3Cpath d='M7 15 16 8l9 7M9 14v10h14V14' fill='none' stroke='%2314171c' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/theme.css">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header class="topbar">
-    <div class="top-left">
-      <a class="brand" href="#" id="home-link" title="Все дома и прогоны">
-        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-          <path d="M4 15 16 5l12 10v13H4z"/><rect x="9" y="17" width="5" height="5"/><rect x="18" y="17" width="5" height="11"/>
-        </svg>
-        <span class="brand-name">GenFacade</span>
-      </a>
-      <nav class="tabs" id="tabs" aria-label="Разделы">
-        <a href="#" data-tab="home">Прогоны</a>
-        <a href="#datasets" data-tab="datasets">Датасеты</a>
-        <a href="/catalog">Каталог</a>
-      </nav>
-      <div class="run-bar" id="run-bar" hidden>
-        <button class="btn ghost" id="back-btn" title="Все дома и прогоны (Esc)"></button>
-        <h1 id="run-title"></h1>
-        <div class="chips" id="run-chips"></div>
-      </div>
-    </div>
-    <div class="topbar-actions">
-      <div class="run-actions" id="run-actions"></div>
-    </div>
-  </header>
+  <header id="topbar"></header>
 
   <main class="main">
-    <section class="home" id="home">
-      <div class="home-inner">
-        <div class="section-head">
-          <h2>План и описание</h2>
-          <span class="section-note">SVG-план GenPlan + описание по-английски → фасады, все шаги конвейера</span>
+    <section class="home" id="houses" hidden aria-labelledby="houses-title">
+      <div class="page">
+        <div class="page-head">
+          <h1 id="houses-title">Дома</h1><span class="count" id="runs-count"></span>
+          <label class="end search">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3" stroke-linecap="round"/></svg>
+            <span class="visually-hidden">Поиск по домам</span>
+            <input class="input" id="runs-search" type="search" autocomplete="off" placeholder="Имя, описание, материал…">
+          </label>
         </div>
-        <form class="plan-form" id="plan-form" inert>
-          <div class="plan-thumb" id="plan-thumb"></div>
-          <div class="plan-fields">
-            <div class="plan-row">
-              <select id="plan-select" aria-label="План"></select>
-              <label class="btn" title="Свой SVG-план в формате GenPlan">
-                <input type="file" accept=".svg,image/svg+xml" id="plan-file" hidden><span>Свой SVG</span>
+        <div class="filters" id="runs-filters" role="group" aria-label="Фильтры"></div>
+        <ul class="cards" id="runs" aria-live="polite"></ul>
+      </div>
+    </section>
+
+    <section class="home" id="new" hidden aria-labelledby="new-title">
+      <div class="page">
+        <div class="page-head">
+          <h1 id="new-title">Новый дом</h1>
+          <span class="count">план GenPlan и параметры дома → фасады, все шаги конвейера</span>
+        </div>
+        <form class="nh" id="nh" inert>
+          <section class="panel nh-plan" aria-labelledby="nh-plan-title">
+            <div class="panel-head"><h2 id="nh-plan-title">План</h2></div>
+            <div class="panel-body">
+              <div class="segmented" id="nh-source" role="radiogroup" aria-label="Откуда план"></div>
+              <div class="nh-pick" id="nh-pick-ready">
+                <select class="select" id="nh-plan" aria-label="Готовый план"></select>
+              </div>
+              <div class="nh-pick" id="nh-pick-random" hidden>
+                <select class="select" id="nh-shape" aria-label="Форма плана"></select>
+                <button class="btn" type="button" id="nh-variant">Другой план <span class="chip" id="nh-variant-n"></span></button>
+              </div>
+              <div class="nh-pick" id="nh-pick-own" hidden>
+                <label class="btn"><input type="file" accept=".svg,image/svg+xml" id="nh-file" hidden><span>Выбрать SVG плана</span></label>
+              </div>
+              <div class="nh-thumb" id="nh-thumb"></div>
+              <div class="nh-field" role="radiogroup" aria-label="Режим">
+                <span class="nh-label">Режим</span>
+                <div class="segmented" id="nh-mode"></div>
+              </div>
+            </div>
+          </section>
+          <section class="panel nh-params" aria-labelledby="nh-params-title">
+            <div class="panel-head">
+              <h2 id="nh-params-title">Параметры дома</h2><span class="chip">шаг 1</span>
+              <button class="btn ghost end" type="button" id="nh-reset">Сбросить</button>
+            </div>
+            <div class="panel-body nh-fields" id="nh-fields"></div>
+          </section>
+          <section class="panel nh-describe" aria-labelledby="nh-describe-title">
+            <div class="panel-head"><h2 id="nh-describe-title">Описание</h2><span class="chip">необязательно</span></div>
+            <div class="panel-body">
+              <label class="field">
+                <span>Собирается из параметров; можно написать своё и разобрать обратно в параметры</span>
+                <textarea class="textarea" id="nh-text" rows="4" spellcheck="false"
+                  placeholder="A simple one-storey house with a flat roof."></textarea>
               </label>
+              <button class="btn" type="button" id="nh-parse">Разобрать в параметры</button>
+              <h3 class="eyebrow nh-read-title">Что прочтёт шаг 1</h3>
+              <dl class="facts" id="nh-read" aria-live="polite"></dl>
             </div>
-            <textarea id="plan-text" rows="3" spellcheck="false" aria-label="Описание дома"
-              placeholder="A simple one-storey house with a flat roof."></textarea>
-            <div class="plan-row">
-              <div class="segmented" id="mode-group" role="radiogroup" aria-label="Режим"></div>
-              <button class="btn primary" id="plan-go" type="submit"></button>
-            </div>
+          </section>
+          <div class="nh-actions">
+            <label class="field nh-count" id="nh-count-field" hidden>
+              <span>Разных планов</span>
+              <input class="input" type="number" id="nh-count" min="1" max="6" inputmode="numeric">
+            </label>
+            <button class="btn primary" id="nh-go" type="submit"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg><span>Построить фасады</span></button>
           </div>
         </form>
-
-        <div class="section-head">
-          <h2>Прогоны</h2><span class="count" id="runs-count"></span>
-          <span class="section-note">новые сверху; открываются без пересчёта</span>
-        </div>
-        <ul class="run-grid" id="runs"></ul>
       </div>
     </section>
 
     <section class="home" id="datasets" hidden>
-      <div class="home-inner" id="samples"></div>
+      <div class="page" id="samples"></div>
     </section>
 
     <section class="run" id="run" hidden>
+      <div class="run-head">
+        <button class="btn ghost" id="back-btn" title="Назад к списку (Esc)"></button>
+        <h1 id="run-title"></h1>
+        <div class="chips" id="run-chips"></div>
+        <div class="run-actions" id="run-actions"></div>
+      </div>
       <nav class="stepper" id="stepper" aria-label="Шаги конвейера"></nav>
       <section class="stage" id="stage"></section>
     </section>

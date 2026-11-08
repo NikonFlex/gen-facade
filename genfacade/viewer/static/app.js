@@ -1,12 +1,14 @@
-// Смотрелка прогонов. Два экрана: главная (дома, свой JSON, история прогонов) и прогон
-// на весь экран (шаги конвейера, чертёж). Открытый прогон — в адресе (#run=…&step=…):
-// перезагрузка и ссылка его сохраняют, «назад» в браузере возвращает на главную.
+// Смотрелка прогонов. Вкладки страницы — Дома (прогоны карточками), Новый дом (план и описание),
+// Данные (примеры датасета) — и экран дома (шаги конвейера, чертёж, 3D). Открытый прогон — в адресе
+// (#run=…&step=…): перезагрузка и ссылка его сохраняют, «назад» в браузере возвращает к списку.
 
 import { HouseStage } from "/static/house3d.js";
 import { refusalText, refusedFrom } from "/static/refusal.js";
+import { NAV, markCurrent, topbar } from "/static/shell.js";
 import { SvgStage, metres } from "/static/stage.js";
+import { showData } from "/static/datapage.js";
+import { mountNewHouse } from "/static/newhouse.js";
 
-const ROOF = { flat: "плоская" };  // пока только плоская (хозяин 01.10)
 const LAYERS = {
   zones: "Зоны отделки", elements: "Элементы", mullions: "Створки",
   annotations: "Подписи", forbidden: "Запретные зоны", violations: "Нарушения",
@@ -30,7 +32,7 @@ const ICON = {
 };
 
 const $ = (id) => document.getElementById(id);
-const state = { runs: [], meta: null, runId: null, step: null, stage: null, nav: 0, shown: 0, planPick: 0, options: null };
+const state = { runs: [], meta: null, runId: null, step: null, stage: null, nav: 0, shown: 0, options: null, filters: {}, query: "" };
 // Ответ шага, с которого уже ушли, экран не трогает: показан последний выбранный шаг (C13, gf#293).
 const stale = (shown) => shown !== state.shown;
 
@@ -71,6 +73,12 @@ async function api(path, body) {
 }
 
 const runName = (id) => id.replace(/^\d{8}-\d{6}-/, "").replace(/-\d+$/, "");
+// Число со словом по-русски: 1 этаж, 2 этажа, 5 этажей.
+const RU_PLURAL = new Intl.PluralRules("ru");
+const counted = (n, forms) => `${n} ${forms[RU_PLURAL.select(n)] ?? forms.many}`;
+const FLOORS = { one: "этаж", few: "этажа", many: "этажей" };
+const SIDES = { one: "сторона", few: "стороны", many: "сторон" };
+const RUNS = { one: "прогон", few: "прогона", many: "прогонов" };
 const fmtDate = (iso) => new Date(iso).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
 function ago(iso) {
@@ -82,111 +90,86 @@ function ago(iso) {
   return "только что";
 }
 
-// ——— план и описание ———
-
-const planState = { svg: null, name: null };
-
-async function loadPlans() {
-  const plans = await api("/api/plans");
-  $("plan-select").replaceChildren(...plans.map((p) => el("option", { value: p.name, textContent: p.name })));
-  const last = store.get("plan.name", null);
-  if (plans.some((p) => p.name === last)) $("plan-select").value = last;
-  showPlanThumb(`/api/plans/${encodeURIComponent($("plan-select").value)}`);
-}
-
-function showPlanThumb(src) {
-  $("plan-thumb").replaceChildren(el("img", { src, alt: "План" }));
-}
-
-function bindPlanForm() {
-  const form = $("plan-form");
-  $("plan-go").innerHTML = `${ICON.play}<span>Построить фасады</span>`;
-  $("plan-text").value = store.get("plan.text", "A simple one-storey house with a flat roof.");
-  const { modes, default_mode: fallback } = state.options;
-  $("mode-group").replaceChildren(...modes.map((m) => el("label", { title: m.hint },
-    `<input type="radio" name="mode" value="${m.value}"><span>${m.title}</span>`)));
-  const saved = store.get("plan.mode", fallback);
-  const mode = modes.some((m) => m.value === saved) ? saved : fallback;
-  form.querySelector(`input[name=mode][value=${mode}]`).checked = true;
-  // Выбор плана — по последнему действию: файл, который ещё читается, не перебьёт выбор из списка.
-  $("plan-select").addEventListener("change", () => {
-    state.planPick += 1;
-    Object.assign(planState, { svg: null, name: null });
-    showPlanThumb(`/api/plans/${encodeURIComponent($("plan-select").value)}`);
-  });
-  $("plan-file").addEventListener("change", async () => {
-    const file = $("plan-file").files[0], pick = ++state.planPick;
-    if (!file) return;
-    const svg = await file.text();
-    if (pick !== state.planPick) return;
-    Object.assign(planState, { svg, name: file.name.replace(/\.svg$/i, "") });
-    showPlanThumb(URL.createObjectURL(file));
-    $("plan-select").replaceChildren(el("option", { textContent: `свой: ${file.name}` }), ...$("plan-select").children);
-    $("plan-select").selectedIndex = 0;
-  });
-  form.addEventListener("submit", (e) => { e.preventDefault(); submitPlan().catch(() => {}); });
-}
-
-async function submitPlan() {
-  const form = $("plan-form");
-  const run = {
-    plan: planState.name ?? $("plan-select").value,
-    text: $("plan-text").value.trim(),
-    mode: form.querySelector("input[name=mode]:checked").value,
-  };
-  store.set("plan.text", run.text);
-  store.set("plan.mode", run.mode);
-  if (!planState.svg) store.set("plan.name", run.plan);
-  await startRun({ plan_run: run, svg: planState.svg }, $("plan-go"));
-}
-
 // ——— дома и прогоны ———
 
 async function loadRuns() {
   state.runs = await api("/api/runs");
-  $("runs-count").textContent = state.runs.length || "";
-  const items = state.runs.map(runCard);
-  $("runs").replaceChildren(...(items.length ? items : [el("li", { className: "empty-note", textContent: "Пока пусто — постройте фасады по плану выше." })]));
+  $("runs-count").textContent = counted(state.runs.length, RUNS);
+  renderFilters();
+  renderRuns();
 }
 
+// Фильтры — по полям карточки, которые посчитал сервер (viewer/houses.py); значения — те, что
+// есть в списке, подписи — из /api/options. Фильтр только сужает показ, ничего не решает.
+const FILTERS = [
+  { key: "outcome", title: "Итог", value: (r) => r.outcome, label: (v) => state.options.outcome[v].title },
+  { key: "mode", title: "Режим", value: (r) => r.mode, label: (v) => modeTitle(v) },
+  { key: "sides", title: "Форма", value: (r) => r.house?.sides, label: (v) => counted(v, SIDES) },
+  { key: "roof", title: "Крыша", value: (r) => r.house?.roof, label: (v) => state.options.roof[v] },
+  { key: "model", title: "Модель", value: (r) => r.model, label: (v) => v },
+];
+const modeTitle = (v) => state.options.modes.find((m) => m.value === v).title;
+
+function renderFilters() {
+  const groups = FILTERS.map((f) => {
+    const counts = new Map();
+    for (const r of state.runs) {
+      const v = f.value(r);
+      if (v != null) counts.set(v, (counts.get(v) ?? 0) + 1);
+    }
+    if (counts.size < 2) return null; // одно значение на все дома — фильтровать нечем
+    const group = el("div", { className: "filter-group", role: "group", ariaLabel: f.title },
+      `<span class="filter-label">${f.title}</span>`);
+    group.append(filterButton(f.key, null, "все"),
+      ...[...counts].sort().map(([v, n]) => filterButton(f.key, v, `${f.label(v)}<span class="n">${n}</span>`)));
+    return group;
+  }).filter(Boolean);
+  $("runs-filters").replaceChildren(...groups);
+}
+
+function filterButton(key, value, html) {
+  const btn = el("button", { type: "button", className: "filter" }, html);
+  btn.setAttribute("aria-pressed", String((state.filters[key] ?? null) === value));
+  btn.addEventListener("click", () => {
+    state.filters[key] = value;
+    for (const b of btn.parentElement.querySelectorAll(".filter")) b.setAttribute("aria-pressed", String(b === btn));
+    renderRuns();
+  });
+  return btn;
+}
+
+function shownRuns() {
+  const q = state.query.toLowerCase();
+  return state.runs.filter((r) => FILTERS.every((f) => state.filters[f.key] == null || f.value(r) === state.filters[f.key])
+    && (!q || [r.id, r.text, r.source, r.model, r.house?.walls].some((t) => t?.toLowerCase().includes(q))));
+}
+
+function renderRuns() {
+  const shown = shownRuns();
+  const note = state.runs.length ? "Под фильтр ничего не подошло." : "Пока пусто — постройте дом на вкладке «Новый дом».";
+  $("runs").replaceChildren(...(shown.length ? shown.map(runCard) : [el("li", { className: "empty-note", textContent: note })]));
+}
+
+// Карточка дома: лист на «бумаге», название, модель, параметры дома и итог проверки.
 function runCard(r) {
-  const thumb = r.preview ? `<img class="run-thumb" src="/files/${r.id}/${r.preview}" alt="" loading="lazy">` : '<span class="run-thumb"></span>';
-  const btn = el("button", { className: "run-card", title: r.id },
-    `${thumb}<span class="run-info"><span class="run-name">${runName(r.id)}</span><span class="run-when">${ago(r.date)} · ${fmtDate(r.date)}</span></span>`);
-  btn.addEventListener("click", () => goToRun(r.id));
-  return listItem(btn);
+  const h = r.house, tone = state.options.outcome[r.outcome];
+  const thumb = r.thumb ? `<img src="${r.thumb}" alt="" loading="lazy">`
+    : '<svg class="house-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/></svg>';
+  const facts = h ? [`<span class="swatch" style="background:${h.color}"></span>${state.options.kind[h.walls] ?? h.walls}`, state.options.roof[h.roof],
+    counted(h.floors, FLOORS), h.sides ? counted(h.sides, SIDES) : null].filter(Boolean) : [];
+  const warn = r.warnings ? `<span class="status warn">· ${r.warnings} предупр.</span>` : "";
+  const link = el("a", { className: "card", href: `#run=${encodeURIComponent(r.id)}`, title: r.text ?? r.source }, `
+    <div class="card-thumb">${thumb}</div>
+    <div class="card-body">
+      <div class="card-title"><h3>${runName(r.id)}</h3>${r.model ? `<span class="chip accent">${r.model}</span>` : ""}</div>
+      <div class="card-meta">${facts.join('<span class="sep">·</span>')}</div>
+      <div class="card-foot"><span class="status ${tone.tone}"><span class="dot"></span>${tone.title}</span>${warn}${r.mode ? `<span>· ${modeTitle(r.mode)}</span>` : ""}<span class="when">${ago(r.date)}</span></div>
+    </div>`);
+  link.addEventListener("click", (e) => { e.preventDefault(); goToRun(r.id); });
+  return listItem(link);
 }
 
-// ——— датасеты ———
-
-async function loadSamples() {
-  const sources = await api("/api/samples");
-  const blocks = sources.flatMap(sourceBlock);
-  $("samples").replaceChildren(...(blocks.length ? blocks : [el("p", { className: "empty-note", textContent: "Примеров пока нет — появятся после сборки датасета." })]));
-}
-
-// Источник: заголовок, опись числами и дома карточками; всё — из ответа сервера.
-function sourceBlock(s) {
-  const counts = (obj, label) => Object.entries(obj).map(([k, n]) => `<span class="chip">${label(k)} <b>${n}</b></span>`).join("");
-  const head = el("div", { className: "section-head" },
-    `<h2>${s.source}</h2>
-     <span class="section-note">опись на ${fmtDate(s.date)}${s.samples > s.ids.length ? ` · показаны первые ${s.ids.length}` : ""}</span>`);
-  const stats = el("div", { className: "dataset-stats" },
-    `<span class="chip">домов <b>${s.samples}</b></span><span class="chip">стен <b>${s.walls}</b></span><span class="chip">из них глухих <b>${s.blind_walls}</b></span>
-     ${s.generator ? `<span class="chip" title="дома с ошибкой валидатора в датасет не пишутся">отброшено <b>${Object.keys(s.generator.rejected).length}</b></span>` : ""}
-     ${counts(s.splits, (k) => k)}${counts(s.elements, (k) => state.options.cls[k].toLowerCase())}`);
-  const grid = el("ul", { className: "run-grid" });
-  grid.append(...s.ids.map((id) => sampleCard(s.source, id)));
-  return [head, stats, grid];
-}
-
-function sampleCard(source, id) {
-  const url = `/api/samples/${source}/${encodeURIComponent(id)}`;
-  const btn = el("button", { className: "run-card", title: `${source}/${id}` },
-    `<img class="run-thumb" src="${url}/sheet.svg" alt="" loading="lazy"><span class="run-info"><span class="run-name">${id}</span></span>`);
-  btn.addEventListener("click", () => openSample(url, btn).catch((err) => toast(err.message, "error")));
-  return listItem(btn);
-}
+// ——— примеры датасета ———
 
 async function openSample(url, busyEl) {
   busyEl.classList.add("busy");
@@ -208,7 +191,7 @@ async function startRun(body, busyEl, { quiet = false } = {}) {
     const ms = Math.round(performance.now() - t0);
     if (nav !== state.nav) { // пока считали, пользователь ушёл — не выдёргиваем его обратно
       toast(`Прогон ${runName(id)} готов за ${ms} мс — он в списке`);
-      if (!$("home").hidden) await loadRuns();
+      if (!$("houses").hidden) await loadRuns();
       return;
     }
     await goToRun(id, state.step === "input" ? "input" : null);
@@ -225,7 +208,7 @@ async function startRun(body, busyEl, { quiet = false } = {}) {
 // ——— переходы между экранами ———
 
 async function goToRun(id, step = null) {
-  // С главной — новая запись в истории: «назад» в браузере вернёт на главную.
+  // Со списка — новая запись в истории: «назад» в браузере вернёт к нему.
   // Из прогона в прогон (перезапуск) — замена, чтобы история не копила промежуточные.
   const url = `#run=${encodeURIComponent(id)}`;
   if ($("run").hidden) history.pushState({ fromHome: true }, "", url);
@@ -233,23 +216,25 @@ async function goToRun(id, step = null) {
   await openRun(id, step);
 }
 
-// Вкладки главной: что показать, чем заполнить и какой у вкладки адрес.
+// Вкладки страницы: раздел шапки (shell.js), секция в index.html, чем заполнить, адрес.
 const TABS = {
-  home: { load: loadRuns, url: () => location.pathname },
-  datasets: { load: loadSamples, url: () => "#datasets" },
+  houses: { section: "houses", load: loadRuns, hash: "" },
+  new: { section: "new", load: async () => {}, hash: "new" },
+  data: { section: "datasets", load: () => showData({ api, options: state.options, openSample: (url, btn) => openSample(url, btn).catch((err) => toast(err.message, "error")) }), hash: "datasets" },
 };
-// Пример датасета открыт со вкладки «Датасеты» — туда же и возвращаемся.
-const tabOfRun = () => (state.meta?.sample ? "datasets" : "home");
+const tabUrl = (tab) => (TABS[tab].hash ? `#${TABS[tab].hash}` : location.pathname);
+// Пример датасета открыт со вкладки «Данные» — туда же и возвращаемся.
+const tabOfRun = () => (state.meta?.sample ? "data" : "houses");
 
 function goHome() {
   if (history.state?.fromHome) return history.back();
   const tab = tabOfRun();
-  history.replaceState(null, "", TABS[tab].url());
+  history.replaceState(null, "", tabUrl(tab));
   return showTab(tab);
 }
 
 function goToTab(tab) {
-  history.pushState(null, "", TABS[tab].url());
+  history.pushState(null, "", tabUrl(tab));
   return showTab(tab);
 }
 
@@ -257,10 +242,8 @@ function showTab(tab) {
   state.nav += 1; // загрузка прогона, начатая до ухода на вкладку, не откроет его поверх
   Object.assign(state, { meta: null, runId: null, step: null, stage: null });
   $("run").hidden = true;
-  $("run-bar").hidden = true;
-  $("tabs").hidden = false;
-  for (const name of Object.keys(TABS)) $(name).hidden = name !== tab;
-  for (const link of $("tabs").children) link.classList.toggle("active", link.dataset.tab === tab);
+  for (const [name, t] of Object.entries(TABS)) $(t.section).hidden = name !== tab;
+  markCurrent($("topbar"), tab);
   $("run-actions").replaceChildren();
   $("tooltip").hidden = true;
   document.title = "GenFacade · смотрелка";
@@ -269,11 +252,11 @@ function showTab(tab) {
 
 async function route() {
   const hash = new URLSearchParams(location.hash.slice(1));
-  const tab = Object.keys(TABS).find((name) => hash.has(name)) ?? "home";
+  const tab = Object.keys(TABS).find((name) => TABS[name].hash && hash.has(TABS[name].hash)) ?? "houses";
   if (!hash.get("run")) return showTab(tab);
   return openRun(hash.get("run"), hash.get("step")).catch((err) => {
     toast(`Прогон из ссылки не открыт — ${err.message}`, "error");
-    return showTab("home");
+    return showTab("houses");
   });
 }
 
@@ -285,10 +268,9 @@ async function openRun(id, step = null) {
   if (nav !== state.nav) return; // пока грузили, пользователь ушёл — не перехватываем экран
   state.meta = meta;
   state.runId = id;
-  for (const name of Object.keys(TABS)) $(name).hidden = true;
-  $("tabs").hidden = true;
+  for (const t of Object.values(TABS)) $(t.section).hidden = true;
   $("run").hidden = false;
-  $("run-bar").hidden = false;
+  markCurrent($("topbar"), tabOfRun());
   renderHead();
   const done = state.meta.steps.filter((s) => s.file);
   showStep(step ?? state.step ?? String(done.at(-1)?.n ?? "input"));
@@ -296,12 +278,13 @@ async function openRun(id, step = null) {
 
 function renderHead() {
   const m = state.meta, id = state.runId, file = (f) => `/files/${id}/${f}`;
-  $("back-btn").innerHTML = `${ICON.back}<span>${$("tabs").querySelector(`[data-tab=${tabOfRun()}]`).textContent}</span>`;
+  $("back-btn").innerHTML = `${ICON.back}<span>${NAV.find((n) => n.page === tabOfRun()).title}</span>`;
   // У примера датасета имя — его id: в нём номер, который runName принял бы за суффикс прогона.
   const title = m.sample ? m.sample.id : runName(id);
   $("run-title").textContent = title;
   document.title = `${title} · GenFacade`;
   $("run-chips").innerHTML = [
+    m.request ? `<span class="chip accent">${modeTitle(m.request.mode)}</span>` : "",
     `<span class="chip">${fmtDate(m.date)}</span>`,
     m.git_sha ? `<span class="chip">коммит <code>${m.git_sha.slice(0, 7)}</code></span>` : "",
     m.sample ? `<span class="chip">${m.sample.source} · ${m.sample.split}</span>`
@@ -551,7 +534,7 @@ function renderSummary(s, colors) {
     ["Этажи", `${s.floors}: ${s.floor_heights_m.map(metres).join(", ")}`],
     ["Цоколь", metres(s.plinth_m)],
     ["Карниз", metres(s.eaves_m)],
-    ["Крыша", ROOF[s.roof.kind] ?? s.roof.kind],
+    ["Крыша", state.options.roof[s.roof.kind]],
   ];
   const color = (m) => m.color ?? colors?.[m.id] ?? "transparent";
   const palette = s.materials.map((m) => `<div class="palette-row"><span class="swatch" style="background:${color(m)}"></span>${m.id}<code>${m.kind}</code></div>`);
@@ -575,17 +558,19 @@ function onKey(e) {
 }
 
 async function init() {
+  topbar($("topbar"), "houses");
   $("back-btn").addEventListener("click", goHome);
-  $("home-link").addEventListener("click", (e) => { e.preventDefault(); goHome(); });
-  for (const link of $("tabs").querySelectorAll("[data-tab]")) link.addEventListener("click", (e) => { e.preventDefault(); goToTab(link.dataset.tab); });
+  // Разделы этой страницы — без перезагрузки; остальные ссылки шапки ведут на свои страницы.
+  for (const link of $("topbar").querySelectorAll("[data-page]")) {
+    if (TABS[link.dataset.page]) link.addEventListener("click", (e) => { e.preventDefault(); goToTab(link.dataset.page); });
+  }
+  $("runs-search").addEventListener("input", (e) => { state.query = e.target.value.trim(); renderRuns(); });
   window.addEventListener("popstate", route);
   document.addEventListener("keydown", onKey);
   state.options = await api("/api/options");
-  bindPlanForm();
-  await loadPlans();
   // Форма неактивна (inert в index.html), пока её не заполнили ответы: иначе набранное до ответа
   // перезаписали бы список планов и сохранённый текст (C13, gf#293).
-  $("plan-form").inert = false;
+  await mountNewHouse({ api, options: state.options, startRun, goHome: () => goToTab("houses") });
   await route();
 }
 

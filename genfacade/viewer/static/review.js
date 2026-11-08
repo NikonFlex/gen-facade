@@ -13,6 +13,9 @@ import { HouseStage } from "/static/house3d.js";
 import { $, el, toast } from "/static/dom.js";
 import { refusedFrom } from "/static/refusal.js";
 import { serial } from "/static/serial.js";
+import { topbar } from "/static/shell.js";
+
+topbar(document.getElementById("topbar"), "review");
 
 const LETTERS = "ABCDEFGH";
 const VIEW_KEY = "review.view";

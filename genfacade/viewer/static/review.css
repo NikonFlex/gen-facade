@@ -1,9 +1,9 @@
 /* Страница слепой проверки (gf#268): настоящий дом и три варианта — сеткой 2×2 на компьютере,
    столбиком на телефоне; под вариантом — отметка. */
-:root { --ok: #3c8d4f; }
 .review-page { min-height: 100vh; }
 /* без «потянуть, чтобы обновить»: свайп по дому наверху страницы перезагружал её (хозяин 03.11) */
 html:has(.review-page), .review-page { overscroll-behavior-y: none; }
+.review-page .topbar { position: static; }
 .review-bar {
   position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px 16px;
   align-items: center; justify-content: space-between; padding: 8px 16px;

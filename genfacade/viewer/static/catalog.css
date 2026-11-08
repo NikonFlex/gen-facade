@@ -1,8 +1,7 @@
-/* Вкладка «Каталог» (gf#354): карточки видов сеткой, раздел за разделом. Цвета — токены style.css. */
+/* Вкладка «Каталог» (gf#354): карточки видов сеткой, раздел за разделом. Цвета — токены theme.css. */
 body.catalog-page { display: block; height: auto; min-height: 100vh; }
-.catalog-page .topbar { position: sticky; top: 0; z-index: 6; height: 52px; }
 .cat-tools {
-  position: sticky; top: 52px; z-index: 5; display: flex; gap: 8px 12px; align-items: center;
+  position: sticky; top: var(--topbar-h); z-index: 5; display: flex; gap: 8px 12px; align-items: center;
   padding: 6px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
 }
 .cat-nav { display: flex; gap: 6px; overflow-x: auto; flex: 1; min-width: 0; scrollbar-width: none; }
@@ -26,10 +25,10 @@ body.catalog-page { display: block; height: auto; min-height: 100vh; }
 .cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .cat-card {
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 10px; box-shadow: var(--shadow); min-width: 0; display: flex; flex-direction: column; gap: 6px;
+  padding: 10px; min-width: 0; display: flex; flex-direction: column; gap: 6px;
 }
 .cat-card[hidden] { display: none; }
-.cat-image { background: #fff; border: 1px solid var(--line); border-radius: 6px; min-height: 120px; display: grid; place-items: center; overflow: hidden; }
+.cat-image { background: var(--paper); border: 1px solid var(--line); border-radius: 6px; min-height: 120px; display: grid; place-items: center; overflow: hidden; }
 .cat-image img { width: 100%; height: auto; max-height: 220px; object-fit: contain; display: block; }
 .cat-image .miss { color: var(--danger); font-size: 12px; padding: 8px; }
 .cat-card h3 { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
@@ -44,7 +43,7 @@ body.catalog-page { display: block; height: auto; min-height: 100vh; }
 .cat-source p { margin: 4px 0 0; overflow-wrap: anywhere; }
 
 @media (max-width: 860px) {
-  .cat-tools { padding: 6px 8px; flex-wrap: wrap; top: 52px; }
+  .cat-tools { padding: 6px 8px; flex-wrap: wrap; top: var(--topbar-h); }
   .cat-nav { flex-basis: 100%; }
   #filter { width: 100%; font-size: 16px; }  /* 16px — iOS не увеличивает страницу */
   .catalog { padding: 4px 8px 40px; }
