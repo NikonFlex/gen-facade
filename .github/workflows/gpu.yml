@@ -142,7 +142,7 @@ jobs:
       - name: transformers для OWLv2
         # версия — как в пробе на процессоре (gf#342): другая может отдать другие рамки
         if: inputs.job == 'owl'
-        run: '"$VENV/bin/pip" install -q "transformers==4.46.3"'
+        run: '"$VENV/bin/pip" install -q "transformers==4.46.3" scipy'
 
       - name: PyTorch видит GPU
         if: inputs.job == 'probe'
