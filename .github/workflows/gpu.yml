@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       job:
-        description: "probe — проверить GPU; train — обучить модель шага 4; finetune — дообучить её на коттеджах BuildingNet; eval — оценить на val; visual — таблица метрик с FID и KID; realtest — таблица против реального теста с FID и KID; retrain — всё сразу: корпус, обучение, дообучение по флагу, реальный тест новой и прежней модели одной таблицей; stability — реальный тест модели по вариантам сэмплинга (variants) и сводка с разбросом по seed; plans — genfacade run на непрямоугольных планах в обоих режимах моделью model_run (gf#306)"
+        description: "probe — проверить GPU; train — обучить модель шага 4; finetune — дообучить её на коттеджах BuildingNet; eval — оценить на val; visual — таблица метрик с FID и KID; realtest — таблица против реального теста с FID и KID; retrain — всё сразу: корпус, обучение, дообучение по флагу, реальный тест новой и прежней модели одной таблицей; stability — реальный тест модели по вариантам сэмплинга (variants) и сводка с разбросом по seed; plans — genfacade run на непрямоугольных планах в обоих режимах моделью model_run (gf#306); owl — OWLv2 ищет окна и двери на листах фасадов строим.дом.рф (gf#342)"
         type: choice
-        options: [probe, train, finetune, eval, visual, realtest, retrain, stability, plans]
+        options: [probe, train, finetune, eval, visual, realtest, retrain, stability, plans, owl]
         default: probe
       houses:
         description: "train, retrain: сколько синтетических домов в корпусе (собранные раньше не пересобираются)"
@@ -80,6 +80,10 @@ on:
         type: choice
         options: [train, pretrain, both]
         default: train
+      owl_ids:
+        description: "owl: номера проектов строим.дом.рф через пробел, либо all — все скачанные на машине (картинки качаются при первом запуске, по полсекунды на запрос)"
+        type: string
+        default: "40496 52299 53112 53422 54090 54107 55322 55477 55481 55707 55521 53626 53048 43341 55356 55221 44337 55437 55417 55409"
       eval_run:
         description: "visual: номер запуска eval, чьи листы считать (артефакт eval-<номер>)"
         type: string
@@ -134,6 +138,11 @@ jobs:
           "$VENV/bin/pip" install -q "$TORCH" "$TORCHVISION" --index-url "$TORCH_INDEX"
           "$VENV/bin/pip" install -q -e ".[train,visual]"
           echo "$VENV/bin" >> "$GITHUB_PATH"
+
+      - name: transformers для OWLv2
+        # версия — как в пробе на процессоре (gf#342): другая может отдать другие рамки
+        if: inputs.job == 'owl'
+        run: '"$VENV/bin/pip" install -q "transformers==4.46.3" scipy'
 
       - name: PyTorch видит GPU
         if: inputs.job == 'probe'
@@ -246,6 +255,31 @@ jobs:
               fi ;;
           esac
           sh tools/retrain.sh $stages
+
+      - name: Окна и двери OWLv2
+        # gf#342: картинки домов — на машине, вне git и вне артефактов (условия ДОМ.РФ, п. 5.3):
+        # data/stroim — ссылка на постоянную папку, скачанное между запусками не качается заново.
+        # Артефакт — только рамки: по JSON на дом и summary.json с секундами на лист и на дом.
+        if: inputs.job == 'owl'
+        env:
+          OWL_IDS: ${{ inputs.owl_ids }}
+        run: |
+          mkdir -p data /home/runner/data/stroim
+          ln -sfn /home/runner/data/stroim data/stroim
+          if [ "$OWL_IDS" = all ]; then ids=--all
+          else
+            ids="$OWL_IDS"
+            python tools/fetch_stroim.py get $ids
+          fi
+          python tools/owl_boxes.py $ids -o "$OUT/owl"
+
+      - name: Рамки OWLv2
+        if: always() && inputs.job == 'owl'
+        uses: actions/upload-artifact@v7
+        with:
+          name: owl-${{ github.run_id }}
+          path: ${{ env.OUT }}/owl
+          if-no-files-found: ignore
 
       - name: Непрямоугольные планы
         # gf#306: девять планов tests/fixtures/make_nonrect_houses.py в обоих режимах; модель —
