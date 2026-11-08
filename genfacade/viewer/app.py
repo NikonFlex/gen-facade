@@ -23,7 +23,7 @@ from genfacade.plan.genplan_svg import PlanError
 from genfacade.render.house3d import house_3d
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import FacadeSheet, Mode, Refusal, Sample, Source, refusal_record
-from genfacade.viewer import catalog, markup, review
+from genfacade.viewer import catalog, houses, markup, review
 
 STATIC = files(__package__).joinpath("static")
 REFERENCE_SLOT = "ref"  # место настоящего листа на странице проверки
@@ -98,7 +98,7 @@ async def _invalid_request(request: Request, exc: RequestValidationError) -> JSO
 def _api(app: FastAPI, cfg: Config, runs_dir: Path) -> None:
     @app.get("/api/runs")
     def runs() -> list[dict]:
-        return _runs(runs_dir)
+        return _runs(runs_dir, cfg)
 
     @app.get("/api/runs/{run_id}")
     def run_meta(run_id: str) -> dict:
@@ -107,6 +107,12 @@ def _api(app: FastAPI, cfg: Config, runs_dir: Path) -> None:
     @app.get("/api/runs/{run_id}/house3d")
     def run_house(run_id: str) -> dict:
         return _house(_run_dir(runs_dir, run_id), cfg)
+
+    @app.get("/api/runs/{run_id}/sheet.svg")
+    def run_sheet(run_id: str) -> Response:
+        """Лист прогона по sheet.json — картинка карточки, когда PNG нет (viewer/houses.py)."""
+        svg = sheet_svg(_run_sheet(_run_dir(runs_dir, run_id)), cfg)
+        return Response(svg, media_type="image/svg+xml")
 
     @app.get("/api/options")
     def options() -> dict:
@@ -245,12 +251,17 @@ def _options(cfg: Config) -> dict:
             **labels.model_dump(mode="json", exclude={"mode"})}
 
 
-def _house(folder: Path, cfg: Config) -> dict:
-    """Дом объёмом по листу прогона; нет листа или контур не ортогональный — 404 с причиной."""
+def _run_sheet(folder: Path) -> FacadeSheet:
+    """Лист прогона; прогон до листа не дошёл — 404 с причиной."""
     meta = json.loads((folder / pipeline.META).read_text())
     if not meta.get("sheet_json"):
         raise refuse(404, Refusal.NO_SHEET)
-    sheet = FacadeSheet.model_validate_json((folder / meta["sheet_json"]).read_text())
+    return FacadeSheet.model_validate_json((folder / meta["sheet_json"]).read_text())
+
+
+def _house(folder: Path, cfg: Config) -> dict:
+    """Дом объёмом по листу прогона; нет листа или контур не ортогональный — 404 с причиной."""
+    sheet = _run_sheet(folder)
     try:
         return house_3d(sheet, cfg)
     except PlanError as e:
@@ -279,15 +290,14 @@ def _start_plan(run: pipeline.PlanRun, svg: str | None, cfg: Config) -> Path:
         raise HTTPException(400, e.record()) from e
 
 
-def _runs(runs_dir: Path) -> list[dict]:
-    """Прогоны с трассой, новые сверху; папки без meta.json со списком шагов и просмотры
-    примеров датасета — пропуск."""
+def _runs(runs_dir: Path, cfg: Config) -> list[dict]:
+    """Прогоны с трассой карточками страницы «Дома» (viewer/houses.py), новые сверху; папки без
+    meta.json со списком шагов и просмотры примеров датасета — пропуск."""
     result = []
     for meta_path in sorted(runs_dir.glob(f"*/{pipeline.META}"), reverse=True):
         meta = json.loads(meta_path.read_text())
         if "steps" in meta and not preview.is_preview(meta):
-            result.append({"id": meta_path.parent.name, "source": meta["source"],
-                           "date": meta["date"], "preview": meta["preview"]})
+            result.append(houses.card(meta_path.parent, meta, cfg))
     return result
 
 

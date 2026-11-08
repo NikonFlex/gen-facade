@@ -8,6 +8,7 @@ TOML сливается с умолчаниями поключно, sheet.css д
 """
 
 import tomllib
+from enum import StrEnum
 from importlib.resources import files
 from pathlib import Path
 from typing import Self
@@ -34,6 +35,7 @@ from genfacade.schema import (
     RejectReason,
     Roof,
     RoofKind,
+    RunOutcome,
     ShutterKind,
     SillKind,
     Source,
@@ -258,6 +260,22 @@ class ModeLabel(Section):
     hint: str
 
 
+class Tone(StrEnum):
+    """Окраска состояния на странице: класс темы смотрелки (viewer/static/theme.css, .status)."""
+
+    OK = "ok"
+    BAD = "bad"
+    WARN = "warn"
+    MUTED = "muted"
+
+
+class OutcomeLabel(Section):
+    """Итог прогона на странице «Дома» (gf#356): подпись и окраска."""
+
+    title: str
+    tone: Tone
+
+
 class Labels(Section):
     """Подписи смотрелки к значениям enum из schema.py: страница берёт их отсюда."""
 
@@ -265,6 +283,8 @@ class Labels(Section):
     cls: dict[ElementClass, str]
     role: dict[ZoneRole, str]
     variant: dict[VariantKind, str]
+    roof: dict[RoofKind, str]
+    outcome: dict[RunOutcome, OutcomeLabel]
 
 
 class SamplesView(Section):

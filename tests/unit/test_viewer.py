@@ -1,5 +1,6 @@
 """Сервер смотрелки: список планов, запуск по плану, трасса, кэш страницы."""
 
+import json
 import re
 
 import pytest
@@ -9,8 +10,18 @@ from simple_house import SIMPLE
 from genfacade import config, derive
 from genfacade.datasets import store
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import REFUSAL_TEXT, ElementClass, Mode, Refusal, VariantKind, ZoneRole
+from genfacade.schema import (
+    REFUSAL_TEXT,
+    ElementClass,
+    Mode,
+    Refusal,
+    RoofKind,
+    RunOutcome,
+    VariantKind,
+    ZoneRole,
+)
 from genfacade.train import tokens
+from genfacade.viewer import houses
 from genfacade.viewer.app import STATIC, create_app
 
 PLAN_RUN = {"plan": SIMPLE.stem, "text": "A simple one-storey house.", "mode": Mode.BLIND}
@@ -41,14 +52,15 @@ def test_options_label_every_enum_value(client):
     assert [m["value"] for m in options["modes"]] == list(Mode)
     assert all(m["title"] and m["hint"] for m in options["modes"])
     assert options["default_mode"] in list(Mode)
-    for key, enum in (("cls", ElementClass), ("role", ZoneRole), ("variant", VariantKind)):
+    for key, enum in (("cls", ElementClass), ("role", ZoneRole), ("variant", VariantKind),
+                      ("roof", RoofKind), ("outcome", RunOutcome)):
         assert set(options[key]) == set(enum), key
         assert all(options[key].values()), key
 
 
 def test_page_does_not_repeat_enum_values():
     """Одно значение — в одном месте: в JS и HTML значений enum из schema.py нет."""
-    values = [*Mode, *ElementClass, *VariantKind, *ZoneRole]
+    values = [*Mode, *ElementClass, *VariantKind, *ZoneRole, *RoofKind, *RunOutcome]
     quoted = re.compile("[\"'`](" + "|".join(map(re.escape, values)) + ")[\"'`]")
     key = re.compile(r"\b(" + "|".join(map(re.escape, values)) + r"):")
     for name in ("app.js", "stage.js", "review.js"):
@@ -81,6 +93,55 @@ def test_plan_run_traces_every_step(client):
     assert client.get(f"/files/{run_id}/{meta['plan_input']}").status_code == 200
     sheet = next(s for s in meta["steps"] if s["n"] == 6)
     assert "data-cls" in client.get(f"/files/{run_id}/{sheet['file']}").text
+
+
+def test_runs_listed_as_house_cards(client):
+    """Страница «Дома» (gf#356) рисует карточку из ответа: итог, режим, модель, параметры дома и
+    картинку листа считает сервер."""
+    run_id = client.post("/api/runs", json={"plan_run": PLAN_RUN}).json()["id"]
+    [card] = client.get("/api/runs").json()
+    assert (card["outcome"], card["mode"], card["model"]) == (RunOutcome.CLEAN, Mode.BLIND, "stub")
+    assert card["house"] == {"floors": 1, "roof": RoofKind.FLAT, "walls": "plaster",
+                             "color": card["house"]["color"], "sides": 4}
+    assert card["house"]["color"].startswith("#") and card["text"] == PLAN_RUN["text"]
+    picture = client.get(card["thumb"])
+    assert picture.status_code == 200 and picture.headers["content-type"].startswith("image/")
+    sheet = client.get(f"/api/runs/{run_id}/sheet.svg")
+    assert sheet.status_code == 200 and "data-cls" in sheet.text
+
+
+def test_card_without_png_shows_sheet(client, tmp_path):
+    """PNG листа не собрался (pipeline.finish) — картинка карточки — лист, нарисованный
+    сервером, а не пустое место."""
+    run_id = client.post("/api/runs", json={"plan_run": PLAN_RUN}).json()["id"]
+    meta_path = tmp_path / "runs" / run_id / "meta.json"
+    meta_path.write_text(json.dumps({**json.loads(meta_path.read_text()), "preview": None}))
+    [card] = client.get("/api/runs").json()
+    picture = client.get(card["thumb"])
+    assert picture.headers["content-type"].startswith("image/svg") and "data-cls" in picture.text
+
+
+@pytest.mark.parametrize(("meta", "want"), [
+    ({"errors": 0}, RunOutcome.CLEAN),
+    ({"errors": 2}, RunOutcome.DEFECT),
+    ({"refusal": {"code": Refusal.PLAN_REJECTED}}, RunOutcome.REFUSED),
+    ({}, RunOutcome.UNCHECKED),
+])
+def test_run_outcome_from_meta(meta, want):
+    """Итог прогона: отказ, ошибки валидатора или нет; лист без шага 5 — не проверен, а не «без
+    брака»."""
+    assert houses.outcome(meta) is want
+
+
+def test_defective_run_card_has_no_sheet(client):
+    """Отказ до листа: карточка с итогом «отказ», параметрами шага 1 и без картинки."""
+    bad = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>'
+    client.post("/api/runs", json={"plan_run": PLAN_RUN, "svg": bad})
+    [card] = client.get("/api/runs").json()
+    assert (card["outcome"], card["thumb"], card["model"]) == (RunOutcome.REFUSED, None, None)
+    assert card["house"]["floors"] == 1 and card["house"]["sides"] is None
+    refused = client.get(f"/api/runs/{card['id']}/sheet.svg").json()["detail"]
+    assert refused["code"] == Refusal.NO_SHEET
 
 
 def test_plan_run_with_sent_svg(client):

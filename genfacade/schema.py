@@ -31,6 +31,16 @@ class CalibrationRow(StrEnum):
     EMPTY = "empty"
 
 
+class RunOutcome(StrEnum):
+    """Итог прогона на странице «Дома» смотрелки (gf#356): считает сервер по meta.json прогона,
+    страница рисует и фильтрует по нему (docs/clean-contour.md, п. 13)."""
+
+    CLEAN = "clean"          # валидатор шага 5 ошибок не нашёл
+    DEFECT = "defect"        # ошибки валидатора на листе
+    REFUSED = "refused"      # прогон остановлен отказом (план, модель)
+    UNCHECKED = "unchecked"  # лист без шага 5 (собран вручную): валидатор не запускался
+
+
 class Refusal(StrEnum):
     """Код отказа, который доходит до человека: в ответе смотрелки (`detail.code`), в
     meta.json прогона и в ответе модели строки realtest («refusal»). Текст — REFUSAL_TEXT;
