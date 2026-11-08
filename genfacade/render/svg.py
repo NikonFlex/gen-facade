@@ -65,6 +65,7 @@ class Top(NamedTuple):
         return max(y for shape in shapes for _, y in shape)
 
 
+RECT_POINTS = 4  # у прямоугольного силуэта четыре вершины
 NOTHING_ABOVE = Top()  # плоская крыша: над карнизом ничего
 
 
@@ -150,6 +151,8 @@ def facade_svg(facade: SideFacade, pen: Pen) -> str:
     Для текстуры дома объёмом (render/house3d.py)."""
     top = _top(facade)
     root = canvas(facade.side.length_m, top, pen.cfg.css, _patterns([facade], pen))
+    if len(facade.silhouette or []) > RECT_POINTS:  # ступень (gf#322): над ней — не белый фон
+        root.remove(next(e for e in root if e.get("class") == "background"))
     _facade_geometry(root, facade, (0.0, top), pen)
     return ElementTree.tostring(root, encoding="unicode")
 

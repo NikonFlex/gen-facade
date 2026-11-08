@@ -21,7 +21,8 @@ from typing import NamedTuple
 import numpy
 from pydantic import BaseModel
 
-from genfacade.config import Config, LayoutModel
+from genfacade import parts
+from genfacade.config import Config, LayoutModel, Parts
 from genfacade.metrics import realism
 from genfacade.models import stub
 from genfacade.models.stub import ModelError
@@ -162,6 +163,8 @@ def layout(bare: FacadeSheet, req: PlanRun, cfg: Config) -> Checked:
     Брак модели — ответ не разобран или ошибка валидатора — генерация заново с новым seed
     (`generation: Брак — заново`), с `wall_retry` — только бракованной стены; из best_of годных
     ответов берётся самый правдоподобный (gf#213). Стаб детерминирован, его не повторяем."""
+    if parts.stepped(bare):
+        return _layout_parts(bare, req, cfg)
     settings = cfg.models.layout
     model = trained_model(settings)
     if model is None:
@@ -175,6 +178,21 @@ def layout(bare: FacadeSheet, req: PlanRun, cfg: Config) -> Checked:
                          f"за {len(trace['attempts'])} попыток нет годного ответа; причины — "
                          f"{_reasons(trace['attempts'])}", trace["attempts"])
     return good[0] if len(good) == 1 else _likeliest(good, Path(req.plan).stem, cfg)
+
+
+def _layout_parts(bare: FacadeSheet, req: PlanRun, cfg: Config) -> Checked:
+    """Шаги 4–5 для дома из частей разной высоты (gf#322): участки части одной этажности — «дом»
+    для модели (она видит стены с параметрами своей части, как прямоугольный дом), ответы
+    собираются на стены дома, привязка и валидатор — по сборке."""
+    subs = parts.sub_sheets(bare)
+    done = {floors: layout(sub, req, cfg) for floors, (sub, _) in subs.items()}
+    items = {floors: pcs for floors, (_, pcs) in subs.items()}
+    raw = parts.merge(bare, {n: c.raw for n, c in done.items()}, items)
+    sheet = parts.merge(bare, {n: c.sheet for n, c in done.items()}, items)
+    trace = {"model": next(iter(done.values())).layout["model"],
+             "attempts": [a for c in done.values() for a in c.layout["attempts"]],
+             "parts": {str(n): c.layout for n, c in done.items()}}
+    return Checked(raw, sheet, validate(sheet, cfg.checks), trace)
 
 
 def _good(model, prompt, bare: FacadeSheet, cfg: Config, trace: dict) -> Iterator[Checked]:
@@ -306,9 +324,13 @@ def _rejected(bad: list[Violation]) -> str:
     return f"ошибок валидатора {len(bad)}, первая — {bad[0].rule}: {bad[0].message}"
 
 
-def walls(spec: HouseSpec, plan: Plan) -> FacadeSheet:
-    """Шаг 3: пустые прямоугольники стен всех сторон плана, без крыши."""
-    return unfold(FacadeSheet(spec=spec, facades=[SideFacade(side=s) for s in plan.sides]))
+def walls(spec: HouseSpec, plan: Plan, rule: Parts | None = None) -> FacadeSheet:
+    """Шаг 3: пустые стены всех сторон плана, без крыши: прямоугольники, а у дома из частей
+    разной высоты — ступенями (`parts.py`). rule — какие крылья ниже главного, если текст молчит;
+    без него — только по `spec.wing_floors` (синтетика и разметка делят дом сами)."""
+    wall_runs = parts.runs(spec, plan, rule)
+    return unfold(FacadeSheet(spec=spec, facades=[
+        SideFacade(side=s, runs=r) for s, r in zip(plan.sides, wall_runs, strict=True)]))
 
 
 def _prepare(req: PlanRun, svg: str, out: Path, cfg: Config, done: list[int]) -> FacadeSheet:
@@ -326,7 +348,7 @@ def _prepare(req: PlanRun, svg: str, out: Path, cfg: Config, done: list[int]) ->
     plan = preprocess(svg, req.mode, cfg.plan)
     _write(out, 2, plan, plan_svg(plan, cfg))
     done.append(2)
-    bare = walls(spec, plan)
+    bare = walls(spec, plan, cfg.plan.parts)
     _write(out, 3, bare, sheet_svg(bare, cfg, annotations=False))
     done.append(3)
     return bare

@@ -14,6 +14,7 @@ from genfacade.plan import sides
 from genfacade.plan.gaps import Found, Gap, find_gaps, is_notch
 from genfacade.plan.genplan_svg import TOL_PX, Box, DoorSwing, GenPlanSvg, PlanError, parse
 from genfacade.plan.outline import outline
+from genfacade.plan.wings import wings
 from genfacade.schema import Mode, OpeningKind, Plan, PlanOpening, Rect, Source
 
 # Масштаб GenPlan: ширина входной двери — 90 см (three_dimensional/convertor.py:32,
@@ -40,9 +41,11 @@ def preprocess(svg: Path | str, mode: Mode, cfg: PlanConfig) -> Plan:
     sealed = [f for f in found if blind and f.external and f.kind in SEALED_IN_BLIND]
     walls = raw.walls + [f.gap.box for f in sealed]
     open_ = [f for f in found if f.external and f not in sealed]
+    metres = [(x * scale, y * scale) for x, y in contour.ring]
     return Plan(
         walls=[_rect(w, scale) for w in walls],
-        outline=[(x * scale, y * scale) for x, y in contour.ring],
+        outline=metres,
+        wings=wings(metres),
         openings=[_opening(f, scale, f in sealed) for f in found],
         sides=sides.build(contour, open_, walls, scale),
         scale_m_per_px=scale,

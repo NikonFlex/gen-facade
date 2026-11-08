@@ -72,11 +72,17 @@ export class HouseStage {
 
   _roof(THREE, data) {
     if (data.roof.faces.length) return this._slopes(THREE, data.roof);
-    const shape = new THREE.Shape(data.roof.flat.map(([x, y]) => new THREE.Vector2(x, y)));
+    // Дом из частей разной высоты (gf#322): плита над каждой частью на её карнизе.
+    const slabs = data.roof.slabs || [{ shape: data.roof.flat, height_m: data.eaves_m }];
+    for (const { shape, height_m } of slabs) this._slab(THREE, shape, height_m);
+  }
+
+  _slab(THREE, outline, height) {
+    const shape = new THREE.Shape(outline.map(([x, y]) => new THREE.Vector2(x, y)));
     const geo = new THREE.ExtrudeGeometry(shape, { depth: ROOF_M, bevelEnabled: false });
     geo.rotateX(-Math.PI / 2);  // (x, y) плана → (x, −z); выдавливание — вверх
     const roof = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: this.look.roof }));
-    roof.position.y = data.eaves_m;
+    roof.position.y = height;
     this.scene.add(roof, this._edges(THREE, geo, roof.position));
   }
 
@@ -117,7 +123,7 @@ export class HouseStage {
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     const geo = new THREE.PlaneGeometry(w.length_m, w.height_m);
-    const wall = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: texture }));
+    const wall = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: texture, alphaTest: 0.5 }));
     const [[lx, ly], [rx, ry]] = [w.left, w.right];
     wall.position.set((lx + rx) / 2, w.height_m / 2, -(ly + ry) / 2);
     // Плоскость смотрит по +z; поворот ставит её лицом по нормали стороны, и тогда её +x идёт

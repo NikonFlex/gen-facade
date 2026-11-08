@@ -13,7 +13,7 @@ import math
 
 import shapely
 
-from genfacade import roof
+from genfacade import parts, roof
 from genfacade.config import Config, House3d
 from genfacade.derive import DERIVED
 from genfacade.render.svg import Pen, element_fill, facade_svg, pen_for
@@ -46,7 +46,7 @@ def house_3d(sheet: FacadeSheet, cfg: Config) -> dict:
         "normal": f.side.orientation,
         "length_m": f.side.length_m,
         "convex_left": _convex(corners, (k + 1) % len(corners)),
-        "height_m": sheet.spec.eaves_m,
+        "height_m": max((y for _, y in f.silhouette or []), default=sheet.spec.eaves_m),
         "svg": facade_svg(_flat(f, look), pen),
         "relief": _relief(f, pen, look),
     } for k, f in enumerate(sheet.facades)]
@@ -71,6 +71,10 @@ def _roof(sheet: FacadeSheet, pen: Pen, corners: list[Point], look: House3d) -> 
     карниза, если карниз на доме есть, — плита закрывает его сверху, а не он торчит из-под неё.
     Цвет кровли — материала крыши, если он в палитре (нет — цвет крыши просмотра)."""
     line = roof.roofline(sheet)
+    if line is None and parts.stepped(sheet):
+        slabs = [{"shape": shape, "height_m": h} for shape, h in parts.slabs(sheet, corners)]
+        return {"faces": [], "above": [], "color": None, "wall": None, "flat": None,
+                "slabs": slabs}
     if line is None:
         cornice = any(e.cls is ElementClass.CORNICE for f in sheet.facades for e in f.elements)
         out = look.relief_cls.get(ElementClass.CORNICE, 0.0) if cornice else 0.0

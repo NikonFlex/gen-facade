@@ -18,6 +18,15 @@ negations = ["без", "no", "without"]   # слово перед словом �
 3 = ["three-storey", "three-story", "3-storey", "3-story", "трёхэтажн", "трехэтажн",
      "в три этажа", "3 этажа"]
 
+# Нижние части дома (gf#322): сочетание «одноэтажное крыло» ставит нижним частям столько этажей
+# (`HouseSpec.wing_floors`); этажность дома ищется в тексте без этих слов. Слов нет — нижнее
+# крыло определяет правило конвейера (config/plan.toml, [parts]).
+[spec.wing_words]
+1 = ["one-storey wing", "one-story wing", "single-storey wing", "single-story wing",
+     "one-storey annex", "one-story annex", "single-storey annex", "single-story annex",
+     "one-storey extension", "single-storey extension", "one-storey garage", "single-storey garage",
+     "garage", "одноэтажн крыл", "одноэтажн пристройк", "одноэтажн гараж", "гараж"]
+
 # Стиль из текста (gf#212): по слову, которое встретилось раньше других; слова нет — стиль заготовки.
 # Стили — те, что знает модель шага 4 (config/synthetic.toml, [spec] styles).
 [spec.style_words]

@@ -57,14 +57,18 @@ def spec_model(text: str, cfg: SpecStub) -> HouseSpec:
     по слову, без слова — отделки, уклон и свес — по виду (gf#320); высота этажа и
     цоколь — заготовки, карниз — над последним этажом."""
     base = json.loads(DATA.joinpath("house.json").read_text())
-    floors = words.first(text, cfg.floors_words, cfg.stem_tail) or base["floors"]
+    wing_phrases = [w for ws in cfg.wing_words.values() for w in ws]
+    floors = words.first(words.without(text, wing_phrases, cfg.stem_tail),
+                         cfg.floors_words, cfg.stem_tail) or base["floors"]
+    wing_floors = words.first(text, cfg.wing_words, cfg.stem_tail)
     style = words.first(text, cfg.style_words, cfg.stem_tail) or base["style"]
     height = base["floor_heights_m"][0]
     house = finish.look(text, style, cfg)
     kind = words.first(text, cfg.roof_words, cfg.stem_tail) or house.roof
     roof = cfg.roof_shape.roof(kind, base["roof"]["material"])
     return HouseSpec.model_validate(base | {"roof": roof.model_dump(),
-        "floors": floors, "floor_heights_m": [height] * floors, "style": style,
+        "wing_floors": wing_floors, "floors": floors, "floor_heights_m": [height] * floors,
+        "style": style,
         "eaves_m": round(base["plinth_m"] + height * floors, 3),
         "trim": house.trim.model_dump(), "materials": [m.model_dump() for m in house.materials]})
 

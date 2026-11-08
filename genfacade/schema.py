@@ -465,6 +465,9 @@ class HouseSpec(Model):
     style: str = ""
     trim: HouseTrim = HouseTrim()
     materials: list[Material]
+    # Этажей у нижних частей дома (gf#322); нет — правило конвейера «меньшее крыло ниже»
+    # (config/plan.toml, [parts]). Остальное — у главной части: floors, eaves_m, roof.
+    wing_floors: int | None = Field(default=None, ge=1)
 
     @model_validator(mode="after")
     def _check(self) -> "HouseSpec":
@@ -557,6 +560,9 @@ class Plan(Model):
 
     walls: list[Rect]
     outline: Polygon
+    # Прямоугольные крылья непрямоугольного контура (шаг 2, gf#322); у прямоугольного — пусто:
+    # дом из одной части.
+    wings: list[Rect] = []
     openings: list[PlanOpening] = []
     sides: list[Side] = []  # заполняет препроцессор
     scale_m_per_px: float = Field(gt=0)
@@ -615,12 +621,25 @@ class MaterialZone(Model):
         return cls(role=role, material=material, shape=[(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
 
 
+class WallRun(Model):
+    """Участок стороны в одной части дома (gf#322): x вдоль стены, как у элементов; этажность и
+    карниз — свойства части, а не стены, поэтому углы частей сходятся по построению."""
+
+    x0_m: float
+    x1_m: float
+    part: int = Field(ge=0)  # номер крыла в Plan.wings
+    floors: int = Field(ge=1)
+    eaves_m: float = Field(gt=0)
+
+
 class SideFacade(Model):
     side: Side
     elements: list[Element] = []
     zones: list[MaterialZone] = []
     # Не генерируется: прямоугольник стены считает развёртка (unfold.py) из HouseSpec и стороны.
     silhouette: Polygon | None = None
+    # Участки по частям дома, слева направо; пусто — вся стена одной части, как в HouseSpec.
+    runs: list[WallRun] = []
 
     @model_validator(mode="after")
     def _check_parents(self) -> "SideFacade":

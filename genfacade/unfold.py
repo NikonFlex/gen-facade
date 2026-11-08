@@ -11,7 +11,7 @@
 import math
 
 from genfacade.plan.genplan_svg import PlanError
-from genfacade.schema import EPS, FacadeSheet, Point, Side
+from genfacade.schema import EPS, FacadeSheet, Point, Side, WallRun
 
 
 def plan_corners(sides: list[Side]) -> list[Point]:
@@ -51,11 +51,34 @@ def _check_contour(sides: list[Side]) -> None:
 
 
 def unfold(sheet: FacadeSheet) -> FacadeSheet:
-    """Шаг 3: прямоугольник стены у каждой стороны, без крыши; остальное не трогает."""
+    """Шаг 3: силуэт стены у каждой стороны — прямоугольник до карниза, а у стены из частей разной
+    высоты (`SideFacade.runs`, gf#322) — ступенями; крыши на нём нет, остальное не трогает."""
     eaves = sheet.spec.eaves_m
-    facades = [
-        f.model_copy(update={"silhouette": [
-            (0.0, 0.0), (f.side.length_m, 0.0), (f.side.length_m, eaves), (0.0, eaves)]})
-        for f in sheet.facades
-    ]
+    facades = [f.model_copy(update={"silhouette": silhouette(f.side.length_m, eaves, f.runs)})
+               for f in sheet.facades]
     return sheet.model_copy(update={"facades": facades})
+
+
+def silhouette(length: float, eaves: float, wall_runs: list[WallRun]) -> list[Point]:
+    """Силуэт стены до карниза: низ ровный, верх ступенями по участкам частей."""
+    if not wall_runs:
+        return [(0.0, 0.0), (length, 0.0), (length, eaves), (0.0, eaves)]
+    top = []
+    for r in reversed(wall_runs):
+        top += [(r.x1_m, r.eaves_m), (r.x0_m, r.eaves_m)]
+    ring = [(0.0, 0.0), (length, 0.0)]
+    for p in top:
+        if p != ring[-1]:
+            ring.append(p)
+    return _without_collinear(ring)
+
+
+def _without_collinear(ring: list[Point]) -> list[Point]:
+    keep = []
+    for prev, cur, nxt in zip(ring[-1:] + ring[:-1], ring, ring[1:] + ring[:1], strict=True):
+        cross = (cur[0] - prev[0]) * (nxt[1] - cur[1]) - (cur[1] - prev[1]) * (nxt[0] - cur[0])
+        if abs(cross) > EPS:
+            keep.append(cur)
+    return keep
+
+
