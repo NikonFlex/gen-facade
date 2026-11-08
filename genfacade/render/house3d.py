@@ -83,7 +83,8 @@ def _roof(sheet: FacadeSheet, pen: Pen, corners: list[Point], look: House3d) -> 
     if house is None and parts.stepped(sheet):
         slabs = [{"shape": shape, "height_m": h} for shape, h in parts.slabs(sheet, corners)]
         return {"faces": [], "above": [], "color": pen.colors.get(pen.roof or ""),
-                "wall": pen.colors.get(PaletteRole.MAIN), "flat": None, "slabs": slabs, "material": material, "wall_material": wall_material}
+                "wall": pen.colors.get(PaletteRole.MAIN), "flat": None, "slabs": slabs,
+                "material": material, "wall_material": wall_material}
     if house is None:
         cornice = any(e.cls is ElementClass.CORNICE for f in sheet.facades for e in f.elements)
         out = look.relief_cls.get(ElementClass.CORNICE, 0.0) if cornice else 0.0
