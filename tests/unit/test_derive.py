@@ -7,7 +7,6 @@ from genfacade import derive, guidelines
 from genfacade.datasets.synthetic import build
 from genfacade.schema import (
     EPS,
-    CanopyKind,
     Element,
     ElementClass,
     FixedField,
@@ -71,12 +70,12 @@ def test_canopy_over_door(answers, cfg):
         for f in sheet.facades:
             for d in _of(f, ElementClass.DOOR):
                 for k in _children(f, d, ElementClass.CANOPY):
-                    look = cfg.derive.canopy.of(sheet.spec.trim.canopy)
+                    look = cfg.derive.canopy[sheet.spec.trim.canopy]
                     assert k.y_m == pytest.approx(d.y_m + d.h_m + look.gap_m)
                     assert k.x_m == pytest.approx(max(0.0, d.x_m - look.pad_m))
                     assert k.x_m + k.w_m == pytest.approx(
                         min(f.side.length_m, d.x_m + d.w_m + look.pad_m))
-                    assert cfg.derive.canopy.min_h_m - EPS <= k.h_m <= look.height_m + EPS
+                    assert cfg.derive.canopy_min_h_m - EPS <= k.h_m <= look.height_m + EPS
                     assert k.y_m + k.h_m <= sheet.spec.eaves_m + EPS
                     canopies += 1
         assert answer.count(tokens.tok(Trim.CANOPY)) == sum(
@@ -99,7 +98,7 @@ def test_shutters_half_window_beside_frame(answers, cfg):
                 left, right = blinds
                 assert left.x_m + left.w_m == pytest.approx(w.x_m - off)
                 assert right.x_m == pytest.approx(w.x_m + w.w_m + off)
-                half = pytest.approx(cfg.derive.shutters.share * w.w_m)
+                half = pytest.approx(cfg.derive.shutters[sheet.spec.trim.shutters].share * w.w_m)
                 assert [b.w_m for b in blinds] == [half, half]
                 assert all((b.y_m, b.h_m) == (w.y_m, w.h_m) for b in blinds)
                 assert left.x_m >= -EPS and right.x_m + right.w_m <= f.side.length_m + EPS
@@ -171,7 +170,7 @@ def _with_canopy(cfg):
     """Параметры дома синтетики, у которого есть козырёк."""
     spec = build.sample(0, cfg).sheet.spec
     return spec.model_copy(update={"trim": spec.trim.model_copy(
-        update={"canopy": CanopyKind.FLAT})})
+        update={"canopy": "flat"})})
 
 
 def test_trim_does_not_land_on_another_opening(cfg):

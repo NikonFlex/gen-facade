@@ -10,13 +10,11 @@ from genfacade.render.house3d import house_3d
 from genfacade.render.sheet_format import num
 from genfacade.render.svg import element_fill, pen_for, sheet_svg
 from genfacade.schema import (
-    CanopyKind,
     ElementClass,
     FacadeSheet,
     Roof,
     RoofKind,
     SideFacade,
-    SillKind,
     ZoneRole,
 )
 from genfacade.unfold import unfold
@@ -114,16 +112,16 @@ def _rich_houses(cfg) -> list[FacadeSheet]:
     """Синтетические дома, где есть и крыльцо, и козырёк, и подоконник, и карниз, — с видами
     козырька и подоконника на любой вкус."""
     need = {ElementClass.PORCH, ElementClass.CANOPY, ElementClass.SILL, ElementClass.CORNICE}
-    found = [s for s in (_flat_roofed(build.sample(k, cfg).sheet) for k in range(30))
+    found = [s for s in (_flat_roofed(build.sample(k, cfg).sheet) for k in range(120))
              if need <= {e.cls for f in s.facades for e in f.elements}]
-    assert {s.spec.trim.canopy for s in found} >= {*CanopyKind} - {CanopyKind.NONE}
-    assert SillKind.SLOPED in {s.spec.trim.sill for s in found}
+    assert {s.spec.trim.canopy for s in found} >= {*cfg.derive.canopy}
+    assert {s.spec.trim.sill for s in found} >= {*cfg.derive.sill}
     return found
 
 
 def test_relief_tells_its_class_and_kind(cfg):
-    """gf#305: форму выступа строит просмотр по его классу и виду — `house_3d` отдаёт класс
-    (элемент) или роль (зона), а у козырька и подоконника — вид из параметров дома."""
+    """gf#305: форму выступа строит просмотр по его классу и форме — `house_3d` отдаёт класс
+    (элемент) или роль (зона), а у козырька и подоконника — форма записи вида дома (derive.toml)."""
     kinds = {ElementClass.CANOPY: "canopy", ElementClass.SILL: "sill"}
     seen = set()
     for sheet in _rich_houses(cfg):
@@ -134,11 +132,12 @@ def test_relief_tells_its_class_and_kind(cfg):
             assert [b["role"] for b in wall["relief"] if b["cls"] is None] == [
                 z.role for z in facade.zones if z.role in cfg.viewer.house3d.relief_role]
             for b in got:
-                want = getattr(sheet.spec.trim, kinds[b["cls"]]) if b["cls"] in kinds else None
-                assert b["kind"] == want, b["cls"]
-                seen.add((b["cls"], b["kind"]))
-    assert {(ElementClass.CANOPY, k) for k in CanopyKind if k is not CanopyKind.NONE} <= seen
-    assert (ElementClass.SILL, SillKind.SLOPED) in seen
+                kind = getattr(sheet.spec.trim, kinds[b["cls"]]) if b["cls"] in kinds else None
+                want = cfg.derive.look(kinds[b["cls"]], kind).shape if kind else None
+                assert b["shape"] == want, b["cls"]
+                seen.add((b["cls"], b["shape"]))
+    assert {(ElementClass.CANOPY, k.shape) for k in cfg.derive.canopy.values()} <= seen
+    assert {(ElementClass.SILL, k.shape) for k in cfg.derive.sill.values()} <= seen
     assert {c for c, _ in seen} >= {ElementClass.CORNICE, ElementClass.PORCH}
 
 

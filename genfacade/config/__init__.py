@@ -16,10 +16,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from genfacade.datasets.buildingnet.mesh import Label
 from genfacade.schema import (
-    CanopyKind,
-    CasingKind,
+    NONE_KIND,
+    CanopyShape,
+    CasingShape,
     ContourKind,
     Device,
+    DoorShape,
     ElementClass,
     GuidelineCheck,
     GuidelineUse,
@@ -31,8 +33,8 @@ from genfacade.schema import (
     Region,
     Roof,
     RoofKind,
-    ShutterKind,
-    SillKind,
+    ShutterShape,
+    SillShape,
     Source,
     Split,
     Trim,
@@ -41,6 +43,7 @@ from genfacade.schema import (
 )
 
 DEFAULTS = files(__package__)
+DOOR_FIELD = "door"  # поле HouseTrim с видом полотна двери: у остальных полей none допустим
 
 
 class Section(BaseModel):
@@ -164,6 +167,8 @@ class TrimLook(Section):
     slab_m: float
     bracket_at: float
     bracket_w_m: float
+    post_w_m: float
+    batten_at: float
 
 
 class RoofDrawing(Section):
@@ -426,10 +431,11 @@ class Cornice(Section):
 class TrimWeights(Section):
     """Веса видов выводимых элементов дома (config/synthetic.toml, [facade.trim])."""
 
-    sill: dict[SillKind, float]
-    casing: dict[CasingKind, float]
-    shutters: dict[ShutterKind, float]
-    canopy: dict[CanopyKind, float]
+    sill: dict[str, float]
+    casing: dict[str, float]
+    shutters: dict[str, float]
+    canopy: dict[str, float]
+    door: dict[str, float]
 
 
 class Finish(Section):
@@ -502,28 +508,38 @@ class Tokens(Section):
 
 
 class SillLook(Section):
+    shape: SillShape
     overhang_m: float
     height_m: float
 
 
+class CasingLook(Section):
+    shape: CasingShape
+    width_m: float
+    rise_m: float = 0.0  # сандрик над рамкой
+
+
 class ShutterLook(Section):
+    shape: ShutterShape
     share: float
 
 
 class CanopyLook(Section):
+    shape: CanopyShape
     pad_m: float
     gap_m: float
     height_m: float
 
 
-class CanopyKinds(Section):
-    min_h_m: float
-    flat: CanopyLook
-    gable: CanopyLook
-    bracket: CanopyLook
+class DoorLeaf(Section):
+    """Рисунок полотна двери: доли полотна; cols, rows — филёнок, inset — отступ (доля ширины),
+    side_share — боковое стекло (доля ширины проёма)."""
 
-    def of(self, kind: CanopyKind) -> CanopyLook:
-        return getattr(self, kind)
+    shape: DoorShape
+    cols: int = 1
+    rows: int = 1
+    inset: float = 0.0
+    side_share: float = 0.0
 
 
 class RoofShape(Section):
@@ -541,12 +557,36 @@ class RoofShape(Section):
 
 
 class Derive(Section):
-    """Выводимые элементы проёма (config/derive.toml, gf#212): размеры по виду дома."""
+    """Выводимые элементы проёма (config/derive.toml, gf#212): виды дома и размеры каждого. Виды —
+    открытый набор записей: новый вид добавляется записью, без переобучения модели (gf#318)."""
 
-    sill: dict[SillKind, SillLook]
-    casing: dict[CasingKind, float]
-    shutters: ShutterLook
-    canopy: CanopyKinds
+    canopy_min_h_m: float
+    sill: dict[str, SillLook]
+    casing: dict[str, CasingLook]
+    shutters: dict[str, ShutterLook]
+    canopy: dict[str, CanopyLook]
+    door: dict[str, DoorLeaf]
+
+    def kinds(self, name: str) -> list[str]:
+        """Виды элемента дома, без none: sill, casing, shutters, canopy, door."""
+        return list(getattr(self, name))
+
+    def look(self, name: str, kind: str):
+        """Запись вида; вида нет в config/derive.toml — отказ с понятным текстом, а не KeyError."""
+        found = getattr(self, name)
+        if kind not in found:
+            raise ValueError(f"{name}: вида «{kind}» нет в derive.toml, есть {sorted(found)}")
+        return found[kind]
+
+    def find(self, name: str, kind: str):
+        """Запись вида или None, если элемента у дома нет (none): у реальных домов листы бывают
+        с элементом, чьего вида дом не назвал."""
+        return None if kind == NONE_KIND else self.look(name, kind)
+
+    def unknown(self, trim: HouseTrim) -> list[str]:
+        """Виды дома, которых нет в записях: none допустим, кроме двери."""
+        return [f"{n}={k}" for n, k in trim if k not in getattr(self, n)
+                and not (k == NONE_KIND and n != DOOR_FIELD)]
 
 
 class GPTSize(Section):
@@ -670,6 +710,7 @@ class SpecStub(Section):
     style_words: dict[str, list[str]]      # стиль → слова в тексте
     material_words: dict[str, list[str]]   # вид стен из библиотеки → слова в тексте
     trim_words: dict[Trim, list[str]]      # выводимый элемент → слова в тексте
+    kind_words: dict[str, dict[str, list[str]]]  # элемент → вид (derive.toml) → слова в тексте
     roof_words: dict[RoofKind, list[str]]  # вид крыши → слова в тексте (gf#320)
     roof_shape: RoofShape                  # уклон и свес по виду крыши — и синтетике
     role_words: dict[PaletteRole, list[str]]  # роль палитры → слова, перед которыми цвет её красит
@@ -817,6 +858,25 @@ class Config(Section):
         """Вид материала стаба шага 1 — из [kinds] library.toml: опечатка — ошибка загрузки."""
         if unknown := self.models.spec.kinds() - set(self.library.kinds):
             raise ValueError(f"spec: видов нет в library.toml [kinds] — {sorted(unknown)}")
+        return self
+
+    @model_validator(mode="after")
+    def _trim_kinds_in_derive(self) -> "Config":
+        """Виды выводимых элементов в отделках, весах синтетики и ручной разметке — записи
+        derive.toml, слова вида в тексте — тоже: опечатка — ошибка загрузки (gf#318)."""
+        houses = {f"отделка {n}": f.trim for n, f in self.models.spec.finish.items()}
+        houses |= {"trim_default": self.models.spec.trim_default,
+                   "manual": self.data.manual.trim}
+        bad = {n: u for n, t in houses.items() if (u := self.derive.unknown(t))}
+        weights = self.synthetic.facade.trim
+        bad |= {f"вес {n}": missing for n, w in weights
+                if (missing := [k for k in w if k not in self.derive.kinds(n)
+                                and not (k == NONE_KIND and n != DOOR_FIELD)])}
+        words = self.models.spec.kind_words
+        bad |= {f"слова {n}": missing for n, kw in words.items()
+                if (missing := [k for k in kw if k not in self.derive.kinds(n)])}
+        if bad:
+            raise ValueError(f"виды, которых нет в config/derive.toml: {bad}")
         return self
 
 

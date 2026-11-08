@@ -31,6 +31,7 @@ class Mentions:
     kind: str | None = None
     colors: dict[PaletteRole, list[set[str]]] = field(default_factory=dict)
     trims: dict[Trim, bool] = field(default_factory=dict)
+    kinds: dict[str, str] = field(default_factory=dict)  # элемент (поле HouseTrim) → названный вид
 
 
 def look(text: str, style: str, cfg: SpecStub) -> Look:
@@ -42,7 +43,7 @@ def look(text: str, style: str, cfg: SpecStub) -> Look:
     finish = cfg.finish[name]
     materials = [_material(role, finish, mentioned, digest if tokens else None, cfg)
                  for role in PaletteRole]
-    return Look(name, materials, _trim(finish, mentioned.trims, cfg), finish.roof)
+    return Look(name, materials, _trim(finish, mentioned, cfg), finish.roof)
 
 
 def _stem(token: str, stems: list[str], cfg: SpecStub) -> bool:
@@ -58,10 +59,20 @@ def _mentions(tokens: list[str], cfg: SpecStub) -> Mentions:
         for trim, stems in cfg.trim_words.items():
             if _stem(token, stems, cfg):
                 found.trims[trim] = not (i and tokens[i - 1] in cfg.negations)
+        _kinds_at(tokens, i, found, cfg)
         if names := _color_names(token, cfg):
             role = _role_after(tokens[i + 1:i + 1 + cfg.reach], cfg)
             found.colors.setdefault(role, []).append(names)
     return found
+
+
+def _kinds_at(tokens: list[str], i: int, found: Mentions, cfg: SpecStub) -> None:
+    """Названный вид элемента (gf#318: слова вида — в [spec.kind_words]): первый в тексте и ставит
+    элемент, и выбирает вид; «без …» перед сочетанием не учитывается — слова вида не отрицают."""
+    for element, kinds in cfg.kind_words.items():
+        for kind, phrases in kinds.items():
+            if element not in found.kinds and words.phrase_at(tokens, i, phrases, cfg.stem_tail):
+                found.kinds[element] = kind
 
 
 def _color_names(token: str, cfg: SpecStub) -> set[str]:
@@ -116,9 +127,10 @@ def _material(role: PaletteRole, finish: Finish, found: Mentions, digest: bytes 
     return Material(id=role.value, kind=finish.materials[role].kind, color=cfg.colors[color].hex)
 
 
-def _trim(finish: Finish, mentioned: dict[Trim, bool], cfg: SpecStub) -> HouseTrim:
+def _trim(finish: Finish, mentioned: Mentions, cfg: SpecStub) -> HouseTrim:
     """Виды элементов отделки; названный в тексте элемент ставится, «без …» — убирается."""
     none = HouseTrim()
+    named = {e: k for e, k in mentioned.kinds.items() if mentioned.trims.get(e) is not False}
     update = {t: cfg.trim_default.kind(t) if on else none.kind(t)
-              for t, on in mentioned.items() if on != finish.trim.has(t)}
-    return finish.trim.model_copy(update=update)
+              for t, on in mentioned.trims.items() if on != finish.trim.has(t)}
+    return finish.trim.model_copy(update=update | named)

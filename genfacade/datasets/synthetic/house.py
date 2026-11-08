@@ -17,6 +17,7 @@ from genfacade.schema import (
     Material,
     PaletteRole,
     RoofKind,
+    Trim,
     VariantKind,
 )
 
@@ -103,10 +104,18 @@ def _head(wanted: float, spec: HouseSpec, cfg: Config) -> tuple[float, float]:
     карниз тоньше, до min_m, а дальше ниже верх окон (gf#212: окна упирались в карниз)."""
     syn = cfg.synthetic
     floor = spec.floor_heights_m[0]
-    room = floor - cfg.derive.casing.get(spec.trim.casing, 0.0) - _frieze(cfg)
+    room = floor - _casing_top(spec, cfg) - _frieze(cfg)
     head = round(min(wanted, floor - syn.facade.windows.lintel_m,
                      room - syn.facade.cornice.min_m), 3)
     return head, round(min(syn.facade.cornice.height_m, room - head), 3)
+
+
+def _casing_top(spec: HouseSpec, cfg: Config) -> float:
+    """Сколько наличник выступает над окном: доска и сандрик; наличника нет — нисколько."""
+    if not spec.trim.has(Trim.CASING):
+        return 0.0
+    look = cfg.derive.look("casing", spec.trim.casing)
+    return look.width_m + look.rise_m
 
 
 def _frieze(cfg: Config) -> float:

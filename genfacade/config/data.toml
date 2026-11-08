@@ -65,4 +65,4 @@ link_tol_m = 0.1
 # Вид выводимых элементов у дома: разметчик его не размечает — вид по умолчанию для тех элементов,
 # что у дома есть (у остальных — none); у ставен FreeFarmhouse на листах — филёнки или планки, не
 # различались [не проверено].
-trim = { sill = "flat", casing = "flat", shutters = "panel", canopy = "flat" }
+trim = { sill = "flat", casing = "flat", shutters = "panel", canopy = "flat", door = "plain" }

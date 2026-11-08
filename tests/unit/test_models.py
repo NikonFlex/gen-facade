@@ -14,13 +14,12 @@ from genfacade.models.stub import LayoutContext, ModelError
 from genfacade.render import sheet_format
 from genfacade.render.svg import paint, pen_for, sheet_svg
 from genfacade.schema import (
-    CasingKind,
     ElementClass,
     FacadeSheet,
     Material,
     Mode,
     PaletteRole,
-    ShutterKind,
+    Trim,
     ZoneRole,
 )
 
@@ -122,8 +121,8 @@ def test_brick_house_with_white_casings(cfg):
         spec = stub.spec_model(text, rules)
         assert _palette(spec)["main"].kind == "brick"
         assert _palette(spec)["trim"].color == white
-        assert spec.trim.casing is not CasingKind.NONE
-    assert stub.spec_model("Светлый кирпичный коттедж", rules).trim.casing is CasingKind.NONE
+        assert spec.trim.has(Trim.CASING)
+    assert stub.spec_model("Светлый кирпичный коттедж", rules).trim.has(Trim.CASING) is False
 
 
 @pytest.mark.parametrize(("text", "wanted"), [
@@ -152,10 +151,9 @@ def test_color_outside_the_kind_row_does_not_paint_walls(cfg):
 
 def test_named_element_is_put_and_no_removes_it(cfg):
     rules = cfg.models.spec
-    assert stub.spec_model("A classic house, no shutters", rules).trim.shutters is ShutterKind.NONE
-    assert stub.spec_model("A classic house", rules).trim.shutters is not ShutterKind.NONE
-    assert stub.spec_model("Современный дом со ставнями", rules).trim.shutters \
-        is not ShutterKind.NONE
+    assert stub.spec_model("A classic house, no shutters", rules).trim.has(Trim.SHUTTERS) is False
+    assert stub.spec_model("A classic house", rules).trim.has(Trim.SHUTTERS)
+    assert stub.spec_model("Современный дом со ставнями", rules).trim.has(Trim.SHUTTERS)
 
 
 TEXTS = ["A house in the forest", "Cozy cottage by the lake", "Дом для семьи из четырёх человек",

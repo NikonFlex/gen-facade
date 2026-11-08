@@ -103,12 +103,13 @@ def _child(parent: Element, trim: Trim, box: tuple[float, ...], wall: Wall) -> E
 
 
 def _casing(w: Element, wall: Wall) -> Element:
-    c = wall.cfg.casing[wall.spec.trim.casing]
-    return _child(w, Trim.CASING, (w.x_m - c, w.y_m, w.w_m + 2 * c, w.h_m + c), wall)
+    look = wall.cfg.look("casing", wall.spec.trim.casing)
+    c = look.width_m
+    return _child(w, Trim.CASING, (w.x_m - c, w.y_m, w.w_m + 2 * c, w.h_m + c + look.rise_m), wall)
 
 
 def _sill(w: Element, wall: Wall) -> Element:
-    s = wall.cfg.sill[wall.spec.trim.sill]
+    s = wall.cfg.look("sill", wall.spec.trim.sill)
     return _child(w, Trim.SILL, (w.x_m - s.overhang_m, w.y_m - s.height_m,
                                  w.w_m + 2 * s.overhang_m, s.height_m), wall)
 
@@ -116,11 +117,11 @@ def _sill(w: Element, wall: Wall) -> Element:
 def _offset(w: Element, marks: Flags, wall: Wall) -> float:
     """Ставни — снаружи наличника, если он у окна есть."""
     has = Trim.CASING in marks.get(w.id, ()) and wall.spec.trim.has(Trim.CASING)
-    return wall.cfg.casing[wall.spec.trim.casing] if has else 0.0
+    return wall.cfg.look("casing", wall.spec.trim.casing).width_m if has else 0.0
 
 
 def _shutter_w(w: Element, wall: Wall) -> float:
-    return round(wall.cfg.shutters.share * w.w_m, 3)
+    return round(wall.cfg.look("shutters", wall.spec.trim.shutters).share * w.w_m, 3)
 
 
 def _shutters(w: Element, marks: Flags, wall: Wall) -> list[Element]:
@@ -150,8 +151,9 @@ def _rows(elements: list[Element]) -> list[list[Element]]:
 
 
 def _need(e: Element, marks: Flags, wall: Wall) -> float:
-    """Сколько места сбоку займёт ставня проёма; без признака — нисколько."""
-    if e.cls is not ElementClass.WINDOW or Trim.SHUTTERS not in marks.get(e.id, ()):
+    """Сколько места сбоку займёт ставня проёма; без признака или вида у дома — нисколько."""
+    if (e.cls is not ElementClass.WINDOW or Trim.SHUTTERS not in marks.get(e.id, ())
+            or not wall.spec.trim.has(Trim.SHUTTERS)):
         return 0.0
     return _offset(e, marks, wall) + _shutter_w(e, wall)
 
@@ -168,12 +170,11 @@ def _canopy(d: Element, elements: list[Element], wall: Wall) -> Element | None:
     """Козырёк над дверью; под карнизом тесно — ниже, но не ниже min_h_m, иначе его нет. Дверь
     за краем стены (ответ недоученной модели, gf#217) — козырька нет: ширина ушла бы в минус, а
     дверь и так брак валидатора (`outside`)."""
-    kinds = wall.cfg.canopy
-    look = kinds.of(wall.spec.trim.canopy)
+    look = wall.cfg.look("canopy", wall.spec.trim.canopy)
     x0, x1 = max(0.0, d.x_m - look.pad_m), min(wall.length_m, d.x_m + d.w_m + look.pad_m)
     y = d.y_m + d.h_m + look.gap_m
     h = min(look.height_m, _ceiling(y, (x0, x1), elements, wall) - y)
-    if h + EPS < kinds.min_h_m or x1 - x0 <= EPS:
+    if h + EPS < wall.cfg.canopy_min_h_m or x1 - x0 <= EPS:
         return None
     return _child(d, Trim.CANOPY, (x0, y, x1 - x0, h), wall)
 

@@ -40,8 +40,6 @@ from genfacade.schema import (
     DOOR_OPENING_KINDS,
     EPS,
     BuildingType,
-    CanopyKind,
-    CasingKind,
     Element,
     ElementClass,
     FacadeSheet,
@@ -54,10 +52,8 @@ from genfacade.schema import (
     OpeningVariant,
     PaletteRole,
     RoofKind,
-    ShutterKind,
     Side,
     SideFacade,
-    SillKind,
     Trim,
     VariantKind,
     ZoneRole,
@@ -78,6 +74,15 @@ class Mark(StrEnum):
     FLOOR = "<floor>"
     PARENT = "<parent>"
     END = "<end>"
+
+
+class Presence(StrEnum):
+    """Есть ли у дома выводимый элемент (подоконник, наличник, ставни, козырёк). В условии модели —
+    только это: вид элемента код берёт из параметров дома, и новый вид не меняет словарь, поэтому
+    обученная модель принимает дом с любым видом, даже не бывшим при обучении (gf#318)."""
+
+    YES = "yes"
+    NO = "no"
 
 
 class TokenError(ValueError):
@@ -102,8 +107,7 @@ class Answer(NamedTuple):
 # значения — с приставкой своего enum.
 ENUMS = {"mode": Mode, "type": BuildingType, "roof": RoofKind, "open": OpeningKind,
          "cls": ElementClass, "var": VariantKind, "mat": PaletteRole, "role": ZoneRole,
-         "fix": FixedField, "sill_kind": SillKind, "casing_kind": CasingKind,
-         "shutters_kind": ShutterKind, "canopy_kind": CanopyKind, "trim": Trim}
+         "fix": FixedField, "has": Presence, "trim": Trim}
 PREFIX = {enum: name for name, enum in ENUMS.items()}
 HALF_STEP_UP = 1e-6  # запас на хвост float при округлении полушага; допуск, не настройка
 KIND = "kind"    # вид материала из библиотеки — открытый набор из config/library.toml
@@ -174,7 +178,8 @@ def condition(sheet: FacadeSheet, mode: Mode, cfg: Config) -> list[str]:
     out = [Mark.HOUSE, tok(mode), tok(spec.building_type), str(spec.floors),
            *(str(units(h, t)) for h in spec.floor_heights_m),
            str(units(spec.plinth_m, t)), str(units(spec.eaves_m, t)),
-           tok(spec.roof.kind), f"{STYLE}:{spec.style}", *(tok(spec.trim.kind(t)) for t in Trim)]
+           tok(spec.roof.kind), f"{STYLE}:{spec.style}",
+           *(tok(Presence.YES if spec.trim.has(t) else Presence.NO) for t in Trim)]
     for m in spec.materials:
         out += [_material(m.id), f"{KIND}:{m.kind}"]
     for f in sheet.facades:
