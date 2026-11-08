@@ -5,7 +5,7 @@ import random
 from genfacade import derive, pipeline
 from genfacade.config import Config, Synthetic
 from genfacade.datasets import genplan_writer
-from genfacade.datasets.synthetic import contour, decor, openings, sizes, upper, zones
+from genfacade.datasets.synthetic import contour, decor, gable, openings, sizes, upper, zones
 from genfacade.datasets.synthetic.house import Look, house
 from genfacade.plan.preprocess import preprocess
 from genfacade.schema import (
@@ -52,27 +52,37 @@ def sample(seed: int, cfg: Config) -> Sample:
     spec, look = house(random.Random(f"house/{seed}"), cfg,  # noqa: S311 — не криптография
                        sizes.pick(seed, syn))
     sheet = lay_out(pipeline.walls(spec, floor), look, cfg,
-                    random.Random(f"upper/{seed}"))  # noqa: S311 — не криптография
+                    random.Random(f"upper/{seed}"),  # noqa: S311 — не криптография
+                    random.Random(f"gable/{seed}"))  # noqa: S311 — не криптография
     return Sample(id=sample_id(seed), source=Source.SYNTHETIC, split=split(seed, syn),
                   plan=floor, sheet=sheet)
 
 
-def lay_out(sheet: FacadeSheet, look: Look, cfg: Config, rng: random.Random) -> FacadeSheet:
+def lay_out(sheet: FacadeSheet, look: Look, cfg: Config, rng: random.Random,
+            roof_rng: random.Random | None = None) -> FacadeSheet:
     """Раскладка всех стен дома при одних параметрах и одном характере; rng — окна верхних
-    этажей, которых нет в плане."""
+    этажей, которых нет в плане; roof_rng — окна во фронтоне (gf#321), None — без них."""
     spec, windows = sheet.spec, cfg.synthetic.facade.windows
     place = (openings.scattered(rng, sheet, look, cfg)
              if cfg.synthetic.openings.placement is Placement.RANDOM
              else openings.on_head_line(look, windows))
-    walls = []
+    placed = []
     for f in sheet.facades:
         rows = upper.rows(rng, f.side, spec.floors, cfg)
-        placed = f.model_copy(update={"elements": openings.windows(rows, spec, place, windows)})
-        walls.append(_wall(placed, spec, look, cfg))
+        placed.append(f.model_copy(update={
+            "elements": openings.windows(rows, spec, place, windows)}))
+    storeys = sheet.model_copy(update={"facades": placed})
+    over = (gable.windows(roof_rng, storeys, cfg) if roof_rng is not None
+            else [[] for _ in placed])
+    # стена с окнами во фронтоне — щипцовая, карниза на ней нет (`facade: Карниз под скатом`)
+    walls = [_wall(f.model_copy(update={"elements": [*f.elements, *extra]}), spec, look, cfg,
+                   cornice=not extra)
+             for f, extra in zip(placed, over, strict=True)]
     return sheet.model_copy(update={"facades": walls})
 
 
-def _wall(wall: SideFacade, spec: HouseSpec, look: Look, cfg: Config) -> SideFacade:
+def _wall(wall: SideFacade, spec: HouseSpec, look: Look, cfg: Config,
+          cornice: bool = True) -> SideFacade:
     """Стена с уже поставленными окнами (`wall.elements`) — дверь, декор и зоны. Подоконники,
     наличники, ставни и козырёк правило только отмечает у проёма, ставит их код (derive.py)."""
     rules, side, windows = cfg.synthetic.facade, wall.side, wall.elements
@@ -80,7 +90,8 @@ def _wall(wall: SideFacade, spec: HouseSpec, look: Look, cfg: Config) -> SideFac
     porch = look.porch and spec.plinth_m > 0  # крыльцо — на высоту цоколя: без цоколя его нет
     porches = [decor.porch(d, spec, cfg.checks.porch_pad_m) for d in doors] if porch else []
     ctx = derive.Wall(spec, side.length_m, cfg.derive)
-    laid = [*windows, *doors, *porches, decor.cornice(side.length_m, spec, look.cornice_m)]
+    laid = [*windows, *doors, *porches,
+            *([decor.cornice(side.length_m, spec, look.cornice_m)] if cornice else [])]
     elements = derive.place(laid, decor.flags(windows, doors, ctx), ctx)
     placed = wall.model_copy(update={"elements": elements})
     return placed.model_copy(update={"zones": zones.zones(placed, spec, look, rules.finish)})

@@ -75,15 +75,32 @@ def _roof(sheet: FacadeSheet, pen: Pen, corners: list[Point], look: House3d) -> 
         cornice = any(e.cls is ElementClass.CORNICE for f in sheet.facades for e in f.elements)
         out = look.relief_cls.get(ElementClass.CORNICE, 0.0) if cornice else 0.0
         flat = shapely.Polygon(corners).buffer(out, join_style="mitre") if out else None
-        return {"faces": [], "above": [], "color": None, "wall": None,
+        return {"faces": [], "above": [], "color": None, "wall": None, "windows": [],
                 "flat": list(flat.exterior.coords)[:-1] if flat else corners}
-    above = []
-    for k in range(len(sheet.facades)):
+    above, windows = [], []
+    for k, f in enumerate(sheet.facades):
         if (shape := roof.above_eaves(line, k)) is not None:
             left, u, _ = roof.wall_axis(line, k)
             above.append([(left[0] + u[0] * x, left[1] + u[1] * x, y) for x, y in shape])
+            windows += _gable_windows(f, line, k, look)
     return {"faces": [face for _, face in roof.faces(line)], "above": above, "flat": None,
-            "color": pen.colors.get(pen.roof or ""), "wall": pen.colors.get(PaletteRole.MAIN)}
+            "color": pen.colors.get(pen.roof or ""), "wall": pen.colors.get(PaletteRole.MAIN),
+            "windows": windows, "glass": pen.cfg.library.fill.glass}
+
+
+def _gable_windows(f: SideFacade, line: roof.Roofline, k: int, look: House3d) -> list[list]:
+    """Окна во фронтоне (gf#321) в объёме: часть рамки выше карниза — текстура стены кончается на
+    карнизе, а фронтон — гладкий многоугольник; чуть наружу от стены, чтобы не тонуть в ней."""
+    left, u, _ = roof.wall_axis(line, k)
+    out = (u[1] * look.window_out_m, -u[0] * look.window_out_m)  # наружная нормаль стены
+    quads = []
+    for e in f.elements:
+        if e.cls is ElementClass.WINDOW and e.y_m + e.h_m > line.eaves + EPS:
+            low = max(e.y_m, line.eaves)
+            quads.append([(left[0] + u[0] * x + out[0], left[1] + u[1] * x + out[1], y)
+                          for x, y in ((e.x_m, low), (e.x_m + e.w_m, low),
+                                       (e.x_m + e.w_m, e.y_m + e.h_m), (e.x_m, e.y_m + e.h_m))])
+    return quads
 
 
 def _convex(corners: list[Point], k: int) -> bool:

@@ -5,8 +5,9 @@ import random
 from itertools import combinations
 
 import pytest
+import shapely
 
-from genfacade import guidelines
+from genfacade import guidelines, roof
 from genfacade.datasets import store
 from genfacade.datasets.synthetic import build, sizes
 from genfacade.datasets.synthetic.house import Scheme, house
@@ -19,6 +20,7 @@ from genfacade.schema import (
     FixedField,
     OpeningKind,
     PaletteRole,
+    RoofKind,
     Source,
     Trim,
     VariantKind,
@@ -72,16 +74,57 @@ def test_plan_openings_stand_where_plan_put_them(houses):
         assert bool(_of(f, ElementClass.DOOR)) == f.side.has_entrance
 
 
+def _roofed(f, spec):
+    """Окна во фронтоне — этажа под скатом (gf#321)."""
+    return [w for w in _of(f, ElementClass.WINDOW) if w.floor > spec.floors]
+
+
 def test_windows_between_floor_and_cornice(houses, cfg):
+    """Окна этажей — между полом и карнизом; стена с окнами во фронтоне — щипцовая, без карниза
+    (gf#321)."""
     rules = cfg.synthetic.facade
     for h, f in _walls(houses):
         spec = h.sheet.spec
-        [cornice] = _of(f, ElementClass.CORNICE)
-        assert (cornice.x_m, cornice.w_m) == (0.0, f.side.length_m)
-        assert cornice.y_m + cornice.h_m == pytest.approx(spec.eaves_m)
+        roofed = _roofed(f, spec)
+        if roofed:
+            assert not _of(f, ElementClass.CORNICE)
+        else:
+            [cornice] = _of(f, ElementClass.CORNICE)
+            assert (cornice.x_m, cornice.w_m) == (0.0, f.side.length_m)
+            assert cornice.y_m + cornice.h_m == pytest.approx(spec.eaves_m)
         for w in _of(f, ElementClass.WINDOW):
+            if w in roofed:
+                continue
             assert w.y_m >= spec.plinth_m - EPS, h.id
             assert w.y_m + w.h_m <= spec.eaves_m - rules.windows.lintel_m + EPS, h.id
+
+
+def test_gable_windows_stand_in_the_gable_off_the_slope(houses, rect_cfg):
+    """`data: Синтетика своим генератором` (gf#321): окна во фронтоне — у части домов с двускатной
+    крышей, только на щипцовых стенах, в стене с отступом от ската, одного из типоразмеров окон
+    этажей дома; при доле ноль дома прежние."""
+    cfg = rect_cfg
+    rules, roofed = cfg.synthetic.facade.gable, []
+    for h in houses:
+        spec, gables = h.sheet.spec, roof.gables(h.sheet)
+        for f, above in zip(h.sheet.facades, gables, strict=True):
+            for w in _roofed(f, spec):
+                assert spec.roof.kind is RoofKind.GABLE and above is not None, h.id
+                room = roof.room(f.side.length_m, spec.eaves_m, above, cfg.checks.slope_offset_m)
+                assert room.buffer(EPS).contains(shapely.box(w.x_m, w.y_m, w.x_m + w.w_m,
+                                                             w.y_m + w.h_m)), h.id
+                low, high = rules.sill_m
+                assert low - EPS <= w.y_m - spec.eaves_m <= high + EPS
+                roofed.append(h.id)
+    assert roofed  # у части домов окна во фронтоне есть
+    zero = cfg.synthetic.model_copy(update={"facade": cfg.synthetic.facade.model_copy(
+        update={"gable": rules.model_copy(update={"share": 0.0})})})
+    flat = cfg.model_copy(update={"synthetic": zero})
+    for h in houses:
+        if h.id in roofed:
+            plain = build.sample(int(h.id.split("-")[1]), flat)
+            assert not any(_roofed(f, plain.sheet.spec) for f in plain.sheet.facades)
+            assert plain.plan == h.plan
 
 
 def test_upper_floors_get_windows_the_plan_does_not_give(houses):
@@ -131,7 +174,8 @@ def test_window_tops_align_and_heights_come_from_rows(houses, looks, cfg):
         assert look.window_h_m in rules.heights_m and look.narrow_h_m in rules.narrow_heights_m
         assert rules.sill_m[0] - EPS <= look.head_m - look.window_h_m <= rules.sill_m[1] + EPS
         levels = spec.floor_levels()
-        for w in (w for f in h.sheet.facades for w in _of(f, ElementClass.WINDOW)):
+        for w in (w for f in h.sheet.facades for w in _of(f, ElementClass.WINDOW)
+                  if w.floor <= h.sheet.spec.floors):  # окно во фронтоне — не этажа
             assert w.y_m + w.h_m == pytest.approx(levels[w.floor - 1] + look.head_m), (h.id, w.id)
             wide, narrow = w.w_m >= rules.wide_min_w_m, w.w_m <= rules.narrow_max_w_m
             want = (look.head_m if wide and look.wide_to_floor

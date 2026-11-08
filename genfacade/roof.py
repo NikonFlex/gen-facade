@@ -21,6 +21,7 @@ from itertools import combinations
 
 import shapely
 
+from genfacade.plan.genplan_svg import PlanError
 from genfacade.schema import EPS, FacadeSheet, Point, Polygon, RoofKind, Side
 from genfacade.unfold import plan_corners
 
@@ -189,3 +190,47 @@ def _outward(a: Point3, b: Point3, face: list[Point3]) -> Point:
     area = sum(p[0] * q[1] - q[0] * p[1] for p, q in _edges(face))  # > 0 — обход против часовой
     dx, dy = b[0] - a[0], b[1] - a[1]
     return (dy, -dx) if area > 0 else (-dy, dx)
+
+
+# ——— фронтон: стена выше карниза как место окон (gf#321) ———
+
+def gables(sheet: FacadeSheet) -> list[Polygon | None]:
+    """Стена выше карниза у каждой стороны листа — зона фронтона, где бывают окна этажа под
+    скатом; скаты не строятся, контур не обходится или у стены нет части выше карниза — None
+    (контур отклоняет развёртка, валидатор и метрики листа на нём не падают)."""
+    try:
+        line = roofline(sheet)
+    except PlanError:
+        line = None
+    return [None if line is None else above_eaves(line, k) for k in range(len(sheet.facades))]
+
+
+def peaks(above: Polygon, eaves: float) -> list[Point]:
+    """Вершины верха стены выше карниза слева направо: у щипца двускатной — конёк; с ними и длиной
+    стены зона фронтона восстанавливается (низ — карниз от края до края)."""
+    return [p for p in above if p[1] > eaves + EPS]
+
+
+def slopes(above: Polygon, eaves: float) -> list[tuple[Point, Point]]:
+    """Кромки ската на стене: стороны зоны фронтона, кроме низа по карнизу и вертикальных краёв
+    стены."""
+    pairs = zip(above, above[1:] + above[:1], strict=True)
+    return [(a, b) for a, b in pairs
+            if abs(a[0] - b[0]) > EPS
+            and not (abs(a[1] - eaves) <= EPS and abs(b[1] - eaves) <= EPS)]
+
+
+def wall_shape(length: float, eaves: float, above: Polygon | None) -> shapely.Geometry:
+    """Стена целиком: прямоугольник до карниза и зона фронтона над ним."""
+    wall = shapely.box(0.0, 0.0, length, eaves)
+    return wall if above is None else wall.union(shapely.Polygon(above))
+
+
+def room(length: float, eaves: float, above: Polygon | None, offset: float) -> shapely.Geometry:
+    """Где может стоять окно: стена целиком без полосы шириной offset вдоль ската."""
+    wall = wall_shape(length, eaves, above)
+    if above is None or offset <= 0:
+        return wall
+    band = shapely.union_all([shapely.LineString(e).buffer(offset, cap_style="flat")
+                              for e in slopes(above, eaves)])
+    return wall.difference(band)

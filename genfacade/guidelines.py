@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from genfacade.config import Config, Guideline
 from genfacade.datasets import store
-from genfacade.metrics.measures import floor_of, level_of
+from genfacade.metrics.measures import floor_of, level_of, storeys
 from genfacade.schema import (
     EPS,
     Element,
@@ -36,8 +36,9 @@ COVERS = (ElementClass.CANOPY, ElementClass.PORCH)  # что закрывает 
 
 
 def cases(g: Guideline, sheet: FacadeSheet, plan: Plan | None) -> list[bool]:
-    """Случаи правила на доме: выполнен ли каждый."""
-    return CHECKS[g.check](g.params, sheet, plan)
+    """Случаи правила на доме: выполнен ли каждый. Свод — об окнах этажей: окна во фронтоне
+    (gf#321) не в счёт, у них нет пола этажа и линии верха."""
+    return CHECKS[g.check](g.params, storeys(sheet), plan)
 
 
 # ——— выборки ———

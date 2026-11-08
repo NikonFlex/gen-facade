@@ -3,9 +3,10 @@
 
 import numpy
 import pytest
+import shapely
 from simple_house import WALL_INTO_WINDOW, before_leaf
 
-from genfacade import schema
+from genfacade import roof, schema
 from genfacade.datasets.synthetic import build
 from genfacade.schema import ElementClass, Mode, ZoneRole
 from genfacade.train import constraints, tokens
@@ -416,8 +417,8 @@ def test_forbidden_zones_belong_to_ground_floor(cfg, lay_out, simple_svg, vocab)
 TWO = constraints.Wall(160, [], [(78, 82), (28, 46)], (60,))
 
 
-def _two_storey(vocab, ids, *words):
-    g = constraints.WallGeometry([TWO], vocab, NORMS)
+def _two_storey(vocab, ids, *words, wall=TWO):
+    g = constraints.WallGeometry([wall], vocab, NORMS)
     for w in (*TYPES, *words):
         g.step(ids[str(w)])
     return g
@@ -562,3 +563,31 @@ def test_reference_answer_passes_the_guard(cfg, vocab, mode):
             assert number[word] not in set(g.banned()), (seed, word)
             g.step(number[word])
 
+
+
+# Стена 6 м до карниза 3 м с фронтоном до 5,1 м (gf#321): место окна — в шагах сетки, низ этажа
+# под скатом — 2,5 м (50 шагов), верх — 102.
+GABLE_ABOVE = [(0.0, 3.0), (3.0, 5.1), (6.0, 3.0)]
+GABLED = constraints.Wall(
+    120, [], height=60,
+    room=shapely.transform(roof.room(6.0, 3.0, GABLE_ABOVE, 0.2), lambda c: c / 0.05),
+    attic=50, top=102)
+
+
+def _gabled(vocab, ids, *words):
+    return _two_storey(vocab, ids, *words, wall=GABLED)
+
+
+def test_window_goes_above_the_eaves_only_into_the_gable(cfg, vocab, sizes):
+    """Окно во фронтоне (gf#321): выше карниза — только окно этажа под скатом (низ не ниже
+    attic), рамка — в стене с отступом от ската; этаж такого окна — под скатом."""
+    ids = {w: i for i, w in enumerate(tokens.vocabulary(cfg))}
+    ys = _allowed(_gabled(vocab, ids, Mark.WALL, WINDOW, 50), vocab)
+    assert {20, 30, 50, 56, 60} <= ys            # окно этажа под карнизом и окно под скатом
+    assert not {35, 45, 80} & ys                  # через карниз этажом ниже и выше конька
+    # у x 2,5 м на 2,8 м: 0,6 и 1,0 м шириной годны, 1,3 м — верхний угол ближе 0,2 м к скату
+    assert sizes(_gabled(vocab, ids, Mark.WALL, WINDOW, 50, 56)) == {0, 1}
+    floor = _gabled(vocab, ids, Mark.WALL, WINDOW, 50, 56, SIZE[1], Mark.FLOOR)
+    assert _allowed(floor, vocab) == {2}
+    # окно этажа — как прежде: под карнизом любой типоразмер, этаж — первый
+    assert sizes(_gabled(vocab, ids, Mark.WALL, WINDOW, 50, 20)) == {0, 1, 2}

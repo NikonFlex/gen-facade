@@ -42,7 +42,9 @@ def _accents(wall: SideFacade, spec: HouseSpec, look: Look, cfg: Finish) -> list
     if look.scheme is Scheme.CORNERS:
         return [(0.0, low, cfg.corner_m, top), (length - cfg.corner_m, low, length, top)]
     if look.scheme is Scheme.PIERS:
-        return _piers(_of(wall, ElementClass.WINDOW), cfg.pier_max_m)
+        # окна во фронтоне (gf#321) — выше карниза, зоны — до него
+        storeys = [w for w in _of(wall, ElementClass.WINDOW) if (w.floor or 1) <= spec.floors]
+        return _piers(storeys, cfg.pier_max_m)
     return []
 
 

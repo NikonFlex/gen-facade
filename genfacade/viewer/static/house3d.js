@@ -84,6 +84,8 @@ export class HouseStage {
   // треугольников; (x, y, h) плана → (x, h, −y) сцены, как у стен.
   _slopes(THREE, roof) {
     const parts = [[roof.faces, roof.color || this.look.roof], [roof.above, roof.wall || this.look.roof]];
+    // окна во фронтоне (gf#321): стекло чуть перед гладким многоугольником фронтона
+    parts.push([roof.windows || [], roof.glass]);
     for (const [shapes, color] of parts) {
       for (const shape of shapes) {
         const points = shape.map(([x, y, h]) => new THREE.Vector3(x, h, -y));

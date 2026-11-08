@@ -10,6 +10,7 @@ from statistics import mean, pstdev
 
 import numpy
 
+from genfacade import roof
 from genfacade.config import Svd
 from genfacade.schema import (
     EPS,
@@ -31,6 +32,20 @@ def floor_of(e: Element, spec: HouseSpec) -> int:
     выше карниза."""
     levels = spec.floor_levels()
     return 1 + sum(e.y_m + EPS >= level for level in levels[1:])
+
+
+def storeys(sheet: FacadeSheet) -> FacadeSheet:
+    """Лист без окон во фронтоне (верх выше карниза на стене с фронтоном, gf#321) и их выводимых
+    элементов: этажность, свод правил этажа и линии окон — об окнах этажей; у окна под скатом нет
+    пола этажа. Окно выше карниза на стене без фронтона — брак (`outside`), оно остаётся."""
+    eaves = sheet.spec.eaves_m
+    facades = []
+    for f, above in zip(sheet.facades, roof.gables(sheet), strict=True):
+        roofed = {e.id for e in f.elements if above is not None
+                  and e.cls is ElementClass.WINDOW and e.y_m + e.h_m > eaves + EPS}
+        facades.append(f.model_copy(update={"elements": [
+            e for e in f.elements if e.id not in roofed and e.parent not in roofed]}))
+    return sheet.model_copy(update={"facades": facades})
 
 
 def level_of(e: Element, spec: HouseSpec) -> float:
@@ -138,8 +153,8 @@ def features(f: SideFacade, spec: HouseSpec) -> list[float]:
 
 def floors_kept(sheet: FacadeSheet) -> bool:
     """Этажность видна по окнам: они только на этажах дома, и на верхнем этаже они есть.
-    Дом без окон этажность не показывает — требование не выполнено."""
-    found = {floor_of(w, sheet.spec) for f in sheet.facades for w in windows(f)}
+    Дом без окон этажность не показывает — требование не выполнено. Окна во фронтоне — не этаж."""
+    found = {floor_of(w, sheet.spec) for f in storeys(sheet).facades for w in windows(f)}
     return found <= set(range(1, sheet.spec.floors + 1)) and sheet.spec.floors in found
 
 
