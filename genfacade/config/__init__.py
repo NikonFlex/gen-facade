@@ -18,6 +18,7 @@ from genfacade.datasets.buildingnet.mesh import Label
 from genfacade.schema import (
     CanopyKind,
     CasingKind,
+    CheckState,
     ContourKind,
     Device,
     ElementClass,
@@ -25,10 +26,12 @@ from genfacade.schema import (
     GuidelineUse,
     HouseScore,
     HouseTrim,
+    LevelKind,
     Mode,
     PaletteRole,
     Placement,
     Region,
+    RejectReason,
     Roof,
     RoofKind,
     ShutterKind,
@@ -290,12 +293,66 @@ class Review(Section):
     reference: bool
 
 
+Size = tuple[float, float]
+
+
+class MarkupColors(Section):
+    """Цвета рамок на странице правки (gf#348); те же берёт `tools/markup.py overlay` — картинка
+    сверки и страница не расходятся. Имена CSS: их понимают и браузер, и Pillow."""
+
+    cls: dict[ElementClass, str]   # рамка элемента по классу
+    levels: str                    # земля, чистый пол, этажи, края стены
+    zone: str                      # вторая отделка
+    outline: str                   # силуэт стены выше карниза
+    roof: str
+    selected: str                  # выбранная рамка
+
+
+class MarkupLabels(Section):
+    state: dict[CheckState, str]
+    reason: dict[RejectReason, str]
+    level: dict[LevelKind, str]
+
+
+class MarkupEditor(Section):
+    """Страница правки разметки (/markup, gf#348, viewer/markup.py): откуда очередь домов, куда
+    пишется правка, как жмутся листы и какого размера рамка от касания."""
+
+    folder: Path                   # <дом>.toml очереди; правка пишется туда же (папка разметки)
+    source: str                    # ключ `data.manual.paths.pdf_dirs`: где листы домов
+    state_file: str                # состояние очереди — в папке разметки
+    original_dir: str              # исходная разметка автоматики: подпапка, сборщик её не читает
+    cache_dir: Path                # сжатые листы
+    image_max_side: int            # длинная сторона листа для страницы, px
+    add_classes: list[ElementClass]  # что можно добавить кнопкой; размер — в default_size_m
+    default_size_m: dict[ElementClass, Size]  # рамка от касания: ширина и высота, м
+    min_box_m: float               # рамка меньше этого при отпускании — касание, не рамка
+    colors: MarkupColors
+    labels: MarkupLabels
+
+    @model_validator(mode="after")
+    def _complete(self) -> Self:
+        """Подпись и цвет есть у каждого значения enum, размер — у каждого добавляемого класса."""
+        need = {
+            "цвет класса": (set(self.colors.cls), set(ElementClass)),
+            "подпись состояния": (set(self.labels.state), set(CheckState)),
+            "подпись причины": (set(self.labels.reason), set(RejectReason)),
+            "подпись линии": (set(self.labels.level), set(LevelKind)),
+            "размер рамки": (set(self.default_size_m), set(self.add_classes)),
+        }
+        for what, (have, want) in need.items():
+            if have != want:
+                raise ValueError(f"{what}: не хватает или лишнее {sorted(have ^ want)}")
+        return self
+
+
 class Viewer(Section):
     server: Server
     paths: ViewerPaths
     samples: SamplesView
     house3d: House3d
     review: Review
+    markup: MarkupEditor
     labels: Labels
 
 

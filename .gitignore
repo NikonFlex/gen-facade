@@ -58,3 +58,6 @@ materials/telegram/
 
 # база pytest-testmon: какие тесты затрагивает какой код (tools/check.sh --quick)
 .testmondata*
+
+# замки очереди проверки разметки (gf#348)
+markup/**/*.lock

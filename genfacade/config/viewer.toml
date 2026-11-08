@@ -55,6 +55,68 @@ seed = 0
 modes = ["with_openings", "blind"]   # по каким режимам идут дома проверки
 reference = true                     # настоящий дом — отдельно и с подписью, не вслепую
 
+[markup]
+# Правка автоматической разметки в браузере (gf#348): страница /markup. Очередь — разметки папки
+# `folder` (`genfacade serve --markup <папка>` берёт другую), правка пишется в те же файлы, и
+# `genfacade manual` собирает их как есть. Исходная разметка автоматики остаётся в original_dir.
+folder = "markup/stroim"
+source = "stroim"                    # где листы: [manual.paths.pdf_dirs] data.toml
+state_file = "check.json"            # проверено / осталось и секунды на дом — в папке разметки
+original_dir = "orig"
+cache_dir = "outputs/markup_cache"
+image_max_side = 2400                # сжатие листа для телефона; координаты разметки не меняются
+add_classes = ["window", "door", "garage_door", "porch", "canopy"]
+min_box_m = 0.15                     # рамка уже этого — касание: ставится рамка по умолчанию
+
+[markup.default_size_m]              # ширина × высота рамки, поставленной касанием
+window = [1.2, 1.4]
+door = [1.0, 2.1]
+garage_door = [2.5, 2.2]
+porch = [2.0, 0.6]
+canopy = [2.0, 0.4]
+
+[markup.colors]
+levels = "blue"          # земля, чистый пол, верх этажей, края стены
+zone = "magenta"
+outline = "deepskyblue"
+roof = "saddlebrown"
+selected = "gold"
+
+[markup.colors.cls]
+window = "red"
+door = "green"
+garage_door = "green"
+pillar = "orange"
+sill = "orange"
+blind = "orange"
+deco = "orange"
+cornice = "orange"
+balcony = "orange"
+molding = "orange"
+shop = "orange"
+facade = "orange"
+porch = "orange"
+chimney = "orange"
+canopy = "orange"
+
+[markup.labels.state]
+unchecked = "не проверен"
+good = "хорошо"
+edited = "поправлен"
+rejected = "негоден"
+
+[markup.labels.level]
+ground = "земля"
+floor = "чистый пол"
+top = "верх этажа"
+
+[markup.labels.reason]
+no_facades = "нет четырёх читаемых фасадов"
+bad_scale = "масштаб не определить"
+complex = "форма дома не по силам модулю"
+bad_drawing = "чертёж нечитаем или искажён"
+other = "другое"
+
 # Подписи к значениям из schema.py. Страница получает их через /api/options и сама
 # значений не знает: новый режим или класс элемента — строка здесь, а не правка JS.
 

@@ -161,6 +161,33 @@ class Markup(Model):
     def m_per_unit(self) -> float:
         return M_PER_UNIT[self.unit]
 
+    def px_per_m(self, e: Elevation) -> float:
+        """pt листа на метр вида: единица отметок — фут или метр, вид — свой масштаб."""
+        return self.scale(e) / self.m_per_unit
+
+    def ground_y(self, e: Elevation) -> float:
+        """Земля на виде, pt: чистый пол плюс цоколь."""
+        return e.floor + self.plinth * self.scale(e)
+
+    def tops_y(self, e: Elevation) -> list[float]:
+        """Верх каждого этажа на виде, pt, снизу вверх; последний — карниз."""
+        y, tops = e.floor, []
+        for h in self.floor_heights:
+            y -= h * self.scale(e)
+            tops.append(y)
+        return tops
+
+    def with_ground(self, e: Elevation, y: float) -> "Markup":
+        """Разметка с цоколем, при котором земля стоит на виде e в y (обратное `ground_y`)."""
+        return self.model_copy(update={"plinth": max(0.0, (y - e.floor) / self.scale(e))})
+
+    def with_top(self, e: Elevation, k: int, y: float) -> "Markup":
+        """Разметка с k-м этажом такой высоты, чтобы его верх на виде e стоял в y."""
+        below = e.floor if k == 0 else self.tops_y(e)[k - 1]
+        heights = list(self.floor_heights)
+        heights[k] = max(EPS, (below - y) / self.scale(e))
+        return self.model_copy(update={"floor_heights": heights})
+
 
 def read(path: Path) -> Markup:
     return Markup.model_validate(tomllib.loads(path.read_text()))

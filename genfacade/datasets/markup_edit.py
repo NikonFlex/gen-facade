@@ -1,0 +1,101 @@
+"""Правка разметки со страницы /markup (gf#348): что браузер присылает и как оно ложится в `Markup`.
+
+Браузер двигает рамки и линии в pt листа, а метры, этажи и цоколь считает только этот модуль через
+`Markup.ground_y / tops_y / with_ground / with_top` — второго пересчёта метры ↔ пиксели нет
+(тот же, что в `tools/markup.py overlay`). Линии земли и этажей приходят pt-отметкой на виде и
+пересчитываются в цоколь и высоты этажей дома: значение общее для всех сторон.
+"""
+
+from pydantic import Field
+
+from genfacade.datasets.manual import Elevation, Mark, Markup
+from genfacade.schema import EPS, LevelKind, Model
+
+MARK_ROUND = 1   # знаков после запятой у координат в pt: 0,1 pt листа — меньше пикселя
+UNIT_ROUND = 3   # у цоколя и высот этажей в единицах вида: миллиметры при метрах
+
+
+class SideEdit(Model):
+    wall: tuple[float, float]
+    pt_per_unit: float = Field(gt=0)   # масштаб вида, pt на единицу отметок
+    elements: list[Mark]
+
+
+class LevelEdit(Model):
+    side: int = Field(ge=0)
+    kind: LevelKind
+    index: int = Field(default=0, ge=0)
+    y: float
+
+
+class Edit(Model):
+    sides: list[SideEdit]
+    levels: list[LevelEdit] = []
+
+
+def _box(box: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+    """Рамка с x0 < x1 и верхом выше низа: тянут за любой угол, и через противоположный."""
+    x0, y0, x1, y1 = (round(v, MARK_ROUND) for v in box)
+    return (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
+
+
+def _mark(mark: Mark, count: int) -> Mark:
+    """Рамка начисто; родитель, которого нет в списке стороны, — ошибка, а не потерянная связь."""
+    if mark.parent is not None and not 0 <= mark.parent < count:
+        raise ValueError(f"родитель {mark.parent} — вне списка из {count} элементов")
+    return mark.model_copy(update={"box": _box(mark.box)})
+
+
+def _side(m: Markup, k: int, edit: SideEdit) -> Elevation:
+    """Сторона после правки; масштаб записывается стороне, только если он не как у дома."""
+    own = None if abs(edit.pt_per_unit - m.pt_per_unit) < EPS else edit.pt_per_unit
+    count = len(edit.elements)
+    return m.sides[k].model_copy(update={
+        "wall": tuple(round(v, MARK_ROUND) for v in sorted(edit.wall)),
+        "pt_per_unit": own,
+        "elements": [_mark(x, count) for x in edit.elements]})
+
+
+def _level(m: Markup, edit: LevelEdit) -> Markup:
+    if edit.side >= len(m.sides):
+        raise ValueError(f"нет стороны {edit.side}")
+    e = m.sides[edit.side]
+    if edit.kind is LevelKind.FLOOR:
+        sides = list(m.sides)
+        sides[edit.side] = e.model_copy(update={"floor": round(edit.y, MARK_ROUND)})
+        return m.model_copy(update={"sides": sides})
+    if edit.kind is LevelKind.GROUND:
+        return m.with_ground(e, edit.y)
+    if edit.index >= len(m.floor_heights):
+        raise ValueError(f"нет этажа {edit.index}")
+    return m.with_top(e, edit.index, edit.y)
+
+
+# пол раньше земли и этажей: от него считаются обе; этажи — снизу вверх
+LEVEL_ORDER = list(LevelKind)
+
+
+def apply(m: Markup, edit: Edit) -> Markup:
+    """Разметка после правки; не складывается (чужое число сторон, родитель вне списка, плохой
+    масштаб) — ValueError с причиной."""
+    if len(edit.sides) != len(m.sides):
+        raise ValueError(f"сторон {len(edit.sides)}, в разметке {len(m.sides)}")
+    sides = [_side(m, k, s) for k, s in enumerate(edit.sides)]
+    out = m.model_copy(update={"sides": sides})
+    ordered = sorted(edit.levels, key=lambda v: (LEVEL_ORDER.index(v.kind), v.index))
+    for level in ordered:   # масштабы сторон уже новые: линия ставится туда, куда её отпустили
+        out = _level(out, level)
+    return round_units(Markup.model_validate(out.model_dump()))
+
+
+def round_units(m: Markup) -> Markup:
+    return m.model_copy(update={
+        "plinth": round(m.plinth, UNIT_ROUND),
+        "floor_heights": [round(h, UNIT_ROUND) for h in m.floor_heights]})
+
+
+def geometry(m: Markup, k: int) -> dict:
+    """Линии стороны k для страницы, pt листа: земля, чистый пол, верх этажей — и масштаб вида."""
+    e = m.sides[k]
+    return {"ground": m.ground_y(e), "floor": e.floor, "tops": m.tops_y(e),
+            "pt_per_unit": m.scale(e), "px_per_m": m.px_per_m(e)}
