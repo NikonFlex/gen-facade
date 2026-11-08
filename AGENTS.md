@@ -103,8 +103,8 @@
 по «да» хозяина. Сторожа `.agents/guards/` перехватывают команды до выполнения во всех трёх
 средах: запись в GitHub и push без «да», PR без «Локального повтора» и `Closes`/`Part of`,
 `.env`, слова закрытия в коммите, отключённые git-хуки. Git-хуки (`sh tools/install_hooks.sh`):
-`pre-commit` — gitleaks и `check.sh --quick`, `commit-msg` — форма и номер задачи; CI повторяет
-оба по коммитам PR. Состояние обвязки — `python3 tools/harness.py`.
+`pre-commit` — gitleaks и `check.sh --quick` (по очереди на машине, `tools/hook_lock.sh`),
+`commit-msg` — форма и номер задачи; CI повторяет оба по коммитам PR. Состояние обвязки — `python3 tools/harness.py`.
 
 ## Ключи и деньги
 
