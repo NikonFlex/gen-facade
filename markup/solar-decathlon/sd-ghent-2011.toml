@@ -1,0 +1,84 @@
+# Team Belgium — Ghent University, Solar Decathlon 2011. U.S. DOE Solar Decathlon; штамп «PUBLIC
+# DOMAIN» («COPYRIGHT: NONE: PROJECT IS PUBLIC DOMAIN»); разметка gf#323.
+# Листы: планы A-111 (стр. 25, 1 этаж) и A-112 (стр. 26, 2 этаж) — вектор, масштаб 1:48; фасады
+# A-211 NORTH (стр. 31), A-212 EAST (32), A-213 SOUTH (33), A-214 WEST (34) — растр 150 dpi,
+# масштаб 1:32 (метрический лист D, отметки в мм): 1 м = 88,583 pt, проверено по отметкам уровней
+# (GRADE 0 → FIRST FLOOR 354 = 31,5 pt; GRADE → SECOND FLOOR BOTTOM 2548 = 225,8 pt; 88,6 pt/м)
+# и по плану (стена 7,9 x 8,0 м при 1:48). Края и рамки сняты с растра по профилю тёмных пикселей.
+# Устройство: двухэтажный куб 7,89 x 7,98 м на опорах (FIRST FLOOR 354, SECOND FLOOR 2707,
+# верх облицовки 5455 мм над GRADE; ROOF STOW BOTTOM 4948, SOLAR ENVELOPE 5486), плоская кровля
+# за парапетом (карниз = верх стены); облицовка — MINERAL-FIBER CEMENT SIDING 07 46 46 панелями
+# ~1,1 м с видимыми швами. Все проёмы — алюминиевые окна на фиксированном остеклении (08 51 13.A4,
+# A5: FIXED WINDOW), дверей на листах нет: вход со стороны не определён, первой стороной взята
+# южная — самая остеклённая. Контур — прямоугольник; стороны по часовой от юга: юг, запад,
+# север, восток. Длины с листов: S 698,7 = N 698,6 pt (7,89 м); W 706,9, E 707,5 pt (7,98 м).
+# Рамка элемента — внешний край рамы окна; верхние окна стоят на уровне второго этажа,
+# нижние — до первого этажа (FIRST FLOOR 354).
+id = "sd-ghent-2011"
+pdf = "2011/ghent_cd.pdf"
+roof = "плоская за парапетом; над ней PV-панели в положении ROOF STOW (низ 4948, SOLAR ENVELOPE 5486)"
+roof_kind = "flat"
+pitch_deg = 0.0
+overhang_m = 0.0
+unit = "m"
+pt_per_unit = 88.583        # 1:32: 1 м = 1000/32 мм = 31,25 мм = 88,583 pt
+material = "siding"       # 07 46 46 MINERAL-FIBER CEMENT SIDING
+plinth = 0.354         # FIRST FLOOR 354 мм над GRADE LEVEL 0
+floor_heights = [2.3513, 2.7502]   # FIRST FLOOR → SECOND FLOOR (2707 мм) и → верх облицовки (5455 мм)
+cut = ["все: PV-панели и солнечный экран над кровлей (SOLAR ENVELOPE 5486 — штриховой уровень)",
+       "все: опоры и платформа фундамента под чистым полом (FOUNDATION 150 мм); терраса, пергола, пандус и настил вокруг дома",
+       "west, north: деревянные настилы и перила за стеной, вне стены дома"]
+absent = ["все: цоколь — дом на опорах: чёрная полоса фундамента без отделки под облицовкой, подполье открыто",
+          "все: карниз — плоский парапет без выделенной полосы; фриз и пояс на стене не нарисованы",
+          "все: вторая отделка — одна облицовка; горизонтальный шов на уровне второго этажа — деление панелей, не зона"]
+
+[[sides]]
+view = "ELEVATION SOUTH"
+page = 33
+wall = [680.3, 1379.0]
+floor = 1074.9
+elements = [
+  { cls = "window", box = [703.6, 656.0, 797.2, 868.0], variant = { kind = "panoramic" } },
+  { cls = "window", box = [797.2, 656.0, 890.2, 868.0], variant = { kind = "panoramic" } },
+  { cls = "window", box = [890.2, 656.0, 983.1, 868.0], variant = { kind = "panoramic" } },
+  { cls = "window", box = [983.1, 870.0, 1076.6, 1075.5], variant = { kind = "panoramic" } },
+  { cls = "window", box = [1076.6, 870.0, 1169.0, 1075.5], variant = { kind = "panoramic" } },
+  { cls = "window", box = [1169.0, 870.0, 1262.4, 1075.5], variant = { kind = "panoramic" } },
+  { cls = "window", box = [1262.4, 870.0, 1354.7, 1075.5], variant = { kind = "panoramic" } },
+]
+eaves = [{ x = [680.3, 1379.0], y = 623.0, floors = 2 }]
+
+[[sides]]
+view = "ELEVATION WEST"
+page = 34
+wall = [800.6, 1507.5]
+floor = 1086.1
+elements = [
+  { cls = "window", box = [874.6, 879.0, 968.4, 1087.0], variant = { kind = "panoramic" } },
+]
+eaves = [{ x = [800.6, 1507.5], y = 634.2, floors = 2 }]
+
+[[sides]]
+view = "ELEVATION NORTH"
+page = 31
+wall = [811.8, 1510.4]
+floor = 1095.4
+elements = [
+  { cls = "window", box = [834.8, 676.5, 929.5, 887.0], variant = { kind = "panoramic" } },
+  { cls = "window", box = [834.8, 889.5, 929.5, 1095.2], variant = { kind = "panoramic" } },
+  { cls = "window", box = [1020.8, 676.5, 1115.8, 887.0], variant = { kind = "panoramic" } },
+  { cls = "window", box = [1206.8, 676.5, 1302.0, 887.0], variant = { kind = "panoramic" } },
+]
+eaves = [{ x = [811.8, 1510.4], y = 643.5, floors = 2 }]
+
+[[sides]]
+view = "ELEVATION EAST"
+page = 32
+wall = [708.0, 1415.5]
+floor = 1068.1
+elements = [
+  { cls = "window", box = [875.0, 649.2, 968.5, 859.6], variant = { kind = "panoramic" } },
+  { cls = "window", box = [968.5, 649.2, 1063.0, 859.6], variant = { kind = "panoramic" } },
+  { cls = "window", box = [1061.0, 861.5, 1155.8, 1068.0], variant = { kind = "panoramic" } },
+]
+eaves = [{ x = [708.0, 1415.5], y = 616.2, floors = 2 }]

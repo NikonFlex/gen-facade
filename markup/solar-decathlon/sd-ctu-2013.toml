@@ -1,0 +1,94 @@
+# AirHouse — Czech Technical University in Prague (CTU), Solar Decathlon 2013. U.S. DOE Solar
+# Decathlon; штамп «PUBLIC DOMAIN» («COPYRIGHT: NONE: PROJECT IS PUBLIC DOMAIN»); разметка gf#323.
+# Листы: план A-111 (стр. 42), фасады A-211 (стр. 46: EAST, NORTH) и A-212 (стр. 47: WEST, SOUTH),
+# масштаб 1/4" = 1'-0" (18 pt/фут; шкала 0–8' = 144 pt). Виды на A-211/A-212 — растр 300 dpi
+# (плана — вектор), края сняты с растра по профилю тёмных пикселей, элементы — по сетке.
+# Устройство: одноэтажный дом-модуль на опорах, плоская кровля (HOUSE ROOF 13'-4", над ней
+# CANOPY 16'-1 1/2" и SOLAR ENVELOPE 19'-1 1/2"); FLOOR LEVEL 2'-3 1/2" над GRADE. Контур —
+# Г-образный: основной объём (гостиная, санузел, вход) 36,4' x 17,7' и у западного края
+# пристройка 8,4' x 12,9' на севере (EXTERNAL STORAGE и MECHANICAL CLOSET) под той же кровлей и
+# на той же высоте. Западная стена — одна плоскость на всю глубину 30,6'. Вход — застеклённая
+# дверь со створом (FACADE MODULE 9) на западе у юга. Контур по часовой от стены входа: запад →
+# север пристройки → восток пристройки (угол после неё внутренний) → север основного объёма →
+# восток основного объёма → юг. Длины с листов: W 550,4; N1 151,0; E1 232,0; N2 507,1; E2 317,8;
+# S 654,8 pt; невязка по x 3,3 pt (0,06 м), по y 0,6 pt.
+# Не стены дома и не размечены: пандус выхода EGRESS RAMP и площадка LANDING на севере, бокс
+# CONSTRUCTED WETLANDS на западе, настил по югу, опоры и ограждения METAL TRANSITION PLATE.
+id = "sd-ctu-2013"
+pdf = "2013/ctu_cd.pdf"
+roof = "плоская, общая для основного объёма и пристройки (HOUSE ROOF 13'-4\"); над ней навес с PV (CANOPY 16'-1 1/2\")"
+roof_kind = "flat"
+pitch_deg = 0.0
+overhang_m = 0.0
+unit = "ft"
+pt_per_unit = 18.0          # SCALE 1/4" = 1'-0"; HOUSE ROOF − FLOOR LEVEL 11'-0 1/2" = 199 pt = 196 pt до верха панели
+material = "wood"         # SIDING 07 46 00 / ENGINEERED WOOD PRODUCTS 06 11 15: крупные панели с швами
+plinth = 2.2917        # FLOOR LEVEL 2'-3 1/2" над GRADE LEVEL
+floor_heights = [10.88] # от FLOOR LEVEL (y 471,0 на E/W) до верха панелей (275,2)
+cut = ["все: PV-навес CANOPY и SOLAR ENVELOPE над кровлей (штриховые контуры)",
+       "east: ниша OUTDOOR KITCHEN в стене пристройки (x 967–1070 pt, открытая кухня без рамы — не окно)",
+       "north: пандус выхода EGRESS RAMP и площадка LANDING перед стеной; на севере слева (восток дома) основание настила",
+       "west: бокс CONSTRUCTED WETLANDS и настил перед стеной, вне стены дома",
+       "south: настил перед стеной",
+       "все: опоры и подпольный пояс (балки, домкраты) под чистым полом"]
+absent = ["все: цоколь — дом на опорах, подполье открыто, между полом и землёй тонкая рамка пояса без отделки",
+          "все: карниз — тонкая тёмная кромка кровли ~0,2' (4 pt) без отделки, отдельной полосы с материалом нет",
+          "все: вторая отделка — одни панели; швы — деление панелей, не зоны"]
+
+[[sides]]
+view = "HOUSE ELEVATION WEST (вход)"
+page = 47
+wall = [653.9, 1204.2]
+floor = 471.0
+elements = [
+  { cls = "door", box = [694.6, 335.0, 746.5, 471.0] },    # MECHANICAL CLOSET ENTRANCE DOOR
+  { cls = "door", box = [800.8, 335.0, 853.1, 471.0] },    # UNINSULATED DOOR (EXTERNAL STORAGE)
+  { cls = "window", box = [1042.5, 335.0, 1073.5, 468.5], variant = { kind = "panoramic" } },   # боковой створ входа
+  { cls = "door", box = [1073.5, 335.0, 1144.2, 471.0], variant = { kind = "glazed" } },        # вход, FACADE MODULE 9
+]
+eaves = [{ x = [653.9, 1204.2], y = 275.2, floors = 1 }]
+
+[[sides]]
+view = "HOUSE ELEVATION NORTH — пристройка (справа на виде)"
+page = 46
+wall = [1047.0, 1198.0]
+floor = 1285.3
+eaves = [{ x = [1047.0, 1198.0], y = 1089.5, floors = 1 }]
+
+[[sides]]
+view = "HOUSE ELEVATION EAST — пристройка (справа на виде)"
+page = 46
+wall = [966.9, 1198.9]
+floor = 471.0
+inner_corner = true
+elements = [
+  { cls = "door", box = [1106.4, 335.0, 1158.5, 471.0] },   # UNINSULATED DOOR
+]
+eaves = [{ x = [966.9, 1198.9], y = 275.2, floors = 1 }]
+
+[[sides]]
+view = "HOUSE ELEVATION NORTH — основной объём (остекление)"
+page = 46
+wall = [539.9, 1047.0]
+floor = 1285.3
+elements = [
+  { cls = "window", box = [578.5, 1149.0, 1048.0, 1283.5], variant = { kind = "panoramic", cols = 4 } },   # 4 створки, 26'-2"
+]
+eaves = [{ x = [539.9, 1047.0], y = 1089.5, floors = 1 }]
+
+[[sides]]
+view = "HOUSE ELEVATION EAST — основной объём (слева на виде)"
+page = 46
+wall = [649.1, 966.9]
+floor = 471.0
+eaves = [{ x = [649.1, 966.9], y = 275.2, floors = 1 }]
+
+[[sides]]
+view = "HOUSE ELEVATION SOUTH"
+page = 47
+wall = [755.6, 1410.4]
+floor = 1285.3
+elements = [
+  { cls = "window", box = [1098.5, 1149.5, 1215.0, 1262.0] },   # 08 51 13 ALUMINUM WINDOWS
+]
+eaves = [{ x = [755.6, 1410.4], y = 1089.5, floors = 1 }]
