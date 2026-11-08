@@ -152,7 +152,7 @@ export async function mountNewHouse({ api, options, startRun, goHome }) {
       const label = el("label", { className: "sw" });
       const dot = el("span", { className: "swatch" });
       dot.style.background = c.hex;
-      label.append(el("input", { type: "radio", name: `f-${name}`, value: c.name }), dot, el("span", {}, c.name));
+      label.append(el("input", { type: "radio", name: `f-${name}`, value: c.name }), dot, el("span", {}, options.color[c.name] ?? c.name));
       return label;
     }));
     check(`f-${name}`, current);

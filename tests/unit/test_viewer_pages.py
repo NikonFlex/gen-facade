@@ -224,3 +224,13 @@ def test_pages_use_shared_topbar_and_theme(client, path):
 def test_nav_lists_rules_once():
     text = STATIC.joinpath("shell.js").read_text()
     assert text.count('page: "rules"') == 1
+
+
+def test_every_nameable_color_has_a_russian_label(cfg):
+    """Цвет в форме «Нового дома» — слово models.toml; подпись у каждого слова своя, по-русски."""
+    choices = spec_form.choices(cfg.models.spec)
+    walls = [c for colors in choices.wall_colors.values() for c in colors]
+    names = {c.name for c in [*choices.roof_colors, *walls]}
+    labels = cfg.viewer.labels.color
+    assert names and not names - labels.keys()
+    assert all(re.search("[а-яё]", text) for text in labels.values())

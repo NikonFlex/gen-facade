@@ -327,6 +327,23 @@ blockhouse = "блок-хаус"
 ashlar = "тёсаный камень"
 profiled_sheet = "профнастил"
 
+[labels.color]   # слово цвета (первое латиницей из words, models.toml [spec.colors]) → подпись на страницах
+white = "белый"
+cream = "кремовый"
+beige = "бежевый"
+yellow = "жёлтый"
+grey = "серый"
+graphite = "графитовый"
+black = "чёрный"
+brown = "коричневый"
+red = "красный"
+green = "зелёный"
+blue = "голубой"
+light = "светлый"
+natural = "натуральный"
+honey = "медовый"
+dark = "тёмный"
+
 [rules.captions]
 good = "Так"
 bad = "Не так"

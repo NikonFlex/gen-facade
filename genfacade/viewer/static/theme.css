@@ -44,6 +44,9 @@
 /* ——— основа ——— */
 * { box-sizing: border-box; }
 html, body { min-height: 100%; }
+[hidden] { display: none !important; }
+/* переход по якорю (#new, #datasets) не прячет заголовок страницы под липкой шапкой */
+.home, .page-head, h1, h2 { scroll-margin-top: calc(var(--topbar-h) + 8px); }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
   font: 14px/1.5 var(--font); -webkit-font-smoothing: antialiased;

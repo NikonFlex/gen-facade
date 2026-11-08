@@ -155,7 +155,7 @@ function runCard(r) {
   const h = r.house, tone = state.options.outcome[r.outcome];
   const thumb = r.thumb ? `<img src="${r.thumb}" alt="" loading="lazy">`
     : '<svg class="house-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/></svg>';
-  const facts = h ? [`<span class="swatch" style="background:${h.color}"></span>${h.walls}`, state.options.roof[h.roof],
+  const facts = h ? [`<span class="swatch" style="background:${h.color}"></span>${state.options.kind[h.walls] ?? h.walls}`, state.options.roof[h.roof],
     counted(h.floors, FLOORS), h.sides ? counted(h.sides, SIDES) : null].filter(Boolean) : [];
   const warn = r.warnings ? `<span class="status warn">· ${r.warnings} предупр.</span>` : "";
   const link = el("a", { className: "card", href: `#run=${encodeURIComponent(r.id)}`, title: r.text ?? r.source }, `

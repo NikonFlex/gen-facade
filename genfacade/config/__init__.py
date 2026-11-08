@@ -293,6 +293,7 @@ class Labels(Section):
     trim: dict[Trim, str]           # выводимый элемент — «Новый дом»
     shape: dict[ContourKind, str]   # вид контура случайного плана — «Новый дом»
     kind: dict[str, str]            # вид материала стен, который можно назвать в тексте
+    color: dict[str, str]           # цвет, который можно назвать в тексте: слово → русское
 
 
 class SamplesView(Section):
