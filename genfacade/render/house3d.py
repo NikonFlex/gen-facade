@@ -100,8 +100,7 @@ def _roof(sheet: FacadeSheet, pen: Pen, corners: list[Point], look: House3d) -> 
         return {"faces": [], "above": [], "color": None, "wall": None, "windows": [],
                 "material": None, "wall_material": None,
                 "flat": list(flat.exterior.coords)[:-1] if flat else corners}
-    # окна во фронтоне (gf#321) — у прямоугольного дома, как зона фронтона `roof.gables`
-    line = house.parts[0] if len(house.parts) == 1 else None
+    line = roof.roofline(sheet)  # окна во фронтоне (gf#321) — там же, где `roof.gables`
     above, windows = [], []
     for k, f in enumerate(sheet.facades):
         left, u, _ = roof.axis(house.corners, k)
