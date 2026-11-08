@@ -29,8 +29,18 @@ from typing import NamedTuple
 import shapely
 
 from genfacade.parts import stepped
+from genfacade.plan.genplan_svg import PlanError
 from genfacade.plan.wings import wings
-from genfacade.schema import EPS, FacadeSheet, OpeningKind, Point, Polygon, RoofKind
+from genfacade.schema import (
+    EPS,
+    Element,
+    ElementClass,
+    FacadeSheet,
+    OpeningKind,
+    Point,
+    Polygon,
+    RoofKind,
+)
 from genfacade.unfold import plan_corners
 
 RECT_SIDES = 4
@@ -244,6 +254,62 @@ def _outward(a: Point3, b: Point3, face: list[Point3]) -> Point:
     return (dy, -dx) if area > 0 else (-dy, dx)
 
 
+# ——— фронтон: стена выше карниза как место окон (gf#321) ———
+
+def gables(sheet: FacadeSheet) -> list[Polygon | None]:
+    """Стена выше карниза у каждой стороны листа — зона фронтона, где бывают окна этажа под
+    скатом; скаты не строятся, контур не обходится, дом из частей (gf#322: в синтетике обучения
+    таких нет, условие модели — как при обучении) или у стены нет части выше карниза — None
+    (контур отклоняет развёртка, валидатор и метрики листа на нём не падают)."""
+    try:
+        line = roofline(sheet)
+    except PlanError:
+        line = None
+    return [None if line is None else above_eaves(line, k) for k in range(len(sheet.facades))]
+
+
+def under_roof(e: Element, floors: int) -> bool:
+    """Элемент этажа под скатом — окно во фронтоне и его выводимые элементы — по записи: этаж
+    `floors + 1` ставят сборщик разметки, синтетика и модель, по нему ведут себя привязка, уровни
+    и раскладка синтетики. Проверки и метрики поле этажа не читают — им `over_eaves`."""
+    return (e.floor or 1) > floors
+
+
+def over_eaves(e: Element, eaves: float) -> bool:
+    """Окно во фронтоне по геометрии: верх выше карниза (стену проверяет вызывающий). Так его
+    видят валидатор, метрики и дом объёмом: поле этажа пишет сам метод."""
+    return e.cls is ElementClass.WINDOW and e.y_m + e.h_m > eaves + EPS
+
+
+def peaks(above: Polygon, eaves: float) -> list[Point]:
+    """Вершины верха стены выше карниза слева направо: у щипца двускатной — конёк; с ними и длиной
+    стены зона фронтона восстанавливается (низ — карниз от края до края)."""
+    return [p for p in above if p[1] > eaves + EPS]
+
+
+def slopes(above: Polygon, eaves: float) -> list[tuple[Point, Point]]:
+    """Кромки ската на стене: стороны зоны фронтона, кроме низа по карнизу и вертикальных краёв
+    стены."""
+    pairs = zip(above, above[1:] + above[:1], strict=True)
+    return [(a, b) for a, b in pairs
+            if abs(a[0] - b[0]) > EPS
+            and not (abs(a[1] - eaves) <= EPS and abs(b[1] - eaves) <= EPS)]
+
+
+def wall_shape(length: float, eaves: float, above: Polygon | None) -> shapely.Geometry:
+    """Стена целиком: прямоугольник до карниза и зона фронтона над ним."""
+    wall = shapely.box(0.0, 0.0, length, eaves)
+    return wall if above is None else wall.union(shapely.Polygon(above))
+
+
+def room(length: float, eaves: float, above: Polygon | None, offset: float) -> shapely.Geometry:
+    """Где может стоять окно: стена целиком без полосы шириной offset вдоль ската."""
+    wall = wall_shape(length, eaves, above)
+    if above is None or offset <= 0:
+        return wall
+    band = shapely.union_all([shapely.LineString(e).buffer(offset, cap_style="flat")
+                              for e in slopes(above, eaves)])
+    return wall.difference(band)
 # ——— Дом из частей разной высоты (gf#322) ———
 
 

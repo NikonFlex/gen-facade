@@ -4,13 +4,15 @@
 import math
 
 import pytest
+import shapely
 from simple_house import L_SHAPE, SIMPLE
 
 from genfacade import config, pipeline, roof
 from genfacade.models import stub
 from genfacade.plan.preprocess import preprocess
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import Mode, RoofKind, Rule
+from genfacade.schema import Element, ElementClass, Mode, RoofKind, Rule
+from genfacade.unfold import unfold
 from genfacade.validate import validate
 
 CFG = config.load()
@@ -120,3 +122,49 @@ def test_stub_roof_without_words_is_the_finish_roof():
     rules = CFG.models.spec
     spec = stub.spec_model("", rules)
     assert spec.roof.kind is rules.finish[rules.default_finish].roof
+
+
+def test_window_room_keeps_off_the_slope():
+    """Место окна во фронтоне (gf#321): стена с фронтоном без полосы `slope_offset_m` у ската —
+    рамка с отступом 0,3 м годна, с отступом 0,1 м и через скат — нет."""
+    above = [(0.0, 3.0), (3.0, 5.0), (6.0, 3.0)]  # щипец 6 м, конёк на 2 м выше карниза
+    room = roof.room(6.0, 3.0, above, 0.2)
+    cos = 3.0 / math.hypot(3.0, 2.0)  # высота над рамкой → расстояние до ската
+
+    def at(gap: float) -> shapely.Geometry:  # окно 1 × 1 м у левого ската, отступ gap
+        x = 1.5
+        top = 3.0 + x * 2.0 / 3.0 - gap / cos
+        return shapely.box(x, top - 1.0, x + 1.0, top)
+
+    assert room.contains(at(0.3))
+    assert not room.contains(at(0.1))
+    assert not room.contains(at(-0.2))
+    assert roof.peaks(above, 3.0) == [(3.0, 5.0)]
+    assert roof.wall_shape(6.0, 3.0, above).area == pytest.approx(6.0 * 3.0 + 6.0)
+
+
+def _with_window(sheet, k: int, x: float, y: float, w: float, h: float):
+    window = Element(id="g1", cls=ElementClass.WINDOW, x_m=x, y_m=y, w_m=w, h_m=h,
+                     floor=sheet.spec.floors + 1)
+    facades = list(sheet.facades)
+    facades[k] = facades[k].model_copy(update={"elements": [window]})
+    return sheet.model_copy(update={"facades": facades})
+
+
+def test_validator_keeps_gable_window_off_the_slope():
+    """`evaluation: Ошибки геометрии` (gf#321): окно во фронтоне — в стене с фронтоном и не ближе
+    `slope_offset_m` к скату: годное — без нарушений, у ската — `slope`, через скат — ещё и
+    `outside`; на карнизной стене выше карниза — `outside`."""
+    sheet = unfold(bare(RoofKind.GABLE))
+    gables = roof.gables(sheet)
+    k = next(i for i, a in enumerate(gables) if a is not None)
+    eave = next(i for i, a in enumerate(gables) if a is None)
+    length, eaves = sheet.facades[k].side.length_m, sheet.spec.eaves_m
+    rules = lambda s: {v.rule for v in validate(s, CFG.checks)  # noqa: E731
+                       if v.rule in (Rule.SLOPE, Rule.OUTSIDE)}
+    mid = length / 2
+    assert rules(_with_window(sheet, k, mid - 0.3, eaves + 0.1, 0.6, 0.6)) == set()
+    near = eaves + (mid - 0.3) * rise(RoofKind.GABLE) - 0.6  # верх угла рамки на скате
+    assert rules(_with_window(sheet, k, mid - 0.3, near, 0.6, 0.6 - 0.05)) == {Rule.SLOPE}
+    assert rules(_with_window(sheet, k, 0.2, eaves + 0.1, 0.6, 0.6)) == {Rule.SLOPE, Rule.OUTSIDE}
+    assert Rule.OUTSIDE in rules(_with_window(sheet, eave, 1.0, eaves + 0.1, 0.6, 0.6))

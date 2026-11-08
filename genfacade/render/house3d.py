@@ -13,10 +13,18 @@ import math
 
 import shapely
 
-from genfacade import parts, roof
+from genfacade import parts, roof, window_shape
 from genfacade.config import Config, House3d
 from genfacade.derive import DERIVED
-from genfacade.render.svg import Pen, element_fill, element_material, facade_svg, pen_for, swatch
+from genfacade.render.svg import (
+    Pen,
+    element_fill,
+    element_material,
+    facade_svg,
+    foot_of,
+    pen_for,
+    swatch,
+)
 from genfacade.schema import (
     EPS,
     Element,
@@ -89,18 +97,43 @@ def _roof(sheet: FacadeSheet, pen: Pen, corners: list[Point], look: House3d) -> 
         cornice = any(e.cls is ElementClass.CORNICE for f in sheet.facades for e in f.elements)
         out = look.relief_cls.get(ElementClass.CORNICE, 0.0) if cornice else 0.0
         flat = shapely.Polygon(corners).buffer(out, join_style="mitre") if out else None
-        return {"faces": [], "above": [], "color": None, "wall": None,
+        return {"faces": [], "above": [], "color": None, "wall": None, "windows": [],
                 "material": None, "wall_material": None,
                 "flat": list(flat.exterior.coords)[:-1] if flat else corners}
-    above = []
-    for k in range(len(sheet.facades)):
+    line = roof.roofline(sheet)  # окна во фронтоне (gf#321) — там же, где `roof.gables`
+    above, windows = [], []
+    for k, f in enumerate(sheet.facades):
         left, u, _ = roof.axis(house.corners, k)
         for shape in roof.house_above(house, k):
             above.append([(left[0] + u[0] * x, left[1] + u[1] * x, y) for x, y in shape])
+        if line is not None:
+            windows += _gable_windows(f, line, k, look, pen.cfg.checks.slope_offset_m)
     above += [wall for joint in roof.joints(house) for wall in joint.walls]
     return {"faces": roof.house_faces(house), "above": above, "flat": None,
             "color": pen.colors.get(pen.roof or ""), "wall": pen.colors.get(PaletteRole.MAIN),
-            "material": material, "wall_material": wall_material}
+            "material": material, "wall_material": wall_material,
+            "windows": windows, "glass": pen.cfg.library.fill.glass}
+
+
+def _gable_windows(f: SideFacade, line: roof.Roofline, k: int, look: House3d,
+                   offset: float) -> list[list]:
+    """Окна во фронтоне (gf#321) в объёме: часть рамки выше карниза — текстура стены кончается на
+    карнизе, а фронтон — гладкий многоугольник; чуть наружу от стены, чтобы не тонуть в ней."""
+    left, u, _ = roof.wall_axis(line, k)
+    out = (u[1] * look.window_out_m, -u[0] * look.window_out_m)  # наружная нормаль стены
+    quads = []
+    room = roof.room(f.side.length_m, line.eaves, roof.above_eaves(line, k),
+                     offset)
+    above = shapely.box(-roof.FAR, line.eaves, roof.FAR, roof.FAR)
+    for e in f.elements:
+        if roof.over_eaves(e, line.eaves):
+            # контур по виду окна (gf#319), выше карниза — ниже он в текстуре стены
+            part = shapely.Polygon(window_shape.outline(e, room)).intersection(above)
+            if part.is_empty or part.geom_type != "Polygon":
+                continue
+            quads.append([(left[0] + u[0] * x + out[0], left[1] + u[1] * x + out[1], y)
+                          for x, y in list(part.exterior.coords)[:-1]])
+    return quads
 
 
 def _convex(corners: list[Point], k: int) -> bool:
@@ -131,7 +164,8 @@ def _relief(f: SideFacade, pen: Pen, look: House3d) -> list[dict]:
     (карниз, подоконник, козырёк, крыльцо): рамка в метрах фасада, глубина, цвет листа, класс
     и вид — форму по ним строит просмотр."""
     return ([_zone_relief(z, pen, look) for z in f.zones if _is_relief(z, look)]
-            + [_element_relief(e, pen, look) for e in f.elements if _is_relief(e, look)])
+            + [_element_relief(e, pen, look, foot_of(e, f.elements)) for e in f.elements
+               if _is_relief(e, look)])
 
 
 def _frame(shape: list[Point], depth: float, color: str, material: str | None) -> dict:
@@ -143,15 +177,18 @@ def _frame(shape: list[Point], depth: float, color: str, material: str | None) -
 
 def _zone_relief(z: MaterialZone, pen: Pen, look: House3d) -> dict:
     return _frame(z.shape, look.relief_role[z.role], pen.colors[z.material], z.material) | {
-        "role": z.role, "cls": None, "kind": None, "steps": None}
+        "role": z.role, "cls": None, "shape": None, "steps": None, "foot": None}
 
 
-def _element_relief(e: Element, pen: Pen, look: House3d) -> dict:
-    """Вид — козырька и подоконника у дома (`HouseSpec.trim`), число ступеней — у крыльца."""
+def _element_relief(e: Element, pen: Pen, look: House3d, foot: float) -> dict:
+    """Форма — козырька и подоконника по виду дома (`HouseSpec.trim`, запись derive.toml: форму
+    строит просмотр по её имени), число ступеней — у крыльца."""
     shape = [(e.x_m, e.y_m), (e.x_m + e.w_m, e.y_m + e.h_m)]
-    kind = pen.trim.kind(TRIM_OF[e.cls]) if e.cls in TRIM_OF else None
+    trim = TRIM_OF.get(e.cls)
+    form = pen.cfg.derive.find(trim, pen.trim.kind(trim)) if trim is not None else None
     return _frame(shape, look.relief_cls[e.cls], element_fill(e, pen), element_material(e, pen)) | {
-        "role": None, "cls": e.cls, "kind": kind, "steps": _steps(e, look)}
+        "role": None, "cls": e.cls, "shape": form.shape if form else None,
+        "steps": _steps(e, look), "foot": foot}
 
 
 def porch_steps(height_m: float, look: House3d) -> int:

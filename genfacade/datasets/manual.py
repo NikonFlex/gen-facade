@@ -11,7 +11,9 @@ gf#199).
 ступенью (`outline`), участки карниза со своей этажностью (`eaves`), крыша на виде (`roof`) и
 элементы выше карниза. Вид, уклон и свес крыши дома — полями разметки (`roof_kind`, `pitch_deg`,
 `overhang_m`, gf#336): с gf#320 вид крыши — условие модели шага 4 и решает, у каких стен
-карниз. Сборщик берёт то, что модуль держит: элемент, заходящий за карниз или угол,
+карниз. Сборщик берёт то, что модуль держит: окно во фронтоне — целиком в стене с фронтоном,
+какой её строит модуль по крыше дома (`roof.gables`), — остаётся окном этажа под скатом (gf#321),
+его выводимые элементы в стене — с ним; другой элемент, заходящий за карниз или угол,
 обрезается по стене, целиком срезанный идёт в счёт `cut` описи (`data: Стена до карниза в
 данных`); дом с частями разной высоты — не пример, а строка `waiting` описи: модуль держит один
 карниз на дом (gf#322). Чего разметчик не размечает (веранда, ступени), он перечисляет в `cut`.
@@ -32,9 +34,10 @@ from enum import StrEnum
 from pathlib import Path
 
 import numpy
+import shapely
 from pydantic import Field, ValidationError
 
-from genfacade import derive, parts, roof
+from genfacade import derive, parts, roof, window_shape
 from genfacade.config import Config, Manual
 from genfacade.datasets import rect_house, store
 from genfacade.plan.wings import edge_runs, wings
@@ -51,6 +54,7 @@ from genfacade.schema import (
     Model,
     OpeningVariant,
     PaletteRole,
+    Polygon,
     Rect,
     Roof,
     RoofKind,
@@ -58,6 +62,7 @@ from genfacade.schema import (
     Source,
     Split,
     Trim,
+    VariantKind,
     WallRun,
     ZoneRole,
 )
@@ -73,6 +78,10 @@ class Unit(StrEnum):
 
 
 M_PER_UNIT = {Unit.FT: 0.3048, Unit.M: 1.0}  # международный фут — определение единицы, не настройка
+
+# Что бывает во фронтоне (gf#321): окно и выводимые элементы окна; дверь и прочее — срезаются.
+GABLE_CLASSES = frozenset({ElementClass.WINDOW, *(derive.DERIVED[t] for t in derive.DERIVED
+                                                   if derive.OWNER[t] is ElementClass.WINDOW)})
 
 FIRST_NORMAL = (0.0, 1.0)  # сторона входа смотрит в +y плана (rect_house.NORMALS[0])
 
@@ -211,12 +220,14 @@ def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
     runs = [parts.side_runs(k, lengths[k], ring[k], ring[(k + 1) % len(ring)], rects, found)
             if found else [] for k in range(len(m.sides))]
     spec = _spec(m)
-    laid, dropped = [], 0
-    for k, e in enumerate(m.sides):
-        elements = _side_elements(e, m, spec)
-        kept = [x for x in (_clipped(x, lengths[k], spec, cfg, runs[k]) for x in elements) if x]
-        dropped += len(elements) - len(kept)
-        laid.append((k, _linked(kept, cfg.link_tol_m)))
+    raw = [_side_elements(e, m, spec) for e in m.sides]
+    # стороны плана — по проёмам первого этажа, фронтон — по крыше и сторонам: окна выше
+    # карниза на них не влияют. У дома из частей фронтона нет (`roof.gables`): его лист без
+    # участков, и контур читался бы одной крышей
+    none = [None] * len(raw)
+    _, walls = rect_house.assemble(spec, fp, _laid(raw, none, lengths, runs, spec, cfg)[0],
+                                   Source.MANUAL)
+    laid, dropped = _laid(raw, none if found else roof.gables(walls), lengths, runs, spec, cfg)
     spec = spec.model_copy(update={"trim": _trim([xs for _, xs in laid], cfg.trim)})
     plan, sheet = rect_house.assemble(spec, fp, laid, Source.MANUAL)
     facades = [f.model_copy(update={"zones": _zones(e, m, spec, f.side.length_m, r), "runs": r})
@@ -227,6 +238,39 @@ def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
     sheet, bare = _no_eaves(sheet)
     return (Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet),
             dropped + bare)
+
+
+def _laid(raw: list[list[Element]], gables: list[Polygon | None], lengths: list[float],
+          runs: list[list[WallRun]], spec: HouseSpec,
+          cfg: Manual) -> tuple[list[tuple[int, list[Element]]], int]:
+    """Элементы сторон, которые модуль держит, и сколько срезано целиком: во фронтоне — как есть
+    (`_in_gable`), остальное — по стене до карниза (`_clipped`); подоконник или ставня срезанного
+    окна (поперечный щипец над карнизной стеной) — с ним."""
+    laid, dropped = [], 0
+    for k, (elements, above) in enumerate(zip(raw, gables, strict=True)):
+        kept = [x for x in (_in_gable(x, lengths[k], above, spec, cfg)
+                            or _clipped(x, lengths[k], spec, cfg, runs[k]) for x in elements) if x]
+        ids = {x.id for x in kept}  # выводимый элемент срезанного окна срезан с ним
+        kept = [x for x in kept if x.parent is None or x.parent in ids]
+        dropped += len(elements) - len(kept)
+        laid.append((k, _linked(kept, cfg.link_tol_m)))
+    return laid, dropped
+
+
+def _in_gable(x: Element, length: float, above: Polygon | None, spec: HouseSpec,
+              cfg: Manual) -> Element | None:
+    """Окно и его выводимые элементы над карнизом, целиком в стене с фронтоном (gf#321), — этажа
+    под скатом; иначе None (решает `_clipped`)."""
+    if above is None or x.y_m + x.h_m <= spec.eaves_m + EPS or x.cls not in GABLE_CLASSES:
+        return None
+    wall = roof.wall_shape(length, spec.eaves_m, above).buffer(cfg.gable_tol_m)
+    box = shapely.box(x.x_m, x.y_m, x.x_m + x.w_m, x.y_m + x.h_m)
+    if window_shape.kind(x) is VariantKind.SLOPE:  # рамка по скату — контур срезан скатом (gf#319)
+        if wall.intersection(box).area < cfg.inside_share * box.area:
+            return None
+    elif not wall.contains(box):
+        return None
+    return x.model_copy(update={"floor": spec.floors + 1})
 
 
 def _no_eaves(sheet: FacadeSheet) -> tuple[FacadeSheet, int]:
@@ -453,13 +497,13 @@ def _trim(walls: list[list[Element]], kinds: HouseTrim) -> HouseTrim:
 
 def run(cfg: Config) -> Path:
     """Все разметки папки → примеры и опись: срезанное, исходные крыши, виды крыш и расхождения
-    с листом, ошибки валидатора."""
+    с листом, окна во фронтоне (gf#321), ошибки валидатора."""
     rules, root = cfg.data.manual, cfg.data.paths.samples_dir
     # Источник целиком — производное разметки: удалённая разметка не должна оставить пример.
     for old in store.ids(root, Source.MANUAL):
         store.path(root, Source.MANUAL, old).unlink()
     rejected, waiting, cut, roofs, absent, invalid = {}, {}, {}, {}, {}, Counter()
-    kinds, gaps = {}, {}
+    kinds, gaps, gables = {}, {}, {}
     for path in sorted(rules.paths.markup_dir.glob("*/*.toml")):
         try:  # разметка, которая не читается, — отказ этого дома, а не всей сборки (C10)
             m = read(path)
@@ -476,9 +520,16 @@ def run(cfg: Config) -> Path:
             continue
         cut[m.id], roofs[m.id], absent[m.id] = len(m.cut) + dropped, m.roof, m.absent
         kinds[m.id], gaps[m.id] = m.roof_kind, m.roof_gaps
+        gables[m.id] = gable_windows(sample.sheet)
         invalid.update(v.rule for v in errors(validate(sample.sheet, cfg.checks)))
         store.write(sample, root)
     return store.write_manifest(root, Source.MANUAL, {
         "rejected": rejected, "waiting": waiting, "cut": cut, "roofs": roofs, "absent": absent,
         "roof_kinds": kinds, "roof_gaps": {k: v for k, v in gaps.items() if v},
-        "invalid": dict(invalid)})
+        "gable_windows": {k: v for k, v in gables.items() if v}, "invalid": dict(invalid)})
+
+
+def gable_windows(sheet: FacadeSheet) -> int:
+    """Окон во фронтоне у дома — окон этажа под скатом (gf#321)."""
+    return sum(e.cls is ElementClass.WINDOW and roof.under_roof(e, sheet.spec.floors)
+               for f in sheet.facades for e in f.elements)

@@ -300,8 +300,9 @@ class TextKind(StrEnum):
 
 
 class VariantKind(StrEnum):
-    """Вид проёма (спека facade, «Элемент», вариант). У окна — первые четыре; у двери — последние
-    два, а дверь без варианта — глухая."""
+    """Вид проёма (спека facade, «Элемент», вариант). У двери — `DOOR_KINDS`, а дверь без варианта
+    — глухая; остальные — виды окна. Форма окна, если она не прямоугольник, — тоже вид (gf#319):
+    рамка остаётся прямоугольником, контур по ней считает window_shape.py."""
 
     REGULAR = "regular"
     PANORAMIC = "panoramic"
@@ -309,6 +310,9 @@ class VariantKind(StrEnum):
     STRIP = "strip"
     GLAZED = "glazed"    # дверь со стеклом в полотне
     TRANSOM = "transom"  # дверь с остеклённой фрамугой над полотном, в высоте элемента
+    SLOPE = "slope"      # окно во фронтоне с верхом по скату: трапеция, пятиугольник у конька
+    ARCH = "arch"        # окно с полукруглым верхом
+    OVAL = "oval"        # круглое или овальное окно, вписанное в рамку
 
 
 DOOR_KINDS = (VariantKind.GLAZED, VariantKind.TRANSOM)
@@ -361,6 +365,7 @@ class Rule(StrEnum):
     CORNICE = "cornice"            # карниз на проёме или его выводимом элементе
     FINISH = "finish"              # часть стены без отделки, зона обрывается посреди стены
     ROOF_FLAT = "roof_flat"        # скатная крыша не строится над этим контуром (gf#320)
+    SLOPE = "slope"                # окно во фронтоне ближе отступа к скату (gf#321)
 
 
 class Trim(StrEnum):
@@ -373,41 +378,52 @@ class Trim(StrEnum):
     CANOPY = "canopy"      # козырёк над дверью
 
 
-class SillKind(StrEnum):
-    """Вид подоконника дома; none — у дома их нет."""
-
-    NONE = "none"
-    FLAT = "flat"      # тонкая полка
-    SLOPED = "sloped"  # плита с отливом: толще и с большим свесом
+DEFAULT_DOOR = "plain"  # вид полотна двери по умолчанию — запись config/derive.toml
+NONE_KIND = "none"  # вида у дома нет; остальные виды — записи config/derive.toml
 
 
-class CasingKind(StrEnum):
-    """Вид наличника дома; none — у дома их нет."""
+class SillShape(StrEnum):
+    """Рисунок подоконника на листе и форма в 3D; вид дома выбирает форму и размеры записью
+    config/derive.toml (gf#318)."""
 
-    NONE = "none"
-    FLAT = "flat"  # узкая доска
-    WIDE = "wide"  # широкая доска
-
-
-class ShutterKind(StrEnum):
-    """Вид ставен дома; none — у дома их нет."""
-
-    NONE = "none"
-    PANEL = "panel"        # филёнчатые
-    LOUVERED = "louvered"  # жалюзийные
-    BOARD = "board"        # дощатые
+    SHELF = "shelf"  # тонкая полка
+    WEDGE = "wedge"  # плита с отливом: уклон наружу
 
 
-class CanopyKind(StrEnum):
-    """Вид козырька над входом; none — у дома их нет."""
+class CasingShape(StrEnum):
+    """Рисунок наличника: рамка по бокам и сверху окна, сверху — сандрик."""
 
-    NONE = "none"
-    FLAT = "flat"        # плоский
-    GABLE = "gable"      # двускатный
-    BRACKET = "bracket"  # на кронштейнах
+    FRAME = "frame"
+    PEDIMENT = "pediment"  # треугольный сандрик над рамкой
+    SEGMENT = "segment"    # сегментный (дуга) сандрик над рамкой
 
 
-NO_TRIM = (SillKind.NONE, CasingKind.NONE, ShutterKind.NONE, CanopyKind.NONE)
+class ShutterShape(StrEnum):
+    """Рисунок створки ставни; ширину створки задаёт окно, а не вид."""
+
+    PANEL = "panel"        # две филёнки
+    LOUVER = "louver"      # жалюзи: планки через шаг
+    BOARD = "board"        # дощатые: вертикальные доски
+    BATTEN_Z = "batten_z"  # доски на двух планках с диагональю
+
+
+class CanopyShape(StrEnum):
+    """Рисунок и форма козырька над дверью."""
+
+    SLAB = "slab"        # плита с уклоном от стены
+    GABLE = "gable"      # двускатный: фронтон наружу
+    BRACKET = "bracket"  # плита на двух кронштейнах
+    ARCHED = "arched"    # арочный: свод дугой
+    POSTS = "posts"      # навес на двух столбах до пола двери
+
+
+class DoorShape(StrEnum):
+    """Рисунок полотна двери; остекление (стекло, фрамуга) выбирает модель, не вид дома."""
+
+    PLAIN = "plain"            # гладкое полотно
+    PANELS = "panels"          # филёнки в полотне
+    DOUBLE = "double"          # двупольная: шов по центру, филёнки на каждом поле
+    SIDELIGHTS = "sidelights"  # боковые стёкла по краям проёма
 
 
 class GuidelineCheck(StrEnum):
@@ -489,20 +505,23 @@ class Roof(Model):
 
 
 class HouseTrim(Model):
-    """Виды выводимых элементов дома — одни на все стены (`facade: Общие параметры дома`):
-    у проёма модель решает только, есть ли элемент (Trim), а вид — дома."""
+    """Виды выводимых элементов дома — одни на все стены (`facade: Общие параметры дома`): у проёма
+    модель решает только, есть ли элемент (Trim), а вид — дома. Вид — имя записи
+    config/derive.toml (открытый набор: новый вид — запись, а не правка кода и не переобучение,
+    gf#318); none — элемента у дома нет. Дверь: рисунок полотна — вид дома, остекление — модель."""
 
-    sill: SillKind = SillKind.NONE
-    casing: CasingKind = CasingKind.NONE
-    shutters: ShutterKind = ShutterKind.NONE
-    canopy: CanopyKind = CanopyKind.NONE
+    sill: str = NONE_KIND
+    casing: str = NONE_KIND
+    shutters: str = NONE_KIND
+    canopy: str = NONE_KIND
+    door: str = DEFAULT_DOOR
 
-    def kind(self, trim: Trim) -> StrEnum:
+    def kind(self, trim: Trim) -> str:
         return getattr(self, trim)
 
     def has(self, trim: Trim) -> bool:
         """У дома такие элементы бывают: вид не none."""
-        return self.kind(trim) not in NO_TRIM
+        return self.kind(trim) != NONE_KIND
 
 
 class HouseSpec(Model):

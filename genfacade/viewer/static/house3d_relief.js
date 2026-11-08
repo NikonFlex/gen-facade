@@ -7,11 +7,14 @@
 const EDGE = 0.01;  // м: рамка у края стены считается доходящей до угла
 
 // Выступ → метод формы: у зоны ключ — её роль ([house3d.relief_role]), у элемента — класс
-// ([house3d.relief_cls]); вид подоконника и козырька (SillKind, CanopyKind в schema) → метод формы.
-// Выступа или вида нет в таблице — ошибка: новый выступ в конфиге без формы не встаёт коробкой молча.
+// ([house3d.relief_cls]); форма подоконника и козырька (`shape` записи вида в derive.toml, SillShape и
+// CanopyShape в schema) → метод. Новый вид с готовой формой — запись конфига, форма новая — метод здесь.
+// Выступа или формы нет в таблице — ошибка: новый выступ в конфиге без формы не встаёт коробкой молча.
 const FORMS = { plinth: "plinth", cornice: "cornice", sill: "sill", canopy: "canopy", porch: "porch" };
-const SILLS = { flat: "plain", sloped: "_wedge" };
-const CANOPIES = { flat: "_wedge", gable: "_gable", bracket: "_bracketed" };
+const SILLS = { shelf: "plain", wedge: "_wedge" };
+const CANOPIES = { slab: "_wedge", gable: "_gable", bracket: "_bracketed", arched: "_arched",
+  posts: "_posted" };
+const ARCH_STEPS = 16;  // звеньев дуги свода: глазу достаточно
 
 function pick(table, key, what) {
   if (!(key in table)) throw new Error(`3D: нет формы для ${what} «${key}»`);
@@ -62,15 +65,15 @@ export class Relief {
     });
   }
 
-  // Подоконник: flat — тонкая полка, sloped — плита с отливом (уклон наружу).
+  // Подоконник: shelf — тонкая полка, wedge — плита с отливом (уклон наружу).
   sill(r, w) {
-    return this[pick(SILLS, r.kind, "подоконника")](r, w);
+    return this[pick(SILLS, r.shape, "подоконника")](r, w);
   }
 
-  // Козырёк над дверью: flat — плита с уклоном от стены, gable — двускатный фронтоном наружу,
-  // bracket — плита на двух кронштейнах.
+  // Козырёк над дверью: slab — плита с уклоном от стены, gable — двускатный фронтоном наружу,
+  // bracket — плита на двух кронштейнах, arched — свод дугой, posts — плита на двух столбах.
   canopy(r, w) {
-    return this[pick(CANOPIES, r.kind, "козырька")](r, w);
+    return this[pick(CANOPIES, r.shape, "козырька")](r, w);
   }
 
   // Крыльцо: площадка у двери глубиной depth и ступени перед ней. Профиль — лестница: ступеней
@@ -98,6 +101,27 @@ export class Relief {
     const shape = new THREE.Shape([new THREE.Vector2(r.x0, r.y0), new THREE.Vector2(r.x1, r.y0),
       new THREE.Vector2((r.x0 + r.x1) / 2, r.y1)]);
     return [new THREE.ExtrudeGeometry(shape, { depth: r.depth, bevelEnabled: false })];
+  }
+
+  // Свод: полуэллипс в плоскости стены, вытянутый наружу на глубину козырька.
+  _arched(r) {
+    const THREE = this.THREE, mid = (r.x0 + r.x1) / 2, half = (r.x1 - r.x0) / 2, rise = r.y1 - r.y0;
+    const dome = Array.from({ length: ARCH_STEPS + 1 }, (_, k) => {
+      const a = Math.PI * (1 - k / ARCH_STEPS);
+      return new THREE.Vector2(mid + half * Math.cos(a), r.y0 + rise * Math.sin(a));
+    });
+    const shape = new THREE.Shape([new THREE.Vector2(r.x0, r.y0), new THREE.Vector2(r.x1, r.y0),
+      ...dome.reverse()]);
+    return [new THREE.ExtrudeGeometry(shape, { depth: r.depth, bevelEnabled: false })];
+  }
+
+  // Навес на столбах: плита сверху и два столба у краёв вниз до r.foot — низа двери.
+  _posted(r) {
+    const { slab_m, post_w_m } = this.trim;
+    const top = r.y1 - Math.min(slab_m, r.y1 - r.y0);
+    const posts = [[r.x0, r.x0 + post_w_m], [r.x1 - post_w_m, r.x1]].map(([a, b]) =>
+      this._box(a, b, r.foot, top, 0, Math.min(r.depth, b - a)));
+    return [this._box(r.x0, r.x1, top, r.y1, 0, r.depth), ...posts];
   }
 
   _bracketed(r) {

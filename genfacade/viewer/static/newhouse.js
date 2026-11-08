@@ -14,7 +14,7 @@ const SOURCES = [
   { key: "own", title: "Свой SVG" },
 ];
 const TEXT = {
-  auto: "авто", sheet: "Построить фасады", sheets: "Построить варианты", slope: "Уклон ската по виду крыши",
+  auto: "авто", sheet: "Построить фасады", sheets: "Построить варианты", pitch: "Уклон ската по виду крыши",
   readTitle: "Что прочтёт шаг 1", noText: "Описание пустое — шаг 1 возьмёт заготовку дома",
 };
 
@@ -200,7 +200,7 @@ export async function mountNewHouse({ api, options, startRun, goHome }) {
     fillSwatches("nh-roof-colors", choices.roof_colors, f.roof_color);
     for (const t of choices.trims) check(`t-${t}`, t in f.trims ? (f.trims[t] ? YES : NO) : AUTO);
     const pitch = f.roof ? choices.pitch_deg[f.roof] ?? 0 : null;
-    $("nh-pitch").textContent = pitch === null ? "" : `${TEXT.slope}: ${pitch}°`;
+    $("nh-pitch").textContent = pitch === null ? "" : `${TEXT.pitch}: ${pitch}°`;
     save();
   }
 

@@ -13,13 +13,13 @@ from xml.etree import ElementTree
 
 import shapely
 
-from genfacade import roof
-from genfacade.config import Axes, Config, DoorLook, Hatch, Levels, Sheet, SheetLayout, TrimLook
-from genfacade.render import hatch, sheet_format
+from genfacade import roof, window_shape
+from genfacade.config import Axes, Config, DoorLook, Hatch, Levels, Sheet, SheetLayout
+from genfacade.render import hatch, sheet_format, trim
+from genfacade.render.shapes import add_line, box, points
 from genfacade.render.sheet_format import num
 from genfacade.schema import (
     EPS,
-    CanopyKind,
     Element,
     ElementClass,
     FacadeSheet,
@@ -29,7 +29,6 @@ from genfacade.schema import (
     PaletteRole,
     Point,
     Polygon,
-    ShutterKind,
     SideFacade,
     VariantKind,
     Violation,
@@ -59,6 +58,7 @@ class Top(NamedTuple):
     above: list[Polygon] = []
     roof: list[Polygon] = []
     seams: list[list[Point]] = []  # линии примыкания кровли нижней части к стене верхней (gf#322)
+    gable: Polygon | None = None  # фронтон — место окон над карнизом (`roof.gables`, gf#321)
 
     def height(self, facade: SideFacade) -> float:
         """Верх рисунка стороны: силуэт стены, стена над карнизом и кровля."""
@@ -75,11 +75,12 @@ def tops(sheet: FacadeSheet, cfg: Config) -> list[Top]:
     house = roof.roofs(sheet)
     if house is None:
         return [NOTHING_ABOVE for _ in sheet.facades]
+    gables = roof.gables(sheet)
     out = []
     for k in range(len(sheet.facades)):
         walls, seams = roof.joint_view(house, k)
         out.append(Top(roof.house_above(house, k) + walls,
-                       roof.house_view(house, k, cfg.sheet.roof.thickness_m), seams))
+                       roof.house_view(house, k, cfg.sheet.roof.thickness_m), seams, gables[k]))
     return out
 
 
@@ -89,16 +90,6 @@ class Marks(NamedTuple):
     levels: list[float]
     axes: tuple[str, str]  # левая и правая ось, если смотреть снаружи
     sheet: Sheet
-
-
-def points(poly: Polygon) -> str:
-    return " ".join(f"{num(x)},{num(y)}" for x, y in poly)
-
-
-def add_line(g: ElementTree.Element, css_class: str, start: Point, end: Point) -> None:
-    (x1, y1), (x2, y2) = start, end
-    ElementTree.SubElement(g, "line", {"class": css_class, "x1": num(x1), "y1": num(y1),
-                                       "x2": num(x2), "y2": num(y2)})
 
 
 def add_text(g: ElementTree.Element, css_class: str, at: Point, text: str) -> None:
@@ -279,8 +270,12 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
     for shape in top.above:  # стена над карнизом — основной отделкой, как стена под ним
         ElementTree.SubElement(g, "polygon", {"class": "above-eaves", "points": points(shape),
                                               "fill": _main(pen)})
+    room = None if top.gable is None else window_shape.gable_room(
+        facade.side.length_m, min(y for _, y in top.gable), top.gable,
+        pen.cfg.checks.slope_offset_m)
+    by = {e.id: e for e in facade.elements}
     for e in facade.elements:
-        _element(g, e, pen, facade.zones)
+        _element(g, e, pen, facade, _shape(e, room), _casing_shape(e, by, room))
     for shape in top.roof:  # кровля — поверх: свес закрывает верх стены
         ElementTree.SubElement(g, "polygon", {"class": "roof", "points": points(shape),
                                               "fill": _roof_fill(pen)})
@@ -305,18 +300,12 @@ def _overlay(g: ElementTree.Element, facade: SideFacade, violations: list[Violat
     а без элемента (углы, проём плана) — рамкой по стене."""
     top = _top(facade)
     for z in facade.side.forbidden:
-        _box(g, "forbidden-zone", (z.x0_m, 0.0, z.x1_m - z.x0_m, top))
+        box(g, "forbidden-zone", (z.x0_m, 0.0, z.x1_m - z.x0_m, top))
     boxes = {e.id: (e.x_m, e.y_m, e.w_m, e.h_m) for e in facade.elements}
     for v in violations:
-        box = boxes.get(v.element or "", (0.0, 0.0, facade.side.length_m, top))
-        node = _box(g, f"violation {v.severity}", box)
+        frame = boxes.get(v.element or "", (0.0, 0.0, facade.side.length_m, top))
+        node = box(g, f"violation {v.severity}", frame)
         ElementTree.SubElement(node, "title").text = f"{v.rule}: {v.message}"
-
-
-def _box(g: ElementTree.Element, css_class: str, box: tuple[float, ...]) -> ElementTree.Element:
-    x, y, w, h = box
-    return ElementTree.SubElement(g, "rect", {"class": css_class, "x": num(x), "y": num(y),
-                                              "width": num(w), "height": num(h)})
 
 
 def _zone(g: ElementTree.Element, z: MaterialZone, pen: Pen) -> None:
@@ -341,7 +330,46 @@ def element_paint(e: Element, pen: Pen) -> str:
     return element_fill(e, pen)
 
 
-def _element(g: ElementTree.Element, e: Element, pen: Pen, zones: list[MaterialZone]) -> None:
+def _glass(g: ElementTree.Element, e: Element, attrs: dict[str, str],
+           shape: Polygon | None) -> None:
+    """Стекло окна поверх рамки: у окна не прямоугольником (gf#319) — контур, деление рамы внутри
+    него; у прямоугольного — деление рамы по рамке."""
+    box = (e.x_m, e.y_m, e.w_m, e.h_m)
+    if shape:
+        drawn = {"class": "window-shape", "points": points(shape), "fill": attrs["fill"]}
+        if "stroke" in attrs:
+            drawn["stroke"] = attrs["stroke"]
+        ElementTree.SubElement(g, "polygon", drawn)
+        if e.variant is not None:
+            _mullions(g, e, box, shapely.Polygon(shape))
+    elif e.variant is not None:
+        _mullions(g, e, box)
+
+
+def _shape(e: Element, room: shapely.Geometry | None) -> Polygon | None:
+    """Контур окна не прямоугольником — по его виду (gf#319); прямоугольное окно — None."""
+    if e.cls is not ElementClass.WINDOW:
+        return None
+    return _not_box(e, window_shape.outline(e, room))
+
+
+def _not_box(e: Element, shape: Polygon) -> Polygon | None:
+    """Контур, если он не прямоугольник рамки элемента, иначе None."""
+    box = shapely.box(e.x_m, e.y_m, e.x_m + e.w_m, e.y_m + e.h_m)
+    return None if shapely.Polygon(shape).equals(box) else shape
+
+
+def _casing_shape(e: Element, by: dict[str, Element],
+                  room: shapely.Geometry | None) -> Polygon | None:
+    """Контур наличника окна не прямоугольником (gf#319); наличник прямоугольного окна — None."""
+    w = by.get(e.parent or "")
+    if e.cls is not ElementClass.MOLDING or w is None or w.cls is not ElementClass.WINDOW:
+        return None
+    return _not_box(e, window_shape.casing(w, e, room))
+
+
+def _element(g: ElementTree.Element, e: Element, pen: Pen, facade: SideFacade,
+             shape: Polygon | None = None, round_casing: Polygon | None = None) -> None:
     lib = pen.cfg.library
     attrs = {
         sheet_format.CLS: e.cls, sheet_format.ID: e.id,
@@ -349,7 +377,7 @@ def _element(g: ElementTree.Element, e: Element, pen: Pen, zones: list[MaterialZ
         "fill": element_paint(e, pen),
     }
     optional = {sheet_format.FLOOR: e.floor, sheet_format.PARENT: e.parent}
-    attrs |= {k: str(v) for k, v in optional.items() if v is not None} | _material(e, zones)
+    attrs |= {k: str(v) for k, v in optional.items() if v is not None} | _material(e, facade.zones)
     if e.variant is not None:
         attrs[sheet_format.VARIANT] = sheet_format.encode_variant(e.variant)
     if e.fixed:
@@ -358,21 +386,56 @@ def _element(g: ElementTree.Element, e: Element, pen: Pen, zones: list[MaterialZ
         attrs["fill"] = lib.fill.glass  # материал окна красит раму
         if e.material:
             attrs["stroke"] = pen.colors[e.material]
-    framed = e.cls is ElementClass.CANOPY and pen.trim.canopy in (CanopyKind.GABLE,
-                                                                   CanopyKind.BRACKET)
-    if framed:  # рисунок вида — не прямоугольник: прямоугольник остаётся только для разбора
+    framed = _framed(e, pen) or round_casing is not None
+    if framed or shape:  # рисунок вида — не прямоугольник: прямоугольник остаётся для разбора
         attrs["class"] = "trim-frame"
     ElementTree.SubElement(g, "rect", attrs)
-    if e.cls is ElementClass.WINDOW and e.variant is not None:
-        _mullions(g, e, (e.x_m, e.y_m, e.w_m, e.h_m))
-    elif e.cls is ElementClass.DOOR and e.variant is not None:
-        glass = _door_glass(e, pen.cfg.sheet.door)
-        _box(g, "door-glass", glass).set("fill", lib.fill.glass)
-        _mullions(g, e, glass)
+    if e.cls is ElementClass.WINDOW:
+        _glass(g, e, attrs, shape)
+    elif e.cls is ElementClass.DOOR:
+        _door(g, e, pen)
     elif e.cls is ElementClass.BLIND:
-        _shutter(g, e, pen.trim.shutters, pen.cfg.sheet.trim)
+        trim.shutter(g, e, pen.cfg.derive.find("shutters", pen.trim.shutters), pen.cfg.sheet.trim)
     elif framed:
-        _canopy(g, e, pen.trim.canopy, pen.cfg.sheet.trim).set("fill", attrs["fill"])
+        drawn = (trim.casing_round(g, round_casing) if round_casing is not None
+                 else _outline(g, e, pen, facade))
+        drawn.set("fill", attrs["fill"])
+
+
+def foot_of(e: Element, elements: list[Element]) -> float:
+    """Низ проёма, к которому прикреплён выводимый элемент (родитель); родителя нет — свой низ.
+    Столбы навеса опускаются до него (рисунок и 3D)."""
+    return next((p.y_m for p in elements if p.id == e.parent), e.y_m)
+
+
+def _door(g: ElementTree.Element, e: Element, pen: Pen) -> None:
+    """Дверь: рисунок полотна — по виду дома, стекло поверх него — по варианту элемента."""
+    leaf = pen.cfg.derive.look("door", pen.trim.door)
+    trim.door(g, e, leaf, pen.cfg.library.fill.glass)
+    if e.variant is not None:
+        glass = _door_glass(e, pen.cfg.sheet.door, trim.leaf_box(e, leaf))
+        box(g, "door-glass", glass).set("fill", pen.cfg.library.fill.glass)
+        _mullions(g, e, glass)
+
+
+def _framed(e: Element, pen: Pen) -> bool:
+    """Элемент со своим контуром (сандрик, двускатный и прочие козырьки): прямоугольник остаётся
+    только для разбора, красится контур."""
+    if e.cls is ElementClass.CANOPY:
+        look = pen.cfg.derive.find("canopy", pen.trim.canopy)
+        return look is not None and trim.canopy_framed(look.shape)
+    if e.cls is ElementClass.MOLDING:
+        look = pen.cfg.derive.find("casing", pen.trim.casing)
+        return look is not None and trim.casing_framed(look.shape)
+    return False
+
+
+def _outline(g: ElementTree.Element, e: Element, pen: Pen,
+             facade: SideFacade) -> ElementTree.Element:
+    if e.cls is ElementClass.CANOPY:
+        look = pen.cfg.derive.find("canopy", pen.trim.canopy)
+        return trim.canopy(g, e, look, pen.cfg.sheet.trim, foot_of(e, facade.elements))
+    return trim.casing(g, e, pen.cfg.derive.find("casing", pen.trim.casing))
 
 
 def _material(e: Element, zones: list[MaterialZone]) -> dict[str, str]:
@@ -388,57 +451,31 @@ def _material(e: Element, zones: list[MaterialZone]) -> dict[str, str]:
     return {sheet_format.MATERIAL: under[-1].material, sheet_format.ZONE_MATERIAL: "true"}
 
 
-def _shutter(g: ElementTree.Element, e: Element, kind: ShutterKind, look: TrimLook) -> None:
-    """Рисунок створки ставни по виду дома: планки жалюзи, доски или две филёнки."""
-    x0, y0, w, h = e.x_m, e.y_m, e.w_m, e.h_m
-    if kind is ShutterKind.LOUVERED:
-        for k in range(1, int(h / look.louver_step_m)):
-            add_line(g, "trim-line", (x0, y0 + k * look.louver_step_m),
-                     (x0 + w, y0 + k * look.louver_step_m))
-    elif kind is ShutterKind.BOARD:
-        for k in range(1, int(w / look.board_step_m)):
-            add_line(g, "trim-line", (x0 + k * look.board_step_m, y0),
-                     (x0 + k * look.board_step_m, y0 + h))
-    elif kind is ShutterKind.PANEL:
-        inset = w * look.panel_inset
-        half = (h - 3 * inset) / 2
-        for y in (y0 + inset, y0 + 2 * inset + half):
-            _box(g, "trim-line", (x0 + inset, y, w - 2 * inset, half)).set("fill", "none")
-
-
-def _canopy(g: ElementTree.Element, e: Element, kind: CanopyKind,
-            look: TrimLook) -> ElementTree.Element:
-    """Двускатный козырёк — треугольник; на кронштейнах — плита сверху и два кронштейна."""
-    x0, y0, w, h = e.x_m, e.y_m, e.w_m, e.h_m
-    if kind is CanopyKind.GABLE:
-        shape = [(x0, y0), (x0 + w, y0), (x0 + w / 2, y0 + h)]
-        return ElementTree.SubElement(g, "polygon", {"points": points(shape)})
-    slab = min(look.slab_m, h)
-    top = ElementTree.SubElement(g, "g")
-    _box(top, "", (x0, y0 + h - slab, w, slab))
-    for at, side in ((x0 + w * look.bracket_at, 1), (x0 + w * (1 - look.bracket_at), -1)):
-        shape = [(at, y0 + h - slab), (at, y0), (at + side * look.bracket_w_m, y0 + h - slab)]
-        ElementTree.SubElement(top, "polygon", {"points": points(shape)})
-    return top
-
-
-def _mullions(g: ElementTree.Element, e: Element, glass: tuple[float, ...]) -> None:
-    """Деление стекла на створки — линии поверх него, в разбор не входят."""
+def _mullions(g: ElementTree.Element, e: Element, glass: tuple[float, ...],
+              inside: shapely.Polygon | None = None) -> None:
+    """Деление стекла на створки — линии поверх него, в разбор не входят; у окна не
+    прямоугольником — в пределах контура (inside)."""
     v, (x0, y0, w, h) = e.variant, glass
-    for x in (x0 + w * i / v.cols for i in range(1, v.cols)):
-        add_line(g, "mullion", (x, y0), (x, y0 + h))
-    for y in (y0 + h * j / v.rows for j in range(1, v.rows)):
-        add_line(g, "mullion", (x0, y), (x0 + w, y))
+    lines = [((x, y0), (x, y0 + h)) for x in (x0 + w * i / v.cols for i in range(1, v.cols))]
+    lines += [((x0, y), (x0 + w, y)) for y in (y0 + h * j / v.rows for j in range(1, v.rows))]
+    for a, b in lines:
+        if inside is not None:
+            cut = inside.intersection(shapely.LineString([a, b]))
+            if cut.is_empty or cut.geom_type != "LineString":
+                continue
+            a, b = cut.coords[0], cut.coords[-1]
+        add_line(g, "mullion", a, b)
 
 
-def _door_glass(e: Element, look: DoorLook) -> tuple[float, float, float, float]:
-    """Где у двери стекло: в полотне или фрамугой сверху (спека facade, «Элемент», вариант)."""
+def _door_glass(e: Element, look: DoorLook,
+                leaf: tuple[float, ...]) -> tuple[float, float, float, float]:
+    """Где у двери стекло: в полотне или фрамугой сверху (спека facade, «Элемент», вариант); leaf —
+    полотно: проём, а при боковых стёклах без них."""
+    x, y, w, h = leaf
     if e.variant.kind is VariantKind.TRANSOM:
-        h = e.h_m * look.transom_share
-        return (e.x_m, e.y_m + e.h_m - h, e.w_m, h)
+        return (x, y + h - h * look.transom_share, w, h * look.transom_share)
     low, high = look.glazed_span
-    inset = e.w_m * look.glass_inset
-    return (e.x_m + inset, e.y_m + e.h_m * low, e.w_m - 2 * inset, e.h_m * (high - low))
+    return (x + w * look.glass_inset, y + h * low, w * (1 - 2 * look.glass_inset), h * (high - low))
 
 
 def _axis_labels(sheet: FacadeSheet, letters: str) -> dict[int, tuple[str, str]]:

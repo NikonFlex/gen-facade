@@ -4,7 +4,8 @@
 Последовательность — условие и ответ:
 
     <house> режим, параметры дома, палитра, виды выводимых элементов
-    <side> длина [<entrance>] {<forbidden> x0 x1} {проём плана: вид x w}     — на каждую стену
+    <side> длина [<entrance>] {<forbidden> x0 x1} {проём плана: вид x w} [<gable> n {x y}]
+                                                                             — на каждую стену
     <answer>
     <types> n {w h}                                  — типоразмеры окон дома, n ≤ window_types(cfg)
     <wall> {элемент} {зона}                                                  — на каждую стену
@@ -21,6 +22,10 @@
 ставни и козырёк в ответе — не элементы, а признаки проёма (`trim:`): прямоугольники по виду дома
 считает код (derive.py) при разборе.
 
+`<gable>` — вершины верха стены выше карниза (конёк щипца, gf#321): зону фронтона считает код по
+крыше дома и плану (roof.py), модели она дана, чтобы окно этажа под скатом (`<floor>` floors + 1)
+вставало в фронтон с отступом от ската.
+
 Стены идут по обходу контура от стороны входа — как стороны плана
 (спека plan-input, «Сторона», номер).
 Числа — целые шаги сетки (config/tokens.toml). Имена элементов в токены не пишутся: родитель —
@@ -33,15 +38,13 @@ from collections import Counter
 from enum import StrEnum
 from typing import NamedTuple
 
-from genfacade import derive
+from genfacade import derive, roof
 from genfacade.config import Config, Tokens
 from genfacade.derive import Flags
 from genfacade.schema import (
     DOOR_OPENING_KINDS,
     EPS,
     BuildingType,
-    CanopyKind,
-    CasingKind,
     Element,
     ElementClass,
     FacadeSheet,
@@ -53,11 +56,10 @@ from genfacade.schema import (
     OpeningKind,
     OpeningVariant,
     PaletteRole,
+    Polygon,
     RoofKind,
-    ShutterKind,
     Side,
     SideFacade,
-    SillKind,
     Trim,
     VariantKind,
     ZoneRole,
@@ -78,6 +80,16 @@ class Mark(StrEnum):
     FLOOR = "<floor>"
     PARENT = "<parent>"
     END = "<end>"
+    GABLE = "<gable>"  # в конце: прежние служебные токены на своих местах (gf#321)
+
+
+class Presence(StrEnum):
+    """Есть ли у дома выводимый элемент (подоконник, наличник, ставни, козырёк). В условии модели —
+    только это: вид элемента код берёт из параметров дома, и новый вид не меняет словарь, поэтому
+    обученная модель принимает дом с любым видом, даже не бывшим при обучении (gf#318)."""
+
+    YES = "yes"
+    NO = "no"
 
 
 class TokenError(ValueError):
@@ -106,8 +118,7 @@ class Answer(NamedTuple):
 # значения — с приставкой своего enum.
 ENUMS = {"mode": Mode, "type": BuildingType, "roof": RoofKind, "open": OpeningKind,
          "cls": ElementClass, "var": VariantKind, "mat": PaletteRole, "role": ZoneRole,
-         "fix": FixedField, "sill_kind": SillKind, "casing_kind": CasingKind,
-         "shutters_kind": ShutterKind, "canopy_kind": CanopyKind, "trim": Trim}
+         "fix": FixedField, "has": Presence, "trim": Trim}
 PREFIX = {enum: name for name, enum in ENUMS.items()}
 HALF_STEP_UP = 1e-6  # запас на хвост float при округлении полушага; допуск, не настройка
 KIND = "kind"    # вид материала из библиотеки — открытый набор из config/library.toml
@@ -178,12 +189,22 @@ def condition(sheet: FacadeSheet, mode: Mode, cfg: Config) -> list[str]:
     out = [Mark.HOUSE, tok(mode), tok(spec.building_type), str(spec.floors),
            *(str(units(h, t)) for h in spec.floor_heights_m),
            str(units(spec.plinth_m, t)), str(units(spec.eaves_m, t)),
-           tok(spec.roof.kind), f"{STYLE}:{spec.style}", *(tok(spec.trim.kind(t)) for t in Trim)]
+           tok(spec.roof.kind), f"{STYLE}:{spec.style}",
+           *(tok(Presence.YES if spec.trim.has(t) else Presence.NO) for t in Trim)]
     for m in spec.materials:
         out += [_material(m.id), f"{KIND}:{cfg.library.model_kind(m.kind)}"]
-    for f in sheet.facades:
-        out += _side(f.side, mode, t)
+    sides = [_side(f.side, mode, t) for f in sheet.facades]
+    for side, above in zip(sides, roof.gables(sheet), strict=True):
+        out += side + _gable(above, spec.eaves_m, t)
     return _known(out, cfg)
+
+
+def _gable(above: Polygon | None, eaves: float, cfg: Tokens) -> list[str]:
+    """Фронтон стены в условии: вершины её верха выше карниза в шагах сетки (gf#321)."""
+    if above is None:
+        return []
+    top = roof.peaks(above, eaves)
+    return [Mark.GABLE, str(len(top)), *(str(units(v, cfg)) for p in top for v in p)]
 
 
 def answer(sheet: FacadeSheet, mode: Mode, cfg: Config) -> list[str]:

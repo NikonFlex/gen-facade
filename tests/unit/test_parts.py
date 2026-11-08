@@ -32,7 +32,8 @@ from genfacade.validate import errors, validate
 
 CFG = config.load()
 TWO_PARTS = "A two-storey house with a single-storey wing."
-GOLDEN = SIMPLE.parents[1] / "golden" / "simple_house_sheet.svg"  # лист простого дома до gf#322
+# лист простого дома до gf#322 (и стиль окна по виду, gf#319)
+GOLDEN = SIMPLE.parents[1] / "golden" / "simple_house_sheet.svg"
 
 
 # Г из simple_house.svg с вырезом 2,05 × 2 м (стенка 880–895 px): стык частей правее входа

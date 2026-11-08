@@ -90,11 +90,11 @@ def test_house_has_at_most_allowed_window_types(by_placement):
             assert 1 <= len(sizes) <= tokens.window_types(cfg), h.id
 
 
-def _wall_limits(wall, rules, eps):
+def _wall_limits(wall, rules, eps, floors):
     """Окна стены по этажам (x, ширина): не ближе к углу нормы стража, не в запретной зоне и не
-    ближе простенка друг к другу."""
+    ближе простенка друг к другу; окна во фронтоне (этажа под скатом, gf#321)."""
     corner, between = rules.openings.window_corner_m, rules.openings.between_m
-    for floor in {w.floor for w in wall.elements if w.cls is ElementClass.WINDOW}:
+    for floor in {w.floor for w in wall.elements if w.cls is ElementClass.WINDOW} - {floors + 1}:
         row = sorted((w.x_m, w.x_m + w.w_m) for w in wall.elements
                      if w.cls is ElementClass.WINDOW and w.floor == floor)
         assert all(corner - eps <= a and b <= wall.side.length_m - corner + eps for a, b in row)
@@ -113,8 +113,8 @@ def test_random_windows_keep_limits_of_plan_and_floor(by_placement):
     for h in houses:
         levels = h.sheet.spec.floor_levels()
         for f in h.sheet.facades:
-            _wall_limits(f, rules, eps)
-        for w in _windows(h.sheet):
+            _wall_limits(f, rules, eps, h.sheet.spec.floors)
+        for w in (w for w in _windows(h.sheet) if w.floor <= h.sheet.spec.floors):
             assert levels[w.floor - 1] - eps <= w.y_m and w.h_m >= lowest - eps, h.id
             assert w.y_m + w.h_m <= levels[w.floor] - rules.facade.windows.lintel_m + eps, h.id
 

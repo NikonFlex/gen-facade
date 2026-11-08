@@ -15,7 +15,6 @@ from functools import partial
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 
-from genfacade import schema
 from genfacade.config import Config, FinishRole
 from genfacade.schema import (
     DOOR_KINDS,
@@ -34,11 +33,6 @@ from genfacade.schema import (
 from genfacade.viewer import catalog_doc, samples
 
 BLANK = "blank"  # дверь без остекления — не вид, а его отсутствие; в URL нужно имя
-NO_KIND = "none"  # вид «элемента у дома нет»: в каталоге не вид
-# Пока вид выводимого элемента — enum в schema.py (gf#318 заменяет его записями derive.toml),
-# его члены — виды; когда перечисления не станет, виды берёт Derive.kinds и этот путь можно убрать.
-KIND_ENUMS = {Trim.SILL: "SillKind", Trim.CASING: "CasingKind", Trim.SHUTTERS: "ShutterKind",
-              Trim.CANOPY: "CanopyKind"}
 
 
 @dataclass(frozen=True)
@@ -368,13 +362,8 @@ def _trim_view(cfg: Config, trim: Trim, kind: str, cls: ElementClass) -> str:
 
 
 def derive_kinds(cfg: Config, name: str) -> list[str]:
-    """Виды элемента дома (sill, casing, shutters, canopy, door) без «нет»: записи derive.toml;
-    пока вид — enum в schema.py, — его члены. Элемента без видов (door до gf#318) — пусто."""
-    kinds = getattr(cfg.derive, "kinds", None)
-    if kinds is not None:
-        return list(kinds(name))
-    enum = getattr(schema, KIND_ENUMS.get(name, ""), None)
-    return [m.value for m in enum if m.value != NO_KIND] if enum else []
+    """Виды элемента дома (sill, casing, shutters, canopy, door) без «нет»: записи derive.toml."""
+    return cfg.derive.kinds(name)
 
 
 def _derive_facts(cfg: Config, name: str, kind: str) -> tuple[tuple[str, str], ...]:

@@ -127,7 +127,9 @@ export class HouseStage {
   // (стены над карнизом выпуклые — веер, скаты — по плану); (x, y, h) плана → (x, h, −y) сцены, как у стен.
   _slopes(THREE, roof) {
     const parts = [[roof.faces, roof.material, roof.color || this.look.roof],
-      [roof.above, roof.wall_material, roof.wall || this.look.roof]];
+      [roof.above, roof.wall_material, roof.wall || this.look.roof],
+      // окна во фронтоне (gf#321): стекло чуть перед гладким многоугольником фронтона
+      [roof.windows || [], null, roof.glass]];
     for (const [shapes, id, color] of parts) {
       const material = this._material(THREE, id, color, THREE.DoubleSide);
       for (const shape of shapes) {

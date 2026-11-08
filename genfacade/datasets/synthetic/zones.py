@@ -4,6 +4,7 @@
 (`facade: Состав фасада по уровням`).
 """
 
+from genfacade import roof
 from genfacade.config import Finish
 from genfacade.datasets.synthetic.house import Look, Scheme
 from genfacade.schema import (
@@ -42,7 +43,10 @@ def _accents(wall: SideFacade, spec: HouseSpec, look: Look, cfg: Finish) -> list
     if look.scheme is Scheme.CORNERS:
         return [(0.0, low, cfg.corner_m, top), (length - cfg.corner_m, low, length, top)]
     if look.scheme is Scheme.PIERS:
-        return _piers(_of(wall, ElementClass.WINDOW), cfg.pier_max_m)
+        # окна во фронтоне (gf#321) — выше карниза, зоны — до него
+        storeys = [w for w in _of(wall, ElementClass.WINDOW)
+                   if not roof.under_roof(w, spec.floors)]
+        return _piers(storeys, cfg.pier_max_m)
     return []
 
 
