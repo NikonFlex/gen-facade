@@ -118,9 +118,11 @@ def test_brick_house_with_white_casings(cfg):
     """`generation: Отделка по словам текста`, `Элемент, названный в тексте`: стены — кирпич,
     обрамление белое, наличники есть; у светлого кирпича их по умолчанию нет."""
     rules, white = cfg.models.spec, cfg.models.spec.colors["white"].hex
+    # слово «кирпич» называет все виды кирпича (gf#317, `spec.material_like`)
+    brick_kinds = {"brick", *(k for k, g in rules.material_like.items() if g == "brick")}
     for text in ("кирпичный дом с белыми наличниками", "A brick house with white window casings"):
         spec = stub.spec_model(text, rules)
-        assert _palette(spec)["main"].kind == "brick"
+        assert _palette(spec)["main"].kind in brick_kinds
         assert _palette(spec)["trim"].color == white
         assert spec.trim.casing is not CasingKind.NONE
     assert stub.spec_model("Светлый кирпичный коттедж", rules).trim.casing is CasingKind.NONE
@@ -129,7 +131,7 @@ def test_brick_house_with_white_casings(cfg):
 @pytest.mark.parametrize(("text", "wanted"), [
     ("A classic yellow house with green shutters", {"main": "yellow", "trim": "green"}),
     ("Белый дом с обшивкой и чёрными ставнями", {"main": "white", "trim": "black"}),
-    ("Серый дом с красной крышей", {"main": "grey", "roof": "red"}),
+    ("Серый дом с красной крышей", {"main": "grey", "roof": "roof_red"}),
     ("A wooden house with a dark plinth", {"plinth": "graphite"}),
 ])
 def test_color_goes_to_the_part_it_stands_before(cfg, text, wanted):
@@ -248,3 +250,52 @@ def test_layout_stub_rejects_other_number_of_walls(lay_out):
     three = sheet.model_copy(update={"facades": sheet.facades[:3]})
     with pytest.raises(ModelError, match="из 4 стен, а у плана их 3"):
         stub.layout_all(three, LayoutContext(sheet.spec, Mode.WITH_OPENINGS, ""))
+
+
+def _scheme_colors(look):
+    by_id = {m.id: m.color for m in look.materials}
+    roles = (PaletteRole.MAIN, PaletteRole.TRIM, PaletteRole.ROOF)
+    return {role: by_id[role.value] for role in roles}
+
+
+def test_scheme_colors_come_together_and_named_color_beats_them(cfg):
+    """`generation: Сочетание цветов отделки`: без цвета в тексте стены, обрамление и крыша —
+    из одного сочетания отделки; названный цвет красит свою часть."""
+    rules = cfg.models.spec
+    texts = ["A siding house on the coast", "Дом из блок-хауса", "Дом из имитации бруса",
+             "Дом с обшивкой и коричневой крышей"]
+    seen = set()
+    for text in texts:
+        found = finish.look(text, "classic", rules)
+        names = rules.finish[found.finish].schemes
+        assert names, text
+        got = _scheme_colors(found)
+        schemes = [{r: rules.colors[c].hex for r, c in rules.schemes[n].colors.items()}
+                   for n in names]
+        roof_named = "коричнев" in text
+        want = [s for s in schemes if all(got[r] == c for r, c in s.items()
+                                          if not (roof_named and r is PaletteRole.ROOF))]
+        assert want, (text, got)
+        seen.add(found.finish)
+    assert len(seen) > 1
+    white = finish.look("A white siding house", "classic", rules)
+    assert _scheme_colors(white)[PaletteRole.MAIN] == rules.colors["white"].hex
+
+
+def test_color_before_roofing_material_paints_the_roof(cfg):
+    """`generation: Отделка по словам текста`: цвет перед названием кровельного материала
+    («красной металлочерепицей») красит крышу, а не стены; «белыми наличниками» — обрамление."""
+    rules = cfg.models.spec
+    text = "Кирпичный дом из полуторного кирпича с красной металлочерепицей и белыми наличниками."
+    pal = _palette(stub.spec_model(text, rules))
+    assert pal["roof"].color == rules.colors["roof_red"].hex
+    assert pal["main"].color != rules.colors["roof_red"].hex
+    assert pal["trim"].color == rules.colors["white"].hex
+
+
+def test_specific_word_after_general_one_narrows_the_wall_kind(cfg):
+    """«кирпичный дом из полуторного кирпича»: общее слово называет все кирпичи, частное — один."""
+    rules = cfg.models.spec
+    for text in ("Кирпичный дом из полуторного кирпича", "A brick house of Norman brick"):
+        kind = _palette(stub.spec_model(text, rules))["main"].kind
+        assert kind == ("brick_1_5" if "полутор" in text else "brick_long"), text

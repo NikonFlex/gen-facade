@@ -21,6 +21,37 @@ tile_roof = "#7a3b2e"
 log = "#b88a54"          # бревно: светлее вида wood — стена из бруса и оцилиндрованного бревна
 board_batten = "#a9b5a3" # доска с планкой: окрашенные вертикальные доски
 clinker = "#6a4a40"      # клинкерная плитка: цоколь и стена, темнее кирпича
+# gf#317, `docs/library-catalog.md`: виды по российским ИЖС и справочным размерам. Цвет — по умолчанию
+brick_1_5 = "#9a5440"          # полуторный кирпич 250 × 88 (1,4НФ, ГОСТ 530-2012)
+brick_long = "#6e5a4e"         # длинный тонкий кирпич 295 × 57 (Norman, США)
+siding_narrow = "#c9d3d8"      # обшивка внахлёст, видимая часть 4 дюйма
+siding_wide = "#c9d3d8"        # обшивка внахлёст, видимая часть 8 дюймов
+siding_dutch = "#c9d3d8"       # Dutch lap: нахлёст с выемкой-тенью, видимая часть 6,75 дюйма
+board_batten_narrow = "#a9b5a3"  # узкая доска с планкой, шаг 178 мм
+ashlar = "#7a746b"             # ровный тёсаный камень: три высоты ряда
+blockhouse = "#b08050"         # блок-хаус: имитация бревна, полубревно 140 мм
+imitation_timber = "#c0975f"   # имитация бруса: плоская доска, видимая ширина 138 мм
+profiled_sheet = "#4a5a66"     # профнастил: стена и кровля
+metal_tile = "#44322d"         # металлочерепица: ступень 350 мм (RAL 8017)
+shingle_roof = "#3d3f44"       # гибкая (битумная) черепица: ряд 143 мм
+ondulin = "#5a4a3c"            # ондулин: волна 95 мм
+
+[model_kinds]
+# Модель шага 4 обучена на видах выше черты gf#317; новый вид показывается ей под образом (gf#317):
+# словарь модели не меняется, переобучения нет. Новый вид — запись в [kinds] и сюда.
+brick_1_5 = "brick"
+brick_long = "brick"
+siding_narrow = "siding"
+siding_wide = "siding"
+siding_dutch = "siding"
+board_batten_narrow = "board_batten"
+ashlar = "stone"
+blockhouse = "log"
+imitation_timber = "wood"
+profiled_sheet = "metal"
+metal_tile = "metal_roof"
+shingle_roof = "tile_roof"
+ondulin = "tile_roof"
 
 [patterns]
 # Рисунок вида на листе (gf#304): SVG <pattern> в метрах фасада, один на пару вид × цвет.
@@ -56,6 +87,54 @@ clinker = { vertical = false, line_m = 0.008, groove_m = 0.0, width_m = 0.25, co
 ] }
 metal_roof = { vertical = true, line_m = 0.015, groove_m = 0.0, width_m = 0.5, courses = [
     { h_m = 0.5, joints_m = [] },           # фальц через 500 мм
+] }
+
+# --- gf#317. Размеры: `docs/library-catalog.md`, раздел «Материалы и цвета» ---
+brick_1_5 = { vertical = false, line_m = 0.012, groove_m = 0.0, width_m = 0.26, courses = [
+    { h_m = 0.098, joints_m = [0.065] },    # кирпич 250 × 88 мм, шов 10 мм
+    { h_m = 0.098, joints_m = [0.195] },
+] }
+brick_long = { vertical = false, line_m = 0.0095, groove_m = 0.0, width_m = 0.305, courses = [
+    { h_m = 0.067, joints_m = [0.076] },    # кирпич 295 × 57 мм, шов 9,5 мм
+    { h_m = 0.067, joints_m = [0.229] },
+] }
+siding_narrow = { vertical = false, line_m = 0.01, groove_m = 0.015, width_m = 0.102, courses = [
+    { h_m = 0.102, joints_m = [] },         # видимая часть 4 дюйма
+] }
+siding_wide = { vertical = false, line_m = 0.012, groove_m = 0.025, width_m = 0.203, courses = [
+    { h_m = 0.203, joints_m = [] },         # видимая часть 8 дюймов
+] }
+siding_dutch = { vertical = false, line_m = 0.012, groove_m = 0.0127, width_m = 0.171, courses = [
+    { h_m = 0.171, joints_m = [] },         # 6,75 дюйма, нахлёст 0,5 дюйма
+] }
+board_batten_narrow = { vertical = true, line_m = 0.01, groove_m = 0.038, width_m = 0.178, courses = [
+    { h_m = 0.178, joints_m = [] },         # доска 140 мм, планка 38 мм
+] }
+ashlar = { vertical = false, line_m = 0.012, groove_m = 0.0, width_m = 1.2, courses = [
+    { h_m = 0.123, joints_m = [0.3, 0.75, 1.05] },   # ряды 55 / 123 / 190 мм, швы вразбежку
+    { h_m = 0.19, joints_m = [0.2, 0.6, 0.95] },
+    { h_m = 0.055, joints_m = [0.45, 0.9] },
+    { h_m = 0.123, joints_m = [0.1, 0.55, 1.0] },
+    { h_m = 0.19, joints_m = [0.35, 0.8] },
+] }
+blockhouse = { vertical = false, line_m = 0.015, groove_m = 0.03, width_m = 0.14, courses = [
+    { h_m = 0.14, joints_m = [] },          # полубревно: шов и тень под ним
+] }
+imitation_timber = { vertical = false, line_m = 0.008, groove_m = 0.0, width_m = 0.138, courses = [
+    { h_m = 0.138, joints_m = [] },         # плоская доска, видимая ширина 138 мм
+] }
+profiled_sheet = { vertical = true, line_m = 0.008, groove_m = 0.0, width_m = 0.1, courses = [
+    { h_m = 0.1, joints_m = [] },           # волна профнастила; шаг — допущение
+] }
+metal_tile = { vertical = false, line_m = 0.012, groove_m = 0.0, width_m = 1.1, courses = [
+    { h_m = 0.35, joints_m = [] },          # ступень 350 мм, полезная ширина листа 1100 мм
+] }
+shingle_roof = { vertical = false, line_m = 0.008, groove_m = 0.0, width_m = 0.333, courses = [
+    { h_m = 0.143, joints_m = [0.0833] },   # ряд 143 мм, язычок 333 мм вразбежку
+    { h_m = 0.143, joints_m = [0.25] },
+] }
+ondulin = { vertical = true, line_m = 0.008, groove_m = 0.0, width_m = 0.095, courses = [
+    { h_m = 0.095, joints_m = [] },         # волна ондулина, шаг 95 мм
 ] }
 
 [fill]

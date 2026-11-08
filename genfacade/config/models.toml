@@ -36,10 +36,29 @@ classic = ["classic", "neoclassic", "colonial", "traditional", "классиче
 # Вид материала стен → слова текста. Слово, которое встретилось раньше других, выбирает отделки с
 # этим видом стен; слова нет — отделки всех видов.
 [spec.material_words]
+# Слова частных видов (gf#317); слов роли «камень» нет: «камень на цоколе» не делает стены каменными.
 plaster = ["plaster", "stucco", "штукатур"]
 brick = ["brick", "кирпич"]
+brick_1_5 = ["полуторн", "5нф"]
+brick_long = ["norman", "нормандск"]
+clinker = ["clinker", "клинкер", "плитк"]
 siding = ["siding", "clapboard", "weatherboard", "обшивк", "сайдинг", "вагонк"]
+siding_dutch = ["dutch", "голландск"]
+board_batten_narrow = ["batten", "реечн"]
 wood = ["wood", "timber", "дерев", "брус"]
+imitation_timber = ["имитаци", "imitation"]
+blockhouse = ["blockhouse", "blockhaus", "хаус"]
+ashlar = ["ashlar", "тёсан", "тесан"]
+profiled_sheet = ["профлист", "профнастил", "corrugated"]
+
+# Вид → общий вид, чьи слова называют и его: «кирпич» — это и brick, и brick_1_5; «полуторный» —
+# только brick_1_5. Слово, названное в тексте, выбирает среди видов, которые оно называет.
+[spec.material_like]
+brick_1_5 = "brick"
+brick_long = "brick"
+siding_narrow = "siding"
+siding_wide = "siding"
+siding_dutch = "siding"
 
 # Элемент → слова текста: слово в тексте ставит элементу вид отделки, если у неё его нет
 # (`trim_default`), «без …» — убирает; цвет перед словом красит роль trim.
@@ -55,7 +74,7 @@ canopy = ["canopy", "canopies", "козыр"]
 trim = ["trim", "отделк", "обрамлен"]
 plinth = ["plinth", "base", "foundation", "цокол", "фундамент"]
 accent = ["accent", "акцент"]
-roof = ["roof", "крыш"]
+roof = ["roof", "крыш", "кровл", "металлочерепиц", "черепиц", "ондулин", "ondulin", "shingle"]
 
 # Вид крыши → слова текста (gf#320): по слову, которое встретилось раньше других; слова нет — вид
 # крыши отделки (`roof` у [spec.finish.*]). Скаты строит код развёртки над прямоугольным домом.
@@ -142,9 +161,90 @@ words = ["grey", "gray", "серы", "серо"]
 [spec.colors.stone_sand]
 hex = "#b9ad98"
 words = ["beige", "sand", "бежев", "песочн"]
+# Цвета сочетаний (gf#317). SW — Sherwin-Williams, номер в комментарии, HEX с страницы цвета на
+# sherwin-williams.com (07–08.11.2026, [открыта]); RAL — Wikipedia «List of RAL colours» (приблизительно,
+# CC BY-SA 4.0). Слов текста нет: цвет приходит вместе с сочетанием, а не по слову.
+[spec.colors.roycroft_suede]    # SW 2842
+hex = "#a79473"
+[spec.colors.roycroft_brass]    # SW 2843
+hex = "#7a6a51"
+[spec.colors.craftsman_brown]    # SW 2835
+hex = "#ae9278"
+[spec.colors.roycroft_vellum]    # SW 2833
+hex = "#e8d9bd"
+[spec.colors.aurora_brown]    # SW 2837
+hex = "#6a4238"
+[spec.colors.bunglehouse_gray]    # SW 2845
+hex = "#988f7b"
+[spec.colors.bottle_green]    # SW 2847
+hex = "#324038"
+[spec.colors.summit_gray]    # SW 7669
+hex = "#959491"
+[spec.colors.extra_white]    # SW 7006
+hex = "#eeefea"
+[spec.colors.red_barn]    # SW 7591
+hex = "#7c453d"
+[spec.colors.alabaster]    # SW 7008
+hex = "#edeae0"
+[spec.colors.perfect_greige]    # SW 6073
+hex = "#b7ab9f"
+[spec.colors.popular_gray]    # SW 6071
+hex = "#d4ccc3"
+[spec.colors.shoji_white]    # SW 7042
+hex = "#e6dfd3"
+[spec.colors.relaxed_khaki]    # SW 6149
+hex = "#c8bba3"
+[spec.colors.roof_brown]    # RAL 8017
+hex = "#44322d"
+words = ["brown", "коричнев"]
+[spec.colors.roof_graphite]    # RAL 7024
+hex = "#474a50"
+words = ["graphite", "anthracite", "grey", "gray", "графит", "антрацит", "серы", "серо"]
+[spec.colors.roof_red]    # RAL 3009
+hex = "#703731"
+words = ["red", "красн", "бордов"]
+[spec.colors.roof_green]    # RAL 6005
+hex = "#0f4336"
+words = ["green", "зелён", "зелен"]
+[spec.colors.roof_blue]    # RAL 5005
+hex = "#154889"
+words = ["blue", "син", "голуб"]
+[spec.colors.roof_black]    # RAL 7016
+hex = "#373f43"
+words = ["black", "чёрн", "черн"]
 [spec.colors.concrete]    # без hex — цвет вида материала из library.toml
 [spec.colors.roof_steel]    # без hex — цвет вида материала из library.toml
 [spec.colors.roof_terracotta]    # без hex — цвет вида материала из library.toml
+
+# Сочетания цветов (gf#317, `docs/library-catalog.md`): стены (main), отделка (trim), крыша (roof).
+# Стены и отделка — триады SW (роли body/wall и trim источника); крыша — из RAL по правилу
+# Dunn-Edwards «коричневая крыша — оливковые, зелёные, русетовые стены; зелёная — коричневые и
+# красные; красная — нейтральные»; в самих источниках SW крыши нет. Акцент SW (дверь, ставни) в
+# сочетании не используется: роль accent у нас — зона отделки, а не цвет двери.
+[spec.schemes.sw_arts_crafts_1]
+source = "Sherwin-Williams Preservation Palette, Arts & Crafts 1900-е, триада 1"
+colors = { main = "roycroft_suede", trim = "roycroft_brass", roof = "roof_brown" }
+[spec.schemes.sw_arts_crafts_3]
+source = "Sherwin-Williams Preservation Palette, Arts & Crafts 1900-е, триада 3"
+colors = { main = "craftsman_brown", trim = "roycroft_vellum", roof = "roof_brown" }
+[spec.schemes.sw_arts_crafts_4]
+source = "Sherwin-Williams Preservation Palette, Arts & Crafts 1900-е, триада 4"
+colors = { main = "aurora_brown", trim = "roycroft_suede", roof = "roof_green" }
+[spec.schemes.sw_arts_crafts_6]
+source = "Sherwin-Williams Preservation Palette, Arts & Crafts 1900-е, триада 6"
+colors = { main = "bunglehouse_gray", trim = "bottle_green", roof = "roof_brown" }
+[spec.schemes.sw_traditional_3]
+source = "Sherwin-Williams Suburban Traditional, триада 3"
+colors = { main = "summit_gray", trim = "extra_white", roof = "roof_graphite" }
+[spec.schemes.sw_traditional_6]
+source = "Sherwin-Williams Suburban Traditional, триада 6"
+colors = { main = "red_barn", trim = "alabaster", roof = "roof_green" }
+[spec.schemes.sw_modern_15]
+source = "Sherwin-Williams Suburban Modern, триада 15"
+colors = { main = "perfect_greige", trim = "popular_gray", roof = "roof_graphite" }
+[spec.schemes.sw_modern_18]
+source = "Sherwin-Williams Suburban Modern, триада 18"
+colors = { main = "shoji_white", trim = "relaxed_khaki", roof = "roof_brown" }
 
 # Отделки: виды и ряды цветов по ролям палитры (первый цвет ряда — по умолчанию; стены — ещё и по
 # слову цвета или от текста; `extra` — цвета только по слову), виды выводимых элементов (config/derive.toml). Виды материалов — из
@@ -164,8 +264,9 @@ roof = { kind = "metal_roof", colors = ["roof_steel"] }
 styles = ["classic"]
 roof = "hip"
 trim = { sill = "sloped", casing = "flat", shutters = "panel", canopy = "gable" }
+schemes = ["sw_traditional_3", "sw_traditional_6", "sw_modern_15", "sw_modern_18", "sw_arts_crafts_1"]
 [spec.finish.plaster_classic.materials]
-main = { kind = "plaster", colors = ["cream", "white", "yellow", "beige", "grey"] }
+main = { kind = "plaster", colors = ["cream", "white", "yellow", "beige", "grey"], extra = ["summit_gray", "red_barn", "perfect_greige", "shoji_white", "roycroft_suede"] }
 plinth = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
 accent = { kind = "stone", colors = ["stone_sand", "stone_grey"] }
 trim = { kind = "wood", colors = ["white", "cream", "green", "brown", "graphite", "black"] }
@@ -175,34 +276,37 @@ roof = { kind = "tile_roof", colors = ["roof_terracotta"] }
 styles = ["modern", "classic"]
 roof = "hip"
 trim = { sill = "sloped", casing = "flat", shutters = "louvered", canopy = "bracket" }
+schemes = ["sw_traditional_3", "sw_modern_15", "sw_modern_18"]
 [spec.finish.plaster_stone.materials]
-main = { kind = "plaster", colors = ["white", "beige", "grey", "yellow", "cream"] }
+main = { kind = "plaster", colors = ["white", "beige", "grey", "yellow", "cream"], extra = ["summit_gray", "perfect_greige", "shoji_white"] }
 plinth = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
 accent = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
 trim = { kind = "wood", colors = ["brown", "white", "graphite", "green", "black"] }
-roof = { kind = "metal_roof", colors = ["roof_steel"] }
+roof = { kind = "metal_tile", colors = ["roof_graphite", "roof_brown", "roof_green", "roof_red", "roof_blue", "roof_black"] }
 
 [spec.finish.siding_painted]       # крашеная обшивка: цвет стен — из ряда
 styles = ["scandinavian", "classic", "modern"]
 roof = "gable"
 trim = { sill = "flat", casing = "flat", shutters = "louvered", canopy = "gable" }
+schemes = ["sw_traditional_3", "sw_traditional_6", "sw_modern_15", "sw_modern_18", "sw_arts_crafts_6"]
 [spec.finish.siding_painted.materials]
-main = { kind = "siding", colors = ["blue", "white", "cream", "yellow", "grey", "green", "red", "graphite"] }
+main = { kind = "siding", colors = ["blue", "white", "cream", "yellow", "grey", "green", "red", "graphite"], extra = ["summit_gray", "red_barn", "perfect_greige", "shoji_white", "bunglehouse_gray"] }
 plinth = { kind = "concrete", colors = ["concrete", "graphite"] }
 accent = { kind = "wood", colors = ["wood_natural", "wood_dark"] }
 trim = { kind = "wood", colors = ["white", "cream", "graphite", "black", "brown"] }
-roof = { kind = "metal_roof", colors = ["roof_steel"] }
+roof = { kind = "metal_tile", colors = ["roof_graphite", "roof_brown", "roof_green", "roof_red", "roof_blue", "roof_black"] }
 
 [spec.finish.wood_natural]         # натуральное дерево, широкие наличники, дощатые ставни
 styles = ["scandinavian", "chalet", "modern"]
 roof = "gable"
 trim = { sill = "flat", casing = "wide", shutters = "board", canopy = "bracket" }
+schemes = ["sw_arts_crafts_1", "sw_arts_crafts_3", "sw_arts_crafts_4", "sw_arts_crafts_6"]
 [spec.finish.wood_natural.materials]
-main = { kind = "wood", colors = ["wood_natural", "wood_honey", "wood_grey"], extra = ["green", "red", "white", "blue", "black"] }
+main = { kind = "wood", colors = ["wood_natural", "wood_honey", "wood_grey"], extra = ["green", "red", "white", "blue", "black", "roycroft_suede", "craftsman_brown", "aurora_brown", "bunglehouse_gray"] }
 plinth = { kind = "concrete", colors = ["concrete", "graphite"] }
 accent = { kind = "wood", colors = ["wood_dark", "wood_honey"] }
 trim = { kind = "wood", colors = ["wood_dark", "white", "brown", "graphite"] }
-roof = { kind = "metal_roof", colors = ["roof_steel"] }
+roof = { kind = "metal_tile", colors = ["roof_brown", "roof_graphite", "roof_green", "roof_red", "roof_blue", "roof_black"] }
 
 [spec.finish.wood_dark]            # тёмное дерево, скандинавский: чёрная отделка, без ставен
 styles = ["scandinavian", "modern"]
@@ -213,7 +317,7 @@ main = { kind = "wood", colors = ["wood_dark", "black"], extra = ["graphite"] }
 plinth = { kind = "concrete", colors = ["graphite", "concrete"] }
 accent = { kind = "wood", colors = ["wood_natural", "wood_honey"] }
 trim = { kind = "metal", colors = ["black", "graphite", "white"] }
-roof = { kind = "metal_roof", colors = ["roof_steel"] }
+roof = { kind = "metal_tile", colors = ["roof_graphite", "roof_brown", "roof_green", "roof_red", "roof_blue", "roof_black"] }
 
 [spec.finish.brick_red]            # красный кирпич, белые наличники и ставни
 styles = ["classic", "modern"]
@@ -246,7 +350,7 @@ main = { kind = "wood", colors = ["wood_honey", "wood_natural", "wood_dark"], ex
 plinth = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
 accent = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
 trim = { kind = "wood", colors = ["wood_dark", "brown", "white", "green"] }
-roof = { kind = "metal_roof", colors = ["roof_steel"] }
+roof = { kind = "metal_tile", colors = ["roof_brown", "roof_graphite", "roof_green", "roof_red", "roof_blue", "roof_black"] }
 
 [spec.finish.stone_house]          # камень стен, дощатые ставни
 styles = ["classic", "chalet", "modern"]
@@ -258,6 +362,145 @@ plinth = { kind = "concrete", colors = ["concrete", "graphite"] }
 accent = { kind = "wood", colors = ["wood_natural", "wood_dark"] }
 trim = { kind = "wood", colors = ["white", "wood_dark", "brown", "graphite"] }
 roof = { kind = "tile_roof", colors = ["roof_terracotta"] }
+
+# ——— Отделки gf#317: виды материалов по российским ИЖС (`docs/library-catalog.md`) ———
+[spec.finish.brick_ru]             # облицовочный кирпич 1,4НФ, металлочерепица, белые наличники и ставни
+styles = ["classic", "modern"]
+roof = "gable"
+trim = { sill = "sloped", casing = "flat", shutters = "panel", canopy = "gable" }
+[spec.finish.brick_ru.materials]
+main = { kind = "brick_1_5", colors = ["brick_red", "brick_brown", "brick_sand"] }
+plinth = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
+accent = { kind = "wood", colors = ["wood_natural", "wood_dark"] }
+trim = { kind = "wood", colors = ["white", "cream", "brown", "graphite"] }
+roof = { kind = "metal_tile", colors = ["roof_brown", "roof_graphite", "roof_green", "roof_red", "roof_blue", "roof_black"] }
+
+[spec.finish.brick_long_modern]    # длинный тонкий кирпич, тёмная отделка, односкатная крыша из профнастила
+styles = ["modern", "scandinavian"]
+roof = "shed"
+trim = { sill = "flat", casing = "none", shutters = "none", canopy = "flat" }
+[spec.finish.brick_long_modern.materials]
+main = { kind = "brick_long", colors = ["brick_brown", "brick_sand", "brick_light"] }
+plinth = { kind = "concrete", colors = ["concrete", "graphite"] }
+accent = { kind = "wood", colors = ["wood_natural", "wood_dark"] }
+trim = { kind = "metal", colors = ["graphite", "black", "white"] }
+roof = { kind = "profiled_sheet", colors = ["roof_graphite", "roof_brown", "roof_green", "roof_red", "roof_blue", "roof_black"] }
+
+[spec.finish.clinker_house]        # фасадная (клинкерная) плитка, металлочерепица
+styles = ["classic", "modern"]
+roof = "hip"
+trim = { sill = "sloped", casing = "flat", shutters = "panel", canopy = "gable" }
+[spec.finish.clinker_house.materials]
+main = { kind = "clinker", colors = ["brick_brown", "brick_red", "brick_sand"] }
+plinth = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
+accent = { kind = "wood", colors = ["wood_natural", "wood_dark"] }
+trim = { kind = "wood", colors = ["white", "cream", "graphite", "brown"] }
+roof = { kind = "metal_tile", colors = ["roof_graphite", "roof_brown", "roof_green", "roof_red", "roof_blue", "roof_black"] }
+
+[spec.finish.siding_narrow_house]  # узкая обшивка 4 дюйма, сочетания SW, гибкая черепица
+styles = ["scandinavian", "classic"]
+roof = "gable"
+trim = { sill = "flat", casing = "flat", shutters = "louvered", canopy = "gable" }
+schemes = ["sw_traditional_3", "sw_traditional_6", "sw_modern_15", "sw_modern_18", "sw_arts_crafts_6"]
+[spec.finish.siding_narrow_house.materials]
+main = { kind = "siding_narrow", colors = ["white", "cream", "blue", "grey", "green"], extra = ["summit_gray", "red_barn", "perfect_greige", "shoji_white", "bunglehouse_gray"] }
+plinth = { kind = "concrete", colors = ["concrete", "graphite"] }
+accent = { kind = "wood", colors = ["wood_natural", "wood_dark"] }
+trim = { kind = "wood", colors = ["white", "cream", "graphite", "black"] }
+roof = { kind = "shingle_roof", colors = ["roof_graphite", "roof_brown", "roof_green", "roof_red", "roof_blue", "roof_black"] }
+
+[spec.finish.siding_wide_house]    # широкая обшивка 8 дюймов
+styles = ["modern", "scandinavian"]
+roof = "gable"
+trim = { sill = "flat", casing = "flat", shutters = "none", canopy = "gable" }
+schemes = ["sw_traditional_3", "sw_modern_15", "sw_modern_18"]
+[spec.finish.siding_wide_house.materials]
+main = { kind = "siding_wide", colors = ["grey", "white", "beige", "graphite", "blue"], extra = ["summit_gray", "perfect_greige", "shoji_white"] }
+plinth = { kind = "concrete", colors = ["concrete", "graphite"] }
+accent = { kind = "wood", colors = ["wood_natural", "wood_dark"] }
+trim = { kind = "metal", colors = ["graphite", "black", "white"] }
+roof = { kind = "metal_tile", colors = ["roof_graphite", "roof_brown", "roof_green", "roof_red", "roof_blue", "roof_black"] }
+
+[spec.finish.siding_dutch_house]   # Dutch lap, классика, гибкая черепица
+styles = ["classic"]
+roof = "hip"
+trim = { sill = "sloped", casing = "flat", shutters = "panel", canopy = "gable" }
+schemes = ["sw_traditional_3", "sw_traditional_6", "sw_modern_18"]
+[spec.finish.siding_dutch_house.materials]
+main = { kind = "siding_dutch", colors = ["cream", "white", "yellow", "blue", "green"], extra = ["summit_gray", "red_barn", "shoji_white"] }
+plinth = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
+accent = { kind = "wood", colors = ["wood_natural", "wood_dark"] }
+trim = { kind = "wood", colors = ["white", "cream", "green", "black"] }
+roof = { kind = "shingle_roof", colors = ["roof_graphite", "roof_brown", "roof_green", "roof_red", "roof_blue", "roof_black"] }
+
+[spec.finish.barn_board]           # узкая доска с планкой, сочетания SW
+styles = ["scandinavian", "modern"]
+roof = "gable"
+trim = { sill = "flat", casing = "flat", shutters = "board", canopy = "gable" }
+schemes = ["sw_traditional_3", "sw_traditional_6", "sw_arts_crafts_6"]
+[spec.finish.barn_board.materials]
+main = { kind = "board_batten_narrow", colors = ["grey", "white", "red", "graphite"], extra = ["summit_gray", "red_barn", "bunglehouse_gray"] }
+plinth = { kind = "concrete", colors = ["concrete", "graphite"] }
+accent = { kind = "wood", colors = ["wood_natural", "wood_dark"] }
+trim = { kind = "wood", colors = ["white", "black", "graphite"] }
+roof = { kind = "metal_tile", colors = ["roof_graphite", "roof_brown", "roof_green", "roof_red", "roof_blue", "roof_black"] }
+
+[spec.finish.ashlar_house]         # тёсаный камень, дощатые ставни
+styles = ["classic", "chalet"]
+roof = "hip"
+trim = { sill = "sloped", casing = "wide", shutters = "board", canopy = "bracket" }
+[spec.finish.ashlar_house.materials]
+main = { kind = "ashlar", colors = ["stone_grey", "stone_sand"], extra = ["graphite"] }
+plinth = { kind = "concrete", colors = ["concrete", "graphite"] }
+accent = { kind = "wood", colors = ["wood_natural", "wood_dark"] }
+trim = { kind = "wood", colors = ["white", "wood_dark", "brown", "graphite"] }
+roof = { kind = "metal_tile", colors = ["roof_brown", "roof_graphite", "roof_green", "roof_red", "roof_blue", "roof_black"] }
+
+[spec.finish.blockhouse_house]     # блок-хаус, сочетания SW
+styles = ["chalet", "scandinavian"]
+roof = "gable"
+trim = { sill = "flat", casing = "wide", shutters = "board", canopy = "bracket" }
+schemes = ["sw_arts_crafts_1", "sw_arts_crafts_3", "sw_arts_crafts_4", "sw_arts_crafts_6"]
+[spec.finish.blockhouse_house.materials]
+main = { kind = "blockhouse", colors = ["wood_honey", "wood_natural", "wood_dark"], extra = ["roycroft_suede", "craftsman_brown", "aurora_brown", "bunglehouse_gray"] }
+plinth = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
+accent = { kind = "wood", colors = ["wood_dark", "wood_honey"] }
+trim = { kind = "wood", colors = ["wood_dark", "brown", "white"] }
+roof = { kind = "metal_tile", colors = ["roof_brown", "roof_graphite", "roof_green", "roof_red", "roof_blue", "roof_black"] }
+
+[spec.finish.timber_imitation]     # имитация бруса, сочетания SW
+styles = ["scandinavian", "classic", "modern"]
+roof = "gable"
+trim = { sill = "flat", casing = "flat", shutters = "louvered", canopy = "gable" }
+schemes = ["sw_arts_crafts_1", "sw_arts_crafts_3", "sw_modern_18", "sw_traditional_3"]
+[spec.finish.timber_imitation.materials]
+main = { kind = "imitation_timber", colors = ["wood_natural", "wood_honey", "wood_grey"], extra = ["roycroft_suede", "craftsman_brown", "shoji_white", "summit_gray"] }
+plinth = { kind = "concrete", colors = ["concrete", "graphite"] }
+accent = { kind = "wood", colors = ["wood_dark", "wood_honey"] }
+trim = { kind = "wood", colors = ["white", "wood_dark", "brown"] }
+roof = { kind = "metal_tile", colors = ["roof_brown", "roof_graphite", "roof_green", "roof_red", "roof_blue", "roof_black"] }
+
+[spec.finish.profiled_house]       # профнастил на стенах и кровле, односкатная крыша
+styles = ["modern", "scandinavian"]
+roof = "shed"
+trim = { sill = "flat", casing = "none", shutters = "none", canopy = "flat" }
+[spec.finish.profiled_house.materials]
+main = { kind = "profiled_sheet", colors = ["graphite", "grey", "brown", "green"], extra = ["black", "red", "blue"] }
+plinth = { kind = "concrete", colors = ["concrete", "graphite"] }
+accent = { kind = "wood", colors = ["wood_natural", "wood_dark"] }
+trim = { kind = "metal", colors = ["graphite", "black", "white"] }
+roof = { kind = "profiled_sheet", colors = ["roof_graphite", "roof_brown", "roof_green", "roof_red", "roof_blue", "roof_black"] }
+
+[spec.finish.plaster_ondulin]      # штукатурка с ондулином
+styles = ["classic", "chalet"]
+roof = "gable"
+trim = { sill = "flat", casing = "flat", shutters = "board", canopy = "gable" }
+[spec.finish.plaster_ondulin.materials]
+main = { kind = "plaster", colors = ["cream", "beige", "white", "grey"] }
+plinth = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
+accent = { kind = "wood", colors = ["wood_natural", "wood_dark"] }
+trim = { kind = "wood", colors = ["white", "brown", "graphite"] }
+roof = { kind = "ondulin", colors = ["roof_brown", "roof_graphite", "roof_green", "roof_red", "roof_blue", "roof_black"] }
 
 [layout]             # шаг 4: обученный GPT (genfacade/models/layout.py)
 # Чекпойнт genfacade train (model.pt). Файла нет — стаб (genfacade/models/stub.py).

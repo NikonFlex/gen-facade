@@ -74,6 +74,9 @@ class Hatch(Section):
 
 class Library(Section):
     kinds: dict[str, str]
+    # Вид → вид, под которым его видит модель шага 4 (gf#317): словарь модели — виды, которыми она
+    # обучена; новый вид добавляется записью здесь и переобучения не требует
+    model_kinds: dict[str, str] = {}
     patterns: dict[str, Hatch]  # вид → рисунок; вида нет — зона и элемент сплошным цветом
     pattern_darken: float       # линии рисунка: каждый канал цвета материала × (1 − это)
     unhatched_cls: list[ElementClass]  # элементы этих классов рисуют себя сами
@@ -81,11 +84,20 @@ class Library(Section):
     class_fill: dict[ElementClass, str]  # опечатка в классе элемента — ошибка загрузки
 
     @model_validator(mode="after")
-    def _patterns_of_known_kinds(self) -> Self:
+    def _kinds_are_consistent(self) -> Self:
         unknown = self.patterns.keys() - self.kinds.keys()
         if unknown:
             raise ValueError(f"рисунок у вида, которого нет в [kinds]: {sorted(unknown)}")
+        bad = {k: v for k, v in self.model_kinds.items()
+               if k not in self.kinds or v not in self.kinds or v in self.model_kinds}
+        if bad:
+            raise ValueError(f"model_kinds: вид и его образ должны быть в [kinds], а образ — "
+                             f"не сам заменяемый: {sorted(bad.items())}")
         return self
+
+    def model_kind(self, kind: str) -> str:
+        """Вид материала в условии модели шага 4."""
+        return self.model_kinds.get(kind, kind)
 
 
 class SheetLayout(Section):
@@ -654,6 +666,20 @@ class FinishRole(Section):
     extra: list[str] = []
 
 
+class Scheme(Section):
+    """Сочетание цветов из источника (gf#317): цвета ролей палитры по именам из ряда colors;
+    source — откуда взято. Роли, которых нет, берут ряд отделки."""
+
+    source: str
+    colors: dict[PaletteRole, str]
+
+    @model_validator(mode="after")
+    def _has_main(self) -> Self:
+        if PaletteRole.MAIN not in self.colors:
+            raise ValueError("сочетание без цвета стен (main)")
+        return self
+
+
 class Finish(Section):
     """Отделка дома: материалы палитры по ролям и виды выводимых элементов (gf#303);
     styles — стили раскладки, с которыми она сочетается."""
@@ -662,6 +688,7 @@ class Finish(Section):
     trim: HouseTrim
     roof: RoofKind  # вид крыши отделки, если в тексте его нет (gf#320)
     materials: dict[PaletteRole, FinishRole]
+    schemes: list[str] = []  # сочетания цветов, которые отделка берёт от текста (gf#317)
 
 
 class SpecStub(Section):
@@ -672,12 +699,14 @@ class SpecStub(Section):
     floors_words: dict[int, list[str]]     # этажей → слова в тексте
     style_words: dict[str, list[str]]      # стиль → слова в тексте
     material_words: dict[str, list[str]]   # вид стен из библиотеки → слова в тексте
+    material_like: dict[str, str] = {}     # вид → общий вид: слова общего называют и этот вид
     trim_words: dict[Trim, list[str]]      # выводимый элемент → слова в тексте
     roof_words: dict[RoofKind, list[str]]  # вид крыши → слова в тексте (gf#320)
     roof_shape: RoofShape                  # уклон и свес по виду крыши — и синтетике
     role_words: dict[PaletteRole, list[str]]  # роль палитры → слова, перед которыми цвет её красит
     trim_default: HouseTrim                # вид названного в тексте элемента, если его нет
     colors: dict[str, FinishColor]         # ряд цветов отделки по имени
+    schemes: dict[str, Scheme] = {}        # сочетания цветов из источников (gf#317)
     finish: dict[str, Finish]              # библиотека отделок
 
     @model_validator(mode="after")
@@ -693,14 +722,28 @@ class SpecStub(Section):
             unknown = used - set(self.colors)
             if unknown:
                 raise ValueError(f"отделка {name}: нет цветов в ряду colors — {sorted(unknown)}")
+            self._check_schemes(name, finish)
             if styles := set(finish.styles) - set(self.style_words):
                 raise ValueError(f"отделка {name}: нет стилей в style_words — {sorted(styles)}")
         return self
 
+    def _check_schemes(self, name: str, finish: Finish) -> None:
+        """Сочетание отделки — из ряда colors, а цвет стен — из тех, что у отделки на стенах."""
+        main = finish.materials[PaletteRole.MAIN]
+        for scheme in finish.schemes:
+            if scheme not in self.schemes:
+                raise ValueError(f"отделка {name}: нет сочетания {scheme}")
+            colors = self.schemes[scheme].colors
+            if unknown := set(colors.values()) - set(self.colors):
+                raise ValueError(f"сочетание {scheme}: нет цветов в colors — {sorted(unknown)}")
+            if colors[PaletteRole.MAIN] not in [*main.colors, *main.extra]:
+                raise ValueError(f"{name}: цвет стен сочетания {scheme} не из рядов")
+
     def kinds(self) -> set[str]:
         """Виды материалов, которые называет стаб: в отделках и в словах вида стен."""
         return {m.kind for f in self.finish.values() for m in f.materials.values()} \
-            | set(self.material_words)
+            | set(self.material_words) | self.material_like.keys() \
+            | set(self.material_like.values())
 
 
 class Models(Section):
