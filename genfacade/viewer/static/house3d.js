@@ -5,6 +5,7 @@
 
 import { refusedFrom } from "/static/refusal.js";
 import { Relief } from "/static/house3d_relief.js";
+import { faceUV, pixels, wallScale, worldUV } from "/static/house3d_texture.js";
 
 const ROOF_M = 0.15;  // толщина плиты крыши — только чтобы край был виден
 
@@ -24,6 +25,10 @@ export class HouseStage {
     const data = await res.json();
     threeModule ??= await import(this.look.three_url);
     this._scene(threeModule, data);
+    await this._tiles(threeModule, data.swatches);
+    this._roof(threeModule, data);
+    this._ground(threeModule);
+    this.pxPerM = this._wallScale(data.walls);
     await Promise.all(data.walls.map((w) => this._wall(threeModule, w)));
     this._bind();
     this.fit();
@@ -65,48 +70,87 @@ export class HouseStage {
     this.center = new THREE.Vector3(mid(xs), data.eaves_m / 2, mid(zs));
     this.radius = Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs), data.eaves_m) / 2;
     this.relief = new Relief(THREE, this.look, data.trim);
-    this.materials = new Map();  // цвет → материал: выступов на доме десятки, цветов — единицы
-    this._roof(THREE, data);
-    this._ground(THREE);
+    this.materials = new Map();  // цвет или id материала → материал: выступов десятки, видов — единицы
+    this.tiles = new Map();  // id материала → { texture, size_m } ячейки рисунка
+  }
+
+  // Шаг текстур стен — желаемый px_per_m, но чтобы стена влезла в MAX_TEXTURE_SIZE видеокарты и
+  // не больше texture_max_px, а все стены вместе — в бюджет памяти (gf#353).
+  _wallScale(walls) {
+    const gl = this.renderer.getContext();
+    const maxSide = Math.min(this.look.texture_max_px, gl.getParameter(gl.MAX_TEXTURE_SIZE));
+    return wallScale(walls.map((w) => [w.length_m, w.height_m]), this.look.px_per_m, maxSide,
+      this.look.texture_budget_mpx * 1e6);
+  }
+
+  // Ячейки рисунков материалов (swatches дома) → повторяющиеся текстуры: кровлю и выступы
+  // выкладывают ими тем же шагом, что на листе. Ячейка мала, поэтому шаг — желаемый px_per_m.
+  async _tiles(THREE, swatches) {
+    await Promise.all(Object.entries(swatches).map(async ([id, s]) => {
+      const canvas = await rasterize(s.svg, pixels(s.width_m, this.look.px_per_m),
+        pixels(s.height_m, this.look.px_per_m));
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+      this.tiles.set(id, { texture, size_m: [s.width_m, s.height_m] });
+    }));
+  }
+
+  // Материал кровли или выступа: рисунок материала палитры, если он есть у дома, иначе цвет.
+  _material(THREE, id, color, side) {
+    const key = `${this.tiles.has(id) ? id : color}|${side ?? ""}`;
+    if (!this.materials.has(key)) {
+      const look = this.tiles.has(id) ? { map: this.tiles.get(id).texture } : { color };
+      this.materials.set(key, new THREE.MeshLambertMaterial({ ...look, ...(side && { side }) }));
+    }
+    return this.materials.get(key);
   }
 
   _roof(THREE, data) {
     if (data.roof.faces.length) return this._slopes(THREE, data.roof);
     // Дом из частей разной высоты (gf#322): плита над каждой частью на её карнизе.
     const slabs = data.roof.slabs || [{ shape: data.roof.flat, height_m: data.eaves_m }];
-    for (const { shape, height_m } of slabs) this._slab(THREE, shape, height_m);
+    for (const { shape, height_m } of slabs) this._slab(THREE, shape, height_m, data.roof);
   }
 
-  _slab(THREE, outline, height) {
+  _slab(THREE, outline, height, roof) {
     const shape = new THREE.Shape(outline.map(([x, y]) => new THREE.Vector2(x, y)));
     const geo = new THREE.ExtrudeGeometry(shape, { depth: ROOF_M, bevelEnabled: false });
     geo.rotateX(-Math.PI / 2);  // (x, y) плана → (x, −z); выдавливание — вверх
-    const roof = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: this.look.roof }));
-    roof.position.y = height;
-    this.scene.add(roof, this._edges(THREE, geo, roof.position));
+    const slab = new THREE.Mesh(geo, this._material(THREE, roof.material, roof.color || this.look.roof));
+    slab.position.y = height;
+    this.scene.add(slab, this._edges(THREE, geo, slab.position));
   }
 
   // Скаты и стены над карнизом (gf#320): многоугольники (x, y плана, высота) → треугольники
   // (стены над карнизом выпуклые — веер, скаты — по плану); (x, y, h) плана → (x, h, −y) сцены, как у стен.
   _slopes(THREE, roof) {
-    const parts = [[roof.faces, roof.color || this.look.roof], [roof.above, roof.wall || this.look.roof]];
-    for (const [shapes, color] of parts) {
+    const parts = [[roof.faces, roof.material, roof.color || this.look.roof],
+      [roof.above, roof.wall_material, roof.wall || this.look.roof]];
+    for (const [shapes, id, color] of parts) {
+      const material = this._material(THREE, id, color, THREE.DoubleSide);
       for (const shape of shapes) {
         const points = shape.map(([x, y, h]) => new THREE.Vector3(x, h, -y));
-        const fan = [];
+        let tris = fan(points.map((_, i) => i));
         if (shapes === roof.faces) {
           // скат плоский, но после обрыва на стене соседней части не обязательно выпуклый: по плану
           const flat = shape.map(([x, y]) => new THREE.Vector2(x, y));
-          for (const tri of THREE.ShapeUtils.triangulateShape(flat, [])) fan.push(...tri.map((i) => points[i]));
-        } else {
-          for (let i = 1; i + 1 < points.length; i++) fan.push(points[0], points[i], points[i + 1]);
+          tris = THREE.ShapeUtils.triangulateShape(flat, []).flat();
         }
-        const geo = new THREE.BufferGeometry().setFromPoints(fan);
+        const geo = new THREE.BufferGeometry().setFromPoints(tris.map((i) => points[i]));
         geo.computeVertexNormals();
-        const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }));
-        this.scene.add(mesh, this._edges(THREE, geo));
+        if (this.tiles.has(id)) this._faceUV(THREE, geo, points, tris, this.tiles.get(id).size_m);
+        this.scene.add(new THREE.Mesh(geo, material), this._edges(THREE, geo));
       }
     }
+  }
+
+  // UV по метрам рисунка: ряды идут по скату вверх, как на фасаде листа.
+  _faceUV(THREE, geo, points, tris, tile) {
+    const uv = faceUV(points.map((p) => [p.x, p.y, p.z]), [this.center.x, this.center.y, this.center.z], tile);
+    const flat = tris.flatMap((i) => uv[i]);
+    geo.setAttribute("uv", new THREE.Float32BufferAttribute(flat, 2));
   }
 
   _ground(THREE) {
@@ -125,7 +169,8 @@ export class HouseStage {
   }
 
   async _wall(THREE, w) {
-    const texture = new THREE.CanvasTexture(await rasterize(w.svg, w.length_m, w.height_m, this.look.px_per_m));
+    const canvas = await rasterize(w.svg, pixels(w.length_m, this.pxPerM), pixels(w.height_m, this.pxPerM));
+    const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     const geo = new THREE.PlaneGeometry(w.length_m, w.height_m);
@@ -149,15 +194,23 @@ export class HouseStage {
     frame.position.set((lx + rx) / 2, 0, -(ly + ry) / 2);
     frame.rotation.y = turn;
     for (const r of w.relief) {
-      if (!this.materials.has(r.color)) {
-        this.materials.set(r.color, new THREE.MeshLambertMaterial({ color: r.color }));
-      }
-      for (const geo of this.relief.geometries(r, w)) {
+      const material = this._material(THREE, r.material, r.color);
+      for (const raw of this.relief.geometries(r, w)) {
+        const geo = this.tiles.has(r.material) ? this._worldUV(THREE, raw, this.tiles.get(r.material).size_m) : raw;
         geo.translate(-w.length_m / 2, 0, 0);
-        frame.add(new THREE.Mesh(geo, this.materials.get(r.color)), this._edges(THREE, geo));
+        frame.add(new THREE.Mesh(geo, material), this._edges(THREE, geo));
       }
     }
     this.scene.add(frame);
+  }
+
+  // UV выступа в метрах стены, делённых на ячейку рисунка: шов выступа идёт тем же шагом, что на
+  // стене. Индексы разворачиваем: у граней коробки одни вершины на разные плоскости.
+  _worldUV(THREE, geo, [tileW, tileH]) {
+    const out = geo.index ? geo.toNonIndexed() : geo;
+    const uv = worldUV(out.attributes.position.array);
+    out.setAttribute("uv", new THREE.BufferAttribute(uv.map((x, i) => x / (i % 2 ? tileH : tileW)), 2));
+    return out;
   }
 
   _bind() {
@@ -204,12 +257,18 @@ export class HouseStage {
   }
 }
 
-// SVG стены → canvas в px_per_m. Размер в пикселях пишем в сам SVG: без width/height у него нет
+// Веер треугольников выпуклого многоугольника: вершина 0 и пары соседних.
+function fan(points) {
+  const out = [];
+  for (let i = 1; i + 1 < points.length; i++) out.push(points[0], points[i], points[i + 1]);
+  return out;
+}
+
+// SVG → canvas width × height пикселей. Размер в пикселях пишем в сам SVG: без width/height у него нет
 // своего размера, Chromium растягивает его по viewBox, а WebKit (iPhone) берёт viewBox в метрах
 // как пиксели (9×3 вместо 780×300), рисует поменьше, и поля текстуры остаются прозрачными —
 // стены чёрные (gf#277).
-async function rasterize(svg, lengthM, heightM, pxPerM) {
-  const width = Math.round(lengthM * pxPerM), height = Math.round(heightM * pxPerM);
+async function rasterize(svg, width, height) {
   const root = new DOMParser().parseFromString(svg, "image/svg+xml").documentElement;
   root.setAttribute("width", width);
   root.setAttribute("height", height);

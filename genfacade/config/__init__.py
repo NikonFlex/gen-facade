@@ -276,6 +276,10 @@ class House3d(Section):
 
     three_url: str
     px_per_m: int
+    # потолки текстур стен (gf#353): сторона — не больше этого и не больше MAX_TEXTURE_SIZE
+    # видеокарты; все стены вместе — не больше texture_budget_mpx млн пикселей (4 байта каждый)
+    texture_max_px: int = Field(gt=0)
+    texture_budget_mpx: float = Field(gt=0)
     roof: str
     ground: str
     background: str

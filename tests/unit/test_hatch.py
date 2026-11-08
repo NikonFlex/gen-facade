@@ -197,3 +197,16 @@ def test_every_pattern_draws_inside_its_cell(house, cfg, kind):
     coords = re.findall(r"M([\d.]+),([\d.]+)L([\d.]+),([\d.]+)", pattern.find("{*}path").get("d"))
     assert coords and all(0 <= float(v) <= limit for c in coords
                           for v, limit in zip(c, cell * 2, strict=True))
+
+
+@pytest.mark.parametrize("kind", ["brick", "siding", "metal_tile", "ondulin"])
+def test_swatch_is_one_cell_of_the_sheet_pattern(cfg, kind):
+    """gf#353: ячейка рисунка для 3D — тот же `<pattern>`, что на листе, размером ровно в его
+    период (у повёрнутого рисунка оси поменяны): плитка текстуры стыкуется без шва."""
+    look = cfg.library.patterns[kind]
+    width, height = hatch.tile_m(look)
+    root = _root(hatch.swatch(kind, look, "#8c4a3a", cfg.library.pattern_darken))
+    assert root.get("viewBox") == f"0 0 {width!r} {height!r}"
+    node = root.find(".//{*}pattern")
+    assert (float(node.get("width")), float(node.get("height"))) == (width, height)
+    assert root.find("{*}g/{*}rect").get("fill") == f"url(#{node.get('id')})"

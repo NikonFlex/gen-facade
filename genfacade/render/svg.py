@@ -200,6 +200,23 @@ def paint(material: str, pen: Pen) -> str:
     return f"url(#{hatch.pattern_id(pen.kinds[material], color)})"
 
 
+def swatch(material: str, pen: Pen) -> dict | None:
+    """Ячейка рисунка материала для 3D (gf#353): SVG и её размер в метрах; рисунка у вида нет —
+    None, 3D красит цветом. Тот же рисунок и цвет, что у `paint` на листе."""
+    look = _hatch_of(material, pen)
+    if look is None:
+        return None
+    width, height = hatch.tile_m(look)
+    return {"svg": hatch.swatch(pen.kinds[material], look, pen.colors[material],
+                                pen.cfg.library.pattern_darken),
+            "width_m": width, "height_m": height}
+
+
+def element_material(e: Element, pen: Pen) -> str | None:
+    """Материал палитры, которым элемент залит на листе, — или None, если он залит цветом класса."""
+    return e.material if _by_material(e, pen) else None
+
+
 def _by_material(e: Element, pen: Pen) -> bool:
     """Элемент залит материалом палитры: материал есть, а класс не из unhatched_cls (те рисуют
     себя сами). Одно правило на заливку элемента (`element_paint`) и на набор паттернов листа."""
@@ -319,8 +336,8 @@ def element_fill(e: Element, pen: Pen) -> str:
 def element_paint(e: Element, pen: Pen) -> str:
     """Заливка прямоугольника элемента: рисунок вида его материала, а без рисунка или у класса
     из unhatched_cls — цвет (element_fill)."""
-    if _by_material(e, pen):
-        return paint(e.material, pen)
+    if (material := element_material(e, pen)) is not None:
+        return paint(material, pen)
     return element_fill(e, pen)
 
 

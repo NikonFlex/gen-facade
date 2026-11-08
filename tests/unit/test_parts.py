@@ -372,6 +372,16 @@ def test_flat_roof_of_parts_is_slab_per_part(plain_model):
     made = pipeline.layout(bare(flat), pipeline.PlanRun(plan="l", text=flat), CFG)
     _, data, high, low = in_3d(made)
     assert sorted(s["height_m"] for s in data["roof"]["slabs"]) == [low, high]
+    assert "material" in data["roof"] and "wall_material" in data["roof"]  # рисунок кровли (gf#353)
+
+
+def test_gable_roof_of_parts_keeps_materials(plain_model):
+    """Скаты частей (gf#322) выкладываются рисунком материала, как скаты обычной крыши (gf#353)."""
+    made = pipeline.layout(bare(GABLE), pipeline.PlanRun(plan="l", text=GABLE), CFG)
+    _, data, _, _ = in_3d(made)
+    roof_part = data["roof"]
+    assert roof_part["faces"] and {"material", "wall_material"} <= roof_part.keys()
+    assert roof_part["material"] in data["swatches"] or roof_part["material"] is None
 
 
 # ——— скаты над частями (gf#322) ———
