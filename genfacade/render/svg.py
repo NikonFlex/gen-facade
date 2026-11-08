@@ -13,7 +13,7 @@ from xml.etree import ElementTree
 
 import shapely
 
-from genfacade import roof
+from genfacade import roof, window_shape
 from genfacade.config import Axes, Config, DoorLook, Hatch, Levels, Sheet, SheetLayout, TrimLook
 from genfacade.render import hatch, sheet_format
 from genfacade.render.sheet_format import num
@@ -242,8 +242,11 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
     if top.above:  # стена над карнизом — основной отделкой, как стена под ним
         ElementTree.SubElement(g, "polygon", {"class": "above-eaves", "points": points(top.above),
                                               "fill": _main(pen)})
+    room = None if not top.above else window_shape.gable_room(
+        facade.side.length_m, min(y for _, y in top.above), top.above,
+        pen.cfg.checks.slope_offset_m)
     for e in facade.elements:
-        _element(g, e, pen, facade.zones)
+        _element(g, e, pen, facade.zones, _shape(e, room))
     for shape in top.roof:  # кровля — поверх: свес закрывает верх стены
         ElementTree.SubElement(g, "polygon", {"class": "roof", "points": points(shape),
                                               "fill": _roof_fill(pen)})
@@ -302,7 +305,33 @@ def element_paint(e: Element, pen: Pen) -> str:
     return element_fill(e, pen)
 
 
-def _element(g: ElementTree.Element, e: Element, pen: Pen, zones: list[MaterialZone]) -> None:
+def _glass(g: ElementTree.Element, e: Element, attrs: dict[str, str],
+           shape: Polygon | None) -> None:
+    """Стекло окна поверх рамки: у окна не прямоугольником (gf#319) — контур, деление рамы внутри
+    него; у прямоугольного — деление рамы по рамке."""
+    box = (e.x_m, e.y_m, e.w_m, e.h_m)
+    if shape:
+        drawn = {"class": "window-shape", "points": points(shape), "fill": attrs["fill"]}
+        if "stroke" in attrs:
+            drawn["stroke"] = attrs["stroke"]
+        ElementTree.SubElement(g, "polygon", drawn)
+        if e.variant is not None:
+            _mullions(g, e, box, shapely.Polygon(shape))
+    elif e.variant is not None:
+        _mullions(g, e, box)
+
+
+def _shape(e: Element, room: shapely.Geometry | None) -> Polygon | None:
+    """Контур окна не прямоугольником — по его виду (gf#319); прямоугольное окно — None."""
+    if e.cls is not ElementClass.WINDOW:
+        return None
+    shape = window_shape.outline(e, room)
+    box = shapely.box(e.x_m, e.y_m, e.x_m + e.w_m, e.y_m + e.h_m)
+    return None if shapely.Polygon(shape).equals(box) else shape
+
+
+def _element(g: ElementTree.Element, e: Element, pen: Pen, zones: list[MaterialZone],
+             shape: Polygon | None = None) -> None:
     lib = pen.cfg.library
     attrs = {
         sheet_format.CLS: e.cls, sheet_format.ID: e.id,
@@ -321,11 +350,11 @@ def _element(g: ElementTree.Element, e: Element, pen: Pen, zones: list[MaterialZ
             attrs["stroke"] = pen.colors[e.material]
     framed = e.cls is ElementClass.CANOPY and pen.trim.canopy in (CanopyKind.GABLE,
                                                                    CanopyKind.BRACKET)
-    if framed:  # рисунок вида — не прямоугольник: прямоугольник остаётся только для разбора
+    if framed or shape:  # рисунок вида — не прямоугольник: прямоугольник остаётся для разбора
         attrs["class"] = "trim-frame"
     ElementTree.SubElement(g, "rect", attrs)
-    if e.cls is ElementClass.WINDOW and e.variant is not None:
-        _mullions(g, e, (e.x_m, e.y_m, e.w_m, e.h_m))
+    if e.cls is ElementClass.WINDOW:
+        _glass(g, e, attrs, shape)
     elif e.cls is ElementClass.DOOR and e.variant is not None:
         glass = _door_glass(e, pen.cfg.sheet.door)
         _box(g, "door-glass", glass).set("fill", lib.fill.glass)
@@ -383,13 +412,20 @@ def _canopy(g: ElementTree.Element, e: Element, kind: CanopyKind,
     return top
 
 
-def _mullions(g: ElementTree.Element, e: Element, glass: tuple[float, ...]) -> None:
-    """Деление стекла на створки — линии поверх него, в разбор не входят."""
+def _mullions(g: ElementTree.Element, e: Element, glass: tuple[float, ...],
+              inside: shapely.Polygon | None = None) -> None:
+    """Деление стекла на створки — линии поверх него, в разбор не входят; у окна не
+    прямоугольником — в пределах контура (inside)."""
     v, (x0, y0, w, h) = e.variant, glass
-    for x in (x0 + w * i / v.cols for i in range(1, v.cols)):
-        add_line(g, "mullion", (x, y0), (x, y0 + h))
-    for y in (y0 + h * j / v.rows for j in range(1, v.rows)):
-        add_line(g, "mullion", (x0, y), (x0 + w, y))
+    lines = [((x, y0), (x, y0 + h)) for x in (x0 + w * i / v.cols for i in range(1, v.cols))]
+    lines += [((x0, y), (x0 + w, y)) for y in (y0 + h * j / v.rows for j in range(1, v.rows))]
+    for a, b in lines:
+        if inside is not None:
+            cut = inside.intersection(shapely.LineString([a, b]))
+            if cut.is_empty or cut.geom_type != "LineString":
+                continue
+            a, b = cut.coords[0], cut.coords[-1]
+        add_line(g, "mullion", a, b)
 
 
 def _door_glass(e: Element, look: DoorLook) -> tuple[float, float, float, float]:

@@ -37,7 +37,7 @@ import numpy
 import shapely
 from pydantic import Field, ValidationError
 
-from genfacade import derive, roof
+from genfacade import derive, roof, window_shape
 from genfacade.config import Config, Manual
 from genfacade.datasets import rect_house, store
 from genfacade.schema import (
@@ -60,6 +60,7 @@ from genfacade.schema import (
     Source,
     Split,
     Trim,
+    VariantKind,
     ZoneRole,
 )
 from genfacade.validate import errors, validate
@@ -224,7 +225,11 @@ def _in_gable(x: Element, length: float, above: Polygon | None, spec: HouseSpec,
     if above is None or x.y_m + x.h_m <= spec.eaves_m + EPS or x.cls not in GABLE_CLASSES:
         return None
     wall = roof.wall_shape(length, spec.eaves_m, above).buffer(cfg.gable_tol_m)
-    if not wall.contains(shapely.box(x.x_m, x.y_m, x.x_m + x.w_m, x.y_m + x.h_m)):
+    box = shapely.box(x.x_m, x.y_m, x.x_m + x.w_m, x.y_m + x.h_m)
+    if window_shape.kind(x) is VariantKind.SLOPE:  # рамка по скату — контур срезан скатом (gf#319)
+        if wall.intersection(box).area < cfg.inside_share * box.area:
+            return None
+    elif not wall.contains(box):
         return None
     return x.model_copy(update={"floor": spec.floors + 1})
 
@@ -424,5 +429,5 @@ def run(cfg: Config) -> Path:
 
 def gable_windows(sheet: FacadeSheet) -> int:
     """Окон во фронтоне у дома — окон этажа под скатом (gf#321)."""
-    return sum(e.cls is ElementClass.WINDOW and (e.floor or 1) > sheet.spec.floors
+    return sum(e.cls is ElementClass.WINDOW and roof.under_roof(e, sheet.spec.floors)
                for f in sheet.facades for e in f.elements)

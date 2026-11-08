@@ -16,8 +16,20 @@ import shapely
 from genfacade import roof
 from genfacade.config import Config
 from genfacade.datasets.synthetic.plan import on_grid
-from genfacade.schema import EPS, Element, ElementClass, FacadeSheet, RoofKind, VariantKind
+from genfacade.schema import (
+    EPS,
+    Element,
+    ElementClass,
+    FacadeSheet,
+    OpeningVariant,
+    RoofKind,
+    VariantKind,
+)
 from genfacade.train import tokens
+
+# Сдвиги ряда окон в шагах сетки, по порядку: ось конька, рядом. Протокол поиска места, а не
+# настройка: двух шагов в каждую сторону хватает, чтобы уйти от почти совпавшей оси окна этажа.
+AXIS_SHIFTS = (0, 1, -1, 2, -2)
 
 
 def windows(rng: random.Random, sheet: FacadeSheet, cfg: Config) -> list[list[Element]]:
@@ -77,8 +89,8 @@ def _fit(rng: random.Random, k: int, count: int, at: tuple[float, float],
         rows = []
         for t in templates:
             base = [round(round(x / grid) * grid, 3) for x in _row(n, apex, t.w_m, gap)]
-            for shift in (0, grid, -grid, 2 * grid, -2 * grid):
-                xs = [round(x + shift, 3) for x in base]
+            for shift in AXIS_SHIFTS:
+                xs = [round(x + shift * grid, 3) for x in base]
                 if all(room.contains(_box((x, y, t.w_m, t.h_m))) for x in xs) and not any(
                         cfg.checks.eps_m < abs(x + t.w_m / 2 - a) <= cfg.checks.align_m + grid
                         for x in xs for a in axes):  # запас в шаг: окна этажа сетка сдвигает
@@ -86,10 +98,24 @@ def _fit(rng: random.Random, k: int, count: int, at: tuple[float, float],
                     break
         if rows:
             t, xs = rng.choice(rows)
+            variant = _shaped(rng, t.variant, cfg)
             return [Element(id=f"g{k}_{i + 1}", cls=ElementClass.WINDOW, x_m=x, y_m=y,
-                            w_m=t.w_m, h_m=t.h_m, floor=floor, variant=t.variant)
+                            w_m=t.w_m, h_m=t.h_m, floor=floor, variant=variant)
                     for i, x in enumerate(xs)]
     return []
+
+
+def _shaped(rng: random.Random, variant: OpeningVariant | None,
+            cfg: Config) -> OpeningVariant | None:
+    """Вид окна во фронтоне по форме (gf#319): как у окна этажа или арка, круг — по весам."""
+    shapes = cfg.synthetic.facade.gable.shapes
+    if not shapes:
+        return variant
+    kind = rng.choices(list(shapes), list(shapes.values()))[0]
+    if kind is VariantKind.REGULAR:
+        return variant
+    base = variant or OpeningVariant()
+    return base.model_copy(update={"kind": kind})
 
 
 def _row(n: int, apex: float, w: float, gap: float) -> list[float]:

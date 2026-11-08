@@ -454,6 +454,7 @@ class GableWindows(Section):
     share: float               # доля домов с двускатной крышей, у которых они есть; 0 — ни у кого
     count_weights: list[float]  # веса 0, 1, 2, 3 окон на щипцовой стене
     sill_m: tuple[float, float]  # низ окна над карнизом, от и до
+    shapes: dict[VariantKind, float] = {}  # вид окна во фронтоне по форме → вес (gf#319)
 
 
 class FacadeRules(Section):

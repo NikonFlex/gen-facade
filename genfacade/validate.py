@@ -17,7 +17,7 @@ from xml.etree import ElementTree
 
 import shapely
 
-from genfacade import roof
+from genfacade import roof, window_shape
 from genfacade.config import Checks
 from genfacade.derive import TRIM_OF
 from genfacade.render.parse import parse_sheet_svg
@@ -120,8 +120,23 @@ def _outside(f: SideFacade, above: Polygon | None, spec: HouseSpec,
     if above is not None:
         wall = wall.union(roof.wall_shape(f.side.length_m, spec.eaves_m, above))
     wall = wall.buffer(cfg.eps_m, join_style="mitre")
+    room = _room(f, above, spec, cfg)
     return [_v(f, Rule.OUTSIDE, e, f"{e.cls} {e.id} выходит за силуэт стены")
-            for e in f.elements if not wall.contains(_box(e))]
+            for e in f.elements if not wall.contains(_drawn(e, room))]
+
+
+def _room(f: SideFacade, above: Polygon | None, spec: HouseSpec,
+          cfg: Checks) -> shapely.Geometry | None:
+    return None if above is None else roof.room(f.side.length_m, spec.eaves_m, above,
+                                                cfg.slope_offset_m)
+
+
+def _drawn(e: Element, room: shapely.Geometry | None) -> shapely.Polygon:
+    """Что элемент занимает на стене: рамка, а у окна — контур по виду (окно по скату — рамка,
+    срезанная скатом, gf#319)."""
+    if e.cls is not ElementClass.WINDOW:
+        return _box(e)
+    return shapely.Polygon(window_shape.outline(e, room))
 
 
 def _slope(f: SideFacade, above: Polygon | None, spec: HouseSpec,
@@ -130,11 +145,12 @@ def _slope(f: SideFacade, above: Polygon | None, spec: HouseSpec,
     пересекающее скат, — ещё и `outside`."""
     if above is None:
         return []
-    room = roof.room(f.side.length_m, spec.eaves_m, above, cfg.slope_offset_m).buffer(cfg.eps_m)
+    room = _room(f, above, spec, cfg)
+    wide = room.buffer(cfg.eps_m)
     near = f"ближе {cfg.slope_offset_m:.2f} м к скату"
     return [_v(f, Rule.SLOPE, e, f"окно {e.id} во фронтоне {near}")
-            for e in f.elements if e.cls is ElementClass.WINDOW
-            and e.y_m + e.h_m > spec.eaves_m + cfg.eps_m and not room.contains(_box(e))]
+            for e in f.elements if roof.over_eaves(e, spec.eaves_m + cfg.eps_m)
+            and not wide.contains(_drawn(e, room))]
 
 
 def _overlaps(f: SideFacade, cfg: Checks) -> list[Violation]:
