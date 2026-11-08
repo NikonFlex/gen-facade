@@ -86,15 +86,21 @@ export class HouseStage {
     this.scene.add(roof, this._edges(THREE, geo, roof.position));
   }
 
-  // Скаты и стены над карнизом (gf#320): выпуклые многоугольники (x, y плана, высота) → веер
-  // треугольников; (x, y, h) плана → (x, h, −y) сцены, как у стен.
+  // Скаты и стены над карнизом (gf#320): многоугольники (x, y плана, высота) → треугольники
+  // (стены над карнизом выпуклые — веер, скаты — по плану); (x, y, h) плана → (x, h, −y) сцены, как у стен.
   _slopes(THREE, roof) {
     const parts = [[roof.faces, roof.color || this.look.roof], [roof.above, roof.wall || this.look.roof]];
     for (const [shapes, color] of parts) {
       for (const shape of shapes) {
         const points = shape.map(([x, y, h]) => new THREE.Vector3(x, h, -y));
         const fan = [];
-        for (let i = 1; i + 1 < points.length; i++) fan.push(points[0], points[i], points[i + 1]);
+        if (shapes === roof.faces) {
+          // скат плоский, но после обрыва на стене соседней части не обязательно выпуклый: по плану
+          const flat = shape.map(([x, y]) => new THREE.Vector2(x, y));
+          for (const tri of THREE.ShapeUtils.triangulateShape(flat, [])) fan.push(...tri.map((i) => points[i]));
+        } else {
+          for (let i = 1; i + 1 < points.length; i++) fan.push(points[0], points[i], points[i + 1]);
+        }
         const geo = new THREE.BufferGeometry().setFromPoints(fan);
         geo.computeVertexNormals();
         const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }));

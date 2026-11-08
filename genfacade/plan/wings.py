@@ -44,8 +44,14 @@ def _split(shape: shapely.Polygon) -> list[shapely.Polygon]:
         return [shape]
     cuts = [c for v, horizontal in product(_reflex(shape), (True, False))
             if len(c := _cut(shape, v, horizontal)) > 1]
-    best = max(cuts, key=lambda pieces: max(p.area for p in pieces))  # max берёт первый из равных
+    best = max(cuts, key=lambda pieces: max(_size(p) for p in pieces))  # max берёт первый из равных
     return [r for piece in best for r in _split(piece)]
+
+
+def _size(shape: shapely.Polygon) -> float:
+    """Площадь для сравнения кусков: до мм², чтобы шум float у равных по площади кусков не менял
+    разбиение — оно одно для контура в любом сдвиге (план и углы развёртки, gf#322)."""
+    return round(shape.area, 6)
 
 
 def _reflex(shape: shapely.Polygon) -> list[Point]:
@@ -65,7 +71,7 @@ def _cut(shape: shapely.Polygon, at: Point, horizontal: bool) -> list[shapely.Po
     dx, dy = (FAR, 0.0) if horizontal else (0.0, FAR)
     line = shapely.LineString([(at[0] - dx, at[1] - dy), (at[0] + dx, at[1] + dy)])
     pieces = [p.simplify(0) for p in ops.split(shape, line).geoms if p.area > EPS]
-    return sorted(pieces, key=lambda p: (-p.area, p.bounds))
+    return sorted(pieces, key=lambda p: (-_size(p), p.bounds))
 
 
 def edge_runs(a: Point, b: Point, wing_rects: list[Rect]) -> list[tuple[int, float, float]]:

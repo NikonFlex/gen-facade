@@ -7,7 +7,7 @@ import pytest
 import shapely
 from simple_house import L_SHAPE, SIMPLE, U_SHAPE
 
-from genfacade import config, parts, pipeline
+from genfacade import config, parts, pipeline, roof
 from genfacade.models import stub
 from genfacade.plan.preprocess import preprocess
 from genfacade.plan.wings import wings
@@ -21,7 +21,9 @@ from genfacade.schema import (
     FixedField,
     MaterialZone,
     Mode,
+    Opening,
     OpeningKind,
+    Rect,
     Rule,
     SideFacade,
     ZoneRole,
@@ -295,6 +297,40 @@ def test_zone_ending_at_part_boundary_is_anchored(plain_model):
     assert not [v for v in found if v.rule is Rule.FINISH]
 
 
+def straddling(width: float, x: float = 7.0) -> FacadeSheet:
+    """Дом, у которого на южной стене проём плана лежит через границу частей (x = 7,95 м)."""
+    sheet = bare()
+    south = sheet.facades[0]
+    opening = Opening(kind=OpeningKind.WINDOW, x_m=x, width_m=width)
+    side = south.side.model_copy(update={"openings": [opening], "has_entrance": False})
+    return sheet.model_copy(update={"facades": [south.model_copy(update={"side": side}),
+                                                *sheet.facades[1:]]})
+
+
+def test_opening_on_part_boundary_goes_to_part_with_bigger_share(plain_model):
+    """Проём 1,5 м с x = 7: 0,95 м у главной части, 0,55 м — у нижней; он отдан главной, обрезан
+    по её краю, и конвейер не бракует план (`facade: Части дома`)."""
+    sheet = straddling(1.5)
+    subs = parts.sub_sheets(sheet)
+    (high, _), (low, _) = (subs[n] for n in sorted(subs, reverse=True))
+    assert [(o.x_m, o.width_m) for o in high.facades[0].side.openings] == [
+        (pytest.approx(7.0), pytest.approx(0.95))]
+    assert not low.facades[0].side.openings
+    made = pipeline.layout(sheet, pipeline.PlanRun(plan="l", text=TWO_PARTS), CFG)
+    assert Rule.PLAN_OPENING not in {v.rule for v in made.violations}
+    window = next(e for e in made.sheet.facades[0].elements if e.x_m == pytest.approx(7.0))
+    assert window.w_m == pytest.approx(0.95)
+
+
+def test_opening_with_bigger_share_in_lower_part_goes_there(plain_model):
+    """Проём 1,5 м с x = 7,5: 0,45 м у главной, 1,05 м — у нижней: отдан нижней."""
+    sheet = straddling(1.5, 7.5)
+    subs = parts.sub_sheets(sheet)
+    low = subs[min(subs)][0]
+    assert [(o.x_m, o.width_m) for o in low.facades[0].side.openings] == [
+        (pytest.approx(0.0), pytest.approx(1.05))]
+
+
 def test_window_heads_are_compared_within_a_part(plain_model):
     """Верх окон первого этажа у главной и нижней частей — разный (каждая часть держит свою
     линию), предупреждение «верх на разной высоте» — только внутри части."""
@@ -312,16 +348,113 @@ def test_window_heads_are_compared_within_a_part(plain_model):
 # ——— 3D ———
 
 
+def in_3d(made: pipeline.Checked):
+    """Дом объёмом: собранный дом, его данные для просмотра, карниз высокой и нижней частей."""
+    high, low = (r.eaves_m for r in made.sheet.facades[0].runs)
+    return made, house_3d(made.sheet, CFG), high, low
+
+
 def test_house_3d_walls_and_roof_follow_parts(plain_model):
     """В 3D стена — до верха своей высокой части, над нижней частью текстура прозрачна, плита
     кровли — над каждой частью на её карнизе."""
-    made = laid_out()
-    data = house_3d(made.sheet, CFG)
-    high, low = (r.eaves_m for r in made.sheet.facades[0].runs)
+    made, data, high, low = in_3d(laid_out())
     assert [w["height_m"] for w in data["walls"]] == [high, high, high, high, low, low]
     assert 'class="background"' not in data["walls"][0]["svg"]
     assert 'class="background"' in data["walls"][1]["svg"]
+    assert not data["roof"].get("slabs")  # скатная крыша (по умолчанию двускатная) — скаты частей
+    tops = sorted({round(z, 3) for face in data["roof"]["faces"] for _, _, z in face})
+    assert low - 0.5 < min(tops) <= low and max(tops) > high  # свес опускает кромку ниже карниза
+
+
+def test_flat_roof_of_parts_is_slab_per_part(plain_model):
+    """Плоская крыша дома из частей — плита над каждой частью на её карнизе, как до скатов."""
+    flat = TWO_PARTS + " Flat roof."
+    made = pipeline.layout(bare(flat), pipeline.PlanRun(plan="l", text=flat), CFG)
+    _, data, high, low = in_3d(made)
     assert sorted(s["height_m"] for s in data["roof"]["slabs"]) == [low, high]
+
+
+# ——— скаты над частями (gf#322) ———
+
+
+GABLE = TWO_PARTS + " Gable roof."
+
+
+def gable_house() -> tuple[FacadeSheet, roof.HouseRoof]:
+    sheet = bare(GABLE)
+    return sheet, roof.roofs(sheet)
+
+
+def test_each_part_has_its_own_slopes_at_its_own_eaves():
+    """Г-дом 2 и 1 этаж: у каждой части скаты от её карниза; конёк нижней — ниже карниза верхней."""
+    sheet, house = gable_house()
+    main, wing = house.parts
+    assert (main.eaves, wing.eaves) == (pytest.approx(6.0), pytest.approx(3.25))
+    assert main.slopes and wing.slopes
+    ridge = {k: max(z for _, face in roof.faces(line) for _, _, z in face)
+             for k, line in enumerate(house.parts)}
+    assert ridge[0] > main.eaves and ridge[1] > wing.eaves
+    assert ridge[1] < main.eaves  # конёк нижней части ниже карниза верхней
+
+
+def test_roof_of_lower_part_ends_at_wall_of_higher():
+    """Кровля нижней части не заходит за стену верхней: ни одна её точка не над крылом верхней."""
+    _, house = gable_house()
+    main = shapely.Polygon(house.parts[0].corners)
+    wing_faces = roof.faces(house.parts[1], roof._area(house, 1))
+    assert wing_faces
+    for _, face in wing_faces:
+        assert shapely.Polygon([(x, y) for x, y, _ in face]).intersection(main).area < EPS
+
+
+def test_junction_is_on_wall_of_higher_part():
+    """Примыкание — на стене верхней части: линия кровли нижней на её плоскости, а выше — стена."""
+    sheet, house = gable_house()
+    (joint,) = roof.joints(house)
+    wall_x = house.parts[0].corners[1][0]  # восточная грань главного крыла
+    assert {round(x, 6) for x, _, _ in joint.seam} == {round(wall_x, 6)}
+    assert joint.normal == pytest.approx((1.0, 0.0))
+    assert min(z for w in joint.walls for _, _, z in w) >= house.parts[1].eaves - EPS
+    assert max(z for w in joint.walls for _, _, z in w) > house.parts[0].eaves  # щипец главной
+    east = next(k for k, f in enumerate(sheet.facades) if f.side.length_m == pytest.approx(3.0))
+    svg = sheet_svg(sheet, CFG)
+    assert svg.count('class="outline joint"') == 1
+    group = svg.split(f'data-side="{east}"')[1].split("</g>")[0]
+    assert 'class="outline joint"' in group and 'class="above-eaves"' in group
+
+
+def test_stepped_house_with_pitched_roof_has_no_roof_flat_warning():
+    sheet, _ = gable_house()
+    assert Rule.ROOF_FLAT not in {v.rule for v in validate(sheet, CFG.checks)}
+    flat = bare(TWO_PARTS + " Flat roof.")
+    assert Rule.ROOF_FLAT not in {v.rule for v in validate(flat, CFG.checks)}  # плоская — нечего
+
+
+def test_hip_roof_of_each_part_rises_to_its_own_ridge():
+    sheet = bare(TWO_PARTS + " Hip roof.")
+    house = roof.roofs(sheet)
+    # у нижней части скат не идёт от стены верхней
+    assert len(house.parts[0].slopes) == 4 and len(house.parts[1].slopes) == 3
+    assert max(z for face in roof.house_faces(house) for _, _, z in face) > house.parts[0].eaves
+
+
+def test_jog_narrower_than_overhang_has_no_roof_of_its_own():
+    """Уступ контура уже свеса (у разметки — шум в сантиметры) крышу не несёт: он под соседними."""
+    sheet, house = gable_house()
+    jog = Rect(x0_m=0.0, y0_m=0.0, x1_m=5.0, y1_m=house.parts[0].overhang - 0.1)
+    line = roof._part_line(sheet, 0, jog, 3.0, 0.7, [])
+    assert not line.slopes and line.height((1.0, 0.1)) == pytest.approx(3.0)
+    assert roof._part_line(sheet, 0, Rect(x0_m=0.0, y0_m=0.0, x1_m=5.0, y1_m=2.0), 3.0, 0.7,
+                           []).slopes
+
+
+def test_roof_view_hides_part_behind_nearer_wall():
+    """С севера крыша крыла за главным не видна ниже карниза главного: на листе нет её скатов."""
+    sheet, house = gable_house()
+    north = next(k for k, f in enumerate(sheet.facades) if house.spans[k] == [roof.Span(
+        0.0, f.side.length_m, 0)] and math.dist(f.side.orientation, (0.0, 1.0)) < EPS)
+    shown = roof.house_view(house, north, 0.1)
+    assert all(y > house.parts[1].eaves for poly in shown for _, y in poly)
 
 
 # ——— прямоугольный дом — прежний ———

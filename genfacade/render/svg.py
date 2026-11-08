@@ -56,12 +56,13 @@ def pen_for(sheet: FacadeSheet, cfg: Config) -> Pen:
 class Top(NamedTuple):
     """Что над карнизом стены (roof.py, gf#320): стена выше карниза и кровля на виде."""
 
-    above: Polygon | None = None
+    above: list[Polygon] = []
     roof: list[Polygon] = []
+    seams: list[list[Point]] = []  # линии примыкания кровли нижней части к стене верхней (gf#322)
 
     def height(self, facade: SideFacade) -> float:
         """Верх рисунка стороны: силуэт стены, стена над карнизом и кровля."""
-        shapes = [facade.silhouette or [], self.above or [], *self.roof]
+        shapes = [facade.silhouette or [], *self.above, *self.roof]
         return max(y for shape in shapes for _, y in shape)
 
 
@@ -71,11 +72,15 @@ NOTHING_ABOVE = Top()  # плоская крыша: над карнизом ни
 
 def tops(sheet: FacadeSheet, cfg: Config) -> list[Top]:
     """Что над карнизом у каждой стороны листа; скаты не строятся — пусто."""
-    line = roof.roofline(sheet)
-    if line is None:
+    house = roof.roofs(sheet)
+    if house is None:
         return [NOTHING_ABOVE for _ in sheet.facades]
-    return [Top(roof.above_eaves(line, k), roof.roof_view(line, k, cfg.sheet.roof.thickness_m))
-            for k in range(len(sheet.facades))]
+    out = []
+    for k in range(len(sheet.facades)):
+        walls, seams = roof.joint_view(house, k)
+        out.append(Top(roof.house_above(house, k) + walls,
+                       roof.house_view(house, k, cfg.sheet.roof.thickness_m), seams))
+    return out
 
 
 class Marks(NamedTuple):
@@ -254,14 +259,16 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
         _zone(g, z, pen)
     # Контур — до элементов: карниз у края стены ложится поверх линии, а не под неё.
     ElementTree.SubElement(g, "polygon", {"class": "outline", "points": silhouette})
-    if top.above:  # стена над карнизом — основной отделкой, как стена под ним
-        ElementTree.SubElement(g, "polygon", {"class": "above-eaves", "points": points(top.above),
+    for shape in top.above:  # стена над карнизом — основной отделкой, как стена под ним
+        ElementTree.SubElement(g, "polygon", {"class": "above-eaves", "points": points(shape),
                                               "fill": _main(pen)})
     for e in facade.elements:
         _element(g, e, pen, facade.zones)
     for shape in top.roof:  # кровля — поверх: свес закрывает верх стены
         ElementTree.SubElement(g, "polygon", {"class": "roof", "points": points(shape),
                                               "fill": _roof_fill(pen)})
+    for seam in top.seams:  # примыкание кровли нижней части к стене верхней
+        ElementTree.SubElement(g, "polyline", {"class": "outline joint", "points": points(seam)})
     return g
 
 

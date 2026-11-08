@@ -70,12 +70,12 @@ def _roof(sheet: FacadeSheet, pen: Pen, corners: list[Point], look: House3d) -> 
     не строятся — пусто, просмотр кладёт плоскую крышу по контуру `flat`: он шире плана на вынос
     карниза, если карниз на доме есть, — плита закрывает его сверху, а не он торчит из-под неё.
     Цвет кровли — материала крыши, если он в палитре (нет — цвет крыши просмотра)."""
-    line = roof.roofline(sheet)
-    if line is None and parts.stepped(sheet):
+    house = roof.roofs(sheet)
+    if house is None and parts.stepped(sheet):
         slabs = [{"shape": shape, "height_m": h} for shape, h in parts.slabs(sheet, corners)]
         return {"faces": [], "above": [], "color": None, "wall": None, "flat": None,
                 "slabs": slabs}
-    if line is None:
+    if house is None:
         cornice = any(e.cls is ElementClass.CORNICE for f in sheet.facades for e in f.elements)
         out = look.relief_cls.get(ElementClass.CORNICE, 0.0) if cornice else 0.0
         flat = shapely.Polygon(corners).buffer(out, join_style="mitre") if out else None
@@ -83,10 +83,11 @@ def _roof(sheet: FacadeSheet, pen: Pen, corners: list[Point], look: House3d) -> 
                 "flat": list(flat.exterior.coords)[:-1] if flat else corners}
     above = []
     for k in range(len(sheet.facades)):
-        if (shape := roof.above_eaves(line, k)) is not None:
-            left, u, _ = roof.wall_axis(line, k)
+        left, u, _ = roof.axis(house.corners, k)
+        for shape in roof.house_above(house, k):
             above.append([(left[0] + u[0] * x, left[1] + u[1] * x, y) for x, y in shape])
-    return {"faces": [face for _, face in roof.faces(line)], "above": above, "flat": None,
+    above += [wall for joint in roof.joints(house) for wall in joint.walls]
+    return {"faces": roof.house_faces(house), "above": above, "flat": None,
             "color": pen.colors.get(pen.roof or ""), "wall": pen.colors.get(PaletteRole.MAIN)}
 
 
