@@ -11,7 +11,7 @@ from collections import Counter
 
 from genfacade.config import Config
 from genfacade.datasets import store
-from genfacade.schema import DataAttr, Source
+from genfacade.schema import DataAttr, PaletteRole, Source
 
 # Признаки считаются для корпуса, где они есть в каждом примере; у остальных наборов — опись.
 CORPUS = Source.SYNTHETIC
@@ -77,7 +77,7 @@ def _label(attr: DataAttr, value: str, cfg: Config) -> str:
 
 def _attrs(sample: dict) -> dict[DataAttr, str]:
     spec = sample["sheet"]["spec"]
-    main = next(m for m in spec["materials"] if m["id"] == "main")
+    main = next(m for m in spec["materials"] if m["id"] == PaletteRole.MAIN)
     roof = spec["roof"]
     return {DataAttr.SIDES: str(len(sample["sheet"]["facades"])),
             DataAttr.FLOORS: str(spec["floors"]),
