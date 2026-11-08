@@ -9,8 +9,8 @@ import tiny_model
 
 from genfacade.datasets.synthetic import batch
 from genfacade.metrics import table
-from genfacade.schema import Device, Mode, OpeningKind, Rule, Source, Split
-from genfacade.train import corpus, evaluate, fit
+from genfacade.schema import Device, Mode, OpeningKind, Rule, Source, Split, Trim
+from genfacade.train import corpus, evaluate, fit, tokens
 
 # долгий: torch — вне быстрой проверки перед коммитом (gf#165)
 pytestmark = pytest.mark.slow
@@ -94,10 +94,13 @@ def test_eval_dumps_sheets_for_metrics(setup, tmp_path):
 def test_independent_sides_take_their_own_house_parameters(setup, monkeypatch):
     """Ablation «независимые стороны» (gf#163): стена k — с параметрами другого дома val того
     же режима; где высоты стен разошлись, валидатор видит несходящиеся углы. Ответы модели
-    подменены ответом генератора: расхождение — только от чужих параметров."""
+    подменены ответом генератора без признаков выводимых элементов: признак вида, которого у
+    дома-донора нет, ответ не разбирает (у модели его не даёт страж) — расхождение только от
+    чужих высот."""
     data, group = _val(setup)
     ev = evaluate.Evaluation(data, group, setup)
-    answers = [c.reference for c in group for _ in c.bare.facades]
+    trims = {ev.words.index(tokens.tok(t)) for t in Trim}
+    answers = [[i for i in c.reference if i not in trims] for c in group for _ in c.bare.facades]
     monkeypatch.setattr(evaluate, "_answers", lambda sampler, prompts, cfg: (answers, 0.0))
     judged = evaluate.independent(ev, None, setup)
     for case, j in zip(group, judged, strict=True):
