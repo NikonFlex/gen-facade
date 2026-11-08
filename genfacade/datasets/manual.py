@@ -34,9 +34,10 @@ from pathlib import Path
 import numpy
 from pydantic import Field, ValidationError
 
-from genfacade import derive, roof
+from genfacade import derive, parts, roof
 from genfacade.config import Config, Manual
 from genfacade.datasets import rect_house, store
+from genfacade.plan.wings import edge_runs, wings
 from genfacade.schema import (
     EPS,
     BuildingType,
@@ -50,14 +51,17 @@ from genfacade.schema import (
     Model,
     OpeningVariant,
     PaletteRole,
+    Rect,
     Roof,
     RoofKind,
     Sample,
     Source,
     Split,
     Trim,
+    WallRun,
     ZoneRole,
 )
+from genfacade.unfold import unfold
 from genfacade.validate import errors, validate
 
 
@@ -200,21 +204,26 @@ def ids(source: str, rules: Manual) -> set[str]:
 
 def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
     """Пример дома и сколько элементов обрезано целиком (за карнизом или углом)."""
-    _one_eaves(m, cfg)
     fp = _outline(m, cfg)
     lengths = [w.length for w in fp.walls]
+    ring = [(float(v[0]) + 0.0, float(v[1]) + 0.0) for v in fp.vertices]
+    rects, found = _levels(m, ring, lengths, cfg)
+    runs = [parts.side_runs(k, lengths[k], ring[k], ring[(k + 1) % len(ring)], rects, found)
+            if found else [] for k in range(len(m.sides))]
     spec = _spec(m)
     laid, dropped = [], 0
     for k, e in enumerate(m.sides):
         elements = _side_elements(e, m, spec)
-        kept = [x for x in (_clipped(x, lengths[k], spec, cfg) for x in elements) if x]
+        kept = [x for x in (_clipped(x, lengths[k], spec, cfg, runs[k]) for x in elements) if x]
         dropped += len(elements) - len(kept)
         laid.append((k, _linked(kept, cfg.link_tol_m)))
     spec = spec.model_copy(update={"trim": _trim([xs for _, xs in laid], cfg.trim)})
     plan, sheet = rect_house.assemble(spec, fp, laid, Source.MANUAL)
-    facades = [f.model_copy(update={"zones": _zones(e, m, spec, f.side.length_m)})
-               for f, e in zip(sheet.facades, m.sides, strict=True)]
+    facades = [f.model_copy(update={"zones": _zones(e, m, spec, f.side.length_m, r), "runs": r})
+               for f, e, r in zip(sheet.facades, m.sides, runs, strict=True)]
     sheet = sheet.model_copy(update={"facades": facades})
+    if found:  # силуэт — ступенями по участкам, крылья — в плане (шаг 2)
+        sheet, plan = unfold(sheet), plan.model_copy(update={"wings": rects})
     sheet, bare = _no_eaves(sheet)
     return (Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet),
             dropped + bare)
@@ -232,20 +241,66 @@ def _no_eaves(sheet: FacadeSheet) -> tuple[FacadeSheet, int]:
     return sheet.model_copy(update={"facades": facades}), bare
 
 
-def _one_eaves(m: Markup, cfg: Manual) -> None:
-    """Участки карниза — на стене своей стороны; у всех этажность и отметка дома, иначе у дома
-    части разной высоты, а модуль держит один карниз на дом (`facade: Общие параметры дома`)."""
-    floors = len(m.floor_heights)
-    for e in m.sides:
-        tol = cfg.length_tol_m / m.m_per_unit * m.scale(e)
-        line = e.floor - sum(m.floor_heights) * m.scale(e)
-        for s in e.eaves:
-            if s.x[0] < e.wall[0] - tol or s.x[1] > e.wall[1] + tol:
-                raise BadMarkup(f"{m.id}: {e.view}: участок карниза за краем стены")
-            off = abs(s.y - line) / m.scale(e) * m.m_per_unit
-            if s.floors != floors or off > cfg.eaves_tol_m:
-                raise Unsupported(f"{m.id}: части разной высоты — {e.view}: карниз над {s.floors} "
-                                  f"эт., {off:.2f} м от карниза дома; модуль держит один (gf#322)")
+def _levels(m: Markup, ring: list[Point], lengths: list[float], cfg: Manual
+            ) -> tuple[list[Rect], list[parts.Level]]:
+    """Крылья контура и этажность с карнизом каждого — по участкам карниза разметки; дом без
+    ступеней — ([], []). Участок стороны лежит на крыле (`edge_runs`), его отметку несут участки
+    карниза, заходящие на него дальше `length_tol_m`; у крыла все участки одной отметки, иначе
+    части не ложатся на крылья (ступень внутри крыла, крыло в две отметки) — `Unsupported`.
+    Отметка в пределах `eaves_tol_m` от карниза дома — карниз дома."""
+    base = parts.Level(len(m.floor_heights), _spec(m).eaves_m)
+    rects = wings(ring)
+    seen: dict[int, list[parts.Level]] = {}
+    for k, e in enumerate(m.sides):
+        marks = _marks(m, e, base, cfg)
+        for part, t0, t1 in edge_runs(ring[k], ring[(k + 1) % len(ring)], rects) or [
+                (0, 0.0, lengths[k])]:
+            x0, x1 = lengths[k] - t1, lengths[k] - t0
+            found = {lv for (a, b), lv in marks if min(b, x1) - max(a, x0) > cfg.length_tol_m}
+            if len(found) > 1:
+                raise Unsupported(f"{m.id}: части разной высоты — {e.view}: на одном участке "
+                                  f"стены {len(found)} отметок карниза; модуль держит одну на "
+                                  f"крыло (gf#322)")
+            seen.setdefault(part, []).extend(found)
+    levels = [_one_level(m, seen.get(k, []), base, cfg) for k in range(len(rects) or 1)]
+    if not rects and levels != [base]:
+        raise Unsupported(f"{m.id}: части разной высоты — ступень внутри прямоугольного контура: "
+                          f"карниз над {levels[0].floors} эт., {levels[0].eaves_m:.2f} м; "
+                          f"крыльев в контуре нет (gf#322)")
+    return (rects, levels) if len({lv.eaves_m for lv in levels}) > 1 else ([], [])
+
+
+def _marks(m: Markup, e: Elevation, base: parts.Level, cfg: Manual
+           ) -> list[tuple[Point, parts.Level]]:
+    """Участки карниза стороны в метрах стены: (x0, x1) и этажность с отметкой; отметка около
+    карниза дома — он сам."""
+    unit, out = m.m_per_unit / m.scale(e), []
+    for s in e.eaves:
+        tol = cfg.length_tol_m / unit
+        if s.x[0] < e.wall[0] - tol or s.x[1] > e.wall[1] + tol:
+            raise BadMarkup(f"{m.id}: {e.view}: участок карниза за краем стены")
+        eaves = m.plinth * m.m_per_unit + (e.floor - s.y) * unit
+        level = parts.Level(s.floors, eaves)
+        out.append((((s.x[0] - e.wall[0]) * unit, (s.x[1] - e.wall[0]) * unit),
+                    base if _same(level, base, cfg) else level))
+    return out
+
+
+def _same(a: parts.Level, b: parts.Level, cfg: Manual) -> bool:
+    return a.floors == b.floors and abs(a.eaves_m - b.eaves_m) <= cfg.eaves_tol_m
+
+
+def _one_level(m: Markup, seen: list[parts.Level], base: parts.Level, cfg: Manual
+               ) -> parts.Level:
+    """Этажность и карниз крыла по его участкам: без разметки — дом; две разные — отказ."""
+    if not seen:
+        return base
+    first = seen[0]
+    if any(not _same(lv, first, cfg) for lv in seen):
+        raise Unsupported(f"{m.id}: части разной высоты — на одном крыле отметки карниза "
+                          f"{sorted({(lv.floors, round(lv.eaves_m, 2)) for lv in seen})}; "
+                          f"модуль держит одну на крыло (gf#322)")
+    return first
 
 
 def _outline(m: Markup, cfg: Manual) -> rect_house.Footprint:
@@ -314,25 +369,42 @@ def _side_elements(e: Elevation, m: Markup, spec: HouseSpec) -> list[Element]:
     return out
 
 
-def _zones(e: Elevation, m: Markup, spec: HouseSpec, length: float) -> list[MaterialZone]:
-    """Зоны стены: цоколь от земли до чистого пола, основная — от него до карниза, вторая
-    отделка с листа — обрезанной по стене, как в синтетике (`synthetic.zones`)."""
-    zone, eaves = MaterialZone.rect, spec.eaves_m
+def _spans(spec: HouseSpec, length: float, runs: list[WallRun]) -> list[WallRun]:
+    """Участки стены: у дома без ступеней — вся стена до карниза дома."""
+    return runs or [WallRun(x0_m=0.0, x1_m=length, part=0, floors=spec.floors,
+                            eaves_m=spec.eaves_m)]
+
+
+def _zones(e: Elevation, m: Markup, spec: HouseSpec, length: float, runs: list[WallRun]
+           ) -> list[MaterialZone]:
+    """Зоны стены: цоколь от земли до чистого пола и основная — от него до карниза, у стены из
+    частей (gf#322) — по участку до его карниза; вторая отделка с листа — обрезанной по участку,
+    как в синтетике (`synthetic.zones`)."""
+    zone, spans = MaterialZone.rect, _spans(spec, length, runs)
     plinth = spec.plinth_m if m.plinth_material is not None else 0.0
-    out = [zone(ZoneRole.PLINTH, PaletteRole.PLINTH, (0.0, 0.0, length, plinth))] if plinth else []
-    out.append(zone(ZoneRole.MAIN, PaletteRole.MAIN, (0.0, plinth, length, eaves)))
+    out = []
+    for r in spans:
+        if plinth:
+            out.append(zone(ZoneRole.PLINTH, PaletteRole.PLINTH, (r.x0_m, 0.0, r.x1_m, plinth)))
+        out.append(zone(ZoneRole.MAIN, PaletteRole.MAIN, (r.x0_m, plinth, r.x1_m, r.eaves_m)))
     for z in e.zones:
         x0, y0, x1, y1 = _metres(z.box, e, m, spec)
-        box = (max(x0, 0.0), max(y0, 0.0), min(x1, length), min(y1, eaves))
-        if box[2] > box[0] + EPS and box[3] > box[1] + EPS:
-            out.append(zone(z.role, PaletteRole.ACCENT, box))
+        for r in spans:
+            box = (max(x0, r.x0_m), max(y0, 0.0), min(x1, r.x1_m), min(y1, r.eaves_m))
+            if box[2] > box[0] + EPS and box[3] > box[1] + EPS:
+                out.append(zone(z.role, PaletteRole.ACCENT, box))
     return out
 
 
-def _clipped(x: Element, length: float, spec: HouseSpec, cfg: Manual) -> Element | None:
-    """Обрезать по стене до карниза; внутри меньше inside_share — элемента нет."""
-    x0, y0 = max(x.x_m, 0.0), max(x.y_m, 0.0)
-    x1, y1 = min(x.x_m + x.w_m, length), min(x.y_m + x.h_m, spec.eaves_m)
+def _clipped(x: Element, length: float, spec: HouseSpec, cfg: Manual,
+             runs: list[WallRun]) -> Element | None:
+    """Обрезать по стене до карниза её части (у стены из частей — участка, где центр элемента);
+    внутри меньше inside_share — элемента нет."""
+    spans = _spans(spec, length, runs)
+    centre = x.x_m + x.w_m / 2
+    r = next((r for r in spans if centre <= r.x1_m + EPS), spans[-1])
+    x0, y0 = max(x.x_m, r.x0_m), max(x.y_m, 0.0)
+    x1, y1 = min(x.x_m + x.w_m, r.x1_m), min(x.y_m + x.h_m, r.eaves_m)
     if x1 <= x0 or y1 <= y0 or (x1 - x0) * (y1 - y0) < cfg.inside_share * x.w_m * x.h_m:
         return None
     return x.model_copy(update={"x_m": x0, "y_m": y0, "w_m": x1 - x0, "h_m": y1 - y0})

@@ -15,7 +15,7 @@ from xml.etree import ElementTree
 
 import shapely
 
-from genfacade import roof
+from genfacade import parts, roof
 from genfacade.config import Checks
 from genfacade.derive import TRIM_OF
 from genfacade.render.parse import parse_sheet_svg
@@ -224,11 +224,12 @@ def _forbidden(f: SideFacade, cfg: Checks) -> list[Violation]:
 
 
 def _plan_openings(f: SideFacade, cfg: Checks) -> list[Violation]:
-    """Каждый проём плана — на первом этаже с теми же x и шириной."""
+    """Каждый проём плана — на первом этаже с теми же x и шириной; у стены из частей проём на
+    границе частей — внутри своей части (`parts.clamped`)."""
     ground = [e for e in f.elements if e.cls in OPENINGS and e.floor == 1]
     return [_v(f, Rule.PLAN_OPENING, None,
                f"проём плана {o.kind} x={o.x_m:.2f} м пропал или смещён")
-            for o in f.side.openings
+            for o in (parts.clamped(o, f.runs) for o in f.side.openings)
             if not any(abs(e.x_m - o.x_m) <= cfg.eps_m and abs(e.w_m - o.width_m) <= cfg.eps_m
                        for e in ground)]
 

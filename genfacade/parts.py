@@ -24,6 +24,7 @@ from genfacade.schema import (
     FacadeSheet,
     HouseSpec,
     MaterialZone,
+    Opening,
     OpeningKind,
     Plan,
     Point,
@@ -80,29 +81,51 @@ def _minor(w: Rect, main_area: float, rule: Parts | None) -> bool:
 
 def runs(spec: HouseSpec, plan: Plan, rule: Parts | None = None) -> list[list[WallRun]]:
     """Участки каждой стороны по частям; все пусты, если у частей одна высота — дом без ступеней."""
-    found = levels(spec, plan, rule)
+    return stepped_runs(plan, levels(spec, plan, rule))
+
+
+def stepped_runs(plan: Plan, found: list[Level]) -> list[list[WallRun]]:
+    """Участки сторон по заданным этажности и карнизу крыльев (`levels` — по правилу, разметка
+    реального дома — по листу); у частей одной высоты участков нет."""
     if len({lv.eaves_m for lv in found}) <= 1:
         return [[] for _ in plan.sides]
     ring = plan.outline
-    return [_side_runs(s, ring[i], ring[(i + 1) % len(ring)], plan.wings, found)
+    return [side_runs(s.index, s.length_m, ring[i], ring[(i + 1) % len(ring)], plan.wings, found)
             for i, s in enumerate(plan.sides)]
 
 
-def _side_runs(side: Side, a: Point, b: Point, wings: list[Rect], found: list[Level]
-               ) -> list[WallRun]:
+def side_runs(index: int, length: float, a: Point, b: Point, wings: list[Rect],
+              found: list[Level]) -> list[WallRun]:
     """Участки стороны ab слева направо снаружи (x = длина − t); части должны покрыть сторону
     без щелей, границы соседних участков — одно число."""
     along = edge_runs(a, b, wings)  # по возрастанию t от начала стороны
     starts = [0.0, *(t1 for _, _, t1 in along)]
     whole = bool(along) and all(abs(t0 - end) <= EPS for (_, t0, _), end in zip(
-        along, starts, strict=False)) and abs(starts[-1] - side.length_m) <= EPS
+        along, starts, strict=False)) and abs(starts[-1] - length) <= EPS
     if not whole:
-        raise ValueError(f"части дома не покрывают сторону {side.index}: {along}")
+        raise ValueError(f"части дома не покрывают сторону {index}: {along}")
     ordered = list(reversed(along))
-    xs = [0.0, *(side.length_m - t0 for _, t0, _ in ordered)]
+    xs = [0.0, *(length - t0 for _, t0, _ in ordered)]
     return [WallRun(x0_m=x0 + 0.0, x1_m=x1, part=k, floors=found[k].floors,
                     eaves_m=found[k].eaves_m)
             for (k, _, _), x0, x1 in zip(ordered, xs[:-1], xs[1:], strict=True)]
+
+
+def home_run(o: Opening, runs: list[WallRun]) -> WallRun:
+    """Участок, которому принадлежит проём плана: с большей долей проёма (при равных — левый).
+    Проём на границе частей не бракуется, а отдаётся одной из них."""
+    share = [(min(o.x_m + o.width_m, r.x1_m) - max(o.x_m, r.x0_m), -j) for j, r in enumerate(runs)]
+    return runs[-max(share)[1]]
+
+
+def clamped(o: Opening, runs: list[WallRun]) -> Opening:
+    """Проём плана, каким его ставит модель: у стены из частей — внутри своего участка; доля за
+    границей отрезана, у стены без участков проём как в плане."""
+    if not runs:
+        return o
+    home = home_run(o, runs)
+    x0, x1 = max(o.x_m, home.x0_m), min(o.x_m + o.width_m, home.x1_m)
+    return o.model_copy(update={"x_m": x0, "width_m": x1 - x0})
 
 
 def stepped(sheet: FacadeSheet) -> bool:
@@ -140,15 +163,17 @@ def sub_sheets(sheet: FacadeSheet) -> dict[int, tuple[FacadeSheet, list[Piece]]]
         groups.setdefault(p.run.floors, []).append(p)
     return {floors: (unfold(FacadeSheet(
         spec=run_spec(sheet.spec, floors),
-        facades=[SideFacade(side=_run_side(sheet.facades[p.k].side, p.run, n))
+        facades=[SideFacade(side=_run_side(sheet.facades[p.k].side, p.run,
+                                           sheet.facades[p.k].runs, n))
                  for n, p in enumerate(items)])), items)
         for floors, items in groups.items()}
 
 
-def _run_side(side: Side, run: WallRun, index: int) -> Side:
-    """Сторона длиной с участок: проёмы и запретные зоны — внутри участка, x от его края."""
-    inside = [o for o in side.openings
-              if o.x_m >= run.x0_m - EPS and o.x_m + o.width_m <= run.x1_m + EPS]
+def _run_side(side: Side, run: WallRun, runs: list[WallRun], index: int) -> Side:
+    """Сторона длиной с участок: проёмы и запретные зоны — внутри участка, x от его края; проём
+    на границе частей — у части с большей долей (`home_run`), отрезанный по участку."""
+    inside = [c for c in (clamped(o, runs) for o in side.openings) if c.x_m >= run.x0_m - EPS
+              and c.x_m + c.width_m <= run.x1_m + EPS and home_run(c, runs) == run]
     forbidden = [z.model_copy(update={"x0_m": max(z.x0_m, run.x0_m) - run.x0_m,
                                       "x1_m": min(z.x1_m, run.x1_m) - run.x0_m})
                  for z in side.forbidden if min(z.x1_m, run.x1_m) - max(z.x0_m, run.x0_m) > EPS]
