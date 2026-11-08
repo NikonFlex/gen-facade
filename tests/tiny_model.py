@@ -8,11 +8,13 @@ import torch
 from genfacade.config import Config, GPTSize
 from genfacade.train import sampling, tokens
 
-SIZE = GPTSize(block=704, layers=1, heads=2, width=8, dropout=0.0)
+SEED = 0
+SIZE = GPTSize(block=1024, layers=1, heads=2, width=8, dropout=0.0)
 
 
 def save(path: Path, cfg: Config) -> Path:
     words = tokens.vocabulary(cfg)
+    torch.manual_seed(SEED)  # веса не зависят от того, что тест сэмплировал до сохранения
     torch.save({"model": sampling.build_model(SIZE, len(words)).state_dict(),
                 "size": SIZE.model_dump(), "vocabulary": words}, path)
     return path
