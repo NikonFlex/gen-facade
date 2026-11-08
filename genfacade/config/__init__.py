@@ -21,6 +21,7 @@ from genfacade.schema import (
     CasingKind,
     CheckState,
     ContourKind,
+    DataAttr,
     Device,
     ElementClass,
     GuidelineCheck,
@@ -35,6 +36,9 @@ from genfacade.schema import (
     RejectReason,
     Roof,
     RoofKind,
+    RuleDraw,
+    RuleFrom,
+    RuleVariant,
     RunOutcome,
     ShutterKind,
     SillKind,
@@ -285,10 +289,63 @@ class Labels(Section):
     variant: dict[VariantKind, str]
     roof: dict[RoofKind, str]
     outcome: dict[RunOutcome, OutcomeLabel]
+    style: dict[str, str]           # стиль стаба шага 1 (models.toml, style_words) — «Новый дом»
+    trim: dict[Trim, str]           # выводимый элемент — «Новый дом»
+    shape: dict[ContourKind, str]   # вид контура случайного плана — «Новый дом»
+    kind: dict[str, str]            # вид материала стен, который можно назвать в тексте
 
 
 class SamplesView(Section):
     shown: int
+
+
+class RuleItem(Section):
+    """Правило на странице «Правила» (gf#356): число берётся из конфига, а не пишется сюда."""
+
+    id: str
+    title: str
+    text: str                       # что утверждает правило и кто его держит
+    number_from: RuleFrom
+    key: str                        # поле Checks или параметр правила свода
+    guideline: str | None = None    # правило свода: его параметр, источники и цитаты
+    unit: str = "м"
+    holds: str                      # где держится: привязка (шаг 5), валидатор, страж синтетики
+    draw: RuleDraw
+    good: float                     # на картинке «так» значение = число × good
+    bad: float                      # на картинке «не так» значение = число × bad
+
+
+class RuleSheet(Section):
+    """Стена, на которой рисуются картинки правил: размеры — одни на все правила."""
+
+    wall_m: float
+    depth_m: float
+    window_m: tuple[float, float]
+    door_m: tuple[float, float]
+    sill_m: float
+
+
+class Rules(Section):
+    sheet: RuleSheet
+    captions: dict[RuleVariant, str]   # подпись под картинкой «так» и «не так»
+    item: list[RuleItem]
+
+
+class DataSetLabel(Section):
+    """Набор данных на странице «Данные»: чем он служит и в каком порядке."""
+
+    title: str
+    note: str
+
+
+class DataView(Section):
+    """Страница «Данные» (gf#356): сколько домов корпуса читать для долей, сколько примеров
+    показывать, подписи наборов и признаков."""
+
+    stats_sample: int = Field(gt=0)
+    examples: int = Field(gt=0)
+    sets: dict[Source, DataSetLabel]
+    attrs: dict[DataAttr, str]
 
 
 class House3d(Section):
@@ -423,6 +480,8 @@ class Viewer(Section):
     review: Review
     markup: MarkupEditor
     catalog: Catalog
+    data_view: DataView
+    rules: Rules
     labels: Labels
 
 

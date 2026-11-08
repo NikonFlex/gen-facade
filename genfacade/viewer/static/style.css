@@ -19,21 +19,67 @@
 .dataset-stats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
 .dataset-stats + .cards { margin-bottom: 34px; }
 
-/* ——— Новый дом: план и описание ——— */
-.plan-form {
-  display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 20px; padding: 18px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+/* ——— Новый дом: план, параметры дома, описание ——— */
+.nh {
+  display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 18px; align-items: start;
+  grid-template-areas: "plan params" "plan describe" "plan actions";
 }
-.plan-thumb {
-  aspect-ratio: 1; border-radius: 10px; background: var(--paper); padding: 10px;
+.nh-plan { grid-area: plan; position: sticky; top: calc(var(--topbar-h) + 16px); }
+.nh-params { grid-area: params; }
+.nh-describe { grid-area: describe; }
+.nh-actions { grid-area: actions; display: flex; justify-content: flex-end; align-items: flex-end; gap: 12px; }
+.nh .panel-body { display: grid; gap: 16px; }
+.nh .panel-head .end { margin-left: auto; }
+.nh-pick { display: flex; gap: 8px; flex-wrap: wrap; }
+.nh [hidden] { display: none; }
+.nh-pick .select { flex: 1; min-width: 160px; }
+.nh-thumb {
+  aspect-ratio: 4 / 3; border-radius: 10px; background: var(--paper); padding: 10px;
   display: flex; align-items: center; justify-content: center; overflow: hidden;
 }
-/* flex, не grid: у строки сетки высота по содержимому, и 100% у картинки не считается */
-.plan-thumb img { width: 100%; height: 100%; object-fit: contain; }
-.plan-fields { display: grid; gap: 12px; align-content: start; min-width: 0; }
-.plan-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.plan-row .select { width: auto; min-width: 240px; flex: 1; }
-#plan-go { margin-left: auto; }
+.nh-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.nh-thumb .empty-note { color: var(--bg); }
+.nh-field { display: grid; gap: 7px; min-width: 0; border: 0; margin: 0; padding: 0; }
+.nh-label { color: var(--muted); font-size: 12.5px; padding: 0; }
+.nh-fields { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; }
+.nh-fields .nh-tiles, .nh-fields .nh-trims-box { grid-column: 1 / -1; }
+.hint-line { margin: -8px 0 0; color: var(--faint); font-size: 12.5px; }
+.hint-line:empty { display: none; }
+.nh .segmented { flex-wrap: wrap; }
+
+/* виды стен — образцами из каталога */
+.nh-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
+.nh-tiles legend { grid-column: 1 / -1; }
+.tile {
+  position: relative; display: grid; gap: 5px; align-content: start; padding: 6px; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: 10px; background: var(--panel-2);
+  font-size: 12px; color: var(--muted); text-align: center;
+}
+.tile input, .sw input { position: absolute; opacity: 0; pointer-events: none; }
+.tile:hover { border-color: #3d4452; color: var(--ink); }
+.tile:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+.tile:has(input:focus-visible), .sw:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tile-pic { display: block; aspect-ratio: 4 / 3; background: var(--paper); border-radius: 6px; overflow: hidden; }
+.tile-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tile-auto { place-content: center; min-height: 70px; }
+
+/* цвета образцами */
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.sw {
+  position: relative; display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 11px 0 8px;
+  border: 1px solid var(--line-strong); border-radius: 999px; font-size: 12.5px; color: var(--muted); cursor: pointer;
+}
+.sw:hover { color: var(--ink); border-color: #3d4452; }
+.sw:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+.sw .swatch { width: 16px; height: 16px; }
+
+/* элементы: есть / нет / авто по каждому */
+.nh-trims { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 18px; }
+.nh-trim { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
+.nh-trim > span { color: var(--ink); }
+.nh-read-title { margin-top: 4px; }
+.nh-count { width: 120px; }
+.facts .swatch { display: inline-block; vertical-align: -2px; margin-right: 4px; }
 
 /* ——— экран дома: голова, шаги, сцена ——— */
 .run {
@@ -144,9 +190,10 @@
 }
 @media (max-width: 860px) {
   .input-view { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
-  .plan-form { grid-template-columns: 1fr; }
-  .plan-thumb { height: 220px; aspect-ratio: auto; }
-  #plan-go { margin-left: 0; }
+  .nh { grid-template-columns: 1fr; grid-template-areas: "plan" "params" "describe" "actions"; }
+  .nh-plan { position: static; }
+  .nh-actions { position: sticky; bottom: 0; padding: 10px 0; background: var(--bg); justify-content: stretch; }
+  .nh-actions .btn { flex: 1; }
   .hint { display: none; }
 }
 @media (max-width: 720px) {
@@ -160,4 +207,27 @@
   /* фильтры — одной строкой с прокруткой вбок: столбиком они занимали полэкрана */
   #runs-filters { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -16px 18px; padding: 0 16px; }
   .filter-group { flex-wrap: nowrap; flex: none; }
+}
+
+/* ——— Данные: наборы, доли признаков, примеры ——— */
+.data-set { margin-bottom: 22px; }
+.data-set .panel-body { display: grid; gap: 18px; }
+.data-note { margin: 0; color: var(--muted); max-width: 80ch; }
+.share-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin-top: 10px; }
+.share { padding: 12px 14px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+.share h3 { font-size: 13px; color: var(--muted); font-weight: 500; margin-bottom: 8px; }
+.bars { display: grid; gap: 6px; }
+.bars li { display: grid; grid-template-columns: minmax(70px, 38%) 1fr 40px; align-items: center; gap: 8px; font-size: 12.5px; }
+.bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar { height: 8px; border-radius: 4px; background: var(--panel-3); position: relative; overflow: hidden; }
+.bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--share); background: var(--accent); border-radius: 4px; }
+.bar-n { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.data-table { overflow-x: auto; }
+.data-table caption { text-align: left; padding: 0 0 8px; }
+.data-table .table th, .data-table .table td { padding: 9px 12px; }
+.data-set .cards { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.data-set button.card { text-align: left; cursor: pointer; font: inherit; padding: 0; width: 100%; align-items: stretch; }
+.data-set button.card .card-thumb { width: 100%; }
+@media (max-width: 720px) {
+  .data-set .cards { grid-template-columns: 1fr 1fr; gap: 10px; }
 }

@@ -1,5 +1,6 @@
 """Сервер смотрелки: планы и прогоны, примеры датасета, режимы и подписи, файлы трассы, слепая
-проверка листов глазами (/review, gf#268), каталог видов (/catalog, gf#354).
+проверка листов глазами (/review, gf#268), каталог видов (/catalog, gf#354), правила (/rules,
+gf#356).
 
 Страница ничего не считает сама: SVG рисует тот же render/, что и на выходе
 (docs/decisions.md, 29.09 «трасса каждого шага и веб-смотрелка»).
@@ -23,7 +24,7 @@ from genfacade.plan.genplan_svg import PlanError
 from genfacade.render.house3d import house_3d
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import FacadeSheet, Mode, Refusal, Sample, Source, refusal_record
-from genfacade.viewer import catalog, houses, markup, review
+from genfacade.viewer import catalog, data_page, houses, markup, newhouse, review, rules
 
 STATIC = files(__package__).joinpath("static")
 REFERENCE_SLOT = "ref"  # место настоящего листа на странице проверки
@@ -49,6 +50,8 @@ def create_app(cfg: Config, checked: Path | None = None, marked: Path | None = N
     _review_api(app, cfg, checked)
     markup.api(app, cfg, marked or cfg.viewer.markup.folder)
     catalog.api(app, cfg)
+    newhouse.api(app, cfg)
+    rules.api(app, cfg)
     app.mount("/files", StaticFiles(directory=runs_dir), name="files")
     app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
@@ -63,6 +66,10 @@ def create_app(cfg: Config, checked: Path | None = None, marked: Path | None = N
     @app.get("/markup")
     def markup_page() -> FileResponse:
         return FileResponse(str(STATIC.joinpath("markup.html")))
+
+    @app.get("/rules")
+    def rules_page() -> FileResponse:
+        return FileResponse(str(STATIC.joinpath("rules.html")))
 
     @app.get("/catalog")
     def catalog_page() -> FileResponse:
@@ -135,6 +142,10 @@ def _api(app: FastAPI, cfg: Config, runs_dir: Path) -> None:
 
 
 def _samples_api(app: FastAPI, cfg: Config) -> None:
+    @app.get("/api/data")
+    def data() -> dict:
+        return data_page.overview(cfg)
+
     @app.get("/api/samples")
     def samples() -> list[dict]:
         return _samples(cfg)

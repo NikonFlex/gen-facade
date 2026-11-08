@@ -32,23 +32,56 @@
       <div class="page">
         <div class="page-head">
           <h1 id="new-title">Новый дом</h1>
-          <span class="count">SVG-план GenPlan и описание → фасады, все шаги конвейера</span>
+          <span class="count">план GenPlan и параметры дома → фасады, все шаги конвейера</span>
         </div>
-        <form class="plan-form" id="plan-form" inert>
-          <div class="plan-thumb" id="plan-thumb"></div>
-          <div class="plan-fields">
-            <div class="plan-row">
-              <select class="select" id="plan-select" aria-label="План"></select>
-              <label class="btn" title="Свой SVG-план в формате GenPlan">
-                <input type="file" accept=".svg,image/svg+xml" id="plan-file" hidden><span>Свой SVG</span>
+        <form class="nh" id="nh" inert>
+          <section class="panel nh-plan" aria-labelledby="nh-plan-title">
+            <div class="panel-head"><h2 id="nh-plan-title">План</h2></div>
+            <div class="panel-body">
+              <div class="segmented" id="nh-source" role="radiogroup" aria-label="Откуда план"></div>
+              <div class="nh-pick" id="nh-pick-ready">
+                <select class="select" id="nh-plan" aria-label="Готовый план"></select>
+              </div>
+              <div class="nh-pick" id="nh-pick-random" hidden>
+                <select class="select" id="nh-shape" aria-label="Форма плана"></select>
+                <button class="btn" type="button" id="nh-variant">Другой план <span class="chip" id="nh-variant-n"></span></button>
+              </div>
+              <div class="nh-pick" id="nh-pick-own" hidden>
+                <label class="btn"><input type="file" accept=".svg,image/svg+xml" id="nh-file" hidden><span>Выбрать SVG плана</span></label>
+              </div>
+              <div class="nh-thumb" id="nh-thumb"></div>
+              <div class="nh-field" role="radiogroup" aria-label="Режим">
+                <span class="nh-label">Режим</span>
+                <div class="segmented" id="nh-mode"></div>
+              </div>
+            </div>
+          </section>
+          <section class="panel nh-params" aria-labelledby="nh-params-title">
+            <div class="panel-head">
+              <h2 id="nh-params-title">Параметры дома</h2><span class="chip">шаг 1</span>
+              <button class="btn ghost end" type="button" id="nh-reset">Сбросить</button>
+            </div>
+            <div class="panel-body nh-fields" id="nh-fields"></div>
+          </section>
+          <section class="panel nh-describe" aria-labelledby="nh-describe-title">
+            <div class="panel-head"><h2 id="nh-describe-title">Описание</h2><span class="chip">необязательно</span></div>
+            <div class="panel-body">
+              <label class="field">
+                <span>Собирается из параметров; можно написать своё и разобрать обратно в параметры</span>
+                <textarea class="textarea" id="nh-text" rows="4" spellcheck="false"
+                  placeholder="A simple one-storey house with a flat roof."></textarea>
               </label>
+              <button class="btn" type="button" id="nh-parse">Разобрать в параметры</button>
+              <h3 class="eyebrow nh-read-title">Что прочтёт шаг 1</h3>
+              <dl class="facts" id="nh-read" aria-live="polite"></dl>
             </div>
-            <textarea class="textarea" id="plan-text" rows="3" spellcheck="false" aria-label="Описание дома"
-              placeholder="A simple one-storey house with a flat roof."></textarea>
-            <div class="plan-row">
-              <div class="segmented" id="mode-group" role="radiogroup" aria-label="Режим"></div>
-              <button class="btn primary" id="plan-go" type="submit"></button>
-            </div>
+          </section>
+          <div class="nh-actions">
+            <label class="field nh-count" id="nh-count-field" hidden>
+              <span>Разных планов</span>
+              <input class="input" type="number" id="nh-count" min="1" max="6" inputmode="numeric">
+            </label>
+            <button class="btn primary" id="nh-go" type="submit"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg><span>Построить фасады</span></button>
           </div>
         </form>
       </div>

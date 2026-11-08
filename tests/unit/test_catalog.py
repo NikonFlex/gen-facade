@@ -146,7 +146,7 @@ def test_doc_sources_by_heading_and_row(tmp_path):
 
 def test_page_served_and_linked(client):
     page = client.get("/catalog")
-    assert page.status_code == 200 and "Каталог" in page.text
+    assert page.status_code == 200 and "GenFacade · каталог" in page.text
     assert page.headers["cache-control"] == "no-cache"
     # ссылка — в шапке всех страниц: разделы смотрелки перечислены в shell.js (gf#356)
     assert 'href: "/catalog"' in STATIC.joinpath("shell.js").read_text()

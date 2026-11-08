@@ -12,6 +12,30 @@ plans_dirs = ["tests/fixtures"]
 [samples]
 shown = 60   # сколько примеров источника показывать на вкладке «Датасеты»: в датасете их тысячи
 
+[data_view]
+# Страница «Данные» (gf#356, хозяин 08.11): датасет, на котором учим. Доли признаков корпуса
+# читаются по `stats_sample` домам, взятым через равные промежутки (10 000 файлов читались бы
+# секунд двадцать); примеров с листом — `examples` на набор. Наборы — по порядку обучения.
+stats_sample = 1500
+examples = 8
+
+[data_view.sets.synthetic]
+title = "Корпус синтетики"
+note = "Учим на нём: дома нашего генератора, эталон раскладки без нарушений"
+[data_view.sets.buildingnet]
+title = "Дообучение: BuildingNet"
+note = "Реальные коттеджи с разметкой компонентов; на них переучиваем после синтетики"
+[data_view.sets.manual]
+title = "Реальный тест"
+note = "Дома, размеченные вручную по чертежам; в обучении не участвуют"
+
+[data_view.attrs]
+sides = "Сторон у дома"
+floors = "Этажей"
+roof = "Крыша"
+walls = "Стены"
+style = "Стиль"
+
 [house3d]
 # Дом объёмом (вкладка «Дом в 3D»): стены по контуру, фасад стороны — текстурой, крыша — скатами
 # (roof.py, gf#320) или плоская.
@@ -267,3 +291,148 @@ clean = { title = "без брака", tone = "ok" }
 defect = { title = "с браком", tone = "bad" }
 refused = { title = "отказ", tone = "bad" }
 unchecked = { title = "не проверен", tone = "muted" }
+
+[labels.style]   # стили стаба шага 1 (models.toml, style_words) — страница «Новый дом»
+modern = "современный"
+scandinavian = "скандинавский"
+chalet = "шале"
+classic = "классический"
+
+[labels.trim]    # выводимые элементы — страница «Новый дом»
+sill = "подоконники"
+casing = "наличники"
+shutters = "ставни"
+canopy = "козырёк над дверью"
+
+[labels.shape]   # вид контура случайного плана (config/synthetic.toml, [contours])
+rectangle = "прямоугольник"
+l = "Г-образный"
+t = "Т-образный"
+u = "П-образный"
+annex = "с пристройкой"
+bay = "с эркером"
+
+[labels.kind]    # виды стен, которые можно назвать в тексте (models.toml, material_words)
+plaster = "штукатурка"
+brick = "кирпич"
+brick_1_5 = "кирпич полуторный"
+brick_long = "кирпич нормандский"
+clinker = "клинкер"
+siding = "сайдинг"
+siding_dutch = "сайдинг голландский"
+board_batten_narrow = "доска с рейкой"
+wood = "дерево"
+imitation_timber = "имитация бруса"
+blockhouse = "блок-хаус"
+ashlar = "тёсаный камень"
+profiled_sheet = "профнастил"
+
+[rules.captions]
+good = "Так"
+bad = "Не так"
+
+[rules.sheet]
+# Стена картинок правил (gf#356): одна на все, окно и дверь — типовые.
+wall_m = 6.0
+depth_m = 4.0
+window_m = [1.2, 1.4]
+door_m = [0.9, 2.1]
+sill_m = 0.9
+
+# Правила страницы «Правила»: число — из checks.toml (number_from = "checks") или из параметров
+# правила свода guidelines.toml; источники и цитаты — у правила свода (`guideline`). На картинке
+# «так» значение = число × good, «не так» = число × bad.
+[[rules.item]]
+id = "corner"
+title = "Отступ окна и двери от угла"
+text = "Проём стоит от угла стены не ближе этого; ближе — шаг 5 отодвигает его от угла."
+number_from = "checks"
+key = "corner_min_m"
+guideline = "window_corner_distance"
+holds = "привязка, шаг 5"
+draw = "corner"
+good = 2.2
+bad = 0.4
+
+[[rules.item]]
+id = "pier"
+title = "Простенок между проёмами"
+text = "Между соседними проёмами одного этажа простенок не уже этого."
+number_from = "guideline"
+key = "min"
+guideline = "pier_min"
+holds = "валидатор, страж синтетики"
+draw = "pier"
+good = 1.8
+bad = 0.3
+
+[[rules.item]]
+id = "head_line"
+title = "Линия верха окон этажа"
+text = "Верхние кромки окон одного этажа лежат на одной линии; отклонение больше допуска — предупреждение, больше прыжка — окно встаёт на линию."
+number_from = "checks"
+key = "align_m"
+guideline = "window_head_line"
+holds = "валидатор, привязка"
+draw = "head_line"
+good = 0.0
+bad = 6.0
+
+[[rules.item]]
+id = "door_height"
+title = "Высота двери"
+text = "Дверь не ниже этой высоты: ниже СП не допускает даже эвакуационный выход."
+number_from = "guideline"
+key = "min"
+guideline = "door_min_height"
+holds = "валидатор, страж синтетики"
+draw = "door_height"
+good = 1.17
+bad = 0.85
+
+[[rules.item]]
+id = "door_spread"
+title = "Двери этажа — одной высоты"
+text = "Разброс высот дверей одного этажа не больше допуска; больше — все двери этажа ставятся на медиану."
+number_from = "checks"
+key = "door_spread_m"
+holds = "привязка, шаг 5"
+draw = "door_spread"
+good = 0.0
+bad = 4.0
+
+[[rules.item]]
+id = "door_width"
+title = "Ширина двери"
+text = "Дверь не уже этой ширины (свет эвакуационного выхода); уже — расширяется."
+number_from = "checks"
+key = "door_min_w_m"
+guideline = "door_size_ru"
+holds = "привязка, шаг 5"
+draw = "door_width"
+good = 1.125
+bad = 0.75
+
+[[rules.item]]
+id = "vertical_axes"
+title = "Окна верхнего этажа над окнами нижнего"
+text = "Центры окон верхнего этажа совпадают с центрами окон нижнего с точностью до допуска."
+number_from = "guideline"
+key = "tol_m"
+guideline = "window_vertical_axes"
+holds = "метрика"
+draw = "vertical_axes"
+good = 0.0
+bad = 6.0
+
+[[rules.item]]
+id = "head_to_eaves"
+title = "Зазор от окна до карниза"
+text = "Между верхом окна верхнего этажа и линией карниза есть зазор (фриз): окно не прижато к кровле."
+number_from = "guideline"
+key = "min"
+guideline = "window_head_to_eaves"
+holds = "метрика"
+draw = "head_to_eaves"
+good = 2.0
+bad = 0.0

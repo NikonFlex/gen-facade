@@ -41,6 +41,42 @@ class RunOutcome(StrEnum):
     UNCHECKED = "unchecked"  # лист без шага 5 (собран вручную): валидатор не запускался
 
 
+class DataAttr(StrEnum):
+    """Признак дома в сводке корпуса на странице «Данные» (gf#356): доли по значениям."""
+
+    SIDES = "sides"
+    FLOORS = "floors"
+    ROOF = "roof"
+    WALLS = "walls"
+    STYLE = "style"
+
+
+class RuleDraw(StrEnum):
+    """Что рисует картинка правила на странице «Правила» (gf#356): сборку стены «так / не так»
+    для каждого вида собирает viewer/rules.py."""
+
+    CORNER = "corner"
+    PIER = "pier"
+    HEAD_LINE = "head_line"
+    DOOR_HEIGHT = "door_height"
+    DOOR_SPREAD = "door_spread"
+    DOOR_WIDTH = "door_width"
+    VERTICAL_AXES = "vertical_axes"
+    HEAD_TO_EAVES = "head_to_eaves"
+
+
+class RuleVariant(StrEnum):
+    GOOD = "good"  # так
+    BAD = "bad"    # не так
+
+
+class RuleFrom(StrEnum):
+    """Откуда число правила: допуск шага 5 (checks.toml) или параметр правила свода."""
+
+    CHECKS = "checks"
+    GUIDELINE = "guideline"
+
+
 class Refusal(StrEnum):
     """Код отказа, который доходит до человека: в ответе смотрелки (`detail.code`), в
     meta.json прогона и в ответе модели строки realtest («refusal»). Текст — REFUSAL_TEXT;
@@ -58,6 +94,7 @@ class Refusal(StrEnum):
     NO_SHEET = "no_sheet"                      # у прогона нет листа фасадов
     NO_SAMPLE = "no_sample"
     NO_CATALOG_ITEM = "no_catalog_item"        # каталог: нет такого раздела или вида
+    NO_RULE = "no_rule"                        # страница «Правила»: нет такого правила
     CATALOG_NOT_DRAWN = "catalog_not_drawn"    # каталог: вид в конфиге, образец с ним не строится
     NO_REVIEW = "no_review"                    # смотрелка запущена без --review
     NO_REVIEW_ITEM = "no_review_item"          # нет дома, места или листа проверки
@@ -81,6 +118,7 @@ REFUSAL_TEXT = {
     Refusal.NO_SHEET: "у прогона нет листа фасадов",
     Refusal.NO_SAMPLE: "нет примера",
     Refusal.NO_CATALOG_ITEM: "нет в каталоге",
+    Refusal.NO_RULE: "нет такого правила",
     Refusal.CATALOG_NOT_DRAWN: "образец с таким видом не строится",
     Refusal.NO_REVIEW: "проверка не включена: genfacade serve --review <папка realtest>",
     Refusal.NO_REVIEW_ITEM: "нет в проверке",

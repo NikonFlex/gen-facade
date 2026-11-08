@@ -6,6 +6,8 @@ import { HouseStage } from "/static/house3d.js";
 import { refusalText, refusedFrom } from "/static/refusal.js";
 import { NAV, markCurrent, topbar } from "/static/shell.js";
 import { SvgStage, metres } from "/static/stage.js";
+import { showData } from "/static/datapage.js";
+import { mountNewHouse } from "/static/newhouse.js";
 
 const LAYERS = {
   zones: "Зоны отделки", elements: "Элементы", mullions: "Створки",
@@ -30,7 +32,7 @@ const ICON = {
 };
 
 const $ = (id) => document.getElementById(id);
-const state = { runs: [], meta: null, runId: null, step: null, stage: null, nav: 0, shown: 0, planPick: 0, options: null, filters: {}, query: "" };
+const state = { runs: [], meta: null, runId: null, step: null, stage: null, nav: 0, shown: 0, options: null, filters: {}, query: "" };
 // Ответ шага, с которого уже ушли, экран не трогает: показан последний выбранный шаг (C13, gf#293).
 const stale = (shown) => shown !== state.shown;
 
@@ -86,64 +88,6 @@ function ago(iso) {
     if (Math.abs(sec) >= size) return rtf.format(Math.round(sec / size), unit);
   }
   return "только что";
-}
-
-// ——— план и описание ———
-
-const planState = { svg: null, name: null };
-
-async function loadPlans() {
-  const plans = await api("/api/plans");
-  $("plan-select").replaceChildren(...plans.map((p) => el("option", { value: p.name, textContent: p.name })));
-  const last = store.get("plan.name", null);
-  if (plans.some((p) => p.name === last)) $("plan-select").value = last;
-  showPlanThumb(`/api/plans/${encodeURIComponent($("plan-select").value)}`);
-}
-
-function showPlanThumb(src) {
-  $("plan-thumb").replaceChildren(el("img", { src, alt: "План" }));
-}
-
-function bindPlanForm() {
-  const form = $("plan-form");
-  $("plan-go").innerHTML = `${ICON.play}<span>Построить фасады</span>`;
-  $("plan-text").value = store.get("plan.text", "A simple one-storey house with a flat roof.");
-  const { modes, default_mode: fallback } = state.options;
-  $("mode-group").replaceChildren(...modes.map((m) => el("label", { title: m.hint },
-    `<input type="radio" name="mode" value="${m.value}"><span>${m.title}</span>`)));
-  const saved = store.get("plan.mode", fallback);
-  const mode = modes.some((m) => m.value === saved) ? saved : fallback;
-  form.querySelector(`input[name=mode][value=${mode}]`).checked = true;
-  // Выбор плана — по последнему действию: файл, который ещё читается, не перебьёт выбор из списка.
-  $("plan-select").addEventListener("change", () => {
-    state.planPick += 1;
-    Object.assign(planState, { svg: null, name: null });
-    showPlanThumb(`/api/plans/${encodeURIComponent($("plan-select").value)}`);
-  });
-  $("plan-file").addEventListener("change", async () => {
-    const file = $("plan-file").files[0], pick = ++state.planPick;
-    if (!file) return;
-    const svg = await file.text();
-    if (pick !== state.planPick) return;
-    Object.assign(planState, { svg, name: file.name.replace(/\.svg$/i, "") });
-    showPlanThumb(URL.createObjectURL(file));
-    $("plan-select").replaceChildren(el("option", { textContent: `свой: ${file.name}` }), ...$("plan-select").children);
-    $("plan-select").selectedIndex = 0;
-  });
-  form.addEventListener("submit", (e) => { e.preventDefault(); submitPlan().catch(() => {}); });
-}
-
-async function submitPlan() {
-  const form = $("plan-form");
-  const run = {
-    plan: planState.name ?? $("plan-select").value,
-    text: $("plan-text").value.trim(),
-    mode: form.querySelector("input[name=mode]:checked").value,
-  };
-  store.set("plan.text", run.text);
-  store.set("plan.mode", run.mode);
-  if (!planState.svg) store.set("plan.name", run.plan);
-  await startRun({ plan_run: run, svg: planState.svg }, $("plan-go"));
 }
 
 // ——— дома и прогоны ———
@@ -225,36 +169,7 @@ function runCard(r) {
   return listItem(link);
 }
 
-// ——— датасеты ———
-
-async function loadSamples() {
-  const sources = await api("/api/samples");
-  const blocks = sources.flatMap(sourceBlock);
-  $("samples").replaceChildren(...(blocks.length ? blocks : [el("p", { className: "empty-note", textContent: "Примеров пока нет — появятся после сборки датасета." })]));
-}
-
-// Источник: заголовок, опись числами и дома карточками; всё — из ответа сервера.
-function sourceBlock(s) {
-  const counts = (obj, label) => Object.entries(obj).map(([k, n]) => `<span class="chip">${label(k)} <b>${n}</b></span>`).join("");
-  const head = el("div", { className: "section-head" },
-    `<h2>${s.source}</h2>
-     <span class="section-note">опись на ${fmtDate(s.date)}${s.samples > s.ids.length ? ` · показаны первые ${s.ids.length}` : ""}</span>`);
-  const stats = el("div", { className: "dataset-stats" },
-    `<span class="chip">домов <b>${s.samples}</b></span><span class="chip">стен <b>${s.walls}</b></span><span class="chip">из них глухих <b>${s.blind_walls}</b></span>
-     ${s.generator ? `<span class="chip" title="дома с ошибкой валидатора в датасет не пишутся">отброшено <b>${Object.keys(s.generator.rejected).length}</b></span>` : ""}
-     ${counts(s.splits, (k) => k)}${counts(s.elements, (k) => state.options.cls[k].toLowerCase())}`);
-  const grid = el("ul", { className: "cards" });
-  grid.append(...s.ids.map((id) => sampleCard(s.source, id)));
-  return [head, stats, grid];
-}
-
-function sampleCard(source, id) {
-  const url = `/api/samples/${source}/${encodeURIComponent(id)}`;
-  const btn = el("button", { type: "button", className: "card", title: `${source}/${id}` },
-    `<div class="card-thumb"><img src="${url}/sheet.svg" alt="" loading="lazy"></div><div class="card-body"><div class="card-title"><h3>${id}</h3></div></div>`);
-  btn.addEventListener("click", () => openSample(url, btn).catch((err) => toast(err.message, "error")));
-  return listItem(btn);
-}
+// ——— примеры датасета ———
 
 async function openSample(url, busyEl) {
   busyEl.classList.add("busy");
@@ -305,7 +220,7 @@ async function goToRun(id, step = null) {
 const TABS = {
   houses: { section: "houses", load: loadRuns, hash: "" },
   new: { section: "new", load: async () => {}, hash: "new" },
-  data: { section: "datasets", load: loadSamples, hash: "datasets" },
+  data: { section: "datasets", load: () => showData({ api, options: state.options, openSample: (url, btn) => openSample(url, btn).catch((err) => toast(err.message, "error")) }), hash: "datasets" },
 };
 const tabUrl = (tab) => (TABS[tab].hash ? `#${TABS[tab].hash}` : location.pathname);
 // Пример датасета открыт со вкладки «Данные» — туда же и возвращаемся.
@@ -653,11 +568,9 @@ async function init() {
   window.addEventListener("popstate", route);
   document.addEventListener("keydown", onKey);
   state.options = await api("/api/options");
-  bindPlanForm();
-  await loadPlans();
   // Форма неактивна (inert в index.html), пока её не заполнили ответы: иначе набранное до ответа
   // перезаписали бы список планов и сохранённый текст (C13, gf#293).
-  $("plan-form").inert = false;
+  await mountNewHouse({ api, options: state.options, startRun, goHome: () => goToTab("houses") });
   await route();
 }
 

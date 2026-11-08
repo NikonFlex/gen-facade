@@ -9,6 +9,7 @@ export const NAV = [
   { page: "houses", href: "/", title: "Дома" },
   { page: "catalog", href: "/catalog", title: "Каталог" },
   { page: "data", href: "/#datasets", title: "Данные" },
+  { page: "rules", href: "/rules", title: "Правила" },
   { page: "markup", href: "/markup", title: "Разметка" },
   { page: "review", href: "/review", title: "Проверка" },
 ];

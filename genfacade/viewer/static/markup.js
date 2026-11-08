@@ -8,9 +8,12 @@ import {
   HANDLES, boxAt, handlePoints, isTap, moveBox, normalize, pick, removeElement, resizeBox, round1,
   setClass,
 } from "/static/markup_geom.js";
+import { topbar } from "/static/shell.js";
 import { $, el, toast } from "/static/dom.js";
 import { refusedFrom } from "/static/refusal.js";
 import { serial } from "/static/serial.js";
+
+topbar(document.getElementById("topbar"), "markup");
 
 const NS = "http://www.w3.org/2000/svg";
 const LEVEL_PAD_M = 1.0; // поле вокруг стены на кадре, как в tools/markup.py overlay

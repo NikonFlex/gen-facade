@@ -3,6 +3,9 @@
 
 import { $, el } from "/static/dom.js";
 import { refusedFrom } from "/static/refusal.js";
+import { topbar } from "/static/shell.js";
+
+topbar(document.getElementById("topbar"), "catalog");
 
 const TEXT = {
   words: "В тексте:", shared: "Также называет общий вид:", source: "Источник", sectionWords: "Элемент в тексте:",
