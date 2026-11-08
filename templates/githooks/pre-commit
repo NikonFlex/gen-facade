@@ -4,4 +4,5 @@
 # Работает для любого агента и для человека; раскладывает tools/install_hooks.sh.
 root="$(git rev-parse --show-toplevel)"
 python3 "$root/tools/secret_scan.py" staged || exit 1
-exec sh "$root/tools/check.sh" --quick
+# тяжёлое — по одному на машине (tools/hook_lock.sh): иначе хуки worktree душат друг друга
+sh "$root/tools/hook_lock.sh" sh "$root/tools/check.sh" --quick
