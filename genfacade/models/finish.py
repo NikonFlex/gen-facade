@@ -26,11 +26,20 @@ class Look:
 
 @dataclass
 class Mentions:
-    """Что названо в тексте: вид стен, цвета по ролям, элементы (True — есть, False — «без …»)."""
+    """Что названо в тексте: виды стен (слово может называть несколько), цвета по ролям,
+    элементы (True — есть, False — «без …»)."""
 
-    kind: str | None = None
+    kinds: set[str] | None = None
     colors: dict[PaletteRole, list[set[str]]] = field(default_factory=dict)
     trims: dict[Trim, bool] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class Pick:
+    """Чем выбирается цвет, которого в тексте нет: хеш текста и сочетание цветов (gf#317)."""
+
+    digest: bytes | None
+    scheme: dict[PaletteRole, str]
 
 
 def look(text: str, style: str, cfg: SpecStub) -> Look:
@@ -40,8 +49,9 @@ def look(text: str, style: str, cfg: SpecStub) -> Look:
     digest = hashlib.sha256(" ".join(tokens).encode()).digest()
     name = cfg.default_finish if not tokens else _choose(mentioned, style, digest, cfg)
     finish = cfg.finish[name]
-    materials = [_material(role, finish, mentioned, digest if tokens else None, cfg)
-                 for role in PaletteRole]
+    scheme = _scheme(finish, mentioned, digest, cfg) if tokens else {}
+    pick = Pick(digest if tokens else None, scheme)
+    materials = [_material(role, finish, mentioned, pick, cfg) for role in PaletteRole]
     return Look(name, materials, _trim(finish, mentioned.trims, cfg), finish.roof)
 
 
@@ -52,9 +62,10 @@ def _stem(token: str, stems: list[str], cfg: SpecStub) -> bool:
 def _mentions(tokens: list[str], cfg: SpecStub) -> Mentions:
     found = Mentions()
     for i, token in enumerate(tokens):
-        if found.kind is None:
-            found.kind = next((k for k, ws in cfg.material_words.items()
-                               if _stem(token, ws, cfg)), None)
+        if found.kinds is None:
+            # слово «кирпич» стоит у каждого вида кирпича, «полуторный» — только у одного
+            named = {k for k, ws in cfg.material_words.items() if _stem(token, ws, cfg)}
+            found.kinds = named | {k for k, g in cfg.material_like.items() if g in named} or None
         for trim, stems in cfg.trim_words.items():
             if _stem(token, stems, cfg):
                 found.trims[trim] = not (i and tokens[i - 1] in cfg.negations)
@@ -89,8 +100,8 @@ def _role_words(cfg: SpecStub) -> dict[PaletteRole, list[str]]:
 
 def _choose(found: Mentions, style: str, digest: bytes, cfg: SpecStub) -> str:
     """Имя отделки: по виду стен, цвету стен и стилю; из оставшихся — от текста."""
-    names = [n for n, f in cfg.finish.items()
-             if found.kind in (None, f.materials[PaletteRole.MAIN].kind)] or list(cfg.finish)
+    names = [n for n, f in cfg.finish.items() if found.kinds is None
+             or f.materials[PaletteRole.MAIN].kind in found.kinds] or list(cfg.finish)
     wanted = found.colors.get(PaletteRole.MAIN, [])
     names = [n for n in names if _color(cfg.finish[n], PaletteRole.MAIN, wanted, cfg)] or names
     names = [n for n in names if style in cfg.finish[n].styles] or names
@@ -105,14 +116,25 @@ def _color(finish: Finish, role: PaletteRole, wanted: list[set[str]], cfg: SpecS
     return next((c for names in wanted for c in pool if c in names), None)
 
 
-def _material(role: PaletteRole, finish: Finish, found: Mentions, digest: bytes | None,
+def _scheme(finish: Finish, found: Mentions, digest: bytes,
+            cfg: SpecStub) -> dict[PaletteRole, str]:
+    """Сочетание цветов отделки от текста; назван цвет стен — среди сочетаний с таким цветом
+    стен, и нет такого — сочетания нет (цвет назван, а не выбран)."""
+    wanted = _color(finish, PaletteRole.MAIN, found.colors.get(PaletteRole.MAIN, []), cfg)
+    pool = [cfg.schemes[n].colors for n in finish.schemes
+            if wanted in (None, cfg.schemes[n].colors[PaletteRole.MAIN])]
+    return pool[int.from_bytes(digest[8:12]) % len(pool)] if pool else {}
+
+
+def _material(role: PaletteRole, finish: Finish, found: Mentions, pick: Pick,
               cfg: SpecStub) -> Material:
-    """Материал роли: назван цвет — он, иначе у стен — от текста, у остальных — первый ряда."""
+    """Материал роли: назван цвет — он, иначе цвет сочетания, иначе у стен — от текста, у
+    остальных — первый ряда."""
     row = finish.materials[role].colors
-    color = _color(finish, role, found.colors.get(role, []), cfg)
+    color = _color(finish, role, found.colors.get(role, []), cfg) or pick.scheme.get(role)
     if color is None:
-        by_text = role is PaletteRole.MAIN and digest is not None
-        color = row[int.from_bytes(digest[4:8]) % len(row)] if by_text else row[0]
+        by_text = role is PaletteRole.MAIN and pick.digest is not None
+        color = row[int.from_bytes(pick.digest[4:8]) % len(row)] if by_text else row[0]
     return Material(id=role.value, kind=finish.materials[role].kind, color=cfg.colors[color].hex)
 
 

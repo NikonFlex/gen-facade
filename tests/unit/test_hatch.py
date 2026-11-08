@@ -7,6 +7,7 @@ from xml.etree import ElementTree
 
 import pytest
 from pydantic import ValidationError
+from sheets import with_kind
 
 from genfacade import config
 from genfacade.render import hatch
@@ -16,12 +17,6 @@ from genfacade.render.svg import palette_colors, sheet_svg
 from genfacade.schema import Element, ElementClass, FacadeSheet, ZoneRole
 
 URL = re.compile(r"url\(#([^)]+)\)")
-
-
-def _with_kind(house: FacadeSheet, material: str, kind: str) -> FacadeSheet:
-    sheet = house.model_copy(deep=True)
-    next(m for m in sheet.spec.materials if m.id == material).kind = kind
-    return sheet
 
 
 def _root(svg: str) -> ElementTree.Element:
@@ -39,7 +34,7 @@ def _patterns(root: ElementTree.Element) -> dict[str, ElementTree.Element]:
 
 def _brick_pattern(house: FacadeSheet, cfg: config.Config) -> ElementTree.Element:
     """Паттерн кирпича с листа дома, у которого цоколь из кирпича."""
-    root = _root(sheet_svg(_with_kind(house, "plinth", "brick"), cfg))
+    root = _root(sheet_svg(with_kind(house, "plinth", "brick"), cfg))
     return next(p for i, p in _patterns(root).items() if i.startswith("hatch-brick"))
 
 
@@ -51,7 +46,7 @@ def _horizontal_ys(pattern: ElementTree.Element) -> list[float]:
 
 def test_brick_zone_is_filled_with_pattern_plaster_with_color(house, cfg):
     """У зоны вида brick — заливка рисунком из <defs>, у штукатурки и бетона — сплошная."""
-    sheet = _with_kind(house, "plinth", "brick")
+    sheet = with_kind(house, "plinth", "brick")
     root = _root(sheet_svg(sheet, cfg))
     patterns = _patterns(root)
     plinth = _zone_fills(root, "plinth")
@@ -73,7 +68,7 @@ def test_brick_course_pitch_is_75_mm(house, cfg):
 
 def test_pattern_declared_once_per_sheet(house, cfg):
     """Зон кирпича на листе много, паттерн — один на пару вид × цвет."""
-    sheet = _with_kind(house, "main", "brick")
+    sheet = with_kind(house, "main", "brick")
     root = _root(sheet_svg(sheet, cfg))
     zones = _zone_fills(root, "main")
     assert len(zones) > 1 and len(set(zones)) == 1
@@ -87,7 +82,7 @@ def test_pattern_declared_once_per_sheet(house, cfg):
 
 def test_same_kind_other_color_is_other_pattern(house, cfg):
     """Цвет линий считается из цвета материала: кирпич другого цвета — свой паттерн."""
-    sheet = _with_kind(house, "main", "brick")
+    sheet = with_kind(house, "main", "brick")
     next(m for m in sheet.spec.materials if m.id == "plinth").kind = "brick"
     next(m for m in sheet.spec.materials if m.id == "plinth").color = "#404040"
     ids = _patterns(_root(sheet_svg(sheet, cfg)))
@@ -133,7 +128,7 @@ def test_siding_pattern_has_lap_groove(cfg):
 
 def test_element_from_material_is_hatched_blind_and_window_are_not(house, cfg):
     """Карниз из дерева — рисунком; ставню (рисует себя линиями) и окно (стекло) — цветом."""
-    sheet = _with_kind(house, "accent", "wood")
+    sheet = with_kind(house, "accent", "wood")
     facade = sheet.facades[0]
     boxes = {cls: Element(id=f"x-{cls}", cls=cls, x_m=0.0, y_m=1.0, w_m=1.0, h_m=0.3,
                           material="accent")
@@ -148,7 +143,7 @@ def test_element_from_material_is_hatched_blind_and_window_are_not(house, cfg):
 
 def test_wall_texture_for_3d_carries_its_patterns(house, cfg):
     """Текстура стены в 3D — тот же SVG: паттерны в <defs> самой стены, ссылки не висят."""
-    sheet = _with_kind(house, "main", "siding")
+    sheet = with_kind(house, "main", "siding")
     for wall in house_3d(sheet, cfg)["walls"]:
         root = _root(wall["svg"])
         ids = set(_patterns(root))
@@ -160,7 +155,7 @@ def test_pattern_does_not_bloat_the_sheet(house, cfg):
     """Датчик gf#304: рисунок не раздувает лист больше чем вдвое — и на доме с кирпичом,
     обшивкой и деревом сразу."""
     plain = cfg.model_copy(update={"library": cfg.library.model_copy(update={"patterns": {}})})
-    sheet = _with_kind(_with_kind(house, "main", "siding"), "plinth", "brick")
+    sheet = with_kind(with_kind(house, "main", "siding"), "plinth", "brick")
     assert len(sheet_svg(sheet, cfg)) < 2 * len(sheet_svg(sheet, plain))
 
 
@@ -174,7 +169,7 @@ def test_pattern_of_unknown_kind_rejected(tmp_path):
 
 def test_zone_roles_are_all_hatched(house, cfg):
     """Рисунок — у зоны любой роли: у цоколя и у отделки основной стены одинаково."""
-    sheet = _with_kind(_with_kind(house, "main", "siding"), "plinth", "brick")
+    sheet = with_kind(with_kind(house, "main", "siding"), "plinth", "brick")
     root = _root(sheet_svg(sheet, cfg))
     hatched = [p for p in root.iterfind(".//{*}polygon") if URL.fullmatch(p.get("fill", ""))]
     roles = {p.get(ROLE) for p in hatched}
@@ -196,7 +191,7 @@ def test_every_pattern_draws_inside_its_cell(house, cfg, kind):
     """Швы любого рисунка лежат внутри ячейки паттерна, а лист с ним — разбираемый XML."""
     look = cfg.library.patterns[kind]
     assert all(0 <= x < look.width_m for c in look.courses for x in c.joints_m)
-    root = _root(sheet_svg(_with_kind(house, "main", kind), cfg))
+    root = _root(sheet_svg(with_kind(house, "main", kind), cfg))
     pattern = next(p for i, p in _patterns(root).items() if i.startswith(f"hatch-{kind}-"))
     cell = (float(pattern.get("width")), float(pattern.get("height")))
     coords = re.findall(r"M([\d.]+),([\d.]+)L([\d.]+),([\d.]+)", pattern.find("{*}path").get("d"))

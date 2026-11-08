@@ -123,7 +123,7 @@ def vocabulary(cfg: Config) -> list[str]:
     """Все токены в постоянном порядке: номер токена — его место в этом списке."""
     numbers = [str(n) for n in range(units(cfg.tokens.max_m, cfg.tokens) + 1)]
     values = [tok(v) for enum in ENUMS.values() for v in enum]
-    kinds = [f"{KIND}:{k}" for k in cfg.library.kinds]
+    kinds = [f"{KIND}:{k}" for k in cfg.library.kinds if k not in cfg.library.model_kinds]
     styles = [f"{STYLE}:{s}" for s in ["", *cfg.synthetic.spec.styles]]
     sizes = [size_tok(k) for k in range(window_types(cfg))]
     return [*map(str, Mark), *values, *kinds, *styles, *sizes, *numbers]
@@ -180,7 +180,7 @@ def condition(sheet: FacadeSheet, mode: Mode, cfg: Config) -> list[str]:
            str(units(spec.plinth_m, t)), str(units(spec.eaves_m, t)),
            tok(spec.roof.kind), f"{STYLE}:{spec.style}", *(tok(spec.trim.kind(t)) for t in Trim)]
     for m in spec.materials:
-        out += [_material(m.id), f"{KIND}:{m.kind}"]
+        out += [_material(m.id), f"{KIND}:{cfg.library.model_kind(m.kind)}"]
     for f in sheet.facades:
         out += _side(f.side, mode, t)
     return _known(out, cfg)
