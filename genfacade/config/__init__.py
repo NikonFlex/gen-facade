@@ -233,6 +233,8 @@ class Checks(Section):
     door_spread_m: float
     door_min_w_m: float
     corner_min_m: float
+    slope_offset_m: float  # окно во фронтоне — не ближе к скату (gf#321)
+    attic_knee_m: float    # окно под скатом — низом не ниже карниза на столько (gf#321)
     norms: dict[GuidelineCheck, GuidelineParams] = {}
 
 
@@ -282,6 +284,7 @@ class House3d(Section):
     slope_edge: float = Field(gt=0, lt=1)
     plinth_wash_m: float = Field(ge=0)
     cornice_steps: list[tuple[float, float]] = Field(min_length=1)
+    window_out_m: float = Field(ge=0)  # окно во фронтоне — на столько наружу от стены (gf#321)
 
 
 class Review(Section):
@@ -351,6 +354,7 @@ class Manual(Section):
     wall_m: float
     inside_share: float
     link_tol_m: float
+    gable_tol_m: float  # окно во фронтоне за стеной с фронтоном модуля не дальше этого (gf#321)
     trim: HouseTrim
 
 
@@ -465,6 +469,15 @@ class Entry(Section):
     porch_p: float
 
 
+class GableWindows(Section):
+    """Окна во фронтоне синтетики (config/synthetic.toml, [facade.gable], gf#321)."""
+
+    share: float               # доля домов с двускатной крышей, у которых они есть; 0 — ни у кого
+    count_weights: list[float]  # веса 0, 1, 2, 3 окон на щипцовой стене
+    sill_m: tuple[float, float]  # низ окна над карнизом, от и до
+    shapes: dict[VariantKind, float] = {}  # вид окна во фронтоне по форме → вес (gf#319)
+
+
 class FacadeRules(Section):
     windows: Windows
     door: Door
@@ -472,6 +485,7 @@ class FacadeRules(Section):
     cornice: Cornice
     finish: Finish
     entry: Entry
+    gable: GableWindows
 
 
 class Build(Section):

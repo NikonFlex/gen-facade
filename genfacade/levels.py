@@ -21,6 +21,7 @@
   всех стенах от земли до `plinth_m`, материал — самый частый у цоколя модели. У 9 из 27 настоящих
   домов реального теста `plinth_m > 0` (пол поднят), а зоны цоколя нет — её не добавляем, если
   модель её не ставила. Зона «цоколь» модели до самого карниза — основная отделка, а не цоколь;
+- окно во фронтоне (этажа под скатом, gf#321) стоит где стоит: у него нет пола и линии этажа;
 - окно — низ не ниже пола своего этажа (не в цоколе); верх, отскочивший от общей линии этажа
   дальше `window_jump_m`, — на линию (gf#275). Линия — медиана верха окон этажа на всех стенах
   дома: окна разных стен видны вместе на углу и в 3D, а настоящие дома держат их на одной высоте с
@@ -115,11 +116,13 @@ def _in_floor(w: Element) -> bool:
 
 
 def _heads(sheet: FacadeSheet) -> dict[int, float]:
-    """Общая линия верха окон этажа — медиана верха окон этажа на всех стенах, кроме окон в пол."""
+    """Общая линия верха окон этажа — медиана верха окон этажа на всех стенах, кроме окон в пол
+    и во фронтоне."""
     tops: dict[int, list[float]] = {}
     for f in sheet.facades:
         for w in f.elements:
-            if w.cls is ElementClass.WINDOW and not _in_floor(w):
+            roofed = roof.under_roof(w, sheet.spec.floors)
+            if w.cls is ElementClass.WINDOW and not _in_floor(w) and not roofed:
                 tops.setdefault(_floor(w, sheet.spec), []).append(w.y_m + w.h_m)
     return {n: median(ys) for n, ys in tops.items()}
 
@@ -128,7 +131,8 @@ def _windows(f: SideFacade, house: House) -> SideFacade:
     """Окна — не ниже пола этажа и на линии верха этажа, их дети — за ними. Окно, которое на новом
     месте налезло бы на другой проём, остаётся где было: брак сдвига хуже неровной линии."""
     moved = {w.id: m for w in f.elements
-             if w.cls is ElementClass.WINDOW and (m := _window(w, house)) is not None
+             if w.cls is ElementClass.WINDOW and not roof.under_roof(w, house.spec.floors)
+             and (m := _window(w, house)) is not None
              and not any(hits(m, o) for o in f.elements if o.cls in OPENINGS and o.id != w.id)}
     return _shifted(f, moved)
 
@@ -358,7 +362,8 @@ def _cornice(f: SideFacade, house: House) -> SideFacade:
     if not found:
         return f
     below = [e.y_m + e.h_m for e in f.elements
-             if e.cls in OPENINGS or (e.cls in TRIM_OF and e.parent is not None)]
+             if (e.cls in OPENINGS or (e.cls in TRIM_OF and e.parent is not None))
+             and not roof.under_roof(e, house.spec.floors)]  # окно во фронтоне — не под карнизом
     h = min(_cornice_h(f), eaves - max(below, default=0.0))
     one = found[0].model_copy(update={"x_m": 0.0, "w_m": f.side.length_m, "y_m": eaves - h,
                                       "h_m": h})

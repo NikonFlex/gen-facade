@@ -3,14 +3,17 @@
 контур — ортогональный, с внутренними углами (gf#199)."""
 
 import json
+import math
 
 import pytest
 
 from genfacade import config
 from genfacade.datasets import manual, store
 from genfacade.datasets.manual import M_PER_UNIT, Markup, Unit
+from genfacade.metrics import measures
 from genfacade.schema import ElementClass, Mode, OpeningKind, RoofKind, Source, Split, Trim
 from genfacade.train import tokens
+from genfacade.train.tokens import Mark
 from genfacade.validate import errors, validate
 
 CFG = config.load()
@@ -311,3 +314,55 @@ def _toml(m: Markup) -> str:
                                               if v is not None)
                     for s in m.model_dump(mode="json")["sides"])
     return head + sides
+
+
+def gabled(*windows: dict) -> Markup:
+    """Дом 12' × 20' с окнами на задней (короткой, щипцовой) стене (gf#321)."""
+    raw = markup().model_dump(mode="json")
+    raw["sides"][2]["elements"] = list(windows)
+    return Markup.model_validate(raw)
+
+
+def test_window_in_the_gable_is_kept_on_the_floor_under_the_roof():
+    """`data: Стена до карниза в данных` (gf#321): окно во фронтоне щипцовой стены — целиком в
+    стене с фронтоном модуля — остаётся окном этажа под скатом; окно, пересекающее скат, срезано и
+    в счёте срезанного; опись считает окна во фронтоне."""
+    inside = {"cls": "window", "box": box(5, EAVE_FT + 0.5, 2, 1.5)}
+    across = {"cls": "window", "box": box(0.5, EAVE_FT + 0.5, 2, 2)}  # у угла — выше ската
+    sample, dropped = manual.house(gabled(inside, across), CFG.data.manual)
+    plain, before = manual.house(gabled(), CFG.data.manual)
+    [window] = sample.sheet.facades[2].elements
+    assert window.floor == sample.sheet.spec.floors + 1
+    assert window.y_m == pytest.approx(sample.sheet.spec.eaves_m + ft(0.5))
+    assert dropped == before + 1
+    assert manual.gable_windows(sample.sheet) == 1
+    assert not errors(validate(sample.sheet, CFG.checks))
+
+
+def test_gable_is_in_the_condition_and_its_window_in_the_answer():
+    """`generation: Раскладка — последовательность токенов` (gf#321): у щипцовых стен в условии —
+    `<gable>` с вершиной конька в шагах сетки; окно во фронтоне пишется окном этажа под скатом и
+    разбирается обратно на то же место."""
+    sample, _ = manual.house(gabled({"cls": "window", "box": box(5, EAVE_FT + 0.5, 2, 1.5)}),
+                             CFG.data.manual)
+    sheet, grid = sample.sheet, CFG.tokens
+    cond = tokens.condition(sheet, Mode.BLIND, CFG)
+    at = [i for i, t in enumerate(cond) if t == Mark.GABLE]
+    rear = sheet.facades[2].side.length_m
+    apex = sheet.spec.eaves_m + rear / 2 * math.tan(math.radians(PITCH))
+    assert len(at) == 2  # две короткие стены — щипцовые
+    assert cond[at[1] + 1:at[1] + 4] == ["1", str(tokens.units(rear / 2, grid)),
+                                         str(tokens.units(apex, grid))]
+    words = tokens.answer(sheet, Mode.BLIND, CFG)
+    [window] = tokens.decode(words, tokens.bare(sheet), CFG).facades[2].elements
+    assert window.floor == sheet.spec.floors + 1
+    assert window.y_m == pytest.approx(tokens.metres(tokens.units(
+        sheet.facades[2].elements[0].y_m, grid), grid))
+
+
+def test_gable_window_is_not_a_storey():
+    """Окно во фронтоне (gf#321) — не этаж: этажность по окнам цела, свод этажей его не видит."""
+    sample, _ = manual.house(gabled({"cls": "window", "box": box(5, EAVE_FT + 0.5, 2, 1.5)}),
+                             CFG.data.manual)
+    assert measures.floors_kept(sample.sheet)
+    assert not measures.storeys(sample.sheet).facades[2].elements

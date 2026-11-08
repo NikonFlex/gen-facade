@@ -3,7 +3,8 @@
 Заданное планом (`fixed`) встаёт ровно на проём плана: положение и ширину задаёт план, а не
 модель (`generation: Режимы отличаются входом`). Окна, чьи оси ближе snap_m, встают на одну ось
 и одну ширину — к заданному планом тянутся остальные; окна одного этажа — на одну линию низа и
-одну высоту.
+одну высоту. Окно во фронтоне (этажа под скатом, gf#321) на ось окон этажей не тянется: ширина
+группы увела бы его на скат.
 Элемент «задан планом», которому проёма плана не досталось, — лишний: модель повторила проём
 плана (gf#153, окно GenPlan не на сетке токенов), он убирается вместе с подоконником и наличником.
 Подоконник, наличник, ставни и козырёк едут вместе со своим проёмом (follow.py). Затем карниз,
@@ -13,6 +14,7 @@
 
 from statistics import median
 
+from genfacade import roof
 from genfacade.config import Checks
 from genfacade.follow import follow
 from genfacade.levels import levels
@@ -33,16 +35,19 @@ PLAN_CLASS = {OpeningKind.WINDOW: ElementClass.WINDOW, OpeningKind.DOOR: Element
 
 
 def snap(sheet: FacadeSheet, cfg: Checks) -> FacadeSheet:
-    snapped = sheet.model_copy(update={"facades": [snap_side(f, cfg) for f in sheet.facades]})
+    snapped = sheet.model_copy(update={"facades": [snap_side(f, cfg, sheet.spec.floors)
+                                                   for f in sheet.facades]})
     return levels(snapped, cfg)
 
 
-def snap_side(f: SideFacade, cfg: Checks) -> SideFacade:
+def snap_side(f: SideFacade, cfg: Checks, floors: int | None = None) -> SideFacade:
+    """floors — этажей дома: окна выше (во фронтоне) на общие оси не встают."""
     f = _without_extra(f)
     planned = _to_plan(f)
     windows = [planned.get(e.id, e) for e in f.elements if e.cls is ElementClass.WINDOW]
     moved = planned | {w.id: w for w in windows}
-    for group in _clusters(windows, cfg.snap_m):
+    storeys = [w for w in windows if floors is None or not roof.under_roof(w, floors)]
+    for group in _clusters(storeys, cfg.snap_m):
         x, w = _target(group)
         for e in group:
             if _differs((e.x_m, e.w_m), (x, w)):

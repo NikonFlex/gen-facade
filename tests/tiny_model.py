@@ -9,6 +9,8 @@ from genfacade.config import Config, GPTSize
 from genfacade.train import sampling, tokens
 
 SEED = 0
+# Окно — с запасом на ответ необученной модели: со словарём gf#321 (`<gable>`, виды окна)
+# веса другие, и ответ пачки на простой дом при 704 обрывался на зонах последней стены.
 SIZE = GPTSize(block=1024, layers=1, heads=2, width=8, dropout=0.0)
 
 
