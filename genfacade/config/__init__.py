@@ -355,6 +355,42 @@ class MarkupEditor(Section):
         return self
 
 
+class CatalogSample(Section):
+    """Образец, на котором каталог рисует вид (gf#354): дом и стена того же размера для каждого
+    вида, чтобы картинки сравнивались. Дом — параметры стаба шага 1 (models/stub_data), здесь
+    только размеры; окно и дверь — по виду, остальное — как у листа."""
+
+    width_m: float                # дом: длинная сторона
+    depth_m: float                # дом: короткая сторона, на ней фронтон и вход
+    wall_m: float                 # отдельная стена для окон, дверей и выводимых элементов
+    sill_m: float                 # низ окна над землёй
+    window_at: float              # окно и дверь рядом на одной стене (отделки): где стоит окно,
+    door_at: float                # где дверь — доля свободной длины стены, 0 — слева, 1 — справа
+    door_m: Size
+    window_m: dict[str, Size]     # вид окна → ширина × высота; `default` — вида нет в таблице
+
+
+class CatalogSection(Section):
+    """Раздел каталога: заголовок и пояснение для страницы, а откуда брать источник вида в
+    docs/library-catalog.md — подзаголовки (по куску текста) и строка таблицы (по куску первой
+    ячейки, если в таблице вперемешку подоконники и наличники)."""
+
+    title: str
+    note: str = ""
+    doc_headings: list[str] = []
+    doc_row: str = ""
+
+
+class Catalog(Section):
+    """Вкладка «Каталог» смотрелки (/catalog, gf#354): состав — из конфига, порядок и тексты
+    разделов — отсюда. Идентификатор раздела — имя построителя в viewer/catalog.py."""
+
+    doc: Path                     # источник видов; нет файла — источников нет
+    sample: CatalogSample
+    labels: dict[str, str]        # подписи к строкам «Что у вида» и группам
+    sections: dict[str, CatalogSection]
+
+
 class Viewer(Section):
     server: Server
     paths: ViewerPaths
@@ -362,6 +398,7 @@ class Viewer(Section):
     house3d: House3d
     review: Review
     markup: MarkupEditor
+    catalog: Catalog
     labels: Labels
 
 
