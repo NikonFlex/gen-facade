@@ -1,0 +1,72 @@
+/* Страница правки разметки (gf#348). Цвета рамок приходят с сервера (config/viewer.toml,
+   [markup.colors]); здесь — только оформление страницы. Размер ручки: мышь и палец. */
+:root { --handle: 9px; }
+@media (pointer: coarse) { :root { --handle: 11px; } }
+body.markup-page { display: block; height: auto; min-height: 100vh; padding-bottom: 84px; }
+html:has(.markup-page), .markup-page { overscroll-behavior-y: none; }
+.markup-page .topbar { position: static; }
+.mk-top { position: sticky; top: 0; z-index: 5; background: var(--panel); box-shadow: var(--shadow); }
+.mk-bar, .mk-tools {
+  display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center;
+  justify-content: space-between; padding: 6px 14px; background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.mk-tools { border-top: 1px solid var(--line); }
+.mk-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.mk-progress { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.mk-chip { padding: 2px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; }
+.mk-chip.good, .mk-chip.edited { background: var(--ok-soft); color: var(--ok); }
+.mk-chip.rejected { background: var(--danger-soft); color: var(--danger); }
+.mk-size { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.mk-tools .btn, .mk-bar .btn { min-height: 38px; padding: 0 12px; }
+.mk-tools select { min-height: 38px; font: inherit; border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 8px; background: var(--panel); }
+.btn.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.danger { color: var(--danger); border-color: var(--danger); }
+
+.mk-sides { align-items: start; max-width: 1500px; margin: 0 auto; padding: 10px 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.mk-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; box-shadow: var(--shadow); min-width: 0; }
+.mk-card h3 { margin: 0 0 6px; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
+.mk-scale { font-size: 12px; color: var(--muted); font-weight: 400; display: flex; gap: 4px; align-items: center; }
+.mk-scale input { width: 78px; min-height: 30px; font: inherit; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 6px; }
+.mk-view { width: 100%; height: auto; display: block; background: var(--bg); border-radius: 6px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.mk-view .box { vector-effect: non-scaling-stroke; stroke-width: 2; cursor: move; }
+.mk-view .line { vector-effect: non-scaling-stroke; stroke-width: 1.5; }
+.mk-view .hit { vector-effect: non-scaling-stroke; stroke: transparent; stroke-width: 18; }
+.mk-view .hit.h { cursor: ns-resize; } .mk-view .hit.v { cursor: ew-resize; }
+.mk-view .zone, .mk-view .shape { vector-effect: non-scaling-stroke; fill: none; stroke-width: 1.5; pointer-events: none; }
+.mk-view .zone { stroke-dasharray: 6 4; }
+.mk-view .grip { stroke: var(--paper); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.mk-view text { paint-order: stroke; stroke: var(--paper); stroke-width: 3px; pointer-events: none; }
+
+.mk-decide {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; gap: 10px;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+.btn.big { min-height: 56px; font-size: 17px; font-weight: 600; flex: 1; }
+.mk-decide .btn.primary { background: var(--ok); color: var(--accent-ink); border-color: var(--ok); flex: 2; }
+.btn.danger-line { color: var(--danger); border-color: var(--danger); }
+.btn:disabled { opacity: 0.5; }
+
+.mk-dialog { border: 0; border-radius: 14px; padding: 16px; width: min(440px, 94vw); box-shadow: 0 10px 40px rgba(0,0,0,.3); }
+.mk-dialog::backdrop { background: rgba(0,0,0,.4); }
+.mk-dialog h2 { font-size: 17px; margin-bottom: 10px; }
+.mk-choices { display: grid; gap: 8px; margin-bottom: 10px; }
+.mk-choices .btn { min-height: 52px; text-align: left; padding: 0 14px; }
+.mk-dialog input { width: 100%; min-height: 44px; font-size: 16px; border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 10px; margin-bottom: 10px; }
+.mk-list { max-height: 60vh; overflow: auto; margin-bottom: 10px; }
+.mk-list button { display: flex; width: 100%; justify-content: space-between; gap: 8px; min-height: 44px; align-items: center; background: none; border: 0; border-bottom: 1px solid var(--line); text-align: left; padding: 0 4px; cursor: pointer; }
+.mk-list .cur { font-weight: 700; }
+
+@media (max-width: 860px) {
+  .mk-bar .mk-nav { order: 2; margin-left: auto; }
+  .mk-bar .mk-stat { order: 3; flex-basis: 100%; }
+  .mk-bar { gap: 2px 8px; }
+  .mk-card h3 { flex-wrap: nowrap; font-size: 13px; }
+  .mk-sides { grid-template-columns: 1fr; padding: 8px; gap: 8px; }
+  .mk-bar, .mk-tools { padding: 5px 8px; }
+  .mk-tools { overflow-x: auto; flex-wrap: nowrap; }
+  .mk-tools .mk-row { flex-wrap: nowrap; }
+  .mk-tools .btn { white-space: nowrap; }
+  .mk-card { padding: 6px; }
+}

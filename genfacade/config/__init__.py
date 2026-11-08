@@ -8,6 +8,7 @@ TOML сливается с умолчаниями поключно, sheet.css д
 """
 
 import tomllib
+from enum import StrEnum
 from importlib.resources import files
 from pathlib import Path
 from typing import Self
@@ -19,7 +20,9 @@ from genfacade.schema import (
     NONE_KIND,
     CanopyShape,
     CasingShape,
+    CheckState,
     ContourKind,
+    DataAttr,
     Device,
     DoorShape,
     ElementClass,
@@ -27,12 +30,18 @@ from genfacade.schema import (
     GuidelineUse,
     HouseScore,
     HouseTrim,
+    LevelKind,
     Mode,
     PaletteRole,
     Placement,
     Region,
+    RejectReason,
     Roof,
     RoofKind,
+    RuleDraw,
+    RuleFrom,
+    RuleVariant,
+    RunOutcome,
     ShutterShape,
     SillShape,
     Source,
@@ -211,9 +220,18 @@ class Outline(Section):
     stray_area: float
 
 
+class Parts(Section):
+    """Какие крылья дома ниже главного (gf#322, `facade: Части дома`)."""
+
+    ratio: float       # крыло меньше этой доли площади главного — кандидат в нижнее
+    wing_min_m: float  # уже этого (меньшая сторона) — выступ, а не крыло: на высоте главной части
+    drop_floors: int   # на сколько этажей нижнее крыло ниже главной части, если текст молчит
+
+
 class PlanConfig(Section):
     gaps: Gaps
     outline: Outline
+    parts: Parts
 
 
 GuidelineParams = dict[str, ElementClass | float | list[float]]
@@ -254,6 +272,22 @@ class ModeLabel(Section):
     hint: str
 
 
+class Tone(StrEnum):
+    """Окраска состояния на странице: класс темы смотрелки (viewer/static/theme.css, .status)."""
+
+    OK = "ok"
+    BAD = "bad"
+    WARN = "warn"
+    MUTED = "muted"
+
+
+class OutcomeLabel(Section):
+    """Итог прогона на странице «Дома» (gf#356): подпись и окраска."""
+
+    title: str
+    tone: Tone
+
+
 class Labels(Section):
     """Подписи смотрелки к значениям enum из schema.py: страница берёт их отсюда."""
 
@@ -261,10 +295,66 @@ class Labels(Section):
     cls: dict[ElementClass, str]
     role: dict[ZoneRole, str]
     variant: dict[VariantKind, str]
+    roof: dict[RoofKind, str]
+    outcome: dict[RunOutcome, OutcomeLabel]
+    style: dict[str, str]           # стиль стаба шага 1 (models.toml, style_words) — «Новый дом»
+    trim: dict[Trim, str]           # выводимый элемент — «Новый дом»
+    shape: dict[ContourKind, str]   # вид контура случайного плана — «Новый дом»
+    kind: dict[str, str]            # вид материала стен, который можно назвать в тексте
+    color: dict[str, str]           # цвет, который можно назвать в тексте: слово → русское
 
 
 class SamplesView(Section):
     shown: int
+
+
+class RuleItem(Section):
+    """Правило на странице «Правила» (gf#356): число берётся из конфига, а не пишется сюда."""
+
+    id: str
+    title: str
+    text: str                       # что утверждает правило и кто его держит
+    number_from: RuleFrom
+    key: str                        # поле Checks или параметр правила свода
+    guideline: str | None = None    # правило свода: его параметр, источники и цитаты
+    unit: str = "м"
+    holds: str                      # где держится: привязка (шаг 5), валидатор, страж синтетики
+    draw: RuleDraw
+    good: float                     # на картинке «так» значение = число × good
+    bad: float                      # на картинке «не так» значение = число × bad
+
+
+class RuleSheet(Section):
+    """Стена, на которой рисуются картинки правил: размеры — одни на все правила."""
+
+    wall_m: float
+    depth_m: float
+    window_m: tuple[float, float]
+    door_m: tuple[float, float]
+    sill_m: float
+
+
+class Rules(Section):
+    sheet: RuleSheet
+    captions: dict[RuleVariant, str]   # подпись под картинкой «так» и «не так»
+    item: list[RuleItem]
+
+
+class DataSetLabel(Section):
+    """Набор данных на странице «Данные»: чем он служит и в каком порядке."""
+
+    title: str
+    note: str
+
+
+class DataView(Section):
+    """Страница «Данные» (gf#356): сколько домов корпуса читать для долей, сколько примеров
+    показывать, подписи наборов и признаков."""
+
+    stats_sample: int = Field(gt=0)
+    examples: int = Field(gt=0)
+    sets: dict[Source, DataSetLabel]
+    attrs: dict[DataAttr, str]
 
 
 class House3d(Section):
@@ -272,6 +362,10 @@ class House3d(Section):
 
     three_url: str
     px_per_m: int
+    # потолки текстур стен (gf#353): сторона — не больше этого и не больше MAX_TEXTURE_SIZE
+    # видеокарты; все стены вместе — не больше texture_budget_mpx млн пикселей (4 байта каждый)
+    texture_max_px: int = Field(gt=0)
+    texture_budget_mpx: float = Field(gt=0)
     roof: str
     ground: str
     background: str
@@ -299,12 +393,105 @@ class Review(Section):
     reference: bool
 
 
+Size = tuple[float, float]
+
+
+class MarkupColors(Section):
+    """Цвета рамок на странице правки (gf#348); те же берёт `tools/markup.py overlay` — картинка
+    сверки и страница не расходятся. Имена CSS: их понимают и браузер, и Pillow."""
+
+    cls: dict[ElementClass, str]   # рамка элемента по классу
+    levels: str                    # земля, чистый пол, этажи, края стены
+    zone: str                      # вторая отделка
+    outline: str                   # силуэт стены выше карниза
+    roof: str
+    selected: str                  # выбранная рамка
+
+
+class MarkupLabels(Section):
+    state: dict[CheckState, str]
+    reason: dict[RejectReason, str]
+    level: dict[LevelKind, str]
+
+
+class MarkupEditor(Section):
+    """Страница правки разметки (/markup, gf#348, viewer/markup.py): откуда очередь домов, куда
+    пишется правка, как жмутся листы и какого размера рамка от касания."""
+
+    folder: Path                   # <дом>.toml очереди; правка пишется туда же (папка разметки)
+    source: str                    # ключ `data.manual.paths.pdf_dirs`: где листы домов
+    state_file: str                # состояние очереди — в папке разметки
+    original_dir: str              # исходная разметка автоматики: подпапка, сборщик её не читает
+    cache_dir: Path                # сжатые листы
+    image_max_side: int            # длинная сторона листа для страницы, px
+    add_classes: list[ElementClass]  # что можно добавить кнопкой; размер — в default_size_m
+    default_size_m: dict[ElementClass, Size]  # рамка от касания: ширина и высота, м
+    min_box_m: float               # рамка меньше этого при отпускании — касание, не рамка
+    colors: MarkupColors
+    labels: MarkupLabels
+
+    @model_validator(mode="after")
+    def _complete(self) -> Self:
+        """Подпись и цвет есть у каждого значения enum, размер — у каждого добавляемого класса."""
+        need = {
+            "цвет класса": (set(self.colors.cls), set(ElementClass)),
+            "подпись состояния": (set(self.labels.state), set(CheckState)),
+            "подпись причины": (set(self.labels.reason), set(RejectReason)),
+            "подпись линии": (set(self.labels.level), set(LevelKind)),
+            "размер рамки": (set(self.default_size_m), set(self.add_classes)),
+        }
+        for what, (have, want) in need.items():
+            if have != want:
+                raise ValueError(f"{what}: не хватает или лишнее {sorted(have ^ want)}")
+        return self
+
+
+class CatalogSample(Section):
+    """Образец, на котором каталог рисует вид (gf#354): дом и стена того же размера для каждого
+    вида, чтобы картинки сравнивались. Дом — параметры стаба шага 1 (models/stub_data), здесь
+    только размеры; окно и дверь — по виду, остальное — как у листа."""
+
+    width_m: float                # дом: длинная сторона
+    depth_m: float                # дом: короткая сторона, на ней фронтон и вход
+    wall_m: float                 # отдельная стена для окон, дверей и выводимых элементов
+    sill_m: float                 # низ окна над землёй
+    window_at: float              # окно и дверь рядом на одной стене (отделки): где стоит окно,
+    door_at: float                # где дверь — доля свободной длины стены, 0 — слева, 1 — справа
+    door_m: Size
+    window_m: dict[str, Size]     # вид окна → ширина × высота; `default` — вида нет в таблице
+
+
+class CatalogSection(Section):
+    """Раздел каталога: заголовок и пояснение для страницы, а откуда брать источник вида в
+    docs/library-catalog.md — подзаголовки (по куску текста) и строка таблицы (по куску первой
+    ячейки, если в таблице вперемешку подоконники и наличники)."""
+
+    title: str
+    note: str = ""
+    doc_headings: list[str] = []
+    doc_row: str = ""
+
+
+class Catalog(Section):
+    """Вкладка «Каталог» смотрелки (/catalog, gf#354): состав — из конфига, порядок и тексты
+    разделов — отсюда. Идентификатор раздела — имя построителя в viewer/catalog.py."""
+
+    doc: Path                     # источник видов; нет файла — источников нет
+    sample: CatalogSample
+    labels: dict[str, str]        # подписи к строкам «Что у вида» и группам
+    sections: dict[str, CatalogSection]
+
+
 class Viewer(Section):
     server: Server
     paths: ViewerPaths
     samples: SamplesView
     house3d: House3d
     review: Review
+    markup: MarkupEditor
+    catalog: Catalog
+    data_view: DataView
+    rules: Rules
     labels: Labels
 
 
@@ -752,6 +939,7 @@ class SpecStub(Section):
     reach: int                             # слов от цвета до слова, чью роль он красит
     negations: list[str]                   # слово перед названием элемента — элемента нет
     floors_words: dict[int, list[str]]     # этажей → слова в тексте
+    wing_words: dict[int, list[str]]       # этажей у нижних частей дома → слова в тексте (gf#322)
     style_words: dict[str, list[str]]      # стиль → слова в тексте
     material_words: dict[str, list[str]]   # вид стен из библиотеки → слова в тексте
     material_like: dict[str, str] = {}     # вид → общий вид: слова общего называют и этот вид

@@ -1,0 +1,53 @@
+/* Вкладка «Каталог» (gf#354): карточки видов сеткой, раздел за разделом. Цвета — токены theme.css. */
+body.catalog-page { display: block; height: auto; min-height: 100vh; }
+.cat-tools {
+  position: sticky; top: var(--topbar-h); z-index: 5; display: flex; gap: 8px 12px; align-items: center;
+  padding: 6px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.cat-nav { display: flex; gap: 6px; overflow-x: auto; flex: 1; min-width: 0; scrollbar-width: none; }
+.cat-nav::-webkit-scrollbar { display: none; }
+.cat-nav a {
+  flex: none; padding: 5px 11px; border-radius: 999px; background: var(--panel-2);
+  border: 1px solid var(--line); color: var(--ink); text-decoration: none; white-space: nowrap;
+}
+.cat-nav a:hover { border-color: var(--accent); color: var(--accent); }
+.cat-nav .n { color: var(--muted); margin-left: 5px; font-variant-numeric: tabular-nums; }
+#filter {
+  flex: none; width: 240px; min-height: 36px; padding: 0 10px; font: inherit;
+  border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel);
+}
+.catalog { max-width: 1500px; margin: 0 auto; padding: 8px 16px 48px; }
+.cat-section { scroll-margin-top: 112px; padding-top: 14px; }
+.cat-section h2 { font-size: 18px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.cat-section h2 .n { color: var(--muted); font-size: 13px; font-weight: 400; }
+.cat-note { color: var(--muted); margin: 4px 0 8px; max-width: 80ch; }
+.cat-group { margin: 12px 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.cat-card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 10px; min-width: 0; display: flex; flex-direction: column; gap: 6px;
+}
+.cat-card[hidden] { display: none; }
+.cat-image { background: var(--paper); border: 1px solid var(--line); border-radius: 6px; min-height: 120px; display: grid; place-items: center; overflow: hidden; }
+.cat-image img { width: 100%; height: auto; max-height: 220px; object-fit: contain; display: block; }
+.cat-image .miss { color: var(--danger); font-size: 12px; padding: 8px; }
+.cat-card h3 { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+.cat-facts { margin: 0; font-size: 12.5px; }  /* подпись над значением: в карточке на телефоне места мало */
+.cat-facts dt { color: var(--muted); font-size: 11.5px; }
+.cat-facts dd { margin: 0 0 3px; overflow-wrap: anywhere; }
+.cat-words { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; color: var(--muted); }
+.cat-words code { background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 6px; font-family: var(--mono); }
+.cat-words.shared code { background: var(--panel-2); color: var(--muted); }
+.cat-source { font-size: 12px; color: var(--muted); }
+.cat-source summary { cursor: pointer; }
+.cat-source p { margin: 4px 0 0; overflow-wrap: anywhere; }
+
+@media (max-width: 860px) {
+  .cat-tools { padding: 6px 8px; flex-wrap: wrap; top: var(--topbar-h); }
+  .cat-nav { flex-basis: 100%; }
+  #filter { width: 100%; font-size: 16px; }  /* 16px — iOS не увеличивает страницу */
+  .catalog { padding: 4px 8px 40px; }
+  .cat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .cat-card { padding: 8px; }
+  .cat-section { scroll-margin-top: 150px; }
+}

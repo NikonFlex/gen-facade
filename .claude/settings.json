@@ -56,7 +56,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash|Read",
+        "matcher": "Bash|Read|Agent|Task",
         "hooks": [
           {
             "type": "command",

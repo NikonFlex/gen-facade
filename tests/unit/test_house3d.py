@@ -6,6 +6,7 @@ import pytest
 from test_unfold import L_SIDES, sides_of
 
 from genfacade.datasets.synthetic import build
+from genfacade.render import hatch
 from genfacade.render.house3d import house_3d
 from genfacade.render.sheet_format import num
 from genfacade.render.svg import element_fill, pen_for, sheet_svg
@@ -184,3 +185,52 @@ def test_cornice_under_slope_is_a_band_flat_roof_covers_it(cfg, rect_cfg):
     xs = [x for x, _ in flat["corners"]]
     assert min(x for x, _ in flat["roof"]["flat"]) == pytest.approx(min(xs) - out)
     assert max(x for x, _ in flat["roof"]["flat"]) == pytest.approx(max(xs) + out)
+
+
+def _gabled(sheet: FacadeSheet, cfg, roof_kind: str, main_kind: str = "plaster") -> FacadeSheet:
+    """Дом под двускатной кровлей: кровля и стена — материалы данного вида, остальное как было."""
+    kinds = {"roof": roof_kind, "main": main_kind}
+    palette = [m.model_copy(update={"kind": kinds.get(m.id, m.kind), "color": None})
+               if m.id in kinds else m for m in sheet.spec.materials]
+    spec = sheet.spec.model_copy(update={
+        "materials": palette, "roof": cfg.models.spec.roof_shape.roof(RoofKind.GABLE, "roof")})
+    return sheet.model_copy(update={"spec": spec})
+
+
+@pytest.mark.parametrize("kind", ["metal_tile", "shingle_roof", "ondulin", "metal_roof"])
+def test_roof_comes_with_its_pattern_swatch(house, cfg, kind):
+    """gf#353, хозяин 08.11: «красивые материалы, а в 3D я их не вижу». Кровля в 3D — рисунком
+    вида кровли: дом отдаёт id материала кровли и ячейку рисунка (SVG и размер в метрах из
+    `[patterns]`) — выкладывает её просмотр по скату."""
+    data = house_3d(_gabled(house, cfg, kind), cfg)
+    assert data["roof"]["material"] == "roof"
+    swatch = data["swatches"]["roof"]
+    tile = hatch.tile_m(cfg.library.patterns[kind])
+    assert (swatch["width_m"], swatch["height_m"]) == tile
+    assert f'id="hatch-{kind}-' in swatch["svg"]
+
+
+def test_no_pattern_no_swatch_wall_above_eaves_keeps_the_wall_material(house, cfg):
+    """Штукатурка и бетон без рисунка — ячейки нет, просмотр красит цветом; стена над карнизом
+    (щипец) — материал main с рисунком, как стена под карнизом."""
+    plain = house_3d(_gabled(house, cfg, "tile_roof"), cfg)
+    assert plain["roof"]["material"] == "roof" and "roof" not in plain["swatches"]
+    brick = house_3d(_gabled(house, cfg, "tile_roof", "brick_1_5"), cfg)
+    assert brick["roof"]["wall_material"] == "main" and "main" in brick["swatches"]
+
+
+def test_relief_of_patterned_material_knows_its_swatch(cfg):
+    """Цоколь из камня — выступ с материалом, у которого рисунок есть: просмотр красит его
+    ячейкой. Элемент, залитый цветом класса (у окна рисунка нет), материала не называет."""
+    sheet = next(s for s in (build.sample(k, cfg).sheet for k in range(20))
+                 if any(z.role is ZoneRole.PLINTH for f in s.facades for z in f.zones))
+    plinth = next(z.material for f in sheet.facades for z in f.zones if z.role is ZoneRole.PLINTH)
+    palette = [m.model_copy(update={"kind": "stone"}) if m.id == plinth else m
+               for m in sheet.spec.materials]
+    sheet = sheet.model_copy(update={"spec": sheet.spec.model_copy(update={"materials": palette})})
+    data = house_3d(sheet, cfg)
+    reliefs = [r for w in data["walls"] for r in w["relief"]]
+    zones = [r for r in reliefs if r["role"] is ZoneRole.PLINTH]
+    assert zones and all(r["material"] == plinth for r in zones)
+    assert plinth in data["swatches"]
+    assert all(r["material"] in data["swatches"] for r in zones)

@@ -31,6 +31,52 @@ class CalibrationRow(StrEnum):
     EMPTY = "empty"
 
 
+class RunOutcome(StrEnum):
+    """Итог прогона на странице «Дома» смотрелки (gf#356): считает сервер по meta.json прогона,
+    страница рисует и фильтрует по нему (docs/clean-contour.md, п. 13)."""
+
+    CLEAN = "clean"          # валидатор шага 5 ошибок не нашёл
+    DEFECT = "defect"        # ошибки валидатора на листе
+    REFUSED = "refused"      # прогон остановлен отказом (план, модель)
+    UNCHECKED = "unchecked"  # лист без шага 5 (собран вручную): валидатор не запускался
+
+
+class DataAttr(StrEnum):
+    """Признак дома в сводке корпуса на странице «Данные» (gf#356): доли по значениям."""
+
+    SIDES = "sides"
+    FLOORS = "floors"
+    ROOF = "roof"
+    WALLS = "walls"
+    STYLE = "style"
+
+
+class RuleDraw(StrEnum):
+    """Что рисует картинка правила на странице «Правила» (gf#356): сборку стены «так / не так»
+    для каждого вида собирает viewer/rules.py."""
+
+    CORNER = "corner"
+    PIER = "pier"
+    HEAD_LINE = "head_line"
+    DOOR_HEIGHT = "door_height"
+    DOOR_SPREAD = "door_spread"
+    DOOR_WIDTH = "door_width"
+    VERTICAL_AXES = "vertical_axes"
+    HEAD_TO_EAVES = "head_to_eaves"
+
+
+class RuleVariant(StrEnum):
+    GOOD = "good"  # так
+    BAD = "bad"    # не так
+
+
+class RuleFrom(StrEnum):
+    """Откуда число правила: допуск шага 5 (checks.toml) или параметр правила свода."""
+
+    CHECKS = "checks"
+    GUIDELINE = "guideline"
+
+
 class Refusal(StrEnum):
     """Код отказа, который доходит до человека: в ответе смотрелки (`detail.code`), в
     meta.json прогона и в ответе модели строки realtest («refusal»). Текст — REFUSAL_TEXT;
@@ -47,8 +93,16 @@ class Refusal(StrEnum):
     NO_RUN = "no_run"
     NO_SHEET = "no_sheet"                      # у прогона нет листа фасадов
     NO_SAMPLE = "no_sample"
+    NO_CATALOG_ITEM = "no_catalog_item"        # каталог: нет такого раздела или вида
+    NO_RULE = "no_rule"                        # страница «Правила»: нет такого правила
+    CATALOG_NOT_DRAWN = "catalog_not_drawn"    # каталог: вид в конфиге, образец с ним не строится
     NO_REVIEW = "no_review"                    # смотрелка запущена без --review
     NO_REVIEW_ITEM = "no_review_item"          # нет дома, места или листа проверки
+    NO_MARKUP_HOUSE = "no_markup_house"        # страница правки: нет такого дома в очереди
+    NO_MARKUP_SHEET = "no_markup_sheet"        # страница правки: у дома нет листа или страницы
+    BAD_MARKUP_EDIT = "bad_markup_edit"        # правка не складывается в разметку
+    BAD_CHECK_STEP = "bad_check_step"          # решение о доме вне таблицы переходов
+    BAD_CHECK_STATE = "bad_check_state"        # файл очереди не читается или не сходится с папкой
 
 
 REFUSAL_TEXT = {
@@ -63,9 +117,45 @@ REFUSAL_TEXT = {
     Refusal.NO_RUN: "нет прогона",
     Refusal.NO_SHEET: "у прогона нет листа фасадов",
     Refusal.NO_SAMPLE: "нет примера",
+    Refusal.NO_CATALOG_ITEM: "нет в каталоге",
+    Refusal.NO_RULE: "нет такого правила",
+    Refusal.CATALOG_NOT_DRAWN: "образец с таким видом не строится",
     Refusal.NO_REVIEW: "проверка не включена: genfacade serve --review <папка realtest>",
     Refusal.NO_REVIEW_ITEM: "нет в проверке",
+    Refusal.NO_MARKUP_HOUSE: "нет дома в очереди разметки",
+    Refusal.NO_MARKUP_SHEET: "у дома нет листа",
+    Refusal.BAD_MARKUP_EDIT: "правка не складывается в разметку",
+    Refusal.BAD_CHECK_STEP: "так решить о доме нельзя",
+    Refusal.BAD_CHECK_STATE: "файл очереди разметки повреждён",
 }
+
+
+class CheckState(StrEnum):
+    """Проверка дома хозяином на странице правки разметки (gf#348): хранимое поле очереди,
+    а не вывод из наличия файла. Переходы — viewer/markup_queue.py."""
+
+    UNCHECKED = "unchecked"  # автоматика разметила, человек ещё не смотрел
+    GOOD = "good"            # посмотрел, правок нет
+    EDITED = "edited"        # посмотрел и поправил, правка записана в разметку
+    REJECTED = "rejected"    # дом негоден для набора; причина — RejectReason
+
+
+class LevelKind(StrEnum):
+    """Горизонтальная линия вида, которую тянут на странице правки (gf#348)."""
+
+    GROUND = "ground"   # земля: задаёт цоколь дома
+    FLOOR = "floor"     # чистый пол первого этажа: свой у каждого вида
+    TOP = "top"         # верх этажа (последний — карниз): задаёт высоту этажа дома
+
+
+class RejectReason(StrEnum):
+    """Почему дом негоден (закрытый список; текст — config/viewer.toml, [markup.labels.reason])."""
+
+    NO_FACADES = "no_facades"      # на листах нет четырёх читаемых фасадов
+    BAD_SCALE = "bad_scale"        # масштаб вида не определить
+    COMPLEX = "complex"            # форма дома не по силам модулю
+    BAD_DRAWING = "bad_drawing"    # чертёж нечитаем или искажён
+    OTHER = "other"
 
 
 class Refused(ValueError):
@@ -446,6 +536,9 @@ class HouseSpec(Model):
     style: str = ""
     trim: HouseTrim = HouseTrim()
     materials: list[Material]
+    # Этажей у нижних частей дома (gf#322); нет — правило конвейера «меньшее крыло ниже»
+    # (config/plan.toml, [parts]). Остальное — у главной части: floors, eaves_m, roof.
+    wing_floors: int | None = Field(default=None, ge=1)
 
     @model_validator(mode="after")
     def _check(self) -> "HouseSpec":
@@ -538,6 +631,9 @@ class Plan(Model):
 
     walls: list[Rect]
     outline: Polygon
+    # Прямоугольные крылья непрямоугольного контура (шаг 2, gf#322); у прямоугольного — пусто:
+    # дом из одной части.
+    wings: list[Rect] = []
     openings: list[PlanOpening] = []
     sides: list[Side] = []  # заполняет препроцессор
     scale_m_per_px: float = Field(gt=0)
@@ -596,12 +692,25 @@ class MaterialZone(Model):
         return cls(role=role, material=material, shape=[(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
 
 
+class WallRun(Model):
+    """Участок стороны в одной части дома (gf#322): x вдоль стены, как у элементов; этажность и
+    карниз — свойства части, а не стены, поэтому углы частей сходятся по построению."""
+
+    x0_m: float
+    x1_m: float
+    part: int = Field(ge=0)  # номер крыла в Plan.wings
+    floors: int = Field(ge=1)
+    eaves_m: float = Field(gt=0)
+
+
 class SideFacade(Model):
     side: Side
     elements: list[Element] = []
     zones: list[MaterialZone] = []
     # Не генерируется: прямоугольник стены считает развёртка (unfold.py) из HouseSpec и стороны.
     silhouette: Polygon | None = None
+    # Участки по частям дома, слева направо; пусто — вся стена одной части, как в HouseSpec.
+    runs: list[WallRun] = []
 
     @model_validator(mode="after")
     def _check_parents(self) -> "SideFacade":

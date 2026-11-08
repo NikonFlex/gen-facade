@@ -13,10 +13,18 @@ import math
 
 import shapely
 
-from genfacade import roof, window_shape
+from genfacade import parts, roof, window_shape
 from genfacade.config import Config, House3d
 from genfacade.derive import DERIVED
-from genfacade.render.svg import Pen, element_fill, facade_svg, foot_of, pen_for
+from genfacade.render.svg import (
+    Pen,
+    element_fill,
+    element_material,
+    facade_svg,
+    foot_of,
+    pen_for,
+    swatch,
+)
 from genfacade.schema import (
     EPS,
     Element,
@@ -46,13 +54,17 @@ def house_3d(sheet: FacadeSheet, cfg: Config) -> dict:
         "normal": f.side.orientation,
         "length_m": f.side.length_m,
         "convex_left": _convex(corners, (k + 1) % len(corners)),
-        "height_m": sheet.spec.eaves_m,
+        "height_m": max((y for _, y in f.silhouette or []), default=sheet.spec.eaves_m),
         "svg": facade_svg(_flat(f, look), pen),
         "relief": _relief(f, pen, look),
     } for k, f in enumerate(sheet.facades)]
+    roof_part = _roof(sheet, pen, corners, look)
+    used = {r["material"] for w in walls for r in w["relief"]} | {
+        roof_part["material"], roof_part["wall_material"]}
+    swatches = {m: s for m in used - {None} if (s := swatch(m, pen)) is not None}
     return {"corners": corners, "eaves_m": sheet.spec.eaves_m,
-            "trim": cfg.sheet.trim.model_dump(), "walls": walls,
-            "roof": _roof(sheet, pen, corners, look)}
+            "trim": cfg.sheet.trim.model_dump(), "walls": walls, "roof": roof_part,
+            "swatches": swatches}
 
 
 def _look(sheet: FacadeSheet, look: House3d) -> House3d:
@@ -69,22 +81,38 @@ def _roof(sheet: FacadeSheet, pen: Pen, corners: list[Point], look: House3d) -> 
     """Скаты и стены над карнизом в объёме: многоугольники (x, y плана, высота) и цвета; скаты
     не строятся — пусто, просмотр кладёт плоскую крышу по контуру `flat`: он шире плана на вынос
     карниза, если карниз на доме есть, — плита закрывает его сверху, а не он торчит из-под неё.
-    Цвет кровли — материала крыши, если он в палитре (нет — цвет крыши просмотра)."""
-    line = roof.roofline(sheet)
-    if line is None:
+    Цвет кровли — материала крыши, если он в палитре (нет — цвет крыши просмотра). `material` и
+    `wall_material` — id материалов кровли и стены над карнизом: рисунком их выкладывает 3D
+    (gf#353, `swatches` дома); материала нет в палитре — None. У дома из частей (gf#322) плиты
+    частей — того же материала кровли."""
+    house = roof.roofs(sheet)
+    material = pen.roof if pen.roof in pen.colors else None
+    wall_material = PaletteRole.MAIN if PaletteRole.MAIN in pen.colors else None
+    if house is None and parts.stepped(sheet):
+        slabs = [{"shape": shape, "height_m": h} for shape, h in parts.slabs(sheet, corners)]
+        return {"faces": [], "above": [], "color": pen.colors.get(pen.roof or ""),
+                "wall": pen.colors.get(PaletteRole.MAIN), "flat": None, "slabs": slabs,
+                "material": material, "wall_material": wall_material}
+    if house is None:
         cornice = any(e.cls is ElementClass.CORNICE for f in sheet.facades for e in f.elements)
         out = look.relief_cls.get(ElementClass.CORNICE, 0.0) if cornice else 0.0
         flat = shapely.Polygon(corners).buffer(out, join_style="mitre") if out else None
         return {"faces": [], "above": [], "color": None, "wall": None, "windows": [],
+                "material": None, "wall_material": None,
                 "flat": list(flat.exterior.coords)[:-1] if flat else corners}
+    # окна во фронтоне (gf#321) — у прямоугольного дома, как зона фронтона `roof.gables`
+    line = house.parts[0] if len(house.parts) == 1 else None
     above, windows = [], []
     for k, f in enumerate(sheet.facades):
-        if (shape := roof.above_eaves(line, k)) is not None:
-            left, u, _ = roof.wall_axis(line, k)
+        left, u, _ = roof.axis(house.corners, k)
+        for shape in roof.house_above(house, k):
             above.append([(left[0] + u[0] * x, left[1] + u[1] * x, y) for x, y in shape])
+        if line is not None:
             windows += _gable_windows(f, line, k, look, pen.cfg.checks.slope_offset_m)
-    return {"faces": [face for _, face in roof.faces(line)], "above": above, "flat": None,
+    above += [wall for joint in roof.joints(house) for wall in joint.walls]
+    return {"faces": roof.house_faces(house), "above": above, "flat": None,
             "color": pen.colors.get(pen.roof or ""), "wall": pen.colors.get(PaletteRole.MAIN),
+            "material": material, "wall_material": wall_material,
             "windows": windows, "glass": pen.cfg.library.fill.glass}
 
 
@@ -141,14 +169,15 @@ def _relief(f: SideFacade, pen: Pen, look: House3d) -> list[dict]:
                if _is_relief(e, look)])
 
 
-def _frame(shape: list[Point], depth: float, color: str) -> dict:
+def _frame(shape: list[Point], depth: float, color: str, material: str | None) -> dict:
+    """material — материал палитры, залитый рисунком на листе, или None (красим цветом)."""
     xs, ys = [x for x, _ in shape], [y for _, y in shape]
     return {"x0": min(xs), "x1": max(xs), "y0": min(ys), "y1": max(ys), "depth": depth,
-            "color": color}
+            "color": color, "material": material}
 
 
 def _zone_relief(z: MaterialZone, pen: Pen, look: House3d) -> dict:
-    return _frame(z.shape, look.relief_role[z.role], pen.colors[z.material]) | {
+    return _frame(z.shape, look.relief_role[z.role], pen.colors[z.material], z.material) | {
         "role": z.role, "cls": None, "shape": None, "steps": None, "foot": None}
 
 
@@ -158,7 +187,7 @@ def _element_relief(e: Element, pen: Pen, look: House3d, foot: float) -> dict:
     shape = [(e.x_m, e.y_m), (e.x_m + e.w_m, e.y_m + e.h_m)]
     trim = TRIM_OF.get(e.cls)
     form = pen.cfg.derive.find(trim, pen.trim.kind(trim)) if trim is not None else None
-    return _frame(shape, look.relief_cls[e.cls], element_fill(e, pen)) | {
+    return _frame(shape, look.relief_cls[e.cls], element_fill(e, pen), element_material(e, pen)) | {
         "role": None, "cls": e.cls, "shape": form.shape if form else None,
         "steps": _steps(e, look), "foot": foot}
 

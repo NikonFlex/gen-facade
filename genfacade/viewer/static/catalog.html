@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GenFacade · каталог</title>
+  <link rel="stylesheet" href="/static/theme.css">
+  <link rel="stylesheet" href="/static/catalog.css">
+</head>
+<body class="catalog-page">
+  <header id="topbar"></header>
+  <div class="cat-tools">
+    <nav class="cat-nav" id="nav" aria-label="Разделы каталога"></nav>
+    <input type="search" id="filter" placeholder="Найти вид, слово или цвет" aria-label="Фильтр" autocomplete="off">
+  </div>
+  <main class="catalog" id="catalog">
+    <p class="section-note" id="status">Загрузка…</p>
+  </main>
+  <script type="module" src="/static/catalog.js"></script>
+</body>
+</html>

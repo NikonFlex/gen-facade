@@ -113,7 +113,7 @@ def save(root: Path, mode: Mode, house: str, slot: int, mark: Mark, cfg: Review)
     order = slots(root, mode, house, cfg)
     if not 0 <= slot < len(order):
         raise Missing(f"нет места {slot} у дома {house!r}")
-    with _locked(root):
+    with locked(root):
         found = marks(root)
         found[key(mode, house, slot)] = {**mark.model_dump(), "row": order[slot],
                                          "date": date.today().isoformat()}
@@ -124,12 +124,12 @@ def save(root: Path, mode: Mode, house: str, slot: int, mark: Mark, cfg: Review)
 
 
 @contextmanager
-def _locked(root: Path):
+def locked(root: Path, name: str = LOCK):
     """Отметки пишутся по одной: «Не годен» и причина уходят двумя запросами сразу, а на папку
     смотрят два сервера (локальный и наружный) — без блокировки записи перемешались и испортили
     файл (04.11, gf#272). Замена готовым файлом (`os.replace`): оборванная запись не оставит
     полфайла."""
-    with (root / LOCK).open("w") as lock:
+    with (root / name).open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         yield
 

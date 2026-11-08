@@ -50,6 +50,7 @@ class Call:
 
     command: str = ""
     path: str = ""
+    agent: dict | None = None  # tool_input запуска субагента (инструмент Agent), иначе None
 
 
 #: Запись в GitHub и push — только по «да» человека. Префиксы команд (как в execpolicy Codex):
@@ -64,6 +65,7 @@ ASK = [
 ]
 
 
+AGENT_TOOLS = ("Agent", "Task")  # имя инструмента запуска субагента (Task — прежнее)
 PR_CREATE = ["gh", "pr", "create"]
 OPERATORS = ";&|\n"  # разделители простых команд: ; && || | и перевод строки
 
@@ -144,6 +146,31 @@ def secrets(call: Call, root: Path) -> tuple[Verdict, str]:
     hit = next((p for p in paths if p and secret_path(p, root)), None)
     return (Verdict.DENY, f"чтение файла с ключами ({hit}) запрещено; имена переменных — "
                           ".env.example") if hit else (Verdict.ALLOW, "")
+
+
+def subagent_model(call: Call, root: Path) -> tuple[Verdict, str]:
+    """Запуск субагента: `model` обязательна; opus — только со строкой `Opus: <причина>` первой в
+    задании и с причиной из `opus_reasons` в config.json (CLAUDE.md, «Субагенты»; gf#358)."""
+    if call.agent is None:
+        return Verdict.ALLOW, ""
+    model = str(call.agent.get("model") or "").strip().lower()
+    reasons = config(root)["opus_reasons"]
+    guide = ("кому что отдавать: haiku — механика (поиск, прогоны тестов и скриптов, снимки, "
+             "замеры по артефактам); sonnet — код по ясной постановке; opus — только для "
+             f"причин [{', '.join(reasons)}], первой строкой задания `Opus: <причина>`")
+    if not model:
+        return Verdict.DENY, f"у Agent нет `model` — {guide}"
+    if model in ("sonnet", "haiku"):
+        return Verdict.ALLOW, ""
+    if model != "opus":
+        return Verdict.DENY, f"model «{model}» — {guide}"
+    prompt = str(call.agent.get("prompt") or "")
+    first = next((line.strip() for line in prompt.splitlines() if line.strip()), "")
+    said = re.fullmatch(r"Opus:\s*(.+?)\s*", first)
+    if said and said.group(1).lower() in reasons:
+        return Verdict.ALLOW, ""
+    return Verdict.DENY, ("Opus-субагент без причины из списка — " + guide
+                          + (f"; сейчас первая строка: «{first[:60]}»" if first else ""))
 
 
 def closing(call: Call, root: Path) -> tuple[Verdict, str]:
@@ -244,7 +271,7 @@ def receipt(call: Call, root: Path) -> tuple[Verdict, str]:
 
 #: Порядок не важен: итог — самый строгий ответ (отказ > вопрос > разрешение).
 GUARDS: list[Callable[[Call, Path], tuple[Verdict, str]]] = [
-    github_write, prod, secrets, closing, pr_link, no_bypass, local_repeat, receipt]
+    github_write, prod, secrets, subagent_model, closing, pr_link, no_bypass, local_repeat, receipt]
 RANK = {Verdict.ALLOW: 0, Verdict.ASK: 1, Verdict.DENY: 2}
 
 
@@ -269,6 +296,8 @@ def _asked(guard: Callable[[Call, Path], tuple[Verdict, str]], call: Call,
 
 def from_claude(event: dict) -> Call:
     tool_input = event.get("tool_input") or {}
+    if event.get("tool_name") in AGENT_TOOLS:
+        return Call(agent=tool_input)
     return Call(command=tool_input.get("command", ""), path=tool_input.get("file_path", ""))
 
 

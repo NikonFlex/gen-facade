@@ -11,7 +11,7 @@ import re
 from xml.etree import ElementTree
 
 from genfacade.config import Hatch
-from genfacade.render.sheet_format import num
+from genfacade.render.sheet_format import SVG_NS, num
 
 PRECISION = 6  # знаков в метрах: суммы шагов не оставляют хвостов float в SVG
 HEX = re.compile(r"#[0-9a-fA-F]{6}")
@@ -29,10 +29,16 @@ def pattern_id(kind: str, color: str) -> str:
     return f"hatch-{kind}-{color.lstrip('#').lower()}"
 
 
+def tile_m(hatch: Hatch) -> tuple[float, float]:
+    """Ячейка рисунка в метрах (ширина, высота), как она стоит на листе: у повёрнутого рисунка
+    оси поменяны. Её же берёт 3D для текстуры-плитки (gf#353)."""
+    height = round(sum(c.h_m for c in hatch.courses), PRECISION)
+    return (height, hatch.width_m) if hatch.vertical else (hatch.width_m, height)
+
+
 def pattern(kind: str, hatch: Hatch, color: str, darkening: float) -> ElementTree.Element:
     """`<pattern>`: фон цвета материала и линии швов; id — pattern_id(kind, color)."""
-    height = round(sum(c.h_m for c in hatch.courses), PRECISION)
-    size = (height, hatch.width_m) if hatch.vertical else (hatch.width_m, height)
+    size = tile_m(hatch)
     node = ElementTree.Element("pattern", {
         "id": pattern_id(kind, color), "patternUnits": "userSpaceOnUse",
         "width": num(size[0]), "height": num(size[1])})
@@ -43,6 +49,21 @@ def pattern(kind: str, hatch: Hatch, color: str, darkening: float) -> ElementTre
                       for (x1, y1), (x2, y2) in _segments(hatch)),
         "fill": "none", "stroke": darken(color, darkening), "stroke-width": num(hatch.line_m)})
     return node
+
+
+def swatch(kind: str, hatch: Hatch, color: str, darkening: float) -> str:
+    """SVG одной ячейки рисунка (gf#353): для 3D, где им выкладывают кровлю и выступы тем же
+    шагом, что на листе. Ячейка стоит как на листе — ряды от земли вверх, поэтому слой
+    перевёрнут по y, как стена в svg.py."""
+    width, height = tile_m(hatch)
+    box = f"0 0 {num(width)} {num(height)}"
+    root = ElementTree.Element("svg", {"xmlns": SVG_NS, "viewBox": box})
+    ElementTree.SubElement(root, "defs").append(pattern(kind, hatch, color, darkening))
+    flip = ElementTree.SubElement(root, "g", {
+        "transform": f"translate(0,{num(height)}) scale(1,-1)"})
+    ElementTree.SubElement(flip, "rect", {"width": num(width), "height": num(height),
+                                          "fill": f"url(#{pattern_id(kind, color)})"})
+    return ElementTree.tostring(root, encoding="unicode")
 
 
 def _segments(hatch: Hatch) -> list[tuple[tuple[float, float], tuple[float, float]]]:

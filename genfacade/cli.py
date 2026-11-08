@@ -115,14 +115,14 @@ def guidelines_table(args: argparse.Namespace) -> Path:
     return guidelines.run(config.load(*args.config), args.out)
 
 
-def serve(config_dirs: list[Path], checked: Path | None = None) -> None:
+def serve(config_dirs: list[Path], checked: Path | None = None, marked: Path | None = None) -> None:
     # uvicorn и fastapi — в группе [viewer]: без смотрелки пакет их не тянет.
     import uvicorn
 
     from genfacade.viewer.app import create_app
 
     cfg = config.load(*config_dirs)
-    uvicorn.run(create_app(cfg, checked), host=cfg.viewer.server.host,
+    uvicorn.run(create_app(cfg, checked, marked), host=cfg.viewer.server.host,
                 port=cfg.viewer.server.port)
 
 
@@ -162,6 +162,9 @@ def _parser() -> argparse.ArgumentParser:
     v = sub.add_parser("serve", help="смотрелка прогонов в браузере")
     v.add_argument("--review", type=Path, help="папка genfacade realtest для слепой проверки "
                                                "листов глазами (страница /review, gf#268)")
+    v.add_argument("--markup", type=Path, help="папка разметки для проверки и правки домов в "
+                                               "браузере (страница /markup, gf#348); по умолчанию "
+                                               "[markup] folder из config/viewer.toml")
     r = sub.add_parser("review", help="сводка слепой проверки: доля принятых листов по строкам")
     r.add_argument("folder", type=Path, help="папка genfacade realtest с review.json")
     s = sub.add_parser("synth", help="синтетические дома → примеры датасета и опись")
@@ -244,7 +247,7 @@ COMMANDS = {
 def main(argv: list[str] | None = None) -> None:
     args = _parser().parse_args(argv)
     if args.command not in COMMANDS:
-        serve(args.config, getattr(args, "review", None))
+        serve(args.config, getattr(args, "review", None), getattr(args, "markup", None))
         return
     command, refusals = COMMANDS[args.command]
     try:

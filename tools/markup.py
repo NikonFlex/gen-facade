@@ -8,10 +8,9 @@
 overlay — кадр каждого фасада из PDF, поверх — края стены, чистый пол, земля, карниз и рамки
 элементов; картинка на дом — стороны по две в ряд.
 
-Цвета: стена и уровни — синие, окна — красные, двери и ворота — зелёные, прочее (и карниз) —
-оранжевое, зоны второй отделки — малиновые, с подписью роли и материала (gf#245). Запись выше
-карниза (gf#323): силуэт стены — голубой, участки карниза — синие толстые с числом этажей, крыша —
-коричневая.
+Цвета — `config/viewer.toml`, [markup.colors] (те же на странице правки /markup, gf#348): стена и
+уровни, окна, двери, прочее, зоны второй отделки с подписью роли и материала (gf#245). Запись выше
+карниза (gf#323): силуэт стены, участки карниза толстыми с числом этажей, крыша.
 Нужен pdfplumber (dev-зависимости).
 """
 
@@ -31,9 +30,7 @@ from genfacade.datasets import manual  # noqa: E402
 
 PT = 72.0          # pt на дюйм — определение единицы
 MARGIN_M = 0.9     # поле вокруг стены на кадре, метры
-LEVELS, WINDOW, DOOR, OTHER, ZONE = "blue", "red", "green", "orange", "magenta"
-OUTLINE, ROOF = "deepskyblue", "saddlebrown"
-DOORS = {"door", "garage_door"}
+COLORS = load().viewer.markup.colors
 
 
 def font(size: int) -> ImageFont.ImageFont:
@@ -47,11 +44,10 @@ def font(size: int) -> ImageFont.ImageFont:
 def frame(pdf: Path, e: manual.Elevation, m: manual.Markup, dpi: int) -> tuple[Image.Image, tuple]:
     """Кадр стороны: от карниза до земли и от края до края стены с полем."""
     pad = MARGIN_M / m.m_per_unit * m.scale(e)
-    eaves = e.floor - sum(m.floor_heights) * m.scale(e)
+    eaves = m.tops_y(e)[-1]
     tops = [b.box[1] for b in e.elements] + [eaves] + [y for _, y in e.outline] + [
         y for shape in e.roof for _, y in shape]
-    box = (e.wall[0] - pad, min(tops) - pad, e.wall[1] + pad,
-           e.floor + m.plinth * m.scale(e) + pad)
+    box = (e.wall[0] - pad, min(tops) - pad, e.wall[1] + pad, m.ground_y(e) + pad)
     with pdfplumber.open(pdf) as doc:
         page = doc.pages[e.page - 1]
         box = (max(box[0], 0), max(box[1], 0), min(box[2], page.width), min(box[3], page.height))
@@ -65,34 +61,31 @@ def draw(img: Image.Image, box: tuple, e: manual.Elevation, m: manual.Markup, dp
     def px(x: float, y: float) -> tuple[float, float]:
         return (x - box[0]) * k, (y - box[1]) * k
 
-    levels = [e.floor, e.floor + m.plinth * m.scale(e)]
-    y = e.floor
-    for h in m.floor_heights:
-        y -= h * m.scale(e)
-        levels.append(y)
+    levels = [e.floor, m.ground_y(e), *m.tops_y(e)]
     for v in levels:
-        d.line([px(e.wall[0], v), px(e.wall[1], v)], fill=LEVELS, width=1)
+        d.line([px(e.wall[0], v), px(e.wall[1], v)], fill=COLORS.levels, width=1)
     for x in e.wall:
-        d.line([px(x, levels[-1]), px(x, levels[1])], fill=LEVELS, width=2)
+        d.line([px(x, levels[-1]), px(x, levels[1])], fill=COLORS.levels, width=2)
     for n, b in enumerate(e.elements):
-        color = WINDOW if b.cls == "window" else DOOR if b.cls in DOORS else OTHER
+        color = COLORS.cls[b.cls]
         d.rectangle([px(b.box[0], b.box[1]), px(b.box[2], b.box[3])], outline=color, width=2)
         d.text(px(b.box[0] + 2, b.box[1] + 1), str(n), fill=color, font=font(12))
     for z in e.zones:
-        d.rectangle([px(z.box[0], z.box[1]), px(z.box[2], z.box[3])], outline=ZONE, width=2)
-        d.text(px(z.box[0] + 2, z.box[3] - 14), f"{z.role} {z.material}", fill=ZONE, font=font(12))
+        d.rectangle([px(z.box[0], z.box[1]), px(z.box[2], z.box[3])], outline=COLORS.zone, width=2)
+        d.text(px(z.box[0] + 2, z.box[3] - 14), f"{z.role} {z.material}", fill=COLORS.zone,
+               font=font(12))
     above(d, px, e)
     d.text((4, 4), f"{e.view} (стр. {e.page})", fill="black", font=font(14))
 
 
 def above(d: ImageDraw.ImageDraw, px, e: manual.Elevation) -> None:
     """Запись чертежа выше карниза и по участкам (gf#323): силуэт, участки карниза, крыша."""
-    for shape, color in [(e.outline, OUTLINE), *((r, ROOF) for r in e.roof)]:
+    for shape, color in [(e.outline, COLORS.outline), *((r, COLORS.roof) for r in e.roof)]:
         if shape:
             d.line([px(*p) for p in [*shape, shape[0]]], fill=color, width=2)
     for s in e.eaves:
-        d.line([px(s.x[0], s.y), px(s.x[1], s.y)], fill=LEVELS, width=4)
-        d.text(px(s.x[0] + 2, s.y - 14), f"{s.floors} эт.", fill=LEVELS, font=font(12))
+        d.line([px(s.x[0], s.y), px(s.x[1], s.y)], fill=COLORS.levels, width=4)
+        d.text(px(s.x[0] + 2, s.y - 14), f"{s.floors} эт.", fill=COLORS.levels, font=font(12))
 
 
 def sheet(path: Path, pdf_dirs: dict[str, Path], dpi: int) -> Image.Image:

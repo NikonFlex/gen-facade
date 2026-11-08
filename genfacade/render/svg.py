@@ -55,25 +55,33 @@ def pen_for(sheet: FacadeSheet, cfg: Config) -> Pen:
 class Top(NamedTuple):
     """Что над карнизом стены (roof.py, gf#320): стена выше карниза и кровля на виде."""
 
-    above: Polygon | None = None
+    above: list[Polygon] = []
     roof: list[Polygon] = []
+    seams: list[list[Point]] = []  # линии примыкания кровли нижней части к стене верхней (gf#322)
+    gable: Polygon | None = None  # фронтон — место окон над карнизом (`roof.gables`, gf#321)
 
     def height(self, facade: SideFacade) -> float:
         """Верх рисунка стороны: силуэт стены, стена над карнизом и кровля."""
-        shapes = [facade.silhouette or [], self.above or [], *self.roof]
+        shapes = [facade.silhouette or [], *self.above, *self.roof]
         return max(y for shape in shapes for _, y in shape)
 
 
+RECT_POINTS = 4  # у прямоугольного силуэта четыре вершины
 NOTHING_ABOVE = Top()  # плоская крыша: над карнизом ничего
 
 
 def tops(sheet: FacadeSheet, cfg: Config) -> list[Top]:
     """Что над карнизом у каждой стороны листа; скаты не строятся — пусто."""
-    line = roof.roofline(sheet)
-    if line is None:
+    house = roof.roofs(sheet)
+    if house is None:
         return [NOTHING_ABOVE for _ in sheet.facades]
-    return [Top(roof.above_eaves(line, k), roof.roof_view(line, k, cfg.sheet.roof.thickness_m))
-            for k in range(len(sheet.facades))]
+    gables = roof.gables(sheet)
+    out = []
+    for k in range(len(sheet.facades)):
+        walls, seams = roof.joint_view(house, k)
+        out.append(Top(roof.house_above(house, k) + walls,
+                       roof.house_view(house, k, cfg.sheet.roof.thickness_m), seams, gables[k]))
+    return out
 
 
 class Marks(NamedTuple):
@@ -139,7 +147,21 @@ def facade_svg(facade: SideFacade, pen: Pen) -> str:
     Для текстуры дома объёмом (render/house3d.py)."""
     top = _top(facade)
     root = canvas(facade.side.length_m, top, pen.cfg.css, _patterns([facade], pen))
+    if len(facade.silhouette or []) > RECT_POINTS:  # ступень (gf#322): над ней — не белый фон
+        root.remove(next(e for e in root if e.get("class") == "background"))
     _facade_geometry(root, facade, (0.0, top), pen)
+    return ElementTree.tostring(root, encoding="unicode")
+
+
+def facade_roof_svg(sheet: FacadeSheet, cfg: Config, k: int) -> str:
+    """Один фасад листа вместе с кровлей над ним, без подписей: то, как его рисует лист, но
+    кадр — по стене и свесу, а не по всему листу. Для образцов каталога смотрелки (gf#354)."""
+    facade, top = sheet.facades[k], tops(sheet, cfg)[k]
+    pen, pad = pen_for(sheet, cfg), sheet.spec.roof.overhang_m
+    above = [PaletteRole.MAIN, pen.roof] if top.roof else []
+    root = canvas(facade.side.length_m + 2 * pad, top.height(facade), cfg.css,
+                  _patterns([facade], pen, above))
+    _facade_geometry(root, facade, (pad, top.height(facade)), pen, top)
     return ElementTree.tostring(root, encoding="unicode")
 
 
@@ -167,6 +189,23 @@ def paint(material: str, pen: Pen) -> str:
     if _hatch_of(material, pen) is None:
         return color
     return f"url(#{hatch.pattern_id(pen.kinds[material], color)})"
+
+
+def swatch(material: str, pen: Pen) -> dict | None:
+    """Ячейка рисунка материала для 3D (gf#353): SVG и её размер в метрах; рисунка у вида нет —
+    None, 3D красит цветом. Тот же рисунок и цвет, что у `paint` на листе."""
+    look = _hatch_of(material, pen)
+    if look is None:
+        return None
+    width, height = hatch.tile_m(look)
+    return {"svg": hatch.swatch(pen.kinds[material], look, pen.colors[material],
+                                pen.cfg.library.pattern_darken),
+            "width_m": width, "height_m": height}
+
+
+def element_material(e: Element, pen: Pen) -> str | None:
+    """Материал палитры, которым элемент залит на листе, — или None, если он залит цветом класса."""
+    return e.material if _by_material(e, pen) else None
 
 
 def _by_material(e: Element, pen: Pen) -> bool:
@@ -228,11 +267,11 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
         _zone(g, z, pen)
     # Контур — до элементов: карниз у края стены ложится поверх линии, а не под неё.
     ElementTree.SubElement(g, "polygon", {"class": "outline", "points": silhouette})
-    if top.above:  # стена над карнизом — основной отделкой, как стена под ним
-        ElementTree.SubElement(g, "polygon", {"class": "above-eaves", "points": points(top.above),
+    for shape in top.above:  # стена над карнизом — основной отделкой, как стена под ним
+        ElementTree.SubElement(g, "polygon", {"class": "above-eaves", "points": points(shape),
                                               "fill": _main(pen)})
-    room = None if not top.above else window_shape.gable_room(
-        facade.side.length_m, min(y for _, y in top.above), top.above,
+    room = None if top.gable is None else window_shape.gable_room(
+        facade.side.length_m, min(y for _, y in top.gable), top.gable,
         pen.cfg.checks.slope_offset_m)
     by = {e.id: e for e in facade.elements}
     for e in facade.elements:
@@ -240,6 +279,8 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
     for shape in top.roof:  # кровля — поверх: свес закрывает верх стены
         ElementTree.SubElement(g, "polygon", {"class": "roof", "points": points(shape),
                                               "fill": _roof_fill(pen)})
+    for seam in top.seams:  # примыкание кровли нижней части к стене верхней
+        ElementTree.SubElement(g, "polyline", {"class": "outline joint", "points": points(seam)})
     return g
 
 
@@ -284,8 +325,8 @@ def element_fill(e: Element, pen: Pen) -> str:
 def element_paint(e: Element, pen: Pen) -> str:
     """Заливка прямоугольника элемента: рисунок вида его материала, а без рисунка или у класса
     из unhatched_cls — цвет (element_fill)."""
-    if _by_material(e, pen):
-        return paint(e.material, pen)
+    if (material := element_material(e, pen)) is not None:
+        return paint(material, pen)
     return element_fill(e, pen)
 
 

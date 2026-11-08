@@ -8,10 +8,10 @@ import math
 import pytest
 
 from genfacade import config
-from genfacade.datasets import manual, store
+from genfacade.datasets import manual, markup_toml, store
 from genfacade.datasets.manual import M_PER_UNIT, Markup, Unit
 from genfacade.metrics import measures
-from genfacade.schema import ElementClass, Mode, OpeningKind, RoofKind, Source, Split, Trim
+from genfacade.schema import ElementClass, Mode, OpeningKind, RoofKind, Rule, Source, Split, Trim
 from genfacade.train import tokens
 from genfacade.train.tokens import Mark
 from genfacade.validate import errors, validate
@@ -141,17 +141,67 @@ def test_contour_must_close():
         manual.house(markup(sides=sides), CFG.data.manual)
 
 
+def l_sides() -> list[dict]:
+    """Стороны Г-дома: фасад 12', бок 20', тыл 6', внутренний угол, бок крыла 8', тыл крыла 6',
+    другой бок 28'."""
+    return [side("FRONT", 12, {"cls": "door", "box": box(5, 0, 2, 6.75)}),
+            side("LEFT", 20), side("REAR WING", 6) | {"inner_corner": True},
+            side("WING SIDE", 8), side("REAR", 6), side("RIGHT", 28)]
+
+
 def test_l_shaped_house(tmp_path):
-    """Г-образный дом (gf#199): фасад 12', бок 20', тыл 6', внутренний угол, бок крыла 8', тыл
-    крыла 6', другой бок 28' — шесть сторон; план замкнут, лист проходит валидатор."""
-    l_sides = [side("FRONT", 12, {"cls": "door", "box": box(5, 0, 2, 6.75)}),
-               side("LEFT", 20), side("REAR WING", 6) | {"inner_corner": True},
-               side("WING SIDE", 8), side("REAR", 6), side("RIGHT", 28)]
-    sample, _ = manual.house(markup(sides=l_sides), CFG.data.manual)
+    """Г-образный дом (gf#199): шесть сторон; план замкнут, лист проходит валидатор."""
+    sample, _ = manual.house(markup(sides=l_sides()), CFG.data.manual)
     lengths = [f.side.length_m for f in sample.sheet.facades]
     assert lengths == pytest.approx([ft(v) for v in (12, 20, 6, 8, 6, 28)])
     assert len(sample.plan.outline) == 6 and len(sample.plan.walls) == 6
     assert errors(validate(sample.sheet, CFG.checks)) == []
+
+
+LOW_FT = 5.0  # карниз нижнего крыла над чистым полом: этажность та же, отметка ниже
+
+
+def stepped_l(lines: dict[int, list[tuple[float, float, float]]]) -> Markup:
+    """Г-дом из test_l_shaped_house с участками карниза: сторона → [(x0, x1 в футах от левого края,
+    карниз над полом)], все в один этаж. Крылья разреза контура: 12' × 20' и 6' × 8' (стороны 3, 4
+    и последние 8' стороны 5)."""
+    sides = l_sides()
+    for k, marks in lines.items():
+        sides[k]["eaves"] = [{"x": [100.0 + a * PT, 100.0 + b * PT], "y": pt_y(h), "floors": 1}
+                             for a, b, h in marks]
+    return markup(sides=sides)
+
+
+def test_parts_of_different_eaves_become_steps():
+    """Нижнее крыло Г-дома, в одну этажность с главным, но с карнизом ниже (gf#322): участки
+    сторон, ступень силуэта и крылья в плане; стены без отметок — карниз дома."""
+    lines = {3: [(0, 8, LOW_FT)], 4: [(0, 6, LOW_FT)], 5: [(0, 20, EAVE_FT), (20, 28, LOW_FT)]}
+    sample, _ = manual.house(stepped_l(lines), CFG.data.manual)
+    assert len(sample.plan.wings) == 2
+    run = {f.side.index: f.runs for f in sample.sheet.facades}
+    assert [r.eaves_m for r in run[5]] == pytest.approx([ft(PLINTH_FT + EAVE_FT),
+                                                         ft(PLINTH_FT + LOW_FT)])
+    assert [r.part for r in run[5]] == [0, 1]
+    assert [(r.part, r.eaves_m) for r in run[0]] == [(0, pytest.approx(ft(PLINTH_FT + EAVE_FT)))]
+    assert {r.floors for rs in run.values() for r in rs} == {1}
+    assert run[3][0].eaves_m == pytest.approx(ft(PLINTH_FT + LOW_FT))
+    assert len(sample.sheet.facades[5].silhouette) == 6  # ступень
+    assert errors(validate(sample.sheet, CFG.checks)) == []
+    assert Rule.ROOF_FLAT not in {v.rule for v in validate(sample.sheet, CFG.checks)}
+
+
+def test_wing_with_two_eaves_marks_waits():
+    """На главном крыле карниз и дома, и ниже — ступень внутри крыла, пример не пишется."""
+    lines = {1: [(0, 20, EAVE_FT)], 0: [(0, 12, LOW_FT)]}
+    with pytest.raises(manual.Unsupported, match="gf#322"):
+        manual.house(stepped_l(lines), CFG.data.manual)
+
+
+def test_house_without_steps_keeps_one_roof_line():
+    """Отметки карниза на всех крыльях в пределах допуска от карниза дома — дом без частей."""
+    near = EAVE_FT - 0.1
+    sample, _ = manual.house(stepped_l({3: [(0, 8, near)], 5: [(20, 28, near)]}), CFG.data.manual)
+    assert sample.plan.wings == [] and not any(f.runs for f in sample.sheet.facades)
 
 
 GABLE_FT = 14.0  # конёк над чистым полом
@@ -277,12 +327,13 @@ def test_run_writes_samples_and_manifest(tmp_path):
     marks = tmp_path / "markup"
     ffh = marks / "freefarmhouse"  # папка на источник
     ffh.mkdir(parents=True)
-    (ffh / "ffh-test.toml").write_text(_toml(markup()))
+    (ffh / "ffh-test.toml").write_text(markup_toml.dumps(markup()))
     three = markup().model_dump()["sides"][:3]
-    (ffh / "ffh-crooked.toml").write_text(_toml(markup(id="ffh-crooked", sides=three)))
+    (ffh / "ffh-crooked.toml").write_text(markup_toml.dumps(markup(id="ffh-crooked", sides=three)))
     (ffh / "ffh-broken.toml").write_text('id = "ffh-broken"\n')  # не разметка: нет сторон
     annex = {"eaves": [{"x": markup().sides[1].wall, "y": pt_y(EAVE_FT - 2), "floors": 1}]}
-    (ffh / "ffh-annex.toml").write_text(_toml(drawn(annex).model_copy(update={"id": "ffh-annex"})))
+    annexed = drawn(annex).model_copy(update={"id": "ffh-annex"})
+    (ffh / "ffh-annex.toml").write_text(markup_toml.dumps(annexed))
     data = CFG.data.model_copy(update={
         "paths": CFG.data.paths.model_copy(update={"samples_dir": tmp_path / "samples"}),
         "manual": CFG.data.manual.model_copy(update={
