@@ -176,7 +176,7 @@ def test_trims_only_on_their_opening_and_house_kinds(guard, keep, cfg, vocab):
                                        ElementClass.MOLDING, ElementClass.CANOPY)}
     assert not derived & window and WINDOW in window
     house = constraints.House({schema.PaletteRole.MAIN},
-                              schema.HouseTrim(shutters=schema.ShutterKind.PANEL))
+                              schema.HouseTrim(shutters="panel"))
     own = keep(_read(constraints.WallGeometry([WALL], vocab, NORMS, house), cfg,
                      *TYPES, Mark.WALL, WINDOW, 52, 10, SIZE[1]))
     assert shutters in own and not {sill, casing, canopy} & own

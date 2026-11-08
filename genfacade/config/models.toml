@@ -90,11 +90,38 @@ shed = ["shed roof", "lean-to", "mono-pitch", "односкатн"]
 pitch_deg = { gable = 35.0, hip = 25.0, shed = 12.0 }
 overhang_m = 0.4
 
+# Вид элемента → слова текста (gf#318): назван вид — он и ставится (и элемент есть, даже если у
+# отделки его нет). Вид — запись config/derive.toml; новый вид с новыми словами — две записи, без
+# кода и без переобучения. Слова — основы (stem_tail букв после основы).
+# Сочетание слов — подряд идущие слова текста (models/words.py); одно слово «арочн» красило бы и окно.
+[spec.kind_words.sill]
+drip = ["drip", "отлив"]
+stone = ["stone sill", "каменн подоконник"]
+[spec.kind_words.casing]
+pediment = ["pediment", "сандрик", "фронтон над окн"]
+segment = ["segmental pediment", "сегментн сандрик", "сегментн наличник"]
+wide = ["wide casing", "широк наличник"]
+[spec.kind_words.shutters]
+louvered = ["louvered", "жалюзи", "жалюзийн"]
+board = ["board shutter", "дощат ставн"]
+board_batten_z = ["batten shutter", "z-brace", "ставн на планк"]
+panel = ["raised panel", "филёнчат ставн", "филенчат ставн"]
+[spec.kind_words.canopy]
+gable = ["gable canopy", "двускатн козыр"]
+bracket = ["bracket", "кронштейн"]
+arched = ["arched canopy", "арочн козыр"]
+posts = ["portico", "porch roof", "на столбах", "навес на столб"]
+[spec.kind_words.door]
+panel6 = ["six-panel", "6-panel", "шестифилёнчат", "филёнчат дверь"]
+double = ["double door", "двупольн", "двустворчат"]
+sidelights = ["sidelight", "боковые стекл", "боковыми стекл"]
+
 [spec.trim_default]    # вид элемента, который назвали в тексте, а у отделки его нет
 sill = "flat"
 casing = "flat"
 shutters = "panel"
 canopy = "flat"
+door = "plain"
 
 # Ряд цветов отделки: имя → цвет и слова текста (подобрано агентом, не из каталога). Слово может
 # быть у нескольких имён: ряд роли в отделке решает, какое из них подходит.
@@ -252,7 +279,7 @@ colors = { main = "shoji_white", trim = "relaxed_khaki", roof = "roof_brown" }
 [spec.finish.plaster_modern]       # гладкая штукатурка, без наличников и ставен
 styles = ["modern"]
 roof = "flat"
-trim = { sill = "flat", casing = "none", shutters = "none", canopy = "flat" }
+trim = { sill = "flat", casing = "none", shutters = "none", canopy = "flat", door = "plain" }
 [spec.finish.plaster_modern.materials]
 main = { kind = "plaster", colors = ["cream", "white", "grey", "beige"], extra = ["graphite", "yellow"] }
 plinth = { kind = "concrete", colors = ["concrete", "graphite"] }
@@ -263,7 +290,7 @@ roof = { kind = "metal_roof", colors = ["roof_steel"] }
 [spec.finish.plaster_classic]      # классика: штукатурка, белые наличники, ставни, скатный подоконник
 styles = ["classic"]
 roof = "hip"
-trim = { sill = "sloped", casing = "flat", shutters = "panel", canopy = "gable" }
+trim = { sill = "sloped", casing = "flat", shutters = "panel", canopy = "gable", door = "plain" }
 schemes = ["sw_traditional_3", "sw_traditional_6", "sw_modern_15", "sw_modern_18", "sw_arts_crafts_1"]
 [spec.finish.plaster_classic.materials]
 main = { kind = "plaster", colors = ["cream", "white", "yellow", "beige", "grey"], extra = ["summit_gray", "red_barn", "perfect_greige", "shoji_white", "roycroft_suede"] }
@@ -275,7 +302,7 @@ roof = { kind = "tile_roof", colors = ["roof_terracotta"] }
 [spec.finish.plaster_stone]        # штукатурка с каменным цоколем, жалюзийные ставни
 styles = ["modern", "classic"]
 roof = "hip"
-trim = { sill = "sloped", casing = "flat", shutters = "louvered", canopy = "bracket" }
+trim = { sill = "sloped", casing = "flat", shutters = "louvered", canopy = "bracket", door = "plain" }
 schemes = ["sw_traditional_3", "sw_modern_15", "sw_modern_18"]
 [spec.finish.plaster_stone.materials]
 main = { kind = "plaster", colors = ["white", "beige", "grey", "yellow", "cream"], extra = ["summit_gray", "perfect_greige", "shoji_white"] }
@@ -287,7 +314,7 @@ roof = { kind = "metal_tile", colors = ["roof_graphite", "roof_brown", "roof_gre
 [spec.finish.siding_painted]       # крашеная обшивка: цвет стен — из ряда
 styles = ["scandinavian", "classic", "modern"]
 roof = "gable"
-trim = { sill = "flat", casing = "flat", shutters = "louvered", canopy = "gable" }
+trim = { sill = "flat", casing = "flat", shutters = "louvered", canopy = "gable", door = "plain" }
 schemes = ["sw_traditional_3", "sw_traditional_6", "sw_modern_15", "sw_modern_18", "sw_arts_crafts_6"]
 [spec.finish.siding_painted.materials]
 main = { kind = "siding", colors = ["blue", "white", "cream", "yellow", "grey", "green", "red", "graphite"], extra = ["summit_gray", "red_barn", "perfect_greige", "shoji_white", "bunglehouse_gray"] }
@@ -299,7 +326,7 @@ roof = { kind = "metal_tile", colors = ["roof_graphite", "roof_brown", "roof_gre
 [spec.finish.wood_natural]         # натуральное дерево, широкие наличники, дощатые ставни
 styles = ["scandinavian", "chalet", "modern"]
 roof = "gable"
-trim = { sill = "flat", casing = "wide", shutters = "board", canopy = "bracket" }
+trim = { sill = "flat", casing = "wide", shutters = "board", canopy = "bracket", door = "plain" }
 schemes = ["sw_arts_crafts_1", "sw_arts_crafts_3", "sw_arts_crafts_4", "sw_arts_crafts_6"]
 [spec.finish.wood_natural.materials]
 main = { kind = "wood", colors = ["wood_natural", "wood_honey", "wood_grey"], extra = ["green", "red", "white", "blue", "black", "roycroft_suede", "craftsman_brown", "aurora_brown", "bunglehouse_gray"] }
@@ -311,7 +338,7 @@ roof = { kind = "metal_tile", colors = ["roof_brown", "roof_graphite", "roof_gre
 [spec.finish.wood_dark]            # тёмное дерево, скандинавский: чёрная отделка, без ставен
 styles = ["scandinavian", "modern"]
 roof = "gable"
-trim = { sill = "flat", casing = "flat", shutters = "none", canopy = "gable" }
+trim = { sill = "flat", casing = "flat", shutters = "none", canopy = "gable", door = "plain" }
 [spec.finish.wood_dark.materials]
 main = { kind = "wood", colors = ["wood_dark", "black"], extra = ["graphite"] }
 plinth = { kind = "concrete", colors = ["graphite", "concrete"] }
@@ -322,7 +349,7 @@ roof = { kind = "metal_tile", colors = ["roof_graphite", "roof_brown", "roof_gre
 [spec.finish.brick_red]            # красный кирпич, белые наличники и ставни
 styles = ["classic", "modern"]
 roof = "gable"
-trim = { sill = "sloped", casing = "flat", shutters = "panel", canopy = "gable" }
+trim = { sill = "sloped", casing = "flat", shutters = "panel", canopy = "gable", door = "plain" }
 [spec.finish.brick_red.materials]
 main = { kind = "brick", colors = ["brick_red", "brick_brown"] }
 plinth = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
@@ -333,7 +360,7 @@ roof = { kind = "tile_roof", colors = ["roof_terracotta"] }
 [spec.finish.brick_light]          # светлый кирпич, тёмная отделка, без наличников
 styles = ["modern", "scandinavian"]
 roof = "shed"
-trim = { sill = "flat", casing = "none", shutters = "none", canopy = "flat" }
+trim = { sill = "flat", casing = "none", shutters = "none", canopy = "flat", door = "plain" }
 [spec.finish.brick_light.materials]
 main = { kind = "brick", colors = ["brick_light", "brick_sand"] }
 plinth = { kind = "concrete", colors = ["concrete", "graphite"] }
@@ -344,7 +371,7 @@ roof = { kind = "metal_roof", colors = ["roof_steel"] }
 [spec.finish.chalet_wood_stone]    # шале: дерево и камень, широкие наличники, дощатые ставни
 styles = ["chalet"]
 roof = "gable"
-trim = { sill = "sloped", casing = "wide", shutters = "board", canopy = "bracket" }
+trim = { sill = "sloped", casing = "wide", shutters = "board", canopy = "bracket", door = "plain" }
 [spec.finish.chalet_wood_stone.materials]
 main = { kind = "wood", colors = ["wood_honey", "wood_natural", "wood_dark"], extra = ["green"] }
 plinth = { kind = "stone", colors = ["stone_grey", "stone_sand"] }
@@ -355,7 +382,7 @@ roof = { kind = "metal_tile", colors = ["roof_brown", "roof_graphite", "roof_gre
 [spec.finish.stone_house]          # камень стен, дощатые ставни
 styles = ["classic", "chalet", "modern"]
 roof = "gable"
-trim = { sill = "sloped", casing = "flat", shutters = "louvered", canopy = "gable" }
+trim = { sill = "sloped", casing = "flat", shutters = "louvered", canopy = "gable", door = "plain" }
 [spec.finish.stone_house.materials]
 main = { kind = "stone", colors = ["stone_grey", "stone_sand"], extra = ["graphite"] }
 plinth = { kind = "concrete", colors = ["concrete", "graphite"] }

@@ -163,10 +163,15 @@ glazed_panes = [1, 2]     # деление стекла в полотне: ст�
 # у 7 из 198), козырёк — у 0,7 (canopy_over_entrance: у реального теста — 0,52 входов), наличник —
 # у половины (как прежде у стилей classic и chalet, gf#211); подоконник — у 0,75: у реального теста
 # он у 20 окон из 106 (gf#212), у синтетики gf#211 был у каждого.
-sill = { none = 1, flat = 2, sloped = 1 }
-casing = { none = 2, flat = 1, wide = 1 }
-shutters = { none = 7, panel = 1, louvered = 1, board = 1 }
-canopy = { none = 3, flat = 3, gable = 2, bracket = 2 }
+# Виды gf#318 (drip, stone, pediment, segment, board_batten_z, arched, posts) входят с весами так,
+# что доля домов с элементом осталась прежней: none пересчитан. Форма вида модели не видна (условие
+# — только наличие), поэтому веса задают лишь разнообразие листов. Двупольная дверь (double) в
+# синтетике не выпадает: ширина входа 0,9 м, двупольным проём бывает от 1,3 м (ГОСТ 475-2016).
+sill = { none = 1.7, flat = 2, sloped = 1, drip = 1, stone = 1 }
+casing = { none = 3, flat = 1, wide = 1, pediment = 0.5, segment = 0.5 }
+shutters = { none = 9, panel = 1, louvered = 1, board = 1, board_batten_z = 1 }
+canopy = { none = 3.9, flat = 3, gable = 2, bracket = 2, arched = 1, posts = 1 }
+door = { plain = 5, panel6 = 3, sidelights = 1 }
 
 [facade.cornice]
 # Карниз под отметкой карниза — одной высоты на дом. Между верхом окна верхнего этажа (с наличником)

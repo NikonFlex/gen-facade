@@ -6,9 +6,11 @@ import pytest
 import tiny_model
 import torch
 
+from genfacade import config
 from genfacade.config import GPTSize, Sampling
 from genfacade.models import layout
 from genfacade.models.stub import ModelError
+from genfacade.render.svg import sheet_svg
 from genfacade.schema import Device, Mode
 from genfacade.train import sampling, tokens
 from genfacade.train.tokens import Mark, TokenError
@@ -248,3 +250,34 @@ def test_cut_answer_keeps_its_words(asked, cfg, monkeypatch):
     assert isinstance(cut, TokenError)
     assert cut.words[0] == Mark.ANSWER and Mark.END not in cut.words
     assert len(prompt.ids) - 1 + len(cut.words) == model.sampler.model.config.block_size
+
+
+def test_model_accepts_house_with_kind_it_was_not_trained_on(checkpoint, cfg, lay_out, tmp_path):
+    """gf#318: вид выводимого элемента — не токен условия, поэтому модель, сохранённая со словарём
+    до появления вида, принимает дом с этим видом: условие то же, ответ разбирается, лист
+    рисуется. Новый вид — запись config/derive.toml, словарь тот же."""
+    folder = tmp_path / "grown"
+    folder.mkdir()
+    (folder / "derive.toml").write_text(
+        '[shutters.never_seen]\nshape = "batten_z"\nshare = 0.5\n'
+        '[canopy.never_seen]\nshape = "arched"\npad_m = 0.3\ngap_m = 0.05\nheight_m = 0.3\n')
+    grown = config.load(folder)
+    settings = _settings(cfg, checkpoint)
+    model = layout.load(settings)
+    sheet = lay_out()
+
+    def house(shutters: str, canopy: str):
+        trim = sheet.spec.trim.model_copy(update={"shutters": shutters, "canopy": canopy})
+        return tokens.bare(sheet.model_copy(update={
+            "spec": sheet.spec.model_copy(update={"trim": trim})}))
+
+    seen, unseen = house("panel", "flat"), house("never_seen", "never_seen")
+    assert not any("never_seen" in w for w in model.words)    # вида нет в словаре чекпойнта
+    prompt = model.prompt(unseen, Mode.WITH_OPENINGS, grown)  # условие записывается и принимается
+    assert prompt.ids == model.prompt(seen, Mode.WITH_OPENINGS, cfg).ids
+    bare = unseen
+    run = grown.model_copy(update={"models": grown.models.model_copy(update={
+        "layout": settings.model_copy(update={"constrain": True})})})
+    answer = model.answer(prompt, bare, 0, run).sheet
+    assert len(answer.facades) == len(bare.facades)
+    assert sheet_svg(answer, grown)
