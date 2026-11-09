@@ -56,3 +56,56 @@ garage_door = "#404040"
 porch = "#ff69b4"
 chimney = "#808000"
 canopy = "#00ced1"
+
+[llm]   # LLM без дообучения (gf#162): запись токенами и few-shot из синтетики; запросы платные
+shots = 8                # примеров в промпте: ближайшие по числу сторон, этажей и периметру
+pool = 300               # домов синтетики train, из которых выбираются примеры (реальный тест — вне пула)
+seed = 0
+attempts = 3             # попыток на дом; брак — ответ не разобран или ошибка валидатора
+temperature = 0.7
+max_output_tokens = 4096
+timeout_s = 120.0
+chars_per_token = 2.5    # оценка для --dry-run: запись токенами — слова вида `cls:window`, цифры
+
+# Цена — доллары за 1 млн токенов. Claude Sonnet 5.5 — [проверено: platform.claude.com/docs/en/
+# about-claude/pricing, 02.11]; модели и цены OpenAI и DeepSeek — [не проверено]: сверить с
+# прайсом поставщика перед настоящим прогоном.
+[llm.providers.claude]
+model = "claude-sonnet-5-5"
+key_env = "ANTHROPIC_API_KEY"
+usd_per_mtok_in = 2.0
+usd_per_mtok_out = 10.0
+
+[llm.providers.openai]
+model = "gpt-4.1"
+key_env = "OPENAI_API_KEY"
+usd_per_mtok_in = 2.0
+usd_per_mtok_out = 8.0
+
+[llm.providers.deepseek]
+model = "deepseek-chat"
+key_env = "DEEPSEEK_API_KEY"
+base_url = "https://api.deepseek.com"
+usd_per_mtok_in = 0.27
+usd_per_mtok_out = 1.1
+
+[llm.providers.stub]
+model = "stub"
+usd_per_mtok_in = 0.0
+usd_per_mtok_out = 0.0
+
+[llm.prompt]
+instruction = """Ты строишь фасады дома. Дом записан последовательностью токенов, токены разделены \
+пробелами. Все длины — целые числа шагов сетки по {grid_m} м. Условие описывает дом и его стены \
+(`<side>` — стена с длиной и проёмами плана, которые уже стоят). Ответ — `<answer>`, типоразмеры \
+окон `<types>`, затем для каждой стены по порядку `<wall>`, её элементы и зоны отделки, в конце \
+`<end>`. Отвечай только записью ответа в том же виде, что в примерах, без пояснений."""
+vocabulary = "Служебные токены и слова записи: {words}. Остальные токены — числа."
+example = "Пример {n}"
+house = "{type}, этажей {floors}, крыша {roof}, стиль {style}, стен {sides}."
+condition = "Условие:"
+answer = "Ответ:"
+
+[llm.prompt.mode]
+with_openings = "Режим: окна и двери из плана заданы условием, остальное достраиваешь ты."
+blind = "Режим: глухой куб, окон плана нет, окна расставляешь ты."

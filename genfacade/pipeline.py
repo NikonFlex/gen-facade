@@ -158,19 +158,23 @@ class Checked(NamedTuple):
     layout: dict
 
 
-def layout(bare: FacadeSheet, req: PlanRun, cfg: Config) -> Checked:
+def layout(bare: FacadeSheet, req: PlanRun, cfg: Config, model=None) -> Checked:
     """Шаги 4–5. Обученная модель (config/models.toml), если чекпойнт есть, иначе стаб.
     Брак модели — ответ не разобран или ошибка валидатора — генерация заново с новым seed
     (`generation: Брак — заново`), с `wall_retry` — только бракованной стены; из best_of годных
-    ответов берётся самый правдоподобный (gf#213). Стаб детерминирован, его не повторяем."""
+    ответов берётся самый правдоподобный (gf#213). Стаб детерминирован, его не повторяем.
+    model — своя модель того же интерфейса (`prompt`, `answers`, `path`): так на этих шагах
+    отвечает LLM базового подхода (`genfacade/llm.py`), и ответ ей проверяют те же привязка и
+    валидатор."""
     if parts.stepped(bare):
-        return _layout_parts(bare, req, cfg)
+        return _layout_parts(bare, req, cfg, model)
     settings = cfg.models.layout
-    model = trained_model(settings)
+    label = str(settings.checkpoint) if model is None else str(model.path)
+    model = trained_model(settings) if model is None else model
     if model is None:
         raw = stub.layout_all(bare, stub.LayoutContext(bare.spec, req.mode, req.text))
         return _check(raw, cfg, {"model": "stub", "attempts": []})
-    trace = {"model": str(settings.checkpoint), "attempts": []}
+    trace = {"model": label, "attempts": []}
     good = list(islice(_good(model, model.prompt(bare, req.mode, cfg), bare, cfg, trace),
                        settings.best_of))
     if not good:
@@ -180,12 +184,12 @@ def layout(bare: FacadeSheet, req: PlanRun, cfg: Config) -> Checked:
     return good[0] if len(good) == 1 else _likeliest(good, Path(req.plan).stem, cfg)
 
 
-def _layout_parts(bare: FacadeSheet, req: PlanRun, cfg: Config) -> Checked:
+def _layout_parts(bare: FacadeSheet, req: PlanRun, cfg: Config, model) -> Checked:
     """Шаги 4–5 для дома из частей разной высоты (gf#322): участки части одной этажности — «дом»
     для модели (она видит стены с параметрами своей части, как прямоугольный дом), ответы
     собираются на стены дома, привязка и валидатор — по сборке."""
     subs = parts.sub_sheets(bare)
-    done = {floors: layout(sub, req, cfg) for floors, (sub, _) in subs.items()}
+    done = {floors: layout(sub, req, cfg, model) for floors, (sub, _) in subs.items()}
     items = {floors: pcs for floors, (_, pcs) in subs.items()}
     raw = parts.merge(bare, {n: c.raw for n, c in done.items()}, items)
     sheet = parts.merge(bare, {n: c.sheet for n, c in done.items()}, items)
