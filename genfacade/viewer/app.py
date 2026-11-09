@@ -20,6 +20,7 @@ from genfacade import pipeline
 from genfacade.config import Config, Review
 from genfacade.datasets import preview, store
 from genfacade.metrics import calibrate
+from genfacade.parts import StaleParts
 from genfacade.plan.genplan_svg import PlanError
 from genfacade.render.house3d import house_3d
 from genfacade.render.svg import sheet_svg
@@ -45,6 +46,7 @@ def create_app(cfg: Config, checked: Path | None = None, marked: Path | None = N
     app = FastAPI(title="GenFacade · смотрелка")
     app.middleware("http")(_revalidate_page)
     app.exception_handler(RequestValidationError)(_invalid_request)
+    app.exception_handler(StaleParts)(_stale_parts)
     _api(app, cfg, runs_dir)
     _samples_api(app, cfg)
     _review_api(app, cfg, checked)
@@ -92,6 +94,12 @@ def refuse(status: int, code: Refusal, detail: str = "") -> HTTPException:
     """Отказ смотрелки: detail — `{code, text, detail}`, страница рисует его как есть и своих
     списков кодов не держит (docs/clean-contour.md, п. 17)."""
     return HTTPException(status, refusal_record(code, detail))
+
+
+async def _stale_parts(request: Request, exc: StaleParts) -> JSONResponse:
+    """Лист собран другим разбиением контура на части: любой вид дома по нему — 409 с кодом отказа,
+    а не 500 (сохранённые прогоны живут дольше разбиения, gf#322)."""
+    return JSONResponse({"detail": exc.record()}, 409)
 
 
 async def _invalid_request(request: Request, exc: RequestValidationError) -> JSONResponse:

@@ -40,7 +40,7 @@ from pydantic import Field, ValidationError
 from genfacade import derive, parts, roof, window_shape
 from genfacade.config import Config, Manual
 from genfacade.datasets import rect_house, store
-from genfacade.plan.wings import edge_runs, wings
+from genfacade.plan.wings import candidates, edge_runs
 from genfacade.schema import (
     EPS,
     BuildingType,
@@ -234,7 +234,8 @@ def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
                for f, e, r in zip(sheet.facades, m.sides, runs, strict=True)]
     sheet = sheet.model_copy(update={"facades": facades})
     if found:  # силуэт — ступенями по участкам, крылья — в плане (шаг 2)
-        sheet, plan = unfold(sheet), plan.model_copy(update={"wings": rects})
+        plan = plan.model_copy(update={"wings": rects})
+        sheet = unfold(sheet.model_copy(update={"wings": parts.sheet_wings(plan)}))
     sheet, bare = _no_eaves(sheet)
     return (Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet),
             dropped + bare)
@@ -291,9 +292,21 @@ def _levels(m: Markup, ring: list[Point], lengths: list[float], cfg: Manual
     ступеней — ([], []). Участок стороны лежит на крыле (`edge_runs`), его отметку несут участки
     карниза, заходящие на него дальше `length_tol_m`; у крыла все участки одной отметки, иначе
     части не ложатся на крылья (ступень внутри крыла, крыло в две отметки) — `Unsupported`.
+    Разбиений контура несколько (`candidates`): берётся первое, на котором отметки ложатся.
     Отметка в пределах `eaves_tol_m` от карниза дома — карниз дома."""
     base = parts.Level(len(m.floor_heights), _spec(m).eaves_m)
-    rects = wings(ring)
+    refusal = None
+    for rects in candidates(ring) or [[]]:
+        try:
+            return _levels_on(m, ring, lengths, cfg, rects, base)
+        except Unsupported as e:
+            refusal = refusal or e  # первый отказ — по разбиению `wings`, его и называем
+    raise refusal
+
+
+def _levels_on(m: Markup, ring: list[Point], lengths: list[float], cfg: Manual,
+               rects: list[Rect], base: parts.Level) -> tuple[list[Rect], list[parts.Level]]:
+    """Этажность и карниз крыльев одного разбиения контура; не ложатся — `Unsupported`."""
     seen: dict[int, list[parts.Level]] = {}
     for k, e in enumerate(m.sides):
         marks = _marks(m, e, base, cfg)

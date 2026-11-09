@@ -329,8 +329,10 @@ def walls(spec: HouseSpec, plan: Plan, rule: Parts | None = None) -> FacadeSheet
     разной высоты — ступенями (`parts.py`). rule — какие крылья ниже главного, если текст молчит;
     без него — только по `spec.wing_floors` (синтетика и разметка делят дом сами)."""
     wall_runs = parts.runs(spec, plan, rule)
-    return unfold(FacadeSheet(spec=spec, facades=[
-        SideFacade(side=s, runs=r) for s, r in zip(plan.sides, wall_runs, strict=True)]))
+    stepped = any(wall_runs)
+    return unfold(FacadeSheet(
+        spec=spec, wings=parts.sheet_wings(plan) if stepped else [],
+        facades=[SideFacade(side=s, runs=r) for s, r in zip(plan.sides, wall_runs, strict=True)]))
 
 
 def _prepare(req: PlanRun, svg: str, out: Path, cfg: Config, done: list[int]) -> FacadeSheet:

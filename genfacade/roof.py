@@ -28,9 +28,8 @@ from typing import NamedTuple
 
 import shapely
 
-from genfacade.parts import stepped
+from genfacade.parts import parts_of, stepped
 from genfacade.plan.genplan_svg import PlanError
-from genfacade.plan.wings import wings
 from genfacade.schema import (
     EPS,
     Element,
@@ -342,7 +341,7 @@ def roofs(sheet: FacadeSheet) -> HouseRoof | None:
     spec = sheet.spec
     rise = math.tan(math.radians(spec.roof.pitch_deg))
     eaves = {r.part: r.eaves_m for f in sheet.facades for r in f.runs}
-    rects = wings(corners)
+    rects = parts_of(sheet, corners)
     lines = [_part_line(sheet, k, w, eaves[k], rise,
                         [r for j, r in enumerate(rects) if eaves[j] > eaves[k] + EPS])
              for k, w in enumerate(rects)]
