@@ -532,8 +532,8 @@ Drawings (ECCV 2020) · StarVector, Chat2SVG, OmniSVG, SVGFusion, LLM4SVG.
   **заданные** проёмы) + текст стиля; выход — 3D-меш с PBR-материалами
   и параметрической крышей. Проёмы не генерирует. Ограничение из §4.7 дословно:
   «treats the facade as a single massing shell and stylizes openings uniformly
-  without modeling per-floor articulation». Код обещан («All code and data will
-  be released»). Мотивация совпадает с нашей: «Existing methods can generate floor
+  without modeling per-floor articulation». Код выложен 01.09.2026: https://github.com/ruiqixu37/ShellMaker, MIT `[проверено: gh api 09.11]`;
+  весов нет — внешние TRELLIS.2 и Gemini API, 16–24 ГБ VRAM `[проверено агентом: README]`. Мотивация совпадает с нашей: «Existing methods can generate floor
   plans and wall layouts but typically stop at a structural shell».
 - **ArchyBase, Floor Plan to Elevation AI** — коммерческий сервис,
   https://www.archybase.com/floor-plan-to-elevation `[проверено: страница]`.
