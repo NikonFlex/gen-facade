@@ -46,6 +46,23 @@ def houses(rect_cfg):
 
 
 @pytest.fixture(scope="module")
+def gable_cfg(rect_cfg):
+    """Окна во фронтоне и по скату — у большинства домов (доли до gf#373): у домов с долями по
+    настоящим домам их в 60 домах слишком мало для проверки формы наличника."""
+    gable = rect_cfg.synthetic.facade.gable
+    rich = gable.model_copy(update={"share": 0.9, "shapes": {**gable.shapes,
+                                                              VariantKind.SLOPE: 50}})
+    facade = rect_cfg.synthetic.facade.model_copy(update={"gable": rich})
+    return rect_cfg.model_copy(update={
+        "synthetic": rect_cfg.synthetic.model_copy(update={"facade": facade})})
+
+
+@pytest.fixture(scope="module")
+def gable_houses(gable_cfg):
+    return [build.sample(s, gable_cfg) for s in SEEDS]
+
+
+@pytest.fixture(scope="module")
 def looks(cfg):
     """Параметры и характер дома по тем же seed, что у примеров."""
     return [house(random.Random(f"house/{s}"), cfg,  # noqa: S311
@@ -389,11 +406,11 @@ def test_slope_windows_cross_the_slope_and_zero_share_keeps_the_houses(houses, r
                        for f in plain.sheet.facades for w in _roofed(f, plain.sheet.spec))
 
 
-def test_casing_of_a_slope_window_follows_the_window_outline(houses, rect_cfg):
+def test_casing_of_a_slope_window_follows_the_window_outline(gable_houses, gable_cfg):
     """Наличник окна по скату (gf#319): на листе — контур вокруг контура окна, прямоугольник
     остаётся невидимой рамкой для разбора; проверка стены — по контуру, не по прямоугольнику."""
     found = 0
-    for h in houses:
+    for h in gable_houses:
         sheet = h.sheet
         for k, f in enumerate(sheet.facades):
             slopes = {w.id for w in _roofed(f, sheet.spec)
@@ -403,12 +420,12 @@ def test_casing_of_a_slope_window_follows_the_window_outline(houses, rect_cfg):
             if not casings:
                 continue
             found += len(casings)
-            text = sheet_svg(sheet, rect_cfg)
+            text = sheet_svg(sheet, gable_cfg)
             assert parse_sheet_svg(text)[k][0] == f.elements
             nodes = list(ElementTree.fromstring(text).iter())
             above = roof.gables(sheet)[k]
             room = roof.room(f.side.length_m, sheet.spec.eaves_m, above,
-                             rect_cfg.checks.slope_offset_m)
+                             gable_cfg.checks.slope_offset_m)
             for e in casings:
                 at = next(i for i, n in enumerate(nodes) if n.get(sheet_format.ID) == e.id)
                 parent = next(w for w in f.elements if w.id == e.parent)
@@ -418,3 +435,26 @@ def test_casing_of_a_slope_window_follows_the_window_outline(houses, rect_cfg):
                 assert nodes[at].get("class") == "trim-frame"
                 assert shapely.Polygon(drawn).equals_exact(shapely.Polygon(want), 0.01), e.id
     assert found
+
+
+# Настоящие 47 домов (data/samples/manual), датчик tools/shares_probe.py, gf#373: у 8 из 21 домов с
+# двускатной крышей и щипцом окно выше карниза (бутстреп по домам, 2,5–97,5 %: 0,19–0,57); окон по
+# скату — 3 из 21 окна выше карниза; двускатных среди скатных домов 26 из 35.
+REAL_GABLE_HOUSES = (0.19, 0.57)
+REAL_SLOPE_OF_GABLE_WINDOWS = 3 / 21
+REAL_GABLE_OF_SLOPED = 26 / 35
+
+
+def test_gable_shares_stay_within_real_houses(cfg):
+    """`data: Синтетика своим генератором` (gf#373): доли окон во фронтоне генератора — как у
+    настоящих домов. У реального щипца места много, окно влезает всегда, поэтому модель повторяет
+    не долю синтетики, а долю генератора на просторном щипце: дом с окнами — `share` и хотя бы одно
+    окно на торце (не нуль в `count_weights`); окно по скату — доля веса `slope`."""
+    rules = cfg.synthetic.facade.gable
+    roomy = rules.share * (1 - rules.count_weights[0] / sum(rules.count_weights))
+    assert REAL_GABLE_HOUSES[0] <= roomy <= REAL_GABLE_HOUSES[1]
+    slope = rules.shapes[VariantKind.SLOPE] / sum(rules.shapes.values())
+    assert slope <= 2 * REAL_SLOPE_OF_GABLE_WINDOWS  # не втрое чаще настоящих, как при весе 50
+    roofs = cfg.synthetic.spec.roof_weights
+    sloped = {k: w for k, w in roofs.items() if k is not RoofKind.FLAT}
+    assert roofs[RoofKind.GABLE] / sum(sloped.values()) >= 0.9 * REAL_GABLE_OF_SLOPED
