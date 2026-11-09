@@ -2,11 +2,15 @@
 
 Путь SVG — не элемент: `ConcatPath` EvoVec склеивает несоприкасающиеся куски одного цвета в один
 путь, а путь бывает закрыт сверху другим (порядок слоёв). Поэтому элементы стены берутся с
-отрисовки: каждый пиксель → класс ближайшего цвета палитры `[vectorizer.colors]` (сглаживание края
-уходит в ближайший класс), связные области (4 соседа) каждого класса, кроме стены, → рамки.
+отрисовки: каждый пиксель → класс ближайшего цвета палитры `[vectorizer.colors]`, связные области
+(4 соседа) каждого класса, кроме стены, → рамки. Пиксели сглаживания на границе окна, ставни или
+двери ближе всего бывают к чужому классу (крыльцу) и цепляют его полосу в «рамку на весь этаж»;
+их убирает открытие маски класса (`open_radius_px`), а не расстояние до палитры: цвета EvoVec
+отличаются от палитры на 90 и больше, чем и сам край.
 scipy и skimage в проекте нет — области собираются объединением пробегов по строкам.
 """
 
+from collections.abc import Callable
 from typing import NamedTuple
 
 import numpy
@@ -37,10 +41,34 @@ def palette(cfg: Config) -> list[ElementClass]:
 
 
 def classes(image: numpy.ndarray, cfg: Config) -> numpy.ndarray:
-    """H×W индексов `palette()`: класс ближайшего по цвету."""
+    """H×W индексов `palette()`: класс ближайшего по цвету; полоски тоньше `2·open_radius_px + 1`
+    пикселей (сглаживание на границе окна и стены, нарисованное чужим классом) — стена."""
     colors = numpy.array([visual.rgb(c) for c in cfg.baselines.vectorizer.colors.values()])
     distance = ((image[:, :, None, :].astype(numpy.int32) - colors) ** 2).sum(axis=3)
-    return distance.argmin(axis=2)
+    index = distance.argmin(axis=2)
+    radius = cfg.baselines.vectorizer.open_radius_px
+    kept = numpy.full(index.shape, palette(cfg).index(ElementClass.FACADE))  # убранное — стена
+    for cls in numpy.unique(index):
+        kept[opened(index == cls, radius)] = cls
+    return kept
+
+
+def shifted(mask: numpy.ndarray, radius: int, reduce: Callable) -> numpy.ndarray:
+    """Свёртка маски квадратом (2·radius + 1)²: `numpy.minimum` — эрозия, `numpy.maximum` —
+    наращивание; за краем картинки край продолжается: обрезанное окно не съедается с края."""
+    padded = numpy.pad(mask, radius, mode="edge")
+    out = mask
+    for dy in range(2 * radius + 1):
+        for dx in range(2 * radius + 1):
+            out = reduce(out, padded[dy:dy + mask.shape[0], dx:dx + mask.shape[1]])
+    return out
+
+
+def opened(mask: numpy.ndarray, radius: int) -> numpy.ndarray:
+    """Морфологическое открытие: остаётся то, куда помещается квадрат (2·radius + 1)²."""
+    if radius <= 0:
+        return mask
+    return shifted(shifted(mask, radius, numpy.minimum), radius, numpy.maximum)
 
 
 def visible_share(index: numpy.ndarray, box: Box, cls: int) -> float:
