@@ -79,12 +79,17 @@ def scale(f: SideFacade, spec: HouseSpec, cfg: Config) -> float:
     return cfg.baselines.vectorizer.long_side_px / max(f.side.length_m, spec.eaves_m)
 
 
-def raster(f: SideFacade, spec: HouseSpec, cfg: Config) -> numpy.ndarray:
+def flat(f: SideFacade, spec: HouseSpec, cfg: Config) -> numpy.ndarray:
     """Растр стены H×W×3: элементы поверх стены плоскими цветами классов, холст — по стене."""
     settings = cfg.metrics.visual.model_copy(update={
         "px_per_m": scale(f, spec, cfg), "canvas_m": (f.side.length_m, spec.eaves_m),
         "colors": cfg.baselines.vectorizer.colors})
-    return roughen(visual.mask(f, spec, settings), cfg)
+    return visual.mask(f, spec, settings)
+
+
+def raster(f: SideFacade, spec: HouseSpec, cfg: Config) -> numpy.ndarray:
+    """То, что получает векторизатор: плоский растр, при `[vectorizer.texture]` — с грязью."""
+    return roughen(flat(f, spec, cfg), cfg)
 
 
 def roughen(image: numpy.ndarray, cfg: Config) -> numpy.ndarray:
@@ -171,6 +176,24 @@ def elements(traced: Traced, f: SideFacade, spec: HouseSpec, cfg: Config) -> lis
     return out
 
 
+def seen(f: SideFacade, spec: HouseSpec, cfg: Config) -> list[Element]:
+    """Проёмы эталонной стены, которые видны на растре: рамка — в пределах стены до карниза, а
+    цвет класса занимает не меньше `min_visible` рамки — иначе элемент закрыт поверх нарисованным
+    (навес на окне) или срезан карнизом, и «потерей векторизатора» его считать нельзя."""
+    run, image, ppm = cfg.baselines.vectorizer, flat(f, spec, cfg), scale(f, spec, cfg)
+    out = []
+    for e in damage.elements_of(f):
+        x0, y0 = max(e.x_m, 0.0), max(e.y_m, 0.0)
+        x1, y1 = min(e.x_m + e.w_m, f.side.length_m), min(e.y_m + e.h_m, spec.eaves_m)
+        if x1 <= x0 or y1 <= y0:
+            continue
+        rows = slice(image.shape[0] - round(y1 * ppm), image.shape[0] - round(y0 * ppm))
+        patch = image[rows, round(x0 * ppm):round(x1 * ppm)]
+        if (patch == visual.rgb(run.colors[e.cls])).all(axis=2).mean() >= run.min_visible:
+            out.append(e.model_copy(update={"x_m": x0, "y_m": y0, "w_m": x1 - x0, "h_m": y1 - y0}))
+    return out
+
+
 def _traced(folder: Path) -> dict[str, dict[int, Traced]]:
     """Ответы векторизатора по домам и стенам."""
     out: dict[str, dict[int, Traced]] = {}
@@ -194,8 +217,11 @@ def collect(real: dict[str, FacadeSheet], cfg: Config, out: Path) -> list[str]:
     found = {n: e.walls for n, e in done.items()}
     shapes = [t for n in done for t in traced[n].values()]
     paths = {"walls": len(shapes), "paths": sum(len(t.shapes) for t in shapes)}
-    (out / "damage.json").write_text(json.dumps({**damage.report(real, found, cfg), **paths},
-                                                indent=1))
+    reference = {n: [seen(f, real[n].spec, cfg) for f in real[n].facades] for n in done}
+    report = damage.report(real, reference, found, cfg)
+    everything = sum(len(damage.elements_of(f)) for n in done for f in real[n].facades)
+    report["hidden"] = everything - sum(len(w) for walls in reference.values() for w in walls)
+    (out / "damage.json").write_text(json.dumps({**report, **paths}, indent=1))
     return list(done)
 
 

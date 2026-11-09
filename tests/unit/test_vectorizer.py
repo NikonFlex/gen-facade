@@ -102,6 +102,7 @@ def _box(cls, x, w=1.0, y=1.0, h=1.5) -> Element:
     ([_box(ElementClass.DOOR, 0.0)], "wrong_class"),
     ([_box(ElementClass.WINDOW, 0.0, w=0.45), _box(ElementClass.WINDOW, 0.55, w=0.45)], "split"),
     ([_box(ElementClass.WINDOW, 0.0, w=0.3)], "partial"),
+    ([_box(ElementClass.WINDOW, -0.5, w=3.0)], "merged"),
     ([_box(ElementClass.WINDOW, 5.0)], "lost"),
 ])
 def test_damage_outcome_of_a_window(found, expected, cfg):

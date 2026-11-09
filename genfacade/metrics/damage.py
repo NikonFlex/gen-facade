@@ -4,6 +4,8 @@
 Для каждого элемента эталона берётся лучший по IoU элемент векторизатора любого класса:
 - matched — тот же класс, IoU от `match_iou`;
 - wrong_class — IoU от `match_iou`, но класс другой;
+- merged — совпадения нет, зато эталонный элемент в основном внутри более крупного элемента того
+  же класса (соседние окна слиты в одну область);
 - split — совпадения нет, зато внутри эталонного элемента два и больше элементов того же класса
   (окно раздроблено);
 - partial — совпадения нет, внутри один осколок того же класса (рамка съехала или усохла);
@@ -20,7 +22,6 @@ from genfacade.config import Config
 from genfacade.schema import Element, ElementClass, FacadeSheet, SideFacade
 
 CLASSES = (ElementClass.WINDOW, ElementClass.DOOR)
-OUTCOMES = ("matched", "wrong_class", "split", "partial", "lost")
 CM = 100.0
 
 
@@ -43,6 +44,8 @@ def outcome(ref: Element, found: list[Element], threshold: float) -> str:
     best = max(found, key=lambda e: iou(ref, e), default=None)
     if best is not None and iou(ref, best) >= threshold:
         return "matched" if best.cls is ref.cls else "wrong_class"
+    if any(e.cls is ref.cls and inside(ref, e) for e in found):
+        return "merged"
     pieces = [e for e in found if e.cls is ref.cls and inside(e, ref)]
     return "split" if len(pieces) > 1 else "partial" if pieces else "lost"
 
@@ -84,17 +87,17 @@ def elements_of(f: SideFacade) -> list[Element]:
     return [e for e in f.elements if e.cls in CLASSES]
 
 
-def report(real: dict[str, FacadeSheet], found: dict[str, list[list[Element]]],
-           cfg: Config) -> dict:
-    """Суммы по домам, которые векторизатор успел: исходы, лишние, ошибка рамки, выравнивание
-    у эталона (`ref_*`) и у векторизатора (`vec_*`); доли — от окон."""
+def report(real: dict[str, FacadeSheet], seen: dict[str, list[list[Element]]],
+           found: dict[str, list[list[Element]]], cfg: Config) -> dict:
+    """Суммы по домам, которые векторизатор успел: исходы эталонных элементов `seen` (видимых на
+    растре), лишние, ошибка рамки, выравнивание у эталона (`ref_*`) и у векторизатора (`vec_*`)."""
     run, total = cfg.baselines.vectorizer, Counter()
     for name, walls in found.items():
         sheet = real[name]
-        for f, got in zip(sheet.facades, walls, strict=True):
-            total += wall(elements_of(f), got, run.match_iou)
+        for f, ref, got in zip(sheet.facades, seen[name], walls, strict=True):
+            total += wall(ref, got, run.match_iou)
             tol = run.align_px * max(f.side.length_m, sheet.spec.eaves_m) / run.long_side_px
-            for key, items in (("ref", f.elements), ("vec", got)):
+            for key, items in (("ref", ref), ("vec", got)):
                 windows = [e for e in items if e.cls is ElementClass.WINDOW]
                 total += Counter({f"{key}_{k}": v for k, v in aligned(windows, tol).items()})
     return {"houses": len(found), **dict(sorted(total.items()))}
