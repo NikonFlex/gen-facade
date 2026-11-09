@@ -67,8 +67,8 @@ min_side_px = 256
 
 [generator.prompt]
 house = "a {floors}-storey {building} with {walls} walls and a {roof} roof"
-drawing = "flat front view of a single house wall filling the whole image edge to edge, architectural elevation drawing, orthographic, flat colors, no perspective, no roof, no sky, no ground"
-negative = "perspective, photo, roof, sky, clouds, lawn, grass, trees, bushes, ground, foundation, people, cars, street, shadows, text, watermark"
+drawing = "extreme close-up of a flat house wall seen straight on, only siding and windows, cropped so that the wall fills the whole image, orthographic architectural elevation, flat colors"
+negative = "perspective, three-quarter view, isometric, 3d, whole house, corner, side wall, roof, gable, chimney, porch, steps, photo, sky, clouds, lawn, grass, trees, bushes, ground, foundation, people, cars, street, shadows, text, watermark"
 
 [generator.prompt.colors]   # называем цвет материала словом: SD не читает #rrggbb
 white = "#f0f0f0"
