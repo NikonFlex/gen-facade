@@ -16,14 +16,18 @@ pitch_deg = 33.0
 overhang_m = 0.4
 unit = "m"
 pt_per_unit = 116.0
-material = "brick"       # светлый кирпич кладкой
+material = "brick"  # светлый кирпич кладкой
 plinth = 0.4
+floor_heights = [2.85, 2.8]
 plinth_material = "plaster"  # белый цоколь −0,400…±0,000
-floor_heights = [3.22, 2.8]
-cut = ["south, east, west: навес на столбах над входом и боковой навес на столбе (вне стены)",
-       "все стороны: тени на рисунке"]
-absent = ["все стороны: нет карнизной полосы и поясов — только свес кровли",
-          "все стороны: нет зон второй отделки — вся стена кирпичом"]
+absent = [
+  "все стороны: нет карнизной полосы и поясов — только свес кровли",
+  "все стороны: нет зон второй отделки — вся стена кирпичом",
+]
+cut = [
+  "south, east, west: навес на столбах над входом и боковой навес на столбе (вне стены)",
+  "все стороны: тени на рисунке",
+]
 
 [[sides]]
 view = "Фасад 1–3 (вход)"
@@ -31,11 +35,12 @@ page = 1
 wall = [193.0, 1237.0]
 floor = 1040.0
 elements = [
-  { cls = "window", box = [372.0, 388.0, 543.0, 573.0], variant = { cols = 2, rows = 1 } },
-  { cls = "window", box = [903.0, 388.0, 1075.0, 573.0], variant = { cols = 2, rows = 1 } },
-  { cls = "window", box = [352.0, 738.0, 560.0, 945.0], variant = { cols = 2, rows = 1 } },
+  { cls = "window", box = [372.0, 388.0, 543.0, 573.0], variant = { cols = 2 } },
+  { cls = "window", box = [903.0, 388.0, 1075.0, 573.0], variant = { cols = 2 } },
+  { cls = "window", box = [352.0, 738.0, 560.0, 945.0], variant = { cols = 2 } },
   { cls = "door", box = [765.0, 795.0, 878.0, 1040.0] },
   { cls = "window", box = [1005.0, 738.0, 1075.0, 945.0] },
+  { cls = "canopy", box = [657.7, 724.3, 979.0, 785.3] },
 ]
 
 [[sides]]
@@ -43,32 +48,33 @@ view = "Фасад Г–А"
 page = 2
 wall = [406.0, 1222.0]
 floor = 822.0
-pt_per_unit = 90.4
 elements = [
   { cls = "window", box = [858.0, 317.0, 912.0, 460.0] },
 ]
+pt_per_unit = 90.4
 
 [[sides]]
 view = "Фасад 3–1"
 page = 4
 wall = [235.0, 1202.0]
 floor = 965.0
-pt_per_unit = 107.2
 elements = [
   { cls = "window", box = [398.0, 362.0, 449.0, 413.0] },
   { cls = "window", box = [598.0, 365.0, 659.0, 530.0] },
-  { cls = "window", box = [849.0, 362.0, 1008.0, 527.0], variant = { cols = 2, rows = 1 } },
+  { cls = "window", box = [849.0, 362.0, 1008.0, 527.0], variant = { cols = 2 } },
   { cls = "window", box = [398.0, 685.0, 449.0, 738.0] },
   { cls = "window", box = [598.0, 685.0, 659.0, 877.0] },
   { cls = "door", box = [851.0, 718.0, 1060.0, 965.0], variant = { kind = "transom" } },
+  { cls = "canopy", box = [661.9, 618.6, 1246.7, 715.6] },
 ]
+pt_per_unit = 107.2
 
 [[sides]]
 view = "Фасад А–Г"
 page = 3
 wall = [342.0, 1172.0]
 floor = 818.0
-pt_per_unit = 91.9
 elements = [
-  { cls = "window", box = [697.0, 303.0, 777.0, 540.0], variant = { cols = 1, rows = 3 } },
+  { cls = "window", box = [697.0, 303.0, 777.0, 540.0], variant = { rows = 3 } },
 ]
+pt_per_unit = 91.9
