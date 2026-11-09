@@ -70,14 +70,16 @@ export class Relief {
     return this[pick(SILLS, r.shape, "подоконника")](r, w);
   }
 
-  // Козырёк над дверью: slab — плита с уклоном от стены, gable — двускатный фронтоном наружу,
+  // Козырёк над дверью (не заходит за угол, как крыльцо): slab — плита с уклоном от стены, gable — двускатный фронтоном наружу,
   // bracket — плита на двух кронштейнах, arched — свод дугой, posts — плита на двух столбах.
   canopy(r, w) {
     return this[pick(CANOPIES, r.shape, "козырька")](r, w);
   }
 
   // Крыльцо: площадка у двери глубиной depth и ступени перед ней. Профиль — лестница: ступеней
-  // `steps` (считает render/house3d.py), высота каждой — доля высоты крыльца.
+  // `steps` (считает render/house3d.py), высота каждой — доля высоты крыльца. Рамка — по стене, как
+  // размечена: у края стены крыльцо не заходит за угол (в отличие от цоколя и карниза, которые
+  // обегают дом и на углу продолжаются, `_start`) — gf#414.
   porch(r, w) {
     const n = r.steps, d = r.depth, rise = (r.y1 - r.y0) / n;
     const out = (k) => d + (n - k) * this.look.tread_m;  // на сколько выходит верх k-й ступени
@@ -87,13 +89,13 @@ export class Relief {
       if (k < n) profile.push([out(k + 1), r.y0 + k * rise]);
     }
     profile.push([0, r.y1]);
-    return [this._extrudeX(profile, this._start(r, w, d), r.x1)];
+    return [this._extrudeX(profile, r.x0, r.x1)];
   }
 
-  _wedge(r, w) {
+  _wedge(r) {
     const d = r.depth, h = r.y1 - r.y0;
     return [this._extrudeX([[0, r.y0], [d, r.y0], [d, r.y0 + h * this.look.slope_edge], [0, r.y1]],
-      this._start(r, w, d), r.x1)];
+      r.x0, r.x1)];
   }
 
   _gable(r) {
