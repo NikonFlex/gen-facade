@@ -250,3 +250,23 @@ def test_panels_put_input_drawing_and_found_side_by_side(real, cfg, traced_by_st
     with Image.open(file) as picture:
         assert picture.size == (3 * width + 2 * raster_panels.GAP_PX,
                                 height + raster_panels.HEADER_PX)
+
+
+def _door_on_porch(cfg) -> numpy.ndarray:
+    """Стена, полоса крыльца внизу и дверь на ней с кольцом сглаживания: полупрозрачный цвет двери
+    на стене ближе всего к розовому крыльцу, и кольцо сцепляет дверь с полосой."""
+    colors = {c: numpy.array(visual.rgb(h)) for c, h in cfg.baselines.vectorizer.colors.items()}
+    image = numpy.tile(colors[ElementClass.FACADE], (60, 100, 1)).astype(numpy.uint8)
+    image[50:58, :] = colors[ElementClass.PORCH]
+    ring = (colors[ElementClass.DOOR] + colors[ElementClass.FACADE]) // 2
+    image[19:50, 39:61] = ring
+    image[20:50, 40:60] = colors[ElementClass.DOOR]
+    return image
+
+
+def test_antialiased_edge_does_not_stretch_porch_over_the_door(cfg):
+    """Пиксели сглаживания вокруг двери не дают крыльцу рамку на всю высоту двери."""
+    found = raster_read.regions(raster_read.classes(_door_on_porch(cfg), cfg), cfg)
+    boxes = {r.cls: r.box for r in found}
+    assert boxes[ElementClass.PORCH] == (0, 50, 100, 58)
+    assert boxes[ElementClass.DOOR] == (40, 20, 60, 50)
