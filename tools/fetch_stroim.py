@@ -38,6 +38,10 @@ ROOFS = {1: RoofKind.FLAT, 2: RoofKind.SHED, 3: RoofKind.GABLE, 4: RoofKind.HIP}
 FACADES = 4             # видов в схеме фасадов
 PAGE_SIZE = 50
 PT_PER_PX = 72          # dpi листа: 1 pt = 1 px
+# Схема фасадов бывает до ~200 Мп (28511 — 190 Мп, run 42541816301 упал на нём): PIL считает
+# такую «бомбой распаковки». Картинки — только с сайта выше, поэтому лимит поднят.
+MAX_PIXELS = 400_000_000
+Image.MAX_IMAGE_PIXELS = MAX_PIXELS
 
 
 def get(path):
@@ -62,7 +66,10 @@ def card(pid):
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(get(f'/api/v1/projects/{pid}'))
-    return json.loads(path.read_text())['payload']
+    payload = json.loads(path.read_text())['payload']
+    if payload is None:  # проект снят с сайта
+        raise LookupError(f'проекта {pid} нет на сайте')
+    return payload
 
 
 def file_url(file_id):
@@ -138,10 +145,18 @@ def main():
     if args.cmd == 'candidates':
         print(f'кандидатов: {len(candidates(args.pages))} → {OUT / "candidates.json"}')
         return
+    failed = []
     for pid in args.ids:
-        pictures, new = images(pid)
-        made = sheet(pid, pictures)
+        try:  # дома независимы: сбой одного (сеть, битая картинка) не роняет пакет на ночь
+            pictures, new = images(pid)
+            made = sheet(pid, pictures)
+        except (OSError, LookupError) as error:
+            failed.append(pid)
+            print(f'{pid}: пропущен — {error}', file=sys.stderr)
+            continue
         print(f'{pid}: картинок {len(pictures)}, скачано {new}, лист {"собран" if made else "был"}')
+    if failed:
+        print(f'пропущено {len(failed)}: {" ".join(map(str, failed))}', file=sys.stderr)
 
 
 if __name__ == '__main__':
