@@ -14,7 +14,7 @@ from simple_house import SIMPLE
 
 from genfacade import config, pipeline
 from genfacade.datasets.synthetic import batch
-from genfacade.metrics import visual
+from genfacade.metrics import calibrate, visual
 from genfacade.models import stub
 from genfacade.pipeline import walls
 from genfacade.plan.preprocess import preprocess
@@ -142,6 +142,14 @@ def lay_out(cfg):
 def house(lay_out) -> FacadeSheet:
     """Простой дом после шагов 1–4 — как его рисует лист (шаг 6)."""
     return lay_out()
+
+
+@pytest.fixture
+def real(house, monkeypatch):
+    """Четыре реальных дома — копии простого."""
+    houses = {f"h{i}": house for i in range(4)}
+    monkeypatch.setattr(calibrate, "houses", lambda source, split, count, cfg: houses)
+    return houses
 
 
 @pytest.fixture

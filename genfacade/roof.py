@@ -366,11 +366,21 @@ def _part_line(sheet: FacadeSheet, part: int, w, eaves: float, rise: float,
     butts = {k for k in on if any(shapely.LineString([corners[k], corners[(k + 1) % 4]])
                                   .intersection(shapely.box(r.x0_m, r.y0_m, r.x1_m, r.y1_m)
                                                 ).length > EPS for r in taller)}
-    on = on - butts or on
+    on = _off_walls(on, butts, sheet.spec.roof.kind)
     slopes = [Slope(corners[k], (-n[0], -n[1])) for k, n in enumerate(normals) if k in on]
     if min(lengths[:2]) <= sheet.spec.roof.overhang_m:  # уже собственного свеса — уступ контура
         slopes = []  # (у разметки — шум в сантиметры): крыши у него нет, он под соседними
     return Roofline(corners, slopes, eaves, rise, sheet.spec.roof.overhang_m)
+
+
+def _off_walls(on: set[int], butts: set[int], kind: RoofKind) -> set[int]:
+    """Стены карниза без тех, на которые опирается более высокая часть. Односкатная опирается
+    единственной низкой стороной на стену: низ уходит на противоположную сторону, высокая — у
+    стены. У остальных видов, если опираются все стены, — как есть."""
+    free = on - butts
+    if not free and kind is RoofKind.SHED:
+        free = {(k + 2) % RECT_SIDES for k in on}
+    return free or on
 
 
 def _entrance_on(facade, part: int) -> bool:

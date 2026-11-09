@@ -61,3 +61,4 @@ materials/telegram/
 
 # замки очереди проверки разметки (gf#348)
 markup/**/*.lock
+markup/**/orig/

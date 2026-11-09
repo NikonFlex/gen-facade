@@ -2,9 +2,10 @@
 
 Часть дома — прямоугольное крыло контура, у него своя этажность и высота. Контур ортогональный:
 режем его по линии через вогнутый угол, пока не останутся прямоугольники. Г-образный контур режется
-двумя способами; берём разрез, после которого самое большое крыло больше (как в Г-образной
-синтетике, `datasets/synthetic/shapes.py`: основной объём — целый); при равенстве — горизонтальный,
-потом по порядку углов, чтобы разбиение не менялось от запуска к запуску.
+двумя способами; берём разрез, после которого самое большое из итоговых крыльев (после дальнейшего
+разбиения) больше (как в Г-образной синтетике, `datasets/synthetic/shapes.py`: основной объём —
+целый; у Т с пристройкой посреди стены — блок целиком, а не полоса сбоку); при равенстве —
+горизонтальный, потом по порядку углов, чтобы разбиение не менялось от запуска к запуску.
 """
 
 import math
@@ -44,8 +45,8 @@ def _split(shape: shapely.Polygon) -> list[shapely.Polygon]:
         return [shape]
     cuts = [c for v, horizontal in product(_reflex(shape), (True, False))
             if len(c := _cut(shape, v, horizontal)) > 1]
-    best = max(cuts, key=lambda pieces: max(_size(p) for p in pieces))  # max берёт первый из равных
-    return [r for piece in best for r in _split(piece)]
+    results = [[r for piece in c for r in _split(piece)] for c in cuts]
+    return max(results, key=lambda rects: max(_size(r) for r in rects))  # первый из равных
 
 
 def _size(shape: shapely.Polygon) -> float:

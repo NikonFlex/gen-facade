@@ -135,6 +135,51 @@ NOISY = [(0.0, 6.726), (8.534400000000003, 6.726), (8.534400000000003, 4.3213866
          (2.7432000000000007, 1.8491199999999992), (0.0, 1.8491199999999992)]
 
 
+# Т из дома random-annex-1: блок 10,75 × 7,55 и пристройка 4,8 × 3,6 посреди фронтальной стены;
+# полоса блока правее пристройки уже 2,29 м (gf#322)
+ANNEX = SIMPLE.parent / "contours" / "annex_house.svg"
+ANNEX_OUTLINE = [(1, 4.6), (4.85, 4.6), (4.85, 1), (9.65, 1), (9.65, 4.6), (11.75, 4.6),
+                 (11.75, 12.15), (1, 12.15)]
+ANNEX_TEXT = "A two-storey house, shed roof."
+
+
+def annex_sheet(text: str = ANNEX_TEXT) -> FacadeSheet:
+    plan = preprocess(ANNEX.read_text(), Mode.WITH_OPENINGS, CFG.plan)
+    return pipeline.walls(stub.spec_model(text, CFG.models.spec), plan, CFG.plan.parts)
+
+
+def test_annex_in_middle_of_wall_does_not_cut_off_a_strip():
+    """Пристройка посреди стены: два крыла — блок целиком и пристройка, без полосы сбоку блока."""
+    found = wings(ANNEX_OUTLINE)
+    sizes = sorted((w.x1_m - w.x0_m, w.y1_m - w.y0_m) for w in found)
+    assert sizes == [pytest.approx((4.8, 3.6)), pytest.approx((10.75, 7.55))]
+
+
+def test_annex_house_has_main_cornice_and_lower_annex_without_strip():
+    levels = parts.levels(stub.spec_model(ANNEX_TEXT, CFG.models.spec),
+                          preprocess(ANNEX.read_text(), Mode.WITH_OPENINGS, CFG.plan),
+                          CFG.plan.parts)
+    spec = stub.spec_model(ANNEX_TEXT, CFG.models.spec)
+    assert len(levels) == 2
+    main, annex = sorted(levels, key=lambda lv: -lv.eaves_m)
+    assert main.eaves_m == pytest.approx(spec.eaves_m) and annex.eaves_m < main.eaves_m
+
+
+def test_annex_house_roof_has_two_parts():
+    assert len(roof.roofs(annex_sheet()).parts) == 2
+
+
+def test_shed_annex_rises_to_wall_of_higher_part():
+    """Односкатная пристройка: низ у свободного края, высокая сторона — у стены главного блока."""
+    house = roof.roofs(annex_sheet())
+    block, annex = sorted(house.parts, key=lambda p: -p.eaves)
+    (slope,) = annex.slopes
+    by_wall = sorted(annex.corners, key=lambda c: shapely.Point(c).distance(
+        shapely.Polygon(block.corners)))
+    assert slope.depth(by_wall[0]) == pytest.approx(3.6)  # у стены блока — самая высокая
+    assert slope.depth(by_wall[-1]) == pytest.approx(0.0)  # карниз — у свободного края
+
+
 def test_wings_of_contour_with_float_noise():
     """Хвосты float в углах не мешают разрезу: три крыла, они покрывают контур."""
     found = wings(NOISY)
