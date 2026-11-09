@@ -118,14 +118,16 @@ def test_vectorizer_row_is_counted_on_the_houses_it_finished(real, cfg, traced_b
         (done / gone).unlink()
     out = tmp_path / "table"
     realtest.run(cfg, out, 0, realtest.Rows({}, {}, {"evo": done}))
-    for mode in Mode:
-        rows = {k.rsplit("/", 1)[-1]: r for k, r in json.loads(
-            (out / mode / "rows" / "metrics.json").read_text())["rows"].items()}
-        assert rows["vectorizer-evo"]["count"] == 2
-        same = json.loads((out / mode / "slices" / "vectorizer-evo-houses" / "metrics.json")
-                          .read_text())["rows"]
-        assert {r["count"] for r in same.values()} == {2}
-        assert {k.rsplit("/", 1)[-1] for k in same} == {"vectorizer-evo", "genplan"}
+    rows = {k.rsplit("/", 1)[-1]: r for k, r in json.loads(
+        (out / Mode.WITH_OPENINGS / "rows" / "metrics.json").read_text())["rows"].items()}
+    assert rows["vectorizer-evo"]["count"] == 2
+    same = json.loads((out / Mode.WITH_OPENINGS / "slices" / "vectorizer-evo-houses"
+                       / "metrics.json").read_text())["rows"]
+    assert {r["count"] for r in same.values()} == {2}
+    assert {k.rsplit("/", 1)[-1] for k in same} == {"vectorizer-evo", "genplan"}
+    half = json.loads((out / Mode.WITH_OPENINGS / "half" / "metrics.json").read_text())["rows"]
+    assert "vectorizer-evo@half-a" in {k.rsplit("/", 1)[-1] for k in half}
+    assert not (out / Mode.BLIND / "vectorizer-evo").exists()  # глухой: окна растра — подсказка
 
 
 def test_texture_dims_wall_lines_and_leaves_elements(real, cfg):
@@ -141,3 +143,13 @@ def test_texture_dims_wall_lines_and_leaves_elements(real, cfg):
     window = visual.rgb(cfg.baselines.vectorizer.colors[ElementClass.WINDOW])
     assert (flat[changed] != window).any(axis=1).all()
     assert (rough == window).all(axis=2).sum() == (flat == window).all(axis=2).sum()
+
+
+def test_control_keeps_reference_elements_on_a_single_finish(real, cfg, tmp_path):
+    """Без векторизатора элементы те же, стена — одной отделкой: контроль строки."""
+    vectorizer.run(Backend.REFERENCE, cfg, tmp_path / "c", 0)
+    row = vectorizer.write_row(real, tmp_path / "c", tmp_path / "row")
+    made = FacadeSheet.model_validate_json((row / "h0.json").read_text())
+    for ours, theirs in zip(made.facades, real["h0"].facades, strict=True):
+        assert ours.elements == theirs.elements
+        assert len(ours.zones) == 1

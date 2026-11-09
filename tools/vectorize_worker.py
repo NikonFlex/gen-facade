@@ -112,6 +112,10 @@ class EvoVec:
         import config
         import main
 
+        # create_resized_image сравнивает int(w / (w / h)) с h: из-за округления float у части
+        # размеров (512×421) оно «сжимает» растр на пиксель, и рендер расходится с эталоном по
+        # высоте. Наши растры не больше 512 — сжимать нечего, путь отдаётся как есть.
+        main.create_resized_image = lambda path, max_w, max_h: path
         config.DEBUG = False
         config.STEP_EVOL = settings["evovec"]["generations"]
         config.INDIVIDUAL_COUNT = settings["evovec"]["individuals"]
@@ -139,7 +143,7 @@ def main() -> None:
     settings = json.loads(Path(settings_path).read_text())
     out_dir = Path(out).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    work = Path(settings["work"]).resolve() / f"shard-{k}"
+    work = Path(settings["work"]).resolve() / f"shard-{k}-{n}"
     work.mkdir(parents=True, exist_ok=True)
     files = [p.resolve() for p in sorted(Path(images).glob("*.npy"))][int(k)::int(n)]
     vectorize = EvoVec(settings, work) if settings["backend"] == "evovec" else run_vtracer

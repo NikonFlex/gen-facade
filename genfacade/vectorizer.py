@@ -47,6 +47,7 @@ SKIPPED = frozenset({ElementClass.FACADE})  # стена — фон растра
 class Backend(StrEnum):
     EVOVEC = "evovec"
     VTRACER = "vtracer"
+    REFERENCE = "reference"  # контроль без векторизатора: элементы эталона как есть
 
 
 class Shape(Model):
@@ -229,9 +230,20 @@ def run(backend: Backend, cfg: Config, out: Path, limit: int) -> Path:
     """Растры → векторизатор → элементы домов; `limit` домов порядка, 0 — все."""
     real = houses(cfg)
     out.mkdir(parents=True, exist_ok=True)
+    if backend is Backend.REFERENCE:
+        return control(real, out)
     write_rasters(real, cfg, out, limit)
     trace(backend, cfg, out)
     collect(real, cfg, out)
+    return out
+
+
+def control(real: dict[str, FacadeSheet], out: Path) -> Path:
+    """Строка-контроль: стены с элементами эталона и одной отделкой, как у векторизатора. От неё
+    до эталона — вклад упрощённой стены (нет зон, цоколя, пояса), а не векторизатора."""
+    for name, sheet in real.items():
+        walls = [f.elements for f in sheet.facades]
+        (out / f"{name}.json").write_text(Extracted(seconds=0.0, walls=walls).model_dump_json())
     return out
 
 

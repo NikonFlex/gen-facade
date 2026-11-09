@@ -67,15 +67,38 @@ def run(cfg: Config, out: Path, synthetic: int, rows: Rows) -> Path:
         models += [_copied(source / mode / MODEL, out / mode / name)
                    for name, source in sheets.items()]
         folders, substitutes = _folders(given, synth, mode, cfg, out / mode)
-        traced = [vectorizer.write_row(given, source, out / mode / f"{VECTORIZER}-{name}")
-                  for name, source in rows.vectorized.items()]
+        traced = _vectorized(given, mode, rows.vectorized, out / mode)
         table.run(models + folders + traced, out / mode / calibrate.REFERENCE, cfg,
                   out / mode / "rows")
-        table.run([*substitutes, out / mode / HALVES[0]], out / mode / HALVES[1], cfg,
-                  out / mode / "half")
+        table.run([*substitutes, *_in_half(traced), out / mode / HALVES[0]],
+                  out / mode / HALVES[1], cfg, out / mode / "half")
         _slices(models + folders[:1], out / mode, cfg)
         _same_houses(models + folders[:1] + traced, traced, out / mode, cfg)
     (out / SUMMARY).write_text(summary(out, cfg))
+    return out
+
+
+def _vectorized(given: dict, mode: Mode, sources: dict[str, Path], out: Path) -> list[Path]:
+    """Строки векторизатора: его растр — рендер эталона, окна на нём уже есть. В глухом режиме
+    окон нет по условию, и строка была бы подсказкой ответа, а не базовым подходом — её нет."""
+    if mode is not Mode.WITH_OPENINGS:
+        return []
+    return [vectorizer.write_row(given, source, out / f"{VECTORIZER}-{name}")
+            for name, source in sources.items()]
+
+
+def _in_half(rows: list[Path]) -> list[Path]:
+    """Строки векторизатора — копии домов эталона, и против эталона, где эти дома есть, они
+    выглядят лучше, чем есть (как подмена против своих домов, gf#268): их дома первой половины —
+    против второй. Папка `<строка>@half-a`."""
+    out = []
+    for row in rows:
+        folder = row.parent / f"{row.name}@{HALVES[0]}"
+        folder.mkdir(exist_ok=True)
+        for sheet in (row.parent / HALVES[0]).glob("*.json"):
+            if (row / sheet.name).exists():
+                shutil.copy(row / sheet.name, folder / sheet.name)
+        out.append(folder)
     return out
 
 
