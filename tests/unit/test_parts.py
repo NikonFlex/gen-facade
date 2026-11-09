@@ -5,9 +5,11 @@ import math
 
 import pytest
 import shapely
+from sheets import with_foreign_parts
 from simple_house import L_SHAPE, SIMPLE, U_SHAPE
 
 from genfacade import config, parts, pipeline, roof
+from genfacade.datasets import manual
 from genfacade.models import stub
 from genfacade.plan.preprocess import preprocess
 from genfacade.plan.wings import wings
@@ -24,6 +26,7 @@ from genfacade.schema import (
     Opening,
     OpeningKind,
     Rect,
+    Refusal,
     Rule,
     SideFacade,
     ZoneRole,
@@ -521,3 +524,55 @@ def test_rectangular_house_sheet_is_byte_for_byte_as_before(cfg, tmp_path):
     req = pipeline.PlanRun(plan=str(SIMPLE), text="A simple one-storey house")
     out = pipeline.generate(req, SIMPLE.read_text(), tmp_path / "run", cfg)
     assert (out / pipeline.SHEET).read_text() == GOLDEN.read_text()
+
+
+# Контуры реальных домов с узкими уступами (сантиметры разметки): ffh-caroline (2 этажа, пристройки
+# в один) и ffh-western. Разметка — копия markup/freefarmhouse/ (gf#322, регрессия после #376).
+CONTOURS = SIMPLE.parent / "contours"
+REAL = ["ffh-caroline", "ffh-western"]
+
+
+def real_house(name: str):
+    return manual.house(manual.read(CONTOURS / f"{name}.toml"), CFG.data.manual)[0]
+
+
+@pytest.mark.parametrize("name", REAL)
+def test_real_house_with_narrow_steps_assembles_and_draws(name):
+    """Выбор разреза не ломает сборку: крылья, на которых отметки карниза ложатся, находятся
+    перебором разбиений контура; лист и 3D строятся, номера частей хранит сам лист."""
+    sample = real_house(name)
+    sheet = sample.sheet
+    assert sheet.wings and len(sheet.wings) == len(sample.plan.wings)
+    assert max(r.part for f in sheet.facades for r in f.runs) < len(sheet.wings)
+    assert "<svg" in sheet_svg(sheet, CFG)
+    assert house_3d(sheet, CFG)["walls"]
+
+
+def test_sheet_keeps_its_own_part_numbers():
+    """Крыша берёт крылья из листа, а не пересчитывает разбиение контура: лист с другим порядком
+    крыльев (и номерами в участках) строится так же, как исходный."""
+    sheet = real_house("ffh-caroline").sheet
+    order = list(reversed(range(len(sheet.wings))))  # новый номер = len - 1 - старый
+    renumbered = sheet.model_copy(update={
+        "wings": [sheet.wings[k] for k in order],
+        "facades": [f.model_copy(update={"runs": [
+            r.model_copy(update={"part": len(order) - 1 - r.part}) for r in f.runs]})
+            for f in sheet.facades]})
+    assert sheet_svg(renumbered, CFG) == sheet_svg(sheet, CFG)
+
+
+def test_sheet_without_wings_and_with_foreign_parts_is_refused_by_code():
+    """Лист старой сборки (крыльев нет, участки по другой нарезке) — отказ с кодом
+    `sheet_parts_stale`, а не IndexError из крыши."""
+    sheet = real_house("ffh-western").sheet
+    old = with_foreign_parts(sheet)
+    with pytest.raises(parts.StaleParts) as e:
+        sheet_svg(old, CFG)
+    assert e.value.code == Refusal.SHEET_PARTS_STALE
+
+
+def test_sheet_without_wings_with_matching_parts_still_draws():
+    """Лист без хранимых крыльев, у которого участки ложатся на нынешнее разбиение, рисуется."""
+    sheet = annex_sheet()
+    assert sheet.wings
+    assert sheet_svg(sheet.model_copy(update={"wings": []}), CFG) == sheet_svg(sheet, CFG)
