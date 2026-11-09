@@ -21,6 +21,7 @@ import sys
 import tempfile
 import time
 from collections.abc import Callable
+from enum import StrEnum
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -32,7 +33,10 @@ from genfacade.schema import Mode  # noqa: E402
 from genfacade.train.tokens import given_sides  # noqa: E402
 from tools import owl_boxes  # noqa: E402
 
-MODES = ("sdxl", "cnet")
+
+class Kind(StrEnum):
+    SDXL = "sdxl"   # глухой режим: по тексту
+    CNET = "cnet"   # окна из плана: по маске
 
 
 def drawer(pipe, run, extra: Callable[[object], dict]):
@@ -109,20 +113,20 @@ def mark(image: Image.Image, found: list[generator.Found]) -> Image.Image:
     return out
 
 
-def run(modes: list[str], cfg: Config, out: Path, limit: int) -> dict:
+def run(modes: list[Kind], cfg: Config, out: Path, limit: int) -> dict:
     real = vectorizer.houses(cfg)
     names = vectorizer.order(list(real), cfg)
     owl = detector(owl_boxes.owl_detector())
     run_cfg = cfg.baselines.generator
     summary: dict = {"modes": {}}
     for mode in modes:
-        pipe = (sdxl_pipeline if mode == "sdxl" else cnet_pipeline)(cfg)
-        settings = run_cfg.sdxl if mode == "sdxl" else run_cfg.cnet
-        folder = out / mode
+        pipe = (sdxl_pipeline if mode is Kind.SDXL else cnet_pipeline)(cfg)
+        settings = run_cfg.sdxl if mode is Kind.SDXL else run_cfg.cnet
+        folder = out / mode.value
         (folder / "images").mkdir(parents=True, exist_ok=True)
         seconds, walls, houses = [], 0, {}
         for name in names:
-            sheet = real[name] if mode == "sdxl" else given_sides(real[name], Mode.WITH_OPENINGS)
+            sheet = real[name] if mode is Kind.SDXL else given_sides(real[name], Mode.WITH_OPENINGS)
             answer, spent = [], 0.0
             for k, f in enumerate(sheet.facades):
                 if limit and walls >= limit:
@@ -130,7 +134,7 @@ def run(modes: list[str], cfg: Config, out: Path, limit: int) -> dict:
                 start = time.perf_counter()
                 width, height = generator.size(f, sheet.spec, settings.long_side_px, cfg)
                 control = generator.control(f, sheet.spec, width, height, cfg) \
-                    if mode == "cnet" else None
+                    if mode is Kind.CNET else None
                 text = generator.prompt(sheet.spec, cfg)
                 image = pipe(text, run_cfg.prompt.negative, (width, height), control, run_cfg.seed)
                 stem = folder / "images" / f"{name}__{k}"
@@ -145,14 +149,15 @@ def run(modes: list[str], cfg: Config, out: Path, limit: int) -> dict:
                 seconds.append(round(took, 2))
                 spent += took
                 walls += 1
-                print(mode, name, k, text, f"{took:.1f} c", flush=True)
+                print(mode.value, name, k, text, f"{took:.1f} c", flush=True)
             if len(answer) == len(sheet.facades):
                 extracted = vectorizer.Extracted(seconds=round(spent, 1), walls=answer)
                 (folder / f"{name}.json").write_text(extracted.model_dump_json())
                 houses[name] = round(spent, 1)
             if limit and walls >= limit:
                 break
-        summary["modes"][mode] = {"walls": walls, "sec_per_wall": seconds, "houses_done": houses}
+        summary["modes"][mode.value] = {"walls": walls, "sec_per_wall": seconds,
+                                        "houses_done": houses}
         del pipe
     (out / "summary.json").write_text(json.dumps(summary, indent=1, ensure_ascii=False) + "\n")
     return summary
@@ -160,7 +165,7 @@ def run(modes: list[str], cfg: Config, out: Path, limit: int) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("modes", nargs="+", choices=MODES)
+    parser.add_argument("modes", nargs="+", type=Kind)
     parser.add_argument("-o", "--out", type=Path, default=Path("outputs/genbase"))
     parser.add_argument("-c", "--config", type=Path, action="append", default=[],
                         help="папка настроек поверх умолчаний (как `genfacade -c`)")
