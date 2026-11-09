@@ -32,6 +32,7 @@ from genfacade.schema import (
     HouseScore,
     HouseTrim,
     LevelKind,
+    LlmProvider,
     Mode,
     PaletteRole,
     Placement,
@@ -1125,11 +1126,57 @@ class Vectorizer(Section):
         return self
 
 
+class LlmEndpoint(Section):
+    """Один поставщик LLM: модель, переменная окружения с ключом и цена, доллары за 1 млн
+    токенов. Ключ берётся из окружения по имени `key_env`, не из файла."""
+
+    model: str
+    key_env: str | None = None  # у заглушки ключа нет
+    base_url: str | None = None  # OpenAI-совместимый API другого поставщика (DeepSeek)
+    usd_per_mtok_in: float = Field(ge=0)
+    usd_per_mtok_out: float = Field(ge=0)
+
+
+class LlmPrompt(Section):
+    """Слова промпта; `{…}` подставляет genfacade/llm.py."""
+
+    instruction: str     # как читать запись и что отвечать; {grid_m} — шаг сетки
+    vocabulary: str      # подпись списка служебных токенов; {words}
+    example: str         # подпись примера; {n}
+    house: str           # описание дома словами; {type} {floors} {roof} {style} {sides}
+    mode: dict[Mode, str]  # условие режима словами
+    condition: str       # подпись условия
+    answer: str          # подпись ответа
+
+
+class Llm(Section):
+    """LLM без дообучения (gf#162): few-shot из синтетики, запись токенами, тот же разбор,
+    привязка и валидатор, что у модели."""
+
+    shots: int = Field(ge=0)       # примеров в промпте
+    pool: int = Field(ge=1)        # домов синтетики train, из которых берутся ближайшие
+    seed: int                      # какие дома пула и как досэмплировать
+    attempts: int = Field(ge=1)    # попыток на дом, как `[layout] attempts` у модели
+    temperature: float             # как у LayoutGPT и LayoutPrompter
+    max_output_tokens: int = Field(ge=1)
+    timeout_s: float = Field(gt=0)  # ожидание ответа поставщика: дольше — отказ, не зависание
+    chars_per_token: float = Field(gt=0)  # оценка токенов для --dry-run: знаков на токен
+    providers: dict[LlmProvider, LlmEndpoint]
+    prompt: LlmPrompt
+
+    @model_validator(mode="after")
+    def _every_provider(self) -> Self:
+        if missing := set(LlmProvider) - set(self.providers):
+            raise ValueError(f"llm.providers: нет поставщиков {sorted(missing)}")
+        return self
+
+
 class Baselines(Section):
     """Базовые подходы (config/baselines.toml, `evaluation: Базовые подходы`)."""
 
     genplan: GenPlanRule
     vectorizer: Vectorizer
+    llm: Llm
 
 
 class GuidelineSource(Section):

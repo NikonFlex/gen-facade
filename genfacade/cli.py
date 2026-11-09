@@ -5,10 +5,10 @@ import argparse
 import sys
 from pathlib import Path
 
-from genfacade import config, pipeline
+from genfacade import config, llm, pipeline
 from genfacade.baselines import Baseline
 from genfacade.datasets.synthetic import batch
-from genfacade.schema import REFUSAL_TEXT, Mode, Refused, Source, Split
+from genfacade.schema import REFUSAL_TEXT, LlmProvider, Mode, Refused, Source, Split
 from genfacade.train import corpus
 from genfacade.vectorizer import Backend
 
@@ -89,7 +89,21 @@ def baseline(args: argparse.Namespace) -> Path:
     """Листы папки → фасады базового подхода на тех же домах (`evaluation: Базовые подходы`)."""
     from genfacade import baselines
 
-    return baselines.run(args.name, args.source_dir, config.load(*args.config), args.out)
+    cfg = config.load(*args.config)
+    if args.name is Baseline.LLM:
+        return _llm(args, cfg)
+    if args.source_dir is None or args.out is None:
+        sys.exit(f"baseline {args.name}: нужны папка листов и -o")
+    return baselines.run(args.name, args.source_dir, cfg, args.out)
+
+
+def _llm(args: argparse.Namespace, cfg: config.Config) -> Path | str:
+    """LLM без дообучения: --dry-run — цена до запуска, иначе ответы одного поставщика в листы."""
+    if args.dry_run:
+        return llm.dry_run(args.provider or list(LlmProvider), cfg, args.limit)
+    if len(args.provider) != 1 or args.out is None:
+        sys.exit("baseline llm: нужны один --provider и -o (цену без запуска — --dry-run)")
+    return llm.run(args.provider[0], cfg, args.out, args.limit)
 
 
 def realtest(args: argparse.Namespace) -> Path:
@@ -213,9 +227,15 @@ def _parser() -> argparse.ArgumentParser:
                    help="папка подмен и таблиц; по умолчанию runs_dir/<время>-calibrate-<источник>")
     b = sub.add_parser("baseline", help="папка листов → фасады базового подхода на тех же домах")
     b.add_argument("name", choices=list(Baseline), type=Baseline, help="базовый подход")
-    b.add_argument("source_dir", type=Path,
-                   help="папка листов <дом>.json: берутся стены, условие режима, параметры дома")
-    b.add_argument("-o", "--out", type=Path, required=True, help="папка фасадов базового подхода")
+    b.add_argument("source_dir", type=Path, nargs="?",
+                   help="папка листов <дом>.json: берутся стены, условие режима, параметры дома "
+                        "(llm берёт дома реального теста)")
+    b.add_argument("-o", "--out", type=Path, help="папка фасадов базового подхода")
+    b.add_argument("--provider", type=LlmProvider, action="append", default=[],
+                   choices=list(LlmProvider), help="llm: поставщик; повторяется только с --dry-run")
+    b.add_argument("--dry-run", action="store_true",
+                   help="llm: запросы, токены и цена по конфигу, без вызовов")
+    b.add_argument("-n", "--limit", type=int, default=0, help="llm: домов прогона; 0 — все")
     q = sub.add_parser("realtest", help="таблица метрик против реального теста")
     q.add_argument("-n", "--synthetic", type=int, default=0, help="домов синтетики val; 0 — все")
     q.add_argument("--model", type=_named, action="append", default=[], metavar="ИМЯ=ЧЕКПОЙНТ",
