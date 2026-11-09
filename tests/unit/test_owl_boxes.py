@@ -50,3 +50,13 @@ def test_run_writes_json_per_house(tmp_path):
     assert [b["cls"] for b in result["sheets"][0]["boxes"]] == ["window", "door"]
     assert summary["houses"]["55001"]["boxes"] == 4 and summary["sheets_total"] == 2
     assert json.loads((out / "summary.json").read_text())["sheets_total"] == 2
+
+
+def test_run_skips_broken_house(tmp_path):
+    """Битая картинка одного дома не роняет пакет: дом — в failed, остальные посчитаны."""
+    make_house(tmp_path)
+    broken = tmp_path / "55002"
+    broken.mkdir()
+    (broken / "facade0.jpg").write_bytes(b"not a jpeg")
+    summary = owl.run(["55002", "55001"], tmp_path, tmp_path / "out", lambda: stub)
+    assert summary["failed"] == ["55002"] and list(summary["houses"]) == ["55001"]

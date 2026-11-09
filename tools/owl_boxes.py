@@ -24,6 +24,9 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from genfacade.schema import ElementClass  # noqa: E402
+from tools.fetch_stroim import MAX_PIXELS  # noqa: E402
+
+Image.MAX_IMAGE_PIXELS = MAX_PIXELS  # схемы фасадов до ~200 Мп — см. fetch_stroim
 
 MODEL = 'google/owlv2-base-patch16-ensemble'
 QUERIES = {'a window': ElementClass.WINDOW, 'a door': ElementClass.DOOR}
@@ -130,9 +133,15 @@ def run(ids: list[str], data: Path, out: Path, make: Callable[[], Detector]) -> 
     out.mkdir(parents=True, exist_ok=True)
     start = time.perf_counter()
     detector = make()
-    summary: dict = {'model_load_sec': round(time.perf_counter() - start, 2), 'houses': {}}
+    summary: dict = {'model_load_sec': round(time.perf_counter() - start, 2), 'houses': {},
+                     'failed': []}
     for pid in ids:
-        result = run_house(data / pid, detector)
+        try:  # битая картинка одного дома не роняет пакет: дом — в failed
+            result = run_house(data / pid, detector)
+        except OSError as error:
+            summary['failed'].append(pid)
+            print(pid, 'пропущен —', error, flush=True)
+            continue
         (out / f'{pid}.json').write_text(json.dumps(result, ensure_ascii=False))
         secs = [s['sec'] for s in result['sheets']]
         summary['houses'][pid] = {'sheets': len(secs), 'sec': round(sum(secs), 2),
@@ -157,7 +166,7 @@ def main():
         parser.error('нужны номера проектов или --all')
     summary = run(ids, args.data, args.out, owl_detector)
     print(f'листов {summary["sheets_total"]}, {summary["sec_total"]} с, '
-          f'модель грузилась {summary["model_load_sec"]} с')
+          f'модель грузилась {summary["model_load_sec"]} с, пропущено {len(summary["failed"])}')
 
 
 if __name__ == '__main__':
