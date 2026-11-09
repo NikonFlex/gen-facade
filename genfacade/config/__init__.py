@@ -1045,6 +1045,13 @@ class Realtest(Section):
     slices: dict[str, str]  # срез домов (gf#328): имя → источник разметки; строки `<строка>@<имя>`
 
 
+class Tolerances(Section):
+    """Датчик допусков tools/tolerance_probe.py (gf#403)."""
+
+    percentiles: list[float]  # процентили распределений: допуск берётся по одному из них
+    pick: float               # процентиль, предлагаемый как допуск (столбец «предварительно»)
+
+
 class Metrics(Section):
     """Метрики оценки (config/metrics.toml, gf#16, gf#143, gf#210)."""
 
@@ -1056,6 +1063,7 @@ class Metrics(Section):
     calibrate: Calibrate
     visual: Visual
     realtest: Realtest
+    tolerances: Tolerances
 
 
 class GenPlanRule(Section):
