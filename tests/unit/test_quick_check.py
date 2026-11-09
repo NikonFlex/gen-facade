@@ -86,3 +86,13 @@ def test_docs_only_with_cyrillic_name(clone):
     (wt / "Таблица требований.md").write_text("b\n")
     _git(wt, "add", ".")
     assert _sh(wt, "docs_only") == 0
+
+
+def test_docs_only_commit_skips_hook_queue(clone, tmp_path):
+    """Хук перед коммитом: одни .md — без очереди hook_lock (её держит чужой прогон)."""
+    _, wt = clone
+    (wt / "c.md").write_text("c\n")
+    _git(wt, "add", "c.md")
+    hook = (ROOT / "templates" / "githooks" / "pre-commit").read_text()
+    branch = hook[hook.index("if docs_only"):hook.index("hook_lock.sh\" sh")]
+    assert "exit" in branch and _sh(wt, "docs_only") == 0
