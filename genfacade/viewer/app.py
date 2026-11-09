@@ -7,6 +7,7 @@ gf#356).
 """
 
 import json
+from functools import lru_cache
 from importlib.resources import files
 from pathlib import Path
 
@@ -150,6 +151,11 @@ def _api(app: FastAPI, cfg: Config, runs_dir: Path) -> None:
 
 
 def _samples_api(app: FastAPI, cfg: Config) -> None:
+    @lru_cache(maxsize=cfg.viewer.data_view.sheet_cache)
+    def thumbnail(source: Source, sample_id: str, mtime_ns: int) -> str:
+        """Лист примера; mtime в ключе — пересобранный файл рисуется заново."""
+        return sheet_svg(_sample(source, sample_id, cfg).sheet, cfg)
+
     @app.get("/api/data")
     def data() -> dict:
         return data_page.overview(cfg)
@@ -172,8 +178,10 @@ def _samples_api(app: FastAPI, cfg: Config) -> None:
 
     @app.get("/api/samples/{source}/{sample_id}/sheet.svg")
     def sample_sheet(source: Source, sample_id: str) -> Response:
-        svg = sheet_svg(_sample(source, sample_id, cfg).sheet, cfg)
-        return Response(svg, media_type="image/svg+xml")
+        _sample(source, sample_id, cfg)  # 404 для чужого имени до кэша
+        file = store.path(cfg.data.paths.samples_dir, source, sample_id)
+        return Response(thumbnail(source, sample_id, file.stat().st_mtime_ns),
+                        media_type="image/svg+xml")
 
 
 def _review_api(app: FastAPI, cfg: Config, root: Path | None) -> None:

@@ -1,6 +1,7 @@
 """Сервер смотрелки: список планов, запуск по плану, трасса, кэш страницы."""
 
 import json
+import os
 import re
 
 import pytest
@@ -188,6 +189,28 @@ def test_sample_thumbnail_is_its_sheet(client, sample, tmp_path, cfg):
     assert res.headers["content-type"].startswith("image/svg+xml")
     assert res.text.count("data-cls") == sheet_svg(sample.sheet, cfg).count("data-cls") > 0
     assert client.get(f"/api/samples/{sample.source}/nope/sheet.svg").status_code == 404
+
+
+def test_sample_thumbnail_is_cached_until_file_changes(client, sample, tmp_path, monkeypatch):
+    """Рендер листа ~0,7 с: повторная прокрутка его не считает, смена файла — считает."""
+    from genfacade.viewer import app as viewer_app
+
+    drawn = []
+
+    def counting(sheet, cfg):
+        drawn.append(1)
+        return sheet_svg(sheet, cfg)
+
+    monkeypatch.setattr(viewer_app, "sheet_svg", counting)
+    store.write(sample, tmp_path / "samples")
+    url = f"/api/samples/{sample.source}/{sample.id}/sheet.svg"
+    first = client.get(url).text
+    assert client.get(url).text == first and len(drawn) == 1
+    file = store.path(tmp_path / "samples", sample.source, sample.id)
+    stat = file.stat()
+    os.utime(file, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+    client.get(url)
+    assert len(drawn) == 2
 
 
 @pytest.fixture

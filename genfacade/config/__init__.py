@@ -360,6 +360,7 @@ class DataView(Section):
     stats_sample: int = Field(gt=0)
     examples: int = Field(gt=0)
     page_size: int = Field(gt=0)
+    sheet_cache: int = Field(gt=0)
     roles: dict[DataRole, str]
     shapes: dict[PlanShape, str]
     sets: dict[Source, DataSetLabel]

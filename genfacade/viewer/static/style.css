@@ -222,8 +222,9 @@
 .data-search { display: flex; gap: 8px; min-width: 0; }
 .data-search .input { width: 220px; }
 .data-list { margin-bottom: 22px; }
-.pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 30px; }
-.pager-at { color: var(--muted); font-variant-numeric: tabular-nums; }
+.feed-foot { display: flex; justify-content: center; margin-bottom: 30px; min-height: 40px; }
+.feed-note { margin: 0; color: var(--muted); }
+.feed-error { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center; color: var(--muted); }
 .share-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin-top: 10px; }
 .share { padding: 12px 14px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
 .share h3 { font-size: 13px; color: var(--muted); font-weight: 500; margin-bottom: 8px; }

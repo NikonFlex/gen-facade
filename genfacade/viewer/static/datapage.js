@@ -1,9 +1,12 @@
 // Страница «Данные» (gf#356): на чём учим и проверяем. Числа, доли и подписи считает сервер
 // (GET /api/data); у каждого набора плашка одной формы, несколько примеров и «Все примеры» —
-// страницами (GET /api/data/<набор>/samples). Страница и фильтр живут в адресе: #datasets&set=…&page=…
+// порциями по прокрутке (GET /api/data/<набор>/samples). Фильтр и поиск живут в адресе: #datasets&set=…&split=…&q=…
 
 import { $, el } from "/static/dom.js";
+import { createFeed, Phase } from "/static/feed.js";
 import { query as apiQuery } from "/static/query.js";
+
+const FEED_MARGIN = "100%"; // запас часового: подгрузка начинается за экран до конца списка
 
 const TEXT = {
   title: "Данные", sub: "на чём учим и проверяем модель шага 4",
@@ -16,7 +19,7 @@ const TEXT = {
   empty: "Примеров пока нет — появятся после сборки датасета.",
   date: "опись на", listSub: "{n} примеров", noMatch: "По этому фильтру примеров нет.",
   allSplits: "Все", split: "Разбиение", search: "Имя дома", searchGo: "Найти",
-  prev: "Назад", next: "Вперёд", pageOf: "Страница {page} из {pages}",
+  allShown: "Все {n} показаны", loading: "Загружаю…", loadFailed: "Не удалось загрузить", retry: "Ещё раз",
 };
 const PERCENT = new Intl.NumberFormat("ru-RU", { style: "percent", maximumFractionDigits: 0 });
 const NUMBER = new Intl.NumberFormat("ru-RU");
@@ -25,6 +28,7 @@ const count = (n) => (n == null ? TEXT.none : NUMBER.format(n));
 const sampleUrl = (source, id) => `/api/samples/${source}/${encodeURIComponent(id)}`;
 
 export async function showData(ctx) {
+  stopFeed();
   const params = new URLSearchParams(location.hash.slice(1));
   params.delete("datasets");
   const view = params.get("set") ? await listPage(ctx, params) : await overviewPage(ctx);
@@ -32,7 +36,7 @@ export async function showData(ctx) {
   window.scrollTo(0, 0);
 }
 
-// Адрес страницы данных: набор, страница, разбиение и поиск; пустое не пишется.
+// Адрес страницы данных: набор, разбиение и поиск; пустое не пишется. Номера порции в адресе нет: прокрутка начинается сверху.
 function dataHash(fields = {}) {
   const rest = new URLSearchParams(Object.entries(fields).filter(([, value]) => value)).toString();
   return rest ? `#datasets&${rest}` : "#datasets";
@@ -164,20 +168,59 @@ function exampleCard(source, item, ctx) {
   return li;
 }
 
-// ——— все примеры набора: страницами, с фильтром по разбиению и поиском по имени ———
+// ——— все примеры набора: прокруткой порциями, с фильтром по разбиению и поиском по имени ———
+
+let stopFeed = () => {};
 
 async function listPage(ctx, params) {
   const source = params.get("set");
-  const query = apiQuery({ page: params.get("page") || 1, split: params.get("split"), q: params.get("q") });
-  const found = await ctx.api(`/api/data/${source}/samples?${query}`);
   const fields = { set: source, split: params.get("split"), q: params.get("q") };
-  const head = pageHead(found.title, TEXT.listSub.replace("{n}", count(found.total)));
+  let first = null;
+  const feed = createFeed(async (page) => {
+    const found = await ctx.api(`/api/data/${source}/samples?${apiQuery({ page, split: fields.split, q: fields.q })}`);
+    first ??= found;
+    return found;
+  });
+  await feed.more();
+  if (feed.phase === Phase.ERROR) throw feed.error;
+  const head = pageHead(first.title, TEXT.listSub.replace("{n}", count(first.total)));
   const back = el("button", { type: "button", className: "btn ghost" }, TEXT.back);
   back.addEventListener("click", () => navigate(ctx, {}));
   head.prepend(back);
-  const cards = el("ul", { className: "cards data-list" });
-  cards.append(...found.items.map((item) => exampleCard(source, item, ctx)));
-  return [head, listFilters(found, fields, ctx), found.items.length ? cards : el("p", { className: "empty-note" }, TEXT.noMatch), pager(found, fields, ctx)];
+  const cards = el("ul", { className: "cards data-list" }), foot = el("div", { className: "feed-foot" });
+  const view = [head, listFilters(first, fields, ctx), cards, foot];
+  if (!first.total) return [head, view[1], el("p", { className: "empty-note" }, TEXT.noMatch)];
+  keepFeeding(feed, { cards, foot, source, total: first.total, ctx });
+  return view;
+}
+
+// Карточки дописываются по мере порций; часовой внизу с запасом в экран просит следующую.
+function keepFeeding(feed, { cards, foot, source, total, ctx }) {
+  let shown = 0;
+  const sentinel = el("div", { className: "feed-sentinel", "aria-hidden": "true" });
+  const watcher = new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) feed.more(); },
+    { rootMargin: `0px 0px ${FEED_MARGIN} 0px` });
+  const draw = () => {
+    cards.append(...feed.items.slice(shown).map((item) => exampleCard(source, item, ctx)));
+    shown = feed.items.length;
+    watcher.disconnect();
+    if (feed.phase === Phase.DONE) foot.replaceChildren(el("p", { className: "feed-note" }, TEXT.allShown.replace("{n}", count(total))));
+    else if (feed.phase === Phase.ERROR) foot.replaceChildren(feedError(feed));
+    else foot.replaceChildren(...(feed.phase === Phase.LOADING ? [el("p", { className: "feed-note" }, TEXT.loading)] : []), sentinel);
+    if (feed.phase === Phase.IDLE) watcher.observe(sentinel); // и когда часовой уже на экране: порция короче экрана
+  };
+  stopFeed();
+  stopFeed = () => { watcher.disconnect(); feed.reset(); };
+  feed.onChange = draw;
+  draw();
+}
+
+function feedError(feed) {
+  const retry = el("button", { type: "button", className: "btn" }, TEXT.retry);
+  retry.addEventListener("click", () => feed.more());
+  const box = el("div", { className: "feed-error", role: "alert" });
+  box.append(el("span", {}, `${TEXT.loadFailed}: ${feed.error.message}`), retry);
+  return box;
 }
 
 function listFilters(found, fields, ctx) {
@@ -194,7 +237,7 @@ function splitButton(label, n, value, fields, ctx) {
   const btn = el("button", { type: "button", className: "filter" }, label);
   btn.setAttribute("aria-pressed", String((fields.split || "") === value));
   btn.append(el("span", { className: "n" }, count(n)));
-  btn.addEventListener("click", () => navigate(ctx, { ...fields, split: value, page: "" }));
+  btn.addEventListener("click", () => navigate(ctx, { ...fields, split: value }));
   return btn;
 }
 
@@ -203,20 +246,6 @@ function searchForm(fields, ctx) {
   const input = el("input", { type: "search", className: "input", placeholder: TEXT.search, value: fields.q || "", name: "q" });
   input.setAttribute("aria-label", TEXT.search);
   form.append(input, el("button", { type: "submit", className: "btn" }, TEXT.searchGo));
-  form.addEventListener("submit", (e) => { e.preventDefault(); navigate(ctx, { ...fields, q: input.value.trim(), page: "" }); });
+  form.addEventListener("submit", (e) => { e.preventDefault(); navigate(ctx, { ...fields, q: input.value.trim() }); });
   return form;
-}
-
-function pager(found, fields, ctx) {
-  const box = el("nav", { className: "pager", "aria-label": TEXT.pageOf.replace("{page}", found.page).replace("{pages}", found.pages) });
-  const step = (label, to, off) => {
-    const btn = el("button", { type: "button", className: "btn" }, label);
-    btn.disabled = off;
-    btn.addEventListener("click", () => navigate(ctx, { ...fields, page: to }));
-    return btn;
-  };
-  box.append(step(TEXT.prev, found.page - 1, found.page <= 1),
-    el("span", { className: "pager-at" }, TEXT.pageOf.replace("{page}", NUMBER.format(found.page)).replace("{pages}", NUMBER.format(found.pages))),
-    step(TEXT.next, found.page + 1, found.page >= found.pages));
-  return box;
 }
