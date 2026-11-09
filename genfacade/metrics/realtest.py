@@ -24,7 +24,7 @@ from typing import NamedTuple
 
 import numpy
 
-from genfacade import baselines, pipeline
+from genfacade import baselines, pipeline, vectorizer
 from genfacade.baselines import Baseline
 from genfacade.config import Config
 from genfacade.datasets import manual
@@ -38,6 +38,7 @@ HALVES = ("half-a", "half-b")
 REFUSED = "refusal"  # ключ ответа-отказа модели в <дом>.json строки модели: Refused.record()
 SUBSTITUTES = (CalibrationRow.RANDOM, CalibrationRow.FOREIGN, CalibrationRow.EMPTY)
 MODEL = "model"
+VECTORIZER = "vectorizer"  # строки готового векторизатора: vectorizer-<имя>
 SUMMARY = "summary.md"
 SLICES = "slices"   # <режим>/slices/<имя среза>/ — листы и metrics.json домов среза (gf#328)
 REAL_HALF = "real-half"
@@ -45,10 +46,12 @@ GOOD = "годных"    # колонка: листов с разобранны�
 
 
 class Rows(NamedTuple):
-    """Строки моделей: имя → чекпойнт и имя → папка прошлого `genfacade realtest`."""
+    """Строки моделей: имя → чекпойнт и имя → папка прошлого `genfacade realtest`; строки
+    векторизатора (gf#17): имя → папка `genfacade vectorize`."""
 
     models: dict[str, Path]
     sheets: dict[str, Path]
+    vectorized: dict[str, Path] = {}
 
 
 def run(cfg: Config, out: Path, synthetic: int, rows: Rows) -> Path:
@@ -64,10 +67,14 @@ def run(cfg: Config, out: Path, synthetic: int, rows: Rows) -> Path:
         models += [_copied(source / mode / MODEL, out / mode / name)
                    for name, source in sheets.items()]
         folders, substitutes = _folders(given, synth, mode, cfg, out / mode)
-        table.run(models + folders, out / mode / calibrate.REFERENCE, cfg, out / mode / "rows")
+        traced = [vectorizer.write_row(given, source, out / mode / f"{VECTORIZER}-{name}")
+                  for name, source in rows.vectorized.items()]
+        table.run(models + folders + traced, out / mode / calibrate.REFERENCE, cfg,
+                  out / mode / "rows")
         table.run([*substitutes, out / mode / HALVES[0]], out / mode / HALVES[1], cfg,
                   out / mode / "half")
         _slices(models + folders[:1], out / mode, cfg)
+        _same_houses(models + folders[:1] + traced, traced, out / mode, cfg)
     (out / SUMMARY).write_text(summary(out, cfg))
     return out
 
@@ -137,15 +144,27 @@ def _slices(rows: list[Path], out: Path, cfg: Config) -> None:
     """Срезы домов (`[realtest] slices`): листы строк и эталона — только домов среза, таблица —
     `slices/<имя>/metrics.json`; строки синтетики и подмен — не по домам, в срез не входят."""
     for name, source in cfg.metrics.realtest.slices.items():
-        houses = manual.ids(source, cfg.data.manual)
-        folder = out / SLICES / name
-        for row in [*rows, out / calibrate.REFERENCE]:
-            for sheet in (s for s in row.glob("*.json") if s.stem in houses):
-                (folder / row.name).mkdir(parents=True, exist_ok=True)
-                shutil.copy(sheet, folder / row.name / sheet.name)
-        if (folder / calibrate.REFERENCE).is_dir():
-            table.run([folder / r.name for r in rows if (folder / r.name).is_dir()],
-                      folder / calibrate.REFERENCE, cfg, folder)
+        _slice(rows, out, name, manual.ids(source, cfg.data.manual), cfg)
+
+
+def _same_houses(rows: list[Path], traced: list[Path], out: Path, cfg: Config) -> None:
+    """Векторизатор мог успеть не все дома: остальные строки — против тех же домов, срез
+    `<строка векторизатора>-houses`; синтетика и подмены — не по домам, в него не входят."""
+    for row in traced:
+        houses = {p.stem for p in row.glob("*.json")}
+        if houses != {p.stem for p in (out / calibrate.REFERENCE).glob("*.json")}:
+            _slice(rows, out, f"{row.name}-houses", houses, cfg)
+
+
+def _slice(rows: list[Path], out: Path, name: str, houses: set[str], cfg: Config) -> None:
+    folder = out / SLICES / name
+    for row in [*rows, out / calibrate.REFERENCE]:
+        for sheet in (s for s in row.glob("*.json") if s.stem in houses):
+            (folder / row.name).mkdir(parents=True, exist_ok=True)
+            shutil.copy(sheet, folder / row.name / sheet.name)
+    if (folder / calibrate.REFERENCE).is_dir():
+        table.run([folder / r.name for r in rows if (folder / r.name).is_dir()],
+                  folder / calibrate.REFERENCE, cfg, folder)
 
 
 def named_rows(out: Path, mode: Mode) -> list[tuple[str, dict]]:

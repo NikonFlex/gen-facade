@@ -20,14 +20,6 @@ MARKUP = Path(__file__).resolve().parents[2] / "markup"
 RUSSIAN = ("st-40496", "st-52299")  # разметки markup/stroim — дома среза
 
 
-@pytest.fixture
-def real(house, monkeypatch):
-    """Четыре реальных дома — копии простого."""
-    houses = {f"h{i}": house for i in range(4)}
-    monkeypatch.setattr(calibrate, "houses", lambda source, split, count, cfg: houses)
-    return houses
-
-
 def _rows(out, mode) -> dict:
     return json.loads((out / mode / "rows" / "metrics.json").read_text())["rows"]
 

@@ -1052,10 +1052,63 @@ class GenPlanRule(Section):
     window: tuple[float, float]
 
 
+class EvoVecRun(Section):
+    code: Path         # папка EvoVec-Evolutionary-Image-Vectorization клона VGLib
+    generations: int   # STEP_EVOL EvoVec
+    individuals: int   # INDIVIDUAL_COUNT EvoVec
+
+
+class VtracerRun(Section):
+    """Параметры `vtracer.convert_image_to_svg_py` — как в библиотеке (имена те же)."""
+
+    colormode: str
+    hierarchical: str
+    mode: str
+    filter_speckle: int
+    color_precision: int
+    layer_difference: int
+    corner_threshold: int
+    length_threshold: float
+    max_iterations: int
+    splice_threshold: int
+    path_precision: int
+
+
+class Texture(Section):
+    """Загрязнение растра: полоски обшивки и шум, чтобы растр не был идеально плоским."""
+
+    siding_px: int      # линия обшивки на стене каждые столько строк; 0 — без линий
+    siding_dim: float   # на сколько линия темнее стены, доля яркости
+    noise: float        # стандартное отклонение шума по каналу, 0–255; 0 — без шума
+
+
+class Vectorizer(Section):
+    """Базовый подход «растр + готовый векторизатор» (config/baselines.toml, gf#17)."""
+
+    python: Path       # интерпретатор venv со сторонними библиотеками
+    worker: Path       # tools/vectorize_worker.py
+    jobs: int          # процессов векторизатора разом
+    long_side_px: int  # длинная сторона растра стены
+    min_side_px: float  # область с меньшей стороной — крошка трассировки, не элемент
+    match_iou: float   # IoU, с которого элемент векторизатора — тот же элемент эталона (damage.py)
+    align_px: float    # допуск «на одной линии», пикселей растра: шаг растра ≈ 2 см
+    texture: Texture
+    evovec: EvoVecRun
+    vtracer: VtracerRun
+    colors: dict[ElementClass, str]  # цвет класса на растре: разведены, чтобы квантование не слило
+
+    @model_validator(mode="after")
+    def _every_class_has_color(self) -> "Vectorizer":
+        if missing := set(ElementClass) - set(self.colors):
+            raise ValueError(f"vectorizer.colors: нет цвета у классов {sorted(missing)}")
+        return self
+
+
 class Baselines(Section):
     """Базовые подходы (config/baselines.toml, `evaluation: Базовые подходы`)."""
 
     genplan: GenPlanRule
+    vectorizer: Vectorizer
 
 
 class GuidelineSource(Section):

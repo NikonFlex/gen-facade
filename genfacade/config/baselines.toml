@@ -4,3 +4,52 @@
 # Низ и верх окна — доли высоты этажа от его пола: WindowSizeType.STANDARD GenPlan
 # (dto/enum/window_size_type.py, docs/decisions.md 30.09). Текст не читается — уровень один.
 window = [0.2, 0.9]
+
+[vectorizer]   # растр стены → готовый векторизатор → элементы (gf#17); сторонний код — вне репо
+python = "python3"                       # интерпретатор venv, где стоят EvoVec и vtracer
+worker = "tools/vectorize_worker.py"
+jobs = 3
+long_side_px = 512                       # EvoVec сжимает растр до 512 (config.MAX_W/MAX_H)
+min_side_px = 2                          # крошка трассировки: пятно уже 2 пикселей — не элемент
+match_iou = 0.5                          # элемент векторизатора — элемент эталона от этого IoU
+align_px = 1.5                           # допуск «на одной линии» в пикселях растра (≈ 3 см)
+
+[vectorizer.texture]                     # по умолчанию растр плоский — верхняя граница векторизатора
+siding_px = 0                            # линия обшивки каждые N строк на цвете стены
+siding_dim = 0.12                        # на сколько линия темнее стены
+noise = 0.0                              # шум по каналу, 0–255
+
+[vectorizer.evovec]
+code = "ext/VGLib/EvoVec-Evolutionary-Image-Vectorization"  # git clone --depth 1 …/CTLab-ITMO/VGLib
+generations = 300                        # STEP_EVOL EvoVec по умолчанию
+individuals = 30                         # INDIVIDUAL_COUNT по умолчанию
+
+[vectorizer.vtracer]                     # умолчания vtracer 0.6 (stacked — слои друг над другом)
+colormode = "color"
+hierarchical = "stacked"
+mode = "spline"
+filter_speckle = 4
+color_precision = 6
+layer_difference = 16
+corner_threshold = 60
+length_threshold = 4.0
+max_iterations = 10
+splice_threshold = 45
+path_precision = 8
+
+[vectorizer.colors]   # растр стены: цвет класса; не цвета листа и не маски FID — разведены по тону
+facade = "#e6e6e6"
+window = "#0044ff"
+door = "#8b4513"
+cornice = "#ff00ff"
+sill = "#00b400"
+balcony = "#ffa500"
+blind = "#ffff00"
+deco = "#00ffff"
+molding = "#800080"
+pillar = "#ff0000"
+shop = "#006400"
+garage_door = "#404040"
+porch = "#ff69b4"
+chimney = "#808000"
+canopy = "#00ced1"
