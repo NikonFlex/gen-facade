@@ -3,6 +3,7 @@
 // страницами (GET /api/data/<набор>/samples). Страница и фильтр живут в адресе: #datasets&set=…&page=…
 
 import { $, el } from "/static/dom.js";
+import { query as apiQuery } from "/static/query.js";
 
 const TEXT = {
   title: "Данные", sub: "на чём учим и проверяем модель шага 4",
@@ -167,7 +168,7 @@ function exampleCard(source, item, ctx) {
 
 async function listPage(ctx, params) {
   const source = params.get("set");
-  const query = new URLSearchParams({ page: params.get("page") || 1, split: params.get("split") || "", q: params.get("q") || "" });
+  const query = apiQuery({ page: params.get("page") || 1, split: params.get("split"), q: params.get("q") });
   const found = await ctx.api(`/api/data/${source}/samples?${query}`);
   const fields = { set: source, split: params.get("split"), q: params.get("q") };
   const head = pageHead(found.title, TEXT.listSub.replace("{n}", count(found.total)));
