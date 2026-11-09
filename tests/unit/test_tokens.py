@@ -289,7 +289,10 @@ def test_wall_edges_off_grid_are_real_edges(sheets, cfg):
     """Сторона не на сетке (у GenPlan 4,2254 м — в условии 4,25): карниз и зоны, которые модель
     поставила на край стены в сетке, после разбора — ровно по настоящей стене; окно посреди стены
     не двигается (gf#153)."""
-    sheet = sheets[0]
+    # дом без щипцовых стен с окнами: у такой стены карниза нет (gf#321), а тест читает карниз
+    # каждой стены; какой из домов выборки первым подходит, зависит от долей генератора (gf#373)
+    sheet = next(s for s in sheets if all(
+        any(e.cls is ElementClass.CORNICE for e in f.elements) for f in s.facades))
     off = cfg.tokens.grid_m * 0.49  # длина, которая округляется в тот же узел сетки
     walls = [f.model_copy(update={"side": f.side.model_copy(update={
         "length_m": f.side.length_m - off})}) for f in tokens.bare(sheet).facades]
