@@ -65,8 +65,14 @@ def cnet_pipeline(cfg: Config):
     from diffusers import StableDiffusionControlNetPipeline  # noqa: PLC0415
 
     run = cfg.baselines.generator.cnet
+    # репозиторий хранит конвейер в подпапке, а from_pretrained ищет model_index.json в корне:
+    # качаем только её и грузим из локальной папки
+    from huggingface_hub import snapshot_download  # noqa: PLC0415
+
+    root = snapshot_download(run.model, allow_patterns=[f"{run.subfolder}/*"])
+    folder = Path(root) / run.subfolder
     pipe = StableDiffusionControlNetPipeline.from_pretrained(
-        run.model, subfolder=run.subfolder, torch_dtype=torch.float16, safety_checker=None)
+        folder, torch_dtype=torch.float16, safety_checker=None)
     return drawer(pipe, run, lambda control: {
         "image": Image.fromarray(control), "controlnet_conditioning_scale": run.conditioning_scale})
 
