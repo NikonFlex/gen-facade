@@ -20,10 +20,12 @@ import json
 import subprocess  # noqa: S404 — запускаем свой worker с путями из конфига, без оболочки
 from enum import StrEnum
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy
+from PIL import Image
 
-from genfacade import baselines
+from genfacade import baselines, raster_panels, raster_read
 from genfacade.config import Config
 from genfacade.metrics import calibrate, damage, visual
 from genfacade.schema import (
@@ -160,20 +162,46 @@ def nearest(color: tuple[int, int, int], cfg: Config) -> ElementClass:
                                                                           strict=True)))
 
 
+def place(box: tuple[float, float, float, float], ppm: float, spec: HouseSpec) -> dict:
+    """Рамка в пикселях растра (y вниз) → поля `Element`: метры от левого низа стены и этаж."""
+    x0, y0, x1, y1 = box
+    y_m = (round(spec.eaves_m * ppm) - y1) / ppm
+    floor = sum(level <= y_m + (y1 - y0) / ppm / 2 for level in spec.floor_levels()[:-1])
+    return {"x_m": x0 / ppm, "y_m": y_m, "w_m": (x1 - x0) / ppm, "h_m": (y1 - y0) / ppm,
+            "floor": max(floor, 1)}
+
+
+def crumb(box: tuple[float, float, float, float], cfg: Config) -> bool:
+    """Крошка трассировки: рамка уже `min_side_px` — не элемент."""
+    x0, y0, x1, y1 = box
+    return min(x1 - x0, y1 - y0) < cfg.baselines.vectorizer.min_side_px
+
+
 def elements(traced: Traced, f: SideFacade, spec: HouseSpec, cfg: Config) -> list[Element]:
-    """Пути стены → элементы: рамка пути — рамка элемента, класс — по цвету заливки; фон стены и
-    крошка трассировки (рамка уже `min_side_px`) не элементы."""
-    ppm, levels, out = scale(f, spec, cfg), spec.floor_levels(), []
-    rows = round(spec.eaves_m * ppm)
+    """Пути стены → элементы по рамке пути, класс — по цвету заливки. Это чтение «путь = элемент»:
+    меряет устройство SVG (склейки, закрытые пути), а не картинку; элементы картинки — `visible`."""
+    ppm, out = scale(f, spec, cfg), []
     for k, shape in enumerate(traced.shapes):
-        x0, y0, x1, y1 = shape.box
         cls = nearest(shape.color, cfg)
-        if cls in SKIPPED or min(x1 - x0, y1 - y0) < cfg.baselines.vectorizer.min_side_px:
-            continue
-        y_m = (rows - y1) / ppm
-        floor = sum(level <= y_m + (y1 - y0) / ppm / 2 for level in levels[:-1])
-        out.append(Element(id=f"v{k + 1}", cls=cls, x_m=x0 / ppm, y_m=y_m, w_m=(x1 - x0) / ppm,
-                           h_m=(y1 - y0) / ppm, floor=max(floor, 1)))
+        if cls not in SKIPPED and not crumb(shape.box, cfg):
+            out.append(Element(id=f"v{k + 1}", cls=cls, **place(shape.box, ppm, spec)))
+    return out
+
+
+def load(picture: Path) -> numpy.ndarray:
+    """Отрисовка SVG векторизатора: H×W×3."""
+    with Image.open(picture) as image:
+        return numpy.asarray(image.convert("RGB"))
+
+
+def visible(picture: Path, f: SideFacade, spec: HouseSpec, cfg: Config) -> list[Element]:
+    """Элементы стены с отрисовки SVG: связные области цвета класса (раздел `raster_read`); крошка
+    не элемент. Склеенный путь даёт столько элементов, сколько кусков на картинке."""
+    ppm, out = scale(f, spec, cfg), []
+    for k, region in enumerate(raster_read.regions(
+            raster_read.classes(load(picture), cfg), cfg)):
+        if not crumb(region.box, cfg):
+            out.append(Element(id=f"r{k + 1}", cls=region.cls, **place(region.box, ppm, spec)))
     return out
 
 
@@ -195,35 +223,87 @@ def seen(f: SideFacade, spec: HouseSpec, cfg: Config) -> list[Element]:
     return out
 
 
-def _traced(folder: Path) -> dict[str, dict[int, Traced]]:
-    """Ответы векторизатора по домам и стенам."""
-    out: dict[str, dict[int, Traced]] = {}
+class Answer(NamedTuple):
+    """Ответ векторизатора на стену: пути из SVG и то, что получилось на его отрисовке."""
+
+    traced: Traced
+    picture: Path
+
+
+def _answers(folder: Path) -> dict[str, dict[int, Answer]]:
+    """Ответы векторизатора по домам и стенам; отрисовка `.png` лежит рядом с `.json`."""
+    out: dict[str, dict[int, Answer]] = {}
     for path in sorted(folder.glob("*.json")):
         _, name, wall = path.stem.split(SEP)
-        out.setdefault(name, {})[int(wall)] = Traced.model_validate_json(path.read_text())
+        traced = Traced.model_validate_json(path.read_text())
+        out.setdefault(name, {})[int(wall)] = Answer(traced, path.with_suffix(".png"))
     return out
 
 
 def collect(real: dict[str, FacadeSheet], cfg: Config, out: Path) -> list[str]:
-    """Дома, у которых ответ есть на каждую стену, → `<дом>.json` и `damage.json`."""
-    traced, done = _traced(out / TRACED), {}
+    """Дома, у которых ответ есть на каждую стену, → `<дом>.json` (элементы с отрисовки) и
+    `damage.json` (видимое — на верхнем уровне, устройство SVG — в `svg_paths`)."""
+    answers, done = _answers(out / TRACED), {}
     for name, sheet in real.items():
-        got = traced.get(name, {})
+        got = answers.get(name, {})
         if len(got) != len(sheet.facades):
             continue
-        walls = [elements(got[k], f, sheet.spec, cfg) for k, f in enumerate(sheet.facades)]
-        extracted = Extracted(seconds=round(sum(t.seconds for t in got.values()), 1), walls=walls)
-        (out / f"{name}.json").write_text(extracted.model_dump_json())
-        done[name] = extracted
-    found = {n: e.walls for n, e in done.items()}
-    shapes = [t for n in done for t in traced[n].values()]
-    paths = {"walls": len(shapes), "paths": sum(len(t.shapes) for t in shapes)}
+        walls = [visible(got[k].picture, f, sheet.spec, cfg) for k, f in enumerate(sheet.facades)]
+        seconds = round(sum(a.traced.seconds for a in got.values()), 1)
+        done[name] = Extracted(seconds=seconds, walls=walls)
+        (out / f"{name}.json").write_text(done[name].model_dump_json())
+    (out / "damage.json").write_text(json.dumps(summary(real, answers, done, cfg), indent=1))
+    return list(done)
+
+
+def summary(real: dict[str, FacadeSheet], answers: dict[str, dict[int, Answer]],
+            done: dict[str, Extracted], cfg: Config) -> dict:
+    """`damage.json`: что стало со структурой эталона на картинке и отдельно — каков SVG."""
     reference = {n: [seen(f, real[n].spec, cfg) for f in real[n].facades] for n in done}
-    report = damage.report(real, reference, found, cfg)
+    report = damage.report(real, reference, {n: e.walls for n, e in done.items()}, cfg)
     everything = sum(len(damage.elements_of(f)) for n in done for f in real[n].facades)
     report["hidden"] = everything - sum(len(w) for walls in reference.values() for w in walls)
-    (out / "damage.json").write_text(json.dumps({**report, **paths}, indent=1))
-    return list(done)
+    report["walls"] = sum(len(e.walls) for e in done.values())
+    return {**report, "svg_paths": svg_paths(real, answers, reference, cfg)}
+
+
+def svg_paths(real: dict[str, FacadeSheet], answers: dict[str, dict[int, Answer]],
+              reference: dict[str, list[list[Element]]], cfg: Config) -> dict:
+    """Мера «SVG — чертёж с объектами», не мера картинки: тот же `damage.report`, но элемент —
+    рамка пути SVG; сколько путей на стене и сколько из них закрыты (цвет пути почти не виден
+    на отрисовке в его рамке, `hidden_path_share`)."""
+    by_path = {n: [elements(answers[n][k].traced, f, real[n].spec, cfg)
+                   for k, f in enumerate(real[n].facades)] for n in reference}
+    shapes = [a for n in reference for a in answers[n].values()]
+    hidden = sum(hidden_paths(a, cfg) for a in shapes)
+    paths = sum(len(a.traced.shapes) for a in shapes)
+    return {"walls": len(shapes), "paths": paths, "paths_hidden": hidden,
+            "report": damage.report(real, reference, by_path, cfg)}
+
+
+def hidden_paths(answer: Answer, cfg: Config) -> int:
+    """Путей стены, закрытых на отрисовке: цвет пути занимает меньше `hidden_path_share` рамки."""
+    index, order = raster_read.classes(load(answer.picture), cfg), raster_read.palette(cfg)
+    limit, count = cfg.baselines.vectorizer.hidden_path_share, 0
+    for shape in answer.traced.shapes:
+        box = tuple(round(v) for v in shape.box)
+        cls = order.index(nearest(shape.color, cfg))
+        count += raster_read.visible_share(index, box, cls) < limit
+    return count
+
+
+def panels(out: Path, stems: list[str], cfg: Config) -> list[Path]:
+    """Картинки стен `stems` (имя растра без расширения) → `<out>/panels/<стена>.png`."""
+    (out / "panels").mkdir(exist_ok=True)
+    files = []
+    for stem in stems:
+        rendered = load(out / TRACED / f"{stem}.png")
+        found = raster_read.regions(raster_read.classes(rendered, cfg), cfg)
+        picture = raster_panels.draw(numpy.load(out / RASTERS / f"{stem}.npy"), rendered,
+                                     [r for r in found if not crumb(r.box, cfg)])
+        files.append(out / "panels" / f"{stem}.png")
+        picture.save(files[-1])
+    return files
 
 
 def run(backend: Backend, cfg: Config, out: Path, limit: int) -> Path:

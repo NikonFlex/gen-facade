@@ -2,7 +2,7 @@
 
 Запускается интерпретатором отдельного venv, где стоят сторонние библиотеки (EvoVec из VGLib,
 vtracer, svgpathtools) — проект их не тянет. Читает `settings.json`, для каждого растра .npy
-папки пишет `<имя>.json`:
+папки пишет `<имя>.json`, сам SVG `<имя>.svg` и его отрисовку `<имя>.png`:
 
     {"seconds": …, "shapes": [{"color": [r, g, b], "box": [x0, y0, x1, y1], "segments": n}]}
 
@@ -73,6 +73,18 @@ def shapes(svg: str) -> list[dict]:
         out.append({"color": color, "box": [x0 + dx, y0 + dy, x1 + dx, y1 + dy],
                     "segments": len(path)})
     return out
+
+
+def render(svg: str, raster: Path, target: Path) -> None:
+    """SVG векторизатора → PNG размера растра: что видно глазами, с порядком слоёв и склейками.
+    Элементы проект берёт отсюда, а не по рамкам путей: у EvoVec путь — не элемент (`ConcatPath`
+    склеивает куски одного цвета, путь бывает закрыт путём стены сверху; gf-0017, 09.11)."""
+    import cairosvg
+    import numpy
+
+    height, width = numpy.load(raster).shape[:2]
+    cairosvg.svg2png(bytestring=svg.encode(), write_to=str(target), output_width=width,
+                     output_height=height, background_color="white")
 
 
 def to_png(raster: Path, work: Path) -> Path:
@@ -153,8 +165,10 @@ def main() -> None:
             continue
         started = time.time()
         svg = vectorize(to_png(raster, work), settings, work)
-        target.write_text(json.dumps({"seconds": round(time.time() - started, 2),
-                                      "shapes": shapes(svg)}))
+        seconds = round(time.time() - started, 2)
+        (out_dir / f"{raster.stem}.svg").write_text(svg)
+        render(svg, raster, out_dir / f"{raster.stem}.png")
+        target.write_text(json.dumps({"seconds": seconds, "shapes": shapes(svg)}))
         print(raster.stem, round(time.time() - started, 1), flush=True)
 
 

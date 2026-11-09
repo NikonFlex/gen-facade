@@ -109,6 +109,7 @@ def vectorize(args: argparse.Namespace) -> Path:
     cfg = config.load(*args.config)
     if args.collect:
         vectorizer.collect(vectorizer.houses(cfg), cfg, args.out)
+        vectorizer.panels(args.out, args.panels, cfg)
         return args.out
     return vectorizer.run(args.backend, cfg, args.out, args.limit)
 
@@ -235,6 +236,9 @@ def _parser() -> argparse.ArgumentParser:
     z.add_argument("-n", "--limit", type=int, default=0, help="домов прогона; 0 — все")
     z.add_argument("--collect", action="store_true",
                    help="только собрать элементы из готовых ответов, векторизатор не запускать")
+    z.add_argument("--panels", action="append", default=[], metavar="СТЕНА",
+                   help="с --collect: картинка стены (имя растра без .npy) — вход, отрисовка SVG, "
+                        "найденные элементы; повторяется")
     t = sub.add_parser("stability", help="сводка реального теста по вариантам сэмплинга")
     t.add_argument("root", type=Path,
                    help="папка вариантов: <вариант>/<режим>/rows/metrics.json от realtest; "

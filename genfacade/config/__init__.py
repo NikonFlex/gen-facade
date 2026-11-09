@@ -1093,6 +1093,7 @@ class Vectorizer(Section):
     match_iou: float   # IoU, с которого элемент векторизатора — тот же элемент эталона (damage.py)
     align_px: float    # допуск «на одной линии», пикселей растра: шаг растра ≈ 2 см
     min_visible: float  # элемент эталона, у которого на растре виден меньший цвет класса, спрятан
+    hidden_path_share: float  # путь SVG, чей цвет виден на меньшей доле его рамки, закрыт
     texture: Texture
     evovec: EvoVecRun
     vtracer: VtracerRun
