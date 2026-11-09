@@ -1107,11 +1107,74 @@ class Vectorizer(Section):
         return self
 
 
+class GeneratorSize(Section):
+    """Размер картинки генератора по пропорции стены."""
+
+    long_side_px: int   # длинная сторона
+    step_px: int        # стороны кратны (VAE и UNet: 8, SDXL — 64)
+    min_side_px: int    # короткая сторона не меньше: узкая стена не превращается в щель
+
+
+class GeneratorPrompt(Section):
+    """Промпт генератора: описание дома из параметров шага 1 + одна и та же приписка про чертёж."""
+
+    house: str          # шаблон: {floors}, {building}, {walls}, {roof}
+    drawing: str        # приписка: фасад-чертёж, а не фото
+    negative: str
+    colors: dict[str, str]  # имя цвета → #rrggbb; цвет материала называется ближайшим
+
+
+class Diffusion(Section):
+    """Общие поля запуска диффузионной модели."""
+
+    model: str          # репозиторий HuggingFace
+    subfolder: str = ""  # папка весов в репозитории; пусто — корень
+    steps: int
+    guidance: float
+    long_side_px: int   # размер картинки модели: у SDXL 1024, у SD 1.5 512 (обучены на них)
+
+
+class SdxlRun(Diffusion):
+    """А. Глухой режим: SDXL по тексту."""
+
+
+class CnetRun(Diffusion):
+    """Б. Окна из плана: ControlNet по маске эталонной стены (окна и двери плана)."""
+
+    conditioning_scale: float
+    background: str     # цвет стены на маске: обучали на масках Facades
+    facade: str
+    window: str
+    door: str
+
+
+class GeneratorDetect(Section):
+    """Рамки на картинке стены: OWLv2 (tools/owl_boxes.py) и отсев по доле стены."""
+
+    through_vtracer: bool  # искать на отрисовке SVG vtracer, а не на картинке генератора
+    min_w: float
+    max_w: float
+    min_h: float
+    max_h: float
+
+
+class Generator(Section):
+    """Базовый подход «растр от генератора + векторизатор» (config/baselines.toml, gf#17)."""
+
+    seed: int
+    size: GeneratorSize
+    prompt: GeneratorPrompt
+    sdxl: SdxlRun
+    cnet: CnetRun
+    detect: GeneratorDetect
+
+
 class Baselines(Section):
     """Базовые подходы (config/baselines.toml, `evaluation: Базовые подходы`)."""
 
     genplan: GenPlanRule
     vectorizer: Vectorizer
+    generator: Generator
 
 
 class GuidelineSource(Section):

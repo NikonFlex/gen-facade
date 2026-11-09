@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       job:
-        description: "probe — проверить GPU; train — обучить модель шага 4; finetune — дообучить её на коттеджах BuildingNet; eval — оценить на val; visual — таблица метрик с FID и KID; realtest — таблица против реального теста с FID и KID; retrain — всё сразу: корпус, обучение, дообучение по флагу, реальный тест новой и прежней модели одной таблицей; stability — реальный тест модели по вариантам сэмплинга (variants) и сводка с разбросом по seed; plans — genfacade run на непрямоугольных планах в обоих режимах моделью model_run (gf#306); owl — OWLv2 ищет окна и двери на листах фасадов строим.дом.рф (gf#342)"
+        description: "probe — проверить GPU; train — обучить модель шага 4; finetune — дообучить её на коттеджах BuildingNet; eval — оценить на val; visual — таблица метрик с FID и KID; realtest — таблица против реального теста с FID и KID; retrain — всё сразу: корпус, обучение, дообучение по флагу, реальный тест новой и прежней модели одной таблицей; stability — реальный тест модели по вариантам сэмплинга (variants) и сводка с разбросом по seed; plans — genfacade run на непрямоугольных планах в обоих режимах моделью model_run (gf#306); owl — OWLv2 ищет окна и двери на листах фасадов строим.дом.рф (gf#342); genbase — базовый подход «картинка генератора + vtracer + OWLv2»: SDXL (глухой режим) и SD 1.5 + ControlNet (окна из плана) на стенах реального теста (gf#17)"
         type: choice
-        options: [probe, train, finetune, eval, visual, realtest, retrain, stability, plans, owl]
+        options: [probe, train, finetune, eval, visual, realtest, retrain, stability, plans, owl, genbase]
         default: probe
       houses:
         description: "train, retrain: сколько синтетических домов в корпусе (собранные раньше не пересобираются)"
@@ -80,6 +80,10 @@ on:
         type: choice
         options: [train, pretrain, both]
         default: train
+      genbase_limit:
+        description: "genbase: сколько стен нарисовать для пробы (по обоим режимам); 0 — все стены реального теста"
+        type: number
+        default: 3
       owl_ids:
         description: "owl: номера проектов строим.дом.рф через пробел, либо all — все скачанные на машине (картинки качаются при первом запуске, по полсекунды на запрос)"
         type: string
@@ -143,6 +147,11 @@ jobs:
         # версия — как в пробе на процессоре (gf#342): другая может отдать другие рамки
         if: inputs.job == 'owl'
         run: '"$VENV/bin/pip" install -q "transformers==4.46.3" scipy'
+
+      - name: diffusers, vtracer и OWLv2 для genbase
+        # transformers — как у owl; diffusers 0.31 — под него (gf#17)
+        if: inputs.job == 'genbase'
+        run: '"$VENV/bin/pip" install -q "transformers==4.46.3" "diffusers==0.31.0" accelerate safetensors scipy vtracer cairosvg'
 
       - name: PyTorch видит GPU
         if: inputs.job == 'probe'
@@ -279,6 +288,28 @@ jobs:
         with:
           name: owl-${{ github.run_id }}
           path: ${{ env.OUT }}/owl
+          if-no-files-found: ignore
+
+      - name: Картинки генератора
+        # gf#17: стены реального теста — `genfacade manual` в $SAMPLES, как у realtest; SDXL — глухой
+        # режим, ControlNet — окна из плана. Артефакт: картинки (PNG, SVG vtracer, рамки) и
+        # <режим>/<дом>.json для `genfacade realtest --vectorized ИМЯ=ПАПКА`.
+        if: inputs.job == 'genbase'
+        env:
+          LIMIT: ${{ inputs.genbase_limit }}
+        run: |
+          cfg="$RUNNER_TEMP/genbase-config"
+          mkdir -p "$cfg" "$OUT"
+          printf '[paths]\nsamples_dir = "%s"\n' "$SAMPLES" > "$cfg/data.toml"
+          python -c 'from genfacade.cli import main; main()' -c "$cfg" manual
+          python tools/genbase.py sdxl cnet -c "$cfg" -o "$OUT/genbase" --limit "$LIMIT"
+
+      - name: Картинки и рамки генератора
+        if: always() && inputs.job == 'genbase'
+        uses: actions/upload-artifact@v7
+        with:
+          name: genbase-${{ github.run_id }}
+          path: ${{ env.OUT }}/genbase
           if-no-files-found: ignore
 
       - name: Непрямоугольные планы

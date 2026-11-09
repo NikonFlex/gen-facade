@@ -56,3 +56,54 @@ garage_door = "#404040"
 porch = "#ff69b4"
 chimney = "#808000"
 canopy = "#00ced1"
+
+[generator]   # растр от генератора вместо рендера эталона (gf#17, «генератор → векторизатор»)
+seed = 17     # один на все стены: прогон повторяем
+
+[generator.size]
+long_side_px = 1024       # А; Б — свой размер, см. [generator.cnet]
+step_px = 64
+min_side_px = 256
+
+[generator.prompt]
+house = "a {floors}-storey {building} with {walls} walls and a {roof} roof"
+drawing = "architectural elevation drawing of one house wall, orthographic, flat colors, no perspective, no sky"
+negative = "perspective, photo, sky, clouds, lawn, grass, trees, people, cars, street, shadows, text, watermark"
+
+[generator.prompt.colors]   # называем цвет материала словом: SD не читает #rrggbb
+white = "#f0f0f0"
+beige = "#d9c9a8"
+gray = "#9a9a96"
+"light blue" = "#a8c0d0"
+brown = "#8c5a3a"
+"red brick" = "#8c4a3a"
+yellow = "#e0c060"
+green = "#7a9a7a"
+black = "#33373b"
+
+[generator.sdxl]
+model = "stabilityai/stable-diffusion-xl-base-1.0"   # OpenRAIL++-M [проверено: карточка]
+steps = 30
+guidance = 7.5
+long_side_px = 1024
+
+[generator.cnet]
+model = "doguilmak/facade-controlnet-sd15"            # MIT; SD 1.5 + ControlNet [проверено: карточка]
+subfolder = "full_pipeline"
+steps = 30
+guidance = 9.0
+long_side_px = 512
+conditioning_scale = 1.0
+# Цвета маски — [не проверено]: карточка пишет «Facades-style RGB masks» и не называет палитру;
+# взяты с примера карточки (цвет класса в jet, окна — узкие синие столбики). Проба решает.
+background = "#000080"
+facade = "#0032ff"
+window = "#007dff"
+door = "#00ffff"
+
+[generator.detect]
+through_vtracer = true
+min_w = 0.02    # доли стены: окно уже 2 % или шире 50 % стены — не окно
+max_w = 0.5
+min_h = 0.04
+max_h = 0.9
