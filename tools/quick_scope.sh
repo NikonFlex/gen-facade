@@ -16,6 +16,6 @@ seed_testmon() {
 # Коммит, где все файлы — .md: тестам нечего проверять, pytest не гоняется (ruff, gitleaks и
 # проверки задач остаются; полный набор — в CI).
 docs_only() {
-    files=$(git diff --cached --name-only)
+    files=$(git -c core.quotePath=false diff --cached --name-only)
     [ -n "$files" ] && ! printf '%s\n' "$files" | grep -qv '\.md$'
 }

@@ -77,3 +77,12 @@ def test_docs_only_commit_skips_tests(clone):
     (wt / "c.py").write_text("x = 1\n")
     _git(wt, "add", "c.py")
     assert _sh(wt, "docs_only") != 0
+
+
+def test_docs_only_with_cyrillic_name(clone):
+    """git берёт в кавычки имя с не-ASCII буквами («Таблица.md» → "...md\"") —
+    всё равно документ."""
+    _, wt = clone
+    (wt / "Таблица требований.md").write_text("b\n")
+    _git(wt, "add", ".")
+    assert _sh(wt, "docs_only") == 0
