@@ -46,12 +46,10 @@ def classes(image: numpy.ndarray, cfg: Config) -> numpy.ndarray:
     colors = numpy.array([visual.rgb(c) for c in cfg.baselines.vectorizer.colors.values()])
     distance = ((image[:, :, None, :].astype(numpy.int32) - colors) ** 2).sum(axis=3)
     index = distance.argmin(axis=2)
-    wall = palette(cfg).index(ElementClass.FACADE)
     radius = cfg.baselines.vectorizer.open_radius_px
-    kept = numpy.full(index.shape, wall)
+    kept = numpy.full(index.shape, palette(cfg).index(ElementClass.FACADE))  # убранное — стена
     for cls in numpy.unique(index):
-        if cls != wall:
-            kept[opened(index == cls, radius)] = cls
+        kept[opened(index == cls, radius)] = cls
     return kept
 
 
