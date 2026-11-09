@@ -13,6 +13,7 @@ quick=""
 fast=""
 [ "${1:-}" = "--quick" ] && quick=1
 [ "${1:-}" = "--fast" ] && fast=1
+. tools/quick_scope.sh
 
 run() {
     name=$1
@@ -33,6 +34,8 @@ run() {
 # отбор и гоняет все быстрые тесты — 7 минут на коммит вместо 16 с (замер 05.11, gf#293).
 pytest_or_none() {
     if [ -n "$quick" ]; then
+        docs_only && return 0    # одни .md — тестам нечего проверять (tools/quick_scope.sh)
+        seed_testmon             # новое дерево — база testmon соседнего дерева, а не все тесты
         python3 -m pytest -q --testmon --testmon-forceselect -m "not slow"
     elif [ -n "$fast" ]; then
         python3 -m pytest -q -m "not slow"

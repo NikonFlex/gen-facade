@@ -40,12 +40,16 @@ def genplan(sheet: FacadeSheet, cfg: Config) -> FacadeSheet:
     return sheet.model_copy(update={"facades": [_wall(f, sheet, cfg) for f in sheet.facades]})
 
 
-def _wall(f: SideFacade, sheet: FacadeSheet, cfg: Config) -> SideFacade:
+def main_zone(f: SideFacade, sheet: FacadeSheet) -> MaterialZone:
+    """Стена одной отделкой до карниза — всё, что знают о стене базовые подходы без модели."""
     length, eaves = f.side.length_m, sheet.spec.eaves_m
-    wall = MaterialZone(shape=[(0, 0), (length, 0), (length, eaves), (0, eaves)],
+    return MaterialZone(shape=[(0, 0), (length, 0), (length, eaves), (0, eaves)],
                         material=PaletteRole.MAIN, role=ZoneRole.MAIN)
+
+
+def _wall(f: SideFacade, sheet: FacadeSheet, cfg: Config) -> SideFacade:
     return f.model_copy(update={"elements": _doors(f, sheet, cfg) + _windows(f, sheet, cfg),
-                                "zones": [wall]})
+                                "zones": [main_zone(f, sheet)]})
 
 
 def _doors(f: SideFacade, sheet: FacadeSheet, cfg: Config) -> list[Element]:

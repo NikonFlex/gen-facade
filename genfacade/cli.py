@@ -10,6 +10,7 @@ from genfacade.baselines import Baseline
 from genfacade.datasets.synthetic import batch
 from genfacade.schema import REFUSAL_TEXT, Mode, Refused, Source, Split
 from genfacade.train import corpus
+from genfacade.vectorizer import Backend
 
 
 def run(args: argparse.Namespace) -> Path:
@@ -97,8 +98,20 @@ def realtest(args: argparse.Namespace) -> Path:
 
     cfg = config.load(*args.config)
     out = args.out or pipeline.new_run_dir(cfg.train.paths.runs_dir, "realtest")
-    rows = realtest.Rows(dict(args.model), dict(args.sheets))
+    rows = realtest.Rows(dict(args.model), dict(args.sheets), dict(args.vectorized))
     return realtest.run(cfg, out, args.synthetic, rows)
+
+
+def vectorize(args: argparse.Namespace) -> Path:
+    """Стены реального теста → растр → готовый векторизатор → элементы (gf#17)."""
+    from genfacade import vectorizer
+
+    cfg = config.load(*args.config)
+    if args.collect:
+        vectorizer.collect(vectorizer.houses(cfg), cfg, args.out)
+        vectorizer.panels(args.out, args.panels, cfg)
+        return args.out
+    return vectorizer.run(args.backend, cfg, args.out, args.limit)
 
 
 def stability(args: argparse.Namespace) -> Path:
@@ -211,8 +224,21 @@ def _parser() -> argparse.ArgumentParser:
     q.add_argument("--sheets", type=_named, action="append", default=[], metavar="ИМЯ=ПАПКА",
                    help="строка model-ИМЯ: листы <режим>/model прошлого genfacade realtest — "
                         "для модели другой записи токенов, ответившей своим кодом")
+    q.add_argument("--vectorized", type=_named, action="append", default=[], metavar="ИМЯ=ПАПКА",
+                   help="строка vectorizer-ИМЯ: папка `genfacade vectorize`; дома, которых в ней "
+                        "нет, в строке не считаются, остальные строки — и против тех же домов")
     q.add_argument("-o", "--out", type=Path,
                    help="папка листов и таблиц; по умолчанию runs_dir/<время>-realtest")
+    z = sub.add_parser("vectorize", help="стены реального теста → готовый векторизатор → элементы")
+    z.add_argument("backend", choices=list(Backend), type=Backend, help="векторизатор")
+    z.add_argument("-o", "--out", type=Path, required=True,
+                   help="папка растров, ответов и элементов; готовые ответы не пересчитываются")
+    z.add_argument("-n", "--limit", type=int, default=0, help="домов прогона; 0 — все")
+    z.add_argument("--collect", action="store_true",
+                   help="только собрать элементы из готовых ответов, векторизатор не запускать")
+    z.add_argument("--panels", action="append", default=[], metavar="СТЕНА",
+                   help="с --collect: картинка стены (имя растра без .npy) — вход, отрисовка SVG, "
+                        "найденные элементы; повторяется")
     t = sub.add_parser("stability", help="сводка реального теста по вариантам сэмплинга")
     t.add_argument("root", type=Path,
                    help="папка вариантов: <вариант>/<режим>/rows/metrics.json от realtest; "
@@ -239,6 +265,7 @@ COMMANDS = {
     "guidelines": (guidelines_table, {}),
     "stability": (stability, {FileNotFoundError: "сводка не начата"}),
     "realtest": (realtest, {FileNotFoundError: "таблица не начата"}),
+    "vectorize": (vectorize, {RuntimeError: "векторизатор не отработал"}),
     "run": (run, {}),
     "review": (review_summary, {}),
 }
