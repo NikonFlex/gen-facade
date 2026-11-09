@@ -14,10 +14,12 @@ from genfacade.schema import (
     ContourKind,
     DataAttr,
     Mode,
+    PlanShape,
     RoofKind,
     RuleDraw,
     RuleVariant,
     Source,
+    Split,
     Trim,
 )
 from genfacade.viewer import rules
@@ -171,6 +173,64 @@ def test_data_counts_and_shares(client, sample, tmp_path, cfg):
     roof = found["shares"]["attrs"][DataAttr.ROOF][0]
     assert roof["label"] == cfg.viewer.labels.roof[sample.sheet.spec.roof.kind]
     assert len(found["examples"]) <= cfg.viewer.data_view.examples
+    shape = found["shares"]["attrs"][DataAttr.SHAPE]
+    assert [r["label"] for r in shape] == [cfg.viewer.data_view.shapes[PlanShape.RECTANGLE]]
+
+
+def _write_sets(sample, root, sizes):
+    for source, n in sizes.items():
+        for k in range(n):
+            part = Split.VAL if k % 3 == 2 else Split.TRAIN
+            store.write(sample.model_copy(update={"id": f"h{k:03d}", "source": source,
+                                                  "split": part}), root)
+        store.write_manifest(root, source)
+
+
+def test_every_set_card_has_the_same_shape(client, sample, tmp_path, cfg):
+    """Плашка набора — одна форма для всех трёх: тексты из конфига, роль, счётчики, доли."""
+    _write_sets(sample, tmp_path / "samples",
+                {Source.SYNTHETIC: 4, Source.BUILDINGNET: 3, Source.MANUAL: 2})
+    sets = client.get("/api/data").json()["sets"]
+    assert [s["source"] for s in sets] == [Source.SYNTHETIC, Source.BUILDINGNET, Source.MANUAL]
+    assert len({tuple(s) for s in sets}) == 1
+    for s in sets:
+        label = cfg.viewer.data_view.sets[s["source"]]
+        assert (s["note"], s["origin"], s["how"], s["modes"]) == (
+            label.note, label.origin, label.how, label.modes)
+        assert s["role_title"] == cfg.viewer.data_view.roles[label.role]
+        assert set(s["shares"]["attrs"]) == set(DataAttr)
+        assert s["elements"] and s["splits"]
+
+
+def test_set_without_plan_has_dash_not_missing_row(client, sample, tmp_path):
+    """У набора без плана доли формы пусты (страница ставит прочерк), строка не пропадает."""
+    store.write(sample.model_copy(update={"plan": None}), tmp_path / "samples")
+    [found] = client.get("/api/data").json()["sets"]
+    assert found["shares"]["attrs"][DataAttr.SHAPE] == []
+    assert found["shares"]["attrs"][DataAttr.FLOORS]
+
+
+def test_all_samples_come_by_pages_with_filters(client, sample, tmp_path, cfg):
+    _write_sets(sample, tmp_path / "samples", {Source.SYNTHETIC: 30})
+    size = cfg.viewer.data_view.page_size
+    url = f"/api/data/{Source.SYNTHETIC}/samples"
+    first = client.get(url).json()
+    assert (first["page"], first["total"], len(first["items"])) == (1, 30, size)
+    assert first["pages"] == -(-30 // size) and first["per_page"] == size
+    last = client.get(url, params={"page": first["pages"]}).json()
+    assert len(last["items"]) == 30 - size * (first["pages"] - 1)
+    assert {i["id"] for i in first["items"]}.isdisjoint(i["id"] for i in last["items"])
+    assert client.get(url, params={"page": 999}).json()["page"] == first["pages"]
+    val = client.get(url, params={"split": Split.VAL}).json()
+    assert val["total"] == 10 and {i["split"] for i in val["items"]} == {Split.VAL}
+    assert val["splits"] == {Split.TRAIN: 20, Split.VAL: 10}
+    found = client.get(url, params={"q": "H02"}).json()
+    assert [i["id"] for i in found["items"]] == [f"h02{k}" for k in range(10)]
+    assert client.get(url, params={"split": "bogus"}).status_code == 422
+
+
+def test_samples_of_empty_set_is_refused(client):
+    assert client.get(f"/api/data/{Source.MANUAL}/samples").status_code == 404
 
 
 # ——— Правила ———

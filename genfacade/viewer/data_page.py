@@ -1,5 +1,6 @@
-"""Страница «Данные» (gf#356, хозяин 08.11): датасет, на котором учим, — корпус синтетики, набор
-для дообучения (BuildingNet) и реальный тест. Сервер считает числа и доли; страница рисует.
+"""Страница «Данные» (gf#356, хозяин 08.11 и 09.11): на чём учим и проверяем — корпус синтетики,
+дообучение на BuildingNet, реальный тест; у каждого набора плашка одной формы и список всех
+примеров. Сервер считает числа и доли; страница рисует.
 
 Опись источника (`store.load_manifest`) отвечает на «сколько»; доли формы, этажей, крыш и
 материалов опись не хранит, поэтому они читаются из примеров — по `stats_sample` домов через равные
@@ -7,41 +8,76 @@
 """
 
 import json
+import re
 from collections import Counter
+from pathlib import Path
 
 from genfacade.config import Config
 from genfacade.datasets import store
-from genfacade.schema import DataAttr, PaletteRole, Source
+from genfacade.schema import DataAttr, PaletteRole, PlanShape, Source, Split
 
 # Признаки считаются для корпуса, где они есть в каждом примере; у остальных наборов — опись.
-CORPUS = Source.SYNTHETIC
-FINETUNE = Source.BUILDINGNET
-REAL_TEST = Source.MANUAL
+SOURCES = (Source.SYNTHETIC, Source.BUILDINGNET, Source.MANUAL)  # по порядку обучения
+SPLIT_HEAD = 512  # поле split стоит в начале файла примера: для списка читаем только начало
+RECT_CORNERS = 4  # контур прямоугольного дома
 
 _cache: dict[tuple[str, str], dict] = {}
+_index_cache: dict[tuple[str, int], list[tuple[str, str]]] = {}
+_SPLIT = re.compile(rb'"split":\s*"(\w+)"')
 
 
 def overview(cfg: Config) -> dict:
-    """Наборы по порядку обучения: опись, примеры; у корпуса — ещё доли признаков, у теста —
-    дома по источникам разметки."""
+    """Наборы по порядку обучения; у каждого плашка одной формы: что это, роль, что лежит,
+    доли признаков, примеры. Чего в наборе нет — None (страница ставит прочерк)."""
     root, view = cfg.data.paths.samples_dir, cfg.viewer.data_view
-    sets = []
-    for source in (CORPUS, FINETUNE, REAL_TEST):
-        found = store.ids(root, source)
-        if not found:
-            continue
-        manifest = store.load_manifest(root, source)
-        sets.append({
-            "source": source, **view.sets[source].model_dump(),
-            "samples": manifest["samples"], "walls": manifest["walls"],
-            "blind_walls": manifest["blind_walls"], "splits": manifest["splits"],
-            "elements": manifest["elements"], "date": manifest["date"],
-            "examples": _spread(found, view.examples),
-            "shares": _shares(cfg, source, found) if source is CORPUS else None,
-            "rejected": _reasons(manifest) if source is FINETUNE else None,
-            "origins": _origins(cfg, manifest, found) if source is REAL_TEST else None,
-        })
+    sets = [_card(cfg, source, found) for source in SOURCES if (found := store.ids(root, source))]
     return {"sets": sets, "attrs": {a.value: t for a, t in view.attrs.items()}}
+
+
+def _card(cfg: Config, source: Source, found: list[str]) -> dict:
+    view = cfg.viewer.data_view
+    manifest = store.load_manifest(cfg.data.paths.samples_dir, source)
+    elements = manifest.get("elements")
+    label = view.sets[source]
+    return {
+        "source": source, **label.model_dump(), "role_title": view.roles[label.role],
+        "samples": manifest.get("samples"), "walls": manifest.get("walls"),
+        "blind_walls": manifest.get("blind_walls"), "splits": manifest.get("splits") or {},
+        "elements": sum(elements.values()) if elements else None, "date": manifest.get("date"),
+        "examples": _spread(found, view.examples), "shares": _shares(cfg, source, found),
+        "rejected": manifest.get("reasons") if source is Source.BUILDINGNET else None,
+        "origins": _origins(cfg, manifest, found) if source is Source.MANUAL else None,
+    }
+
+
+def listing(cfg: Config, source: Source, page: int, split: Split | None, query: str) -> dict:
+    """Одна страница всех примеров набора с фильтром по разбиению и подстроке имени; страница
+    за краем списка заменяется ближайшей."""
+    size = cfg.viewer.data_view.page_size
+    named = [(i, sp) for i, sp in _index(cfg, source) if query.lower() in i.lower()]
+    shown = [(i, sp) for i, sp in named if split is None or sp == split]
+    pages = max(1, -(-len(shown) // size))
+    page = min(max(page, 1), pages)
+    return {"source": source, "title": cfg.viewer.data_view.sets[source].title, "page": page,
+            "pages": pages, "per_page": size, "total": len(shown),
+            "splits": dict(Counter(sp for _, sp in named)),
+            "items": [{"id": i, "split": sp} for i, sp in shown[(page - 1) * size:page * size]]}
+
+
+def _index(cfg: Config, source: Source) -> list[tuple[str, str]]:
+    """(имя, разбиение) всех примеров набора; кэш — до смены числа файлов."""
+    root = cfg.data.paths.samples_dir
+    found = store.ids(root, source)
+    key = (str(root / source), len(found))
+    if key not in _index_cache:
+        _index_cache[key] = [(i, _split_of(store.path(root, source, i))) for i in found]
+    return _index_cache[key]
+
+
+def _split_of(file: Path) -> str:
+    with file.open("rb") as f:
+        found = _SPLIT.search(f.read(SPLIT_HEAD))
+    return found.group(1).decode() if found else ""
 
 
 def _spread[T](items: list[T], n: int) -> list[T]:
@@ -72,6 +108,8 @@ def _label(attr: DataAttr, value: str, cfg: Config) -> str:
     """Подпись значения признака: roof, walls, style — из labels; нет подписи — само значение."""
     labels = cfg.viewer.labels
     table = {DataAttr.ROOF: labels.roof, DataAttr.WALLS: labels.kind, DataAttr.STYLE: labels.style}
+    if attr is DataAttr.SHAPE:
+        return cfg.viewer.data_view.shapes[PlanShape(value)]
     return table.get(attr, {}).get(value, value)
 
 
@@ -79,15 +117,12 @@ def _attrs(sample: dict) -> dict[DataAttr, str]:
     spec = sample["sheet"]["spec"]
     main = next(m for m in spec["materials"] if m["id"] == PaletteRole.MAIN)
     roof = spec["roof"]
-    return {DataAttr.SIDES: str(len(sample["sheet"]["facades"])),
-            DataAttr.FLOORS: str(spec["floors"]),
-            DataAttr.ROOF: roof["kind"] if isinstance(roof, dict) else roof,
-            DataAttr.WALLS: main["kind"], DataAttr.STYLE: spec["style"]}
-
-
-def _reasons(manifest: dict) -> dict[str, int]:
-    """Почему дома BuildingNet не вошли в набор: причина → сколько."""
-    return manifest.get("reasons", {})
+    plan = sample.get("plan")
+    shape = {} if plan is None else {DataAttr.SHAPE: _shape(plan)}
+    return shape | {DataAttr.SIDES: str(len(sample["sheet"]["facades"])),
+                    DataAttr.FLOORS: str(spec["floors"]),
+                    DataAttr.ROOF: roof["kind"] if isinstance(roof, dict) else roof,
+                    DataAttr.WALLS: main["kind"], DataAttr.STYLE: spec["style"]}
 
 
 def _origins(cfg: Config, manifest: dict, built: list[str]) -> list[dict]:
@@ -101,3 +136,8 @@ def _origins(cfg: Config, manifest: dict, built: list[str]) -> list[dict]:
                        "built": sum(n in built for n in names),
                        "waiting": sum(n in waiting for n in names)})
     return result
+
+
+def _shape(plan: dict) -> str:
+    rectangle = len(plan["outline"]) == RECT_CORNERS
+    return PlanShape.RECTANGLE if rectangle else PlanShape.OTHER

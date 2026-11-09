@@ -23,7 +23,7 @@ from genfacade.metrics import calibrate
 from genfacade.plan.genplan_svg import PlanError
 from genfacade.render.house3d import house_3d
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import FacadeSheet, Mode, Refusal, Sample, Source, refusal_record
+from genfacade.schema import FacadeSheet, Mode, Refusal, Sample, Source, Split, refusal_record
 from genfacade.viewer import catalog, data_page, houses, markup, newhouse, review, rules
 
 STATIC = files(__package__).joinpath("static")
@@ -146,6 +146,13 @@ def _samples_api(app: FastAPI, cfg: Config) -> None:
     def data() -> dict:
         return data_page.overview(cfg)
 
+    @app.get("/api/data/{source}/samples")
+    def data_samples(source: Source, page: int = 1, split: Split | None = None,
+                     q: str = "") -> dict:
+        if not store.ids(cfg.data.paths.samples_dir, source):
+            raise refuse(404, Refusal.NO_SAMPLE, source)
+        return data_page.listing(cfg, source, page, split, q)
+
     @app.get("/api/samples")
     def samples() -> list[dict]:
         return _samples(cfg)
@@ -248,7 +255,10 @@ def _samples(cfg: Config) -> list[dict]:
 
 def _sample(source: Source, sample_id: str, cfg: Config) -> Sample:
     root = cfg.data.paths.samples_dir
-    if sample_id not in store.ids(root, source):
+    # Файл примера проверяется напрямую: список имён набора в 10 000 файлов на каждую миниатюру
+    # страницы «Данные» читался бы заново.
+    known = Path(sample_id).name == sample_id and not sample_id.startswith("_")
+    if not (known and store.path(root, source, sample_id).is_file()):
         raise refuse(404, Refusal.NO_SAMPLE, f"{source}/{sample_id}")
     return store.read(root, source, sample_id)
 
