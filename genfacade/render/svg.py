@@ -296,11 +296,13 @@ def _roof_fill(pen: Pen) -> str:
 
 
 def _overlay(g: ElementTree.Element, facade: SideFacade, violations: list[Violation]) -> None:
-    """Запретные зоны — полосой во всю высоту стены; нарушение — рамкой вокруг элемента,
-    а без элемента (углы, проём плана) — рамкой по стене."""
+    """Запретные зоны — полосой во всю высоту стены, зона под кровлей соседней части — по своей
+    высоте; нарушение — рамкой вокруг элемента, а без элемента (углы, проём плана) — рамкой по
+    стене."""
     top = _top(facade)
     for z in facade.side.forbidden:
-        box(g, "forbidden-zone", (z.x0_m, 0.0, z.x1_m - z.x0_m, top))
+        y0, y1 = (0.0, top) if z.y0_m is None or z.y1_m is None else (z.y0_m, z.y1_m)
+        box(g, "forbidden-zone", (z.x0_m, y0, z.x1_m - z.x0_m, y1 - y0))
     boxes = {e.id: (e.x_m, e.y_m, e.w_m, e.h_m) for e in facade.elements}
     for v in violations:
         frame = boxes.get(v.element or "", (0.0, 0.0, facade.side.length_m, top))

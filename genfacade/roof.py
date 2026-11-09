@@ -35,6 +35,7 @@ from genfacade.schema import (
     Element,
     ElementClass,
     FacadeSheet,
+    ForbiddenZone,
     OpeningKind,
     Point,
     Polygon,
@@ -375,7 +376,14 @@ def _part_line(sheet: FacadeSheet, part: int, w, eaves: float, rise: float,
 def _off_walls(on: set[int], butts: set[int], kind: RoofKind) -> set[int]:
     """Стены карниза без тех, на которые опирается более высокая часть. Односкатная опирается
     единственной низкой стороной на стену: низ уходит на противоположную сторону, высокая — у
-    стены. У остальных видов, если опираются все стены, — как есть."""
+    стены. Двускатная опирается длинной стеной не «в один скат» (плоскость в 1,5–2 м, что
+    поднимается к стене выше карниза и читается палаткой, gf#412), а коньком от стены: скаты — от
+    двух других стен, как у крыльца с щипцом наружу. У остальных видов, если опираются все
+    стены, — как есть."""
+    if kind is RoofKind.GABLE and on & butts:
+        across = {(k + 1) % RECT_SIDES for k in on}  # другая пара стен напротив
+        if not across & butts:
+            return across
     free = on - butts
     if not free and kind is RoofKind.SHED:
         free = {(k + 2) % RECT_SIDES for k in on}
@@ -504,3 +512,75 @@ def joint_view(house: HouseRoof, k: int) -> tuple[list[Polygon], list[list[Point
         seams += [list(g.coords) for g in getattr(line, "geoms", [line])
                   if isinstance(g, shapely.LineString) and g.length > EPS]
     return walls, seams
+
+
+# ——— Запретная зона под крышей соседней нижней части (gf#412) ———
+
+
+def covered(house: HouseRoof, k: int) -> list[ForbiddenZone]:
+    """Участки стены k высокой части, закрытые кровлей соседней более низкой части: кровля нижней
+    части (с вывесом) стоит перед стеной — по x от её края до края, по высоте от самой низкой точки
+    кровли над участком (кромка вывеса) до самой высокой (у стены, у ската). Окно там на виде
+    срезано кровлей. Участок стены — наружный, то есть только вывес за торцом нижней части:
+    стена под самой нижней частью внутренняя и в сторону не входит."""
+    left, u, _ = axis(house.corners, k)
+    toward = (u[1], -u[0])
+    found: list[ForbiddenZone] = []
+    for span in house.spans[k]:
+        high = house.parts[span.part]
+        strip = shapely.box(span.x0, EPS, span.x1, FAR)  # впереди стены: x вдоль стены, d наружу
+        zones: list[ForbiddenZone] = []
+        for q, line in enumerate(house.parts):
+            if line.eaves >= high.eaves - EPS:
+                continue
+            for _, face in faces(line, _area(house, q)):
+                zones += _under(face, line, left, u, toward, strip)
+        found += _joined(zones)
+    return found
+
+
+def _under(face: list[Point3], line: Roofline, left: Point, u: Point, toward: Point,
+           strip: shapely.Geometry) -> list[ForbiddenZone]:
+    """Часть ската face перед стеной, в полосе strip: зона по x и высоте кровли над ней."""
+    def at(p: Point) -> Point:  # точка плана → (x вдоль стены, d от стены наружу)
+        return ((p[0] - left[0]) * u[0] + (p[1] - left[1]) * u[1],
+                (p[0] - left[0]) * toward[0] + (p[1] - left[1]) * toward[1])
+
+    piece = shapely.Polygon([at(p) for p in face]).buffer(0).intersection(strip)
+    out = []
+    for g in getattr(piece, "geoms", [piece]):
+        if not isinstance(g, shapely.Polygon) or g.area <= EPS:
+            continue
+        heights = [line.height((left[0] + a * u[0] + d * toward[0],
+                                left[1] + a * u[1] + d * toward[1])) for a, d in g.exterior.coords]
+        x0, _, x1, _ = g.bounds
+        out.append(ForbiddenZone(x0_m=x0, x1_m=x1, y0_m=min(heights), y1_m=max(heights)))
+    return out
+
+
+def _joined(zones: list[ForbiddenZone]) -> list[ForbiddenZone]:
+    """Зоны, что пересекаются по x, — одной: рамка по x и высоте всех."""
+    out: list[ForbiddenZone] = []
+    for z in sorted(zones, key=lambda z: z.x0_m):
+        if out and z.x0_m <= out[-1].x1_m + EPS:
+            last = out[-1]
+            out[-1] = ForbiddenZone(
+                x0_m=last.x0_m, x1_m=max(last.x1_m, z.x1_m),
+                y0_m=min(last.y0_m, z.y0_m), y1_m=max(last.y1_m, z.y1_m))
+        else:
+            out.append(z)
+    return out
+
+
+def with_covered(sheet: FacadeSheet) -> FacadeSheet:
+    """Лист с запретными зонами под кровлей соседних нижних частей у стен (`covered`) — к зонам
+    плана; прежние такие зоны заменяются. Дом без скатов или не из частей — как есть."""
+    house = roofs(sheet)
+    if house is None or len(house.parts) == 1:
+        return sheet
+    facades = []
+    for k, f in enumerate(sheet.facades):
+        plan = [z for z in f.side.forbidden if z.y0_m is None]
+        facades.append(f.model_copy(update={"side": f.side.model_copy(update={
+            "forbidden": [*plan, *covered(house, k)]})}))
+    return sheet.model_copy(update={"facades": facades})

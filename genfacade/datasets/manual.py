@@ -235,7 +235,8 @@ def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
     sheet = sheet.model_copy(update={"facades": facades})
     if found:  # силуэт — ступенями по участкам, крылья — в плане (шаг 2)
         plan = plan.model_copy(update={"wings": rects})
-        sheet = unfold(sheet.model_copy(update={"wings": parts.sheet_wings(plan)}))
+        sheet = roof.with_covered(unfold(sheet.model_copy(
+            update={"wings": parts.sheet_wings(plan)})))
     sheet, bare = _no_eaves(sheet)
     return (Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet),
             dropped + bare)

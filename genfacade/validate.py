@@ -28,6 +28,7 @@ from genfacade.schema import (
     ElementClass,
     FacadeSheet,
     FixedField,
+    ForbiddenZone,
     GuidelineCheck,
     HouseSpec,
     MaterialZone,
@@ -263,15 +264,31 @@ def _bounds(z: MaterialZone) -> tuple[float, ...]:
 
 def _forbidden(f: SideFacade, cfg: Checks) -> list[Violation]:
     """Окно модели в запретной зоне — ошибка. Окно плана (x задан планом) — предупреждение: план
-    главнее, его окно не двигается (`evaluation: Окно плана в запретной зоне`). Зоны — по плану
-    первого этажа: у верхних этажей плана нет, их перегородок мы не знаем
-    (`evaluation: Запретные зоны — по плану этажа`)."""
-    ground = [e for e in f.elements if e.cls is ElementClass.WINDOW and (e.floor or 1) == 1]
+    главнее, его окно не двигается (`evaluation: Окно плана в запретной зоне`). Зоны плана — по
+    первому этажу: у верхних этажей плана нет, их перегородок мы не знаем (`evaluation: Запретные
+    зоны — по плану этажа`). Зона под кровлей соседней нижней части (у неё есть высота, gf#412) —
+    на любом этаже: окно, у которого кровля закрывает больше `slope_share` рамки (как «окно по
+    скату»), срезано ею."""
+    windows = [e for e in f.elements if e.cls is ElementClass.WINDOW]
     return [_v(f, Rule.PLAN_FORBIDDEN if FixedField.X in e.fixed else Rule.FORBIDDEN, e,
                f"окно {'плана ' if FixedField.X in e.fixed else ''}{e.id} в запретной зоне "
-               f"{z.x0_m:.2f}–{z.x1_m:.2f} м")
-            for e in ground for z in f.side.forbidden
-            if min(e.x_m + e.w_m, z.x1_m) - max(e.x_m, z.x0_m) > cfg.eps_m]
+               f"{z.x0_m:.2f}–{z.x1_m:.2f} м" + _under_roof(z))
+            for e in windows for z in f.side.forbidden if _in_zone(e, z, cfg)]
+
+
+def _in_zone(e: Element, z: ForbiddenZone, cfg: Checks) -> bool:
+    """Окно в зоне: у зоны плана рамка заходит на неё по x на первом этаже; у зоны под кровлей —
+    кровля закрывает больше `slope_share` площади рамки."""
+    along = min(e.x_m + e.w_m, z.x1_m) - max(e.x_m, z.x0_m)
+    if z.y0_m is None or z.y1_m is None:
+        return along > cfg.eps_m and (e.floor or 1) == 1
+    high = min(e.y_m + e.h_m, z.y1_m) - max(e.y_m, z.y0_m)
+    return along > cfg.eps_m and high > cfg.eps_m and (
+        along * high > cfg.slope_share * e.w_m * e.h_m)
+
+
+def _under_roof(z: ForbiddenZone) -> str:
+    return "" if z.y0_m is None else f" под кровлей соседней части ({z.y0_m:.2f}–{z.y1_m:.2f} м)"
 
 
 def _plan_openings(f: SideFacade, cfg: Checks) -> list[Violation]:
