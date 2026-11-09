@@ -9,7 +9,7 @@
 """
 
 import math
-from itertools import product
+from itertools import islice, product
 
 import shapely
 from shapely import ops
@@ -17,17 +17,31 @@ from shapely import ops
 from genfacade.schema import EPS, Point, Polygon, Rect
 
 SNAP = 9  # знаков после запятой, до которых округляется контур, метры
+MAX_CANDIDATES = 400  # разбиений контура, что перебирает `candidates`; у реальных домов — до сотни
 FAR = 1e6  # длина разрезающей линии, метров: больше любого дома
 
 
 def wings(outline: Polygon) -> list[Rect]:
     """Крылья контура; у прямоугольника — пустой список (дом из одной части)."""
+    found = candidates(outline)
+    return found[0] if found else []
+
+
+def candidates(outline: Polygon) -> list[list[Rect]]:
+    """Все разбиения контура на крылья (по разным разрезам Г-образных кусков), первое — то, что
+    даёт `wings`; дальше — с меньшим числом крыльев, потом по порядку разрезов. Нужны сборщику
+    разметки: отметки карниза лежат не на любом разбиении (gf#322) — берётся первое, на котором
+    у каждого крыла одна отметка. Не больше `MAX_CANDIDATES`; у прямоугольника — пусто."""
     # Контур из разметки ортогонален с точностью до хвостов float (1e-15): без округления линия
     # разреза не попадает в соседний угол, и разрез не делит контур.
     shape = shapely.Polygon([(round(x, SNAP), round(y, SNAP)) for x, y in outline]).simplify(0)
     if _is_rect(shape):
         return []
-    return [_rect(p) for p in _split(shape)]
+    found = [[_rect(p) for p in pieces] for pieces in _splits(shape)]
+    unique = {tuple(sorted(tuple(r.model_dump().items()) for r in rects)): rects
+              for rects in found}
+    rest = [r for r in unique.values() if r != found[0]]
+    return [found[0], *sorted(rest, key=len)]  # sorted устойчива: порядок разрезов сохраняется
 
 
 def _is_rect(shape: shapely.Polygon) -> bool:
@@ -40,13 +54,20 @@ def _rect(shape: shapely.Polygon) -> Rect:
     return Rect(x0_m=x0, y0_m=y0, x1_m=x1, y1_m=y1)
 
 
-def _split(shape: shapely.Polygon) -> list[shapely.Polygon]:
+def _splits(shape: shapely.Polygon) -> list[list[shapely.Polygon]]:
+    """Итоговые крылья по каждому способу разбиения; первое — лучшее (самое большое крыло, при
+    равенстве — первое по порядку разрезов), остальные — по порядку разрезов. Куски разреза
+    разбиваются независимо; перебор ограничен `MAX_CANDIDATES`."""
     if _is_rect(shape):
-        return [shape]
+        return [[shape]]
     cuts = [c for v, horizontal in product(_reflex(shape), (True, False))
             if len(c := _cut(shape, v, horizontal)) > 1]
-    results = [[r for piece in c for r in _split(piece)] for c in cuts]
-    return max(results, key=lambda rects: max(_size(r) for r in rects))  # первый из равных
+    results: list[list[shapely.Polygon]] = []
+    for c in cuts:
+        for combo in islice(product(*(_splits(piece) for piece in c)), MAX_CANDIDATES):
+            results.append([r for rects in combo for r in rects])
+    best = max(results, key=lambda rects: max(_size(r) for r in rects))  # первый из равных
+    return [best, *(r for r in results if r is not best)][:MAX_CANDIDATES]
 
 
 def _size(shape: shapely.Polygon) -> float:

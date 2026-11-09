@@ -104,6 +104,7 @@ class Refusal(StrEnum):
     MODEL_MISMATCH = "model_mismatch"          # модель учили на другой записи токенов
     HOUSE_OUT_OF_MODEL = "house_out_of_model"  # дом модель не прочтёт: стаб, окно, словарь
     HOUSE_NOT_BUILT = "house_not_built"        # 3D: контур не собирается в дом
+    SHEET_PARTS_STALE = "sheet_parts_stale"    # у листа номера частей от другого разбиения контура
     INVALID_REQUEST = "invalid_request"        # запрос не прошёл проверку схемы
     NO_PLAN = "no_plan"
     NO_RUN = "no_run"
@@ -128,6 +129,7 @@ REFUSAL_TEXT = {
     Refusal.MODEL_MISMATCH: "модель не подходит к записи токенов",
     Refusal.HOUSE_OUT_OF_MODEL: "дом модели не по силам",
     Refusal.HOUSE_NOT_BUILT: "дом не собрать по контуру",
+    Refusal.SHEET_PARTS_STALE: "лист собран другим разбиением контура на части",
     Refusal.INVALID_REQUEST: "запрос не прошёл проверку",
     Refusal.NO_PLAN: "нет плана",
     Refusal.NO_RUN: "нет прогона",
@@ -744,6 +746,19 @@ class FacadeSheet(Model):
 
     spec: HouseSpec
     facades: list[SideFacade]
+    # Крылья контура, на которых стоят части дома (gf#322): прямоугольники в координатах углов
+    # листа (`unfold.plan_corners`), номер — `WallRun.part`. Пусто — дом без частей. Номера хранит
+    # лист, а не пересчитывает разбиение контура: оно менялось, а лист остаётся тем, каким собран.
+    wings: list[Rect] = []
+
+    @model_validator(mode="after")
+    def _check_parts(self) -> "FacadeSheet":
+        for f in self.facades:
+            for r in f.runs:
+                if self.wings and r.part >= len(self.wings):
+                    raise ValueError(f"сторона {f.side.index}: участок части {r.part}, "
+                                     f"а крыльев {len(self.wings)}")
+        return self
 
     @model_validator(mode="after")
     def _check_materials(self) -> "FacadeSheet":

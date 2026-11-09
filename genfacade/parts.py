@@ -17,7 +17,7 @@
 from typing import NamedTuple
 
 from genfacade.config import Parts
-from genfacade.plan.wings import edge_runs, wings
+from genfacade.plan.wings import SNAP, edge_runs, wings
 from genfacade.schema import (
     EPS,
     Element,
@@ -30,6 +30,8 @@ from genfacade.schema import (
     Point,
     Polygon,
     Rect,
+    Refusal,
+    Refused,
     Roof,
     RoofKind,
     Side,
@@ -132,6 +134,49 @@ def stepped(sheet: FacadeSheet) -> bool:
     return any(f.runs for f in sheet.facades)
 
 
+def sheet_wings(plan: Plan) -> list[Rect]:
+    """Крылья плана в координатах углов листа: сторона 0 листа начинается в (0, 0), а в плане — в
+    первой вершине контура; сдвиг и есть разница (gf#322)."""
+    ox, oy = plan.outline[0]
+
+    def moved(v: float, origin: float) -> float:
+        return round(v - origin, SNAP) + 0.0  # как округляет `wings`: без хвостов float в листе
+
+    return [Rect(x0_m=moved(w.x0_m, ox), y0_m=moved(w.y0_m, oy),
+                 x1_m=moved(w.x1_m, ox), y1_m=moved(w.y1_m, oy)) for w in plan.wings]
+
+
+class StaleParts(Refused):
+    """Номера частей в участках листа не сходятся с крыльями: лист собран другим разбиением."""
+
+    def __init__(self, detail: str):
+        super().__init__(Refusal.SHEET_PARTS_STALE, detail)
+
+
+def _show(runs: list[tuple[int, float, float]]) -> list[tuple[int, float, float]]:
+    return [(part, round(x0, 2), round(x1, 2)) for part, x0, x1 in runs]
+
+
+def parts_of(sheet: FacadeSheet, corners: list[Point]) -> list[Rect]:
+    """Крылья листа с частями. Хранимые `sheet.wings` — как есть; у листа без них (собран до того,
+    как лист стал их хранить) — разбиение контура, но только если участки сторон на нём ложатся:
+    те же номера и границы. Иначе отказ `StaleParts`, а не чужая крыша под чужими номерами."""
+    if sheet.wings:
+        return sheet.wings
+    rects = wings(corners)
+    for k, f in enumerate(sheet.facades):
+        length = f.side.length_m
+        want = sorted((part, length - t1, length - t0) for part, t0, t1 in edge_runs(
+            corners[k], corners[(k + 1) % len(corners)], rects))
+        have = sorted((r.part, r.x0_m, r.x1_m) for r in f.runs)
+        if len(want) != len(have) or any(
+                a[0] != b[0] or abs(a[1] - b[1]) > EPS or abs(a[2] - b[2]) > EPS
+                for a, b in zip(want, have, strict=True)):
+            raise StaleParts(f"сторона {k}: у листа участки по частям {_show(have)}, а крылья "
+                             f"контура сегодня дают {_show(want)}")
+    return rects
+
+
 # ——— Шаг 4: участки как отдельные стены ———
 
 
@@ -217,8 +262,8 @@ def _shifted_zone(z: MaterialZone, dx: float) -> MaterialZone:
 
 
 def slabs(sheet: FacadeSheet, corners: list[Point]) -> list[tuple[Polygon, float]]:
-    """Плоская кровля дома объёмом (gf#322): плита над каждой частью на её карнизе. Крылья берутся
-    тем же разбиением контура, что на шаге 2, — по углам дома (контур тот же, сдвинут в нуль)."""
+    """Плоская кровля дома объёмом (gf#322): плита над каждой частью на её
+    карнизе. Крылья — из листа (`parts_of`), в координатах углов дома."""
     eaves = {r.part: r.eaves_m for f in sheet.facades for r in f.runs}
     return [([(w.x0_m, w.y0_m), (w.x1_m, w.y0_m), (w.x1_m, w.y1_m), (w.x0_m, w.y1_m)], eaves[k])
-            for k, w in enumerate(wings(corners))]
+            for k, w in enumerate(parts_of(sheet, corners))]

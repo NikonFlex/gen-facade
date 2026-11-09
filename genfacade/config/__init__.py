@@ -1103,6 +1103,7 @@ class Vectorizer(Section):
     align_px: float    # допуск «на одной линии», пикселей растра: шаг растра ≈ 2 см
     min_visible: float  # элемент эталона, у которого на растре виден меньший цвет класса, спрятан
     hidden_path_share: float  # путь SVG, чей цвет виден на меньшей доле его рамки, закрыт
+    open_radius_px: int  # полоски класса тоньше 2·этого + 1 пикселей — сглаживание края, не элемент
     texture: Texture
     evovec: EvoVecRun
     vtracer: VtracerRun

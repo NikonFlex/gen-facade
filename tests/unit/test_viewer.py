@@ -5,10 +5,11 @@ import re
 
 import pytest
 from fastapi.testclient import TestClient
+from sheets import with_foreign_parts
 from simple_house import SIMPLE
 
 from genfacade import config, derive
-from genfacade.datasets import store
+from genfacade.datasets import manual, store
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import (
     REFUSAL_TEXT,
@@ -296,3 +297,17 @@ def test_page_waits_for_its_own_answers():
     # withData (шаги JSON и токенов), renderSvgStep, renderInput сверяют шаг после ответа
     assert js.count("stale(shown)") == 3
     assert "withData(step, renderJsonStep)" in js and "withData(step, renderTokensStep)" in js
+
+
+def test_run_with_stale_part_numbers_is_refused_not_crashed(client, tmp_path):
+    """Сохранённый лист со старыми номерами частей: лист и 3D отвечают 409 с кодом отказа, а не 500
+    (gf#322): прогоны живут дольше разбиения контура на крылья."""
+    run_id = client.post("/api/runs", json={"plan_run": PLAN_RUN}).json()["id"]
+    meta = client.get(f"/api/runs/{run_id}").json()
+    sheet = manual.house(manual.read(SIMPLE.parent / "contours" / "ffh-western.toml"),
+                         config.load().data.manual)[0].sheet
+    old = with_foreign_parts(sheet)
+    (tmp_path / "runs" / run_id / meta["sheet_json"]).write_text(old.model_dump_json())
+    for tail in ("sheet.svg", "house3d"):
+        res = client.get(f"/api/runs/{run_id}/{tail}")
+        assert res.status_code == 409 and res.json()["detail"]["code"] == Refusal.SHEET_PARTS_STALE
