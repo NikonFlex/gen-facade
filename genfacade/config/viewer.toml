@@ -66,6 +66,10 @@ style = "Стиль"
 # Дом объёмом (вкладка «Дом в 3D»): стены по контуру, фасад стороны — текстурой, крыша — скатами
 # (roof.py, gf#320) или плоская.
 three_url = "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"  # MIT
+# Просмотр IFC (вкладка «BIM (IFC)», gf#392): разбор файла — web-ifc (MPL-2.0, wasm), вид — тот же three.js
+web_ifc_url = "https://cdn.jsdelivr.net/npm/web-ifc@0.0.78/web-ifc-api.js"
+web_ifc_wasm_dir = "https://cdn.jsdelivr.net/npm/web-ifc@0.0.78/"  # здесь лежит web-ifc.wasm
+selected = "#ffb84d"   # подсветка выбранного объекта IFC
 px_per_m = 120         # разрешение текстуры фасада: 10-метровая стена — 1200 px, шов кирпича 0,01 м — 1,2 px (gf#353)
 texture_max_px = 4096  # сторона текстуры стены: телефоны часто дают MAX_TEXTURE_SIZE = 4096 (gf#353)
 texture_budget_mpx = 8 # все стены вместе, млн пикселей: 32 МБ, на телефоне без провалов по памяти

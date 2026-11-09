@@ -3,6 +3,7 @@
 // (#run=…&step=…): перезагрузка и ссылка его сохраняют, «назад» в браузере возвращает к списку.
 
 import { HouseStage } from "/static/house3d.js";
+import { IfcStage } from "/static/ifc_view.js";
 import { refusalText, refusedFrom } from "/static/refusal.js";
 import { NAV, markCurrent, topbar } from "/static/shell.js";
 import { SvgStage, metres } from "/static/stage.js";
@@ -21,6 +22,8 @@ const STEP_LAYERS = {
 };
 // После листа — дом объёмом по нему же: не шаг конвейера, а другой взгляд на шаг 6.
 const HOUSE_STEP = { key: "3d", n: "3D", title: "Дом в 3D" };
+// И в BIM (gf#392): тот же дом объектами IFC — стены, окна, двери, этажи, крыша; файл скачивается.
+const IFC_STEP = { key: "ifc", n: "IFC", title: "BIM (IFC)" };
 const ICON = {
   back: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',
   play: '<svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>',
@@ -317,7 +320,8 @@ async function runBody(input) {
 
 function renderStepper() {
   const input = state.meta.input ? [{ key: "input", n: "", title: "Вход", file: state.meta.input }] : [];
-  const house = state.meta.sheet_json ? [{ ...HOUSE_STEP, file: state.meta.sheet_json }] : [];
+  const house = state.meta.sheet_json
+    ? [HOUSE_STEP, IFC_STEP].map((step) => ({ ...step, file: state.meta.sheet_json })) : [];
   const steps = input.concat(state.meta.steps.map((s) => ({ ...s, key: String(s.n) })), house);
   const nodes = steps.flatMap((s, i) => {
     const btn = el("button", {
@@ -335,6 +339,7 @@ function renderStepper() {
 function showStep(wanted) {
   state.shown += 1;
   if (wanted === HOUSE_STEP.key && state.meta.sheet_json) return showHouse();
+  if (wanted === IFC_STEP.key && state.meta.sheet_json) return showIfc();
   const done = state.meta.steps.filter((s) => s.file);
   // Нет такого шага — «Вход»; у примера датасета входа нет — его последний шаг.
   const step = done.find((s) => String(s.n) === wanted) ?? (state.meta.input ? null : done.at(-1));
@@ -364,12 +369,42 @@ async function renderHouse() {
   $("stage").replaceChildren(bar, wrap);
   state.stage = new HouseStage(wrap, state.options.house3d);
   fit.addEventListener("click", () => state.stage.fit());
+  await loadStage(wrap, `/api/runs/${encodeURIComponent(state.runId)}/house3d`);
+}
+
+// Сцена дома грузит свои данные; отказ — текстом на месте сцены.
+async function loadStage(wrap, url) {
   try {
-    await state.stage.load(`/api/runs/${encodeURIComponent(state.runId)}/house3d`);
+    await state.stage.load(url);
   } catch (err) {
     wrap.replaceChildren(el("p", { className: "empty-note", textContent: err.message }));
     state.stage = null;
   }
+}
+
+function showIfc() {
+  state.step = IFC_STEP.key;
+  history.replaceState(history.state, "", `#run=${encodeURIComponent(state.runId)}&step=${IFC_STEP.key}`);
+  renderStepper();
+  return renderIfc();
+}
+
+async function renderIfc() {
+  const url = `/api/runs/${encodeURIComponent(state.runId)}/house.ifc`;
+  const wrap = el("div", { className: "canvas-wrap house-wrap" }), panel = el("aside", { className: "ifc-panel" });
+  const fit = el("button", { className: "icon-btn", title: "Вписать (F)", ariaLabel: "Вписать" }, ICON.fit);
+  const save = el("a", { className: "btn", href: `${url}?download=true`, download: `${state.runId}.ifc`,
+    title: "Скачать .ifc — открывается в любом BIM-просмотрщике" }, `${ICON.file}<span>Скачать IFC</span>`);
+  const bar = el("div", { className: "toolbar" });
+  bar.append(el("div", { className: "tool-group" }), save, el("span", { className: "hint" },
+    "тянуть — повернуть · колесо — ближе/дальше · щелчок по объекту — свойства"));
+  bar.firstChild.append(fit);
+  const view = el("div", { className: "ifc-view" });
+  view.append(wrap, panel);
+  $("stage").replaceChildren(bar, view);
+  state.stage = new IfcStage(wrap, state.options.house3d, panel);
+  fit.addEventListener("click", () => state.stage.fit());
+  await loadStage(wrap, url);
 }
 
 // JSON шага без чертежа: холста у такого шага нет.

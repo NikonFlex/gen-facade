@@ -24,6 +24,7 @@ from genfacade.metrics import calibrate
 from genfacade.parts import StaleParts
 from genfacade.plan.genplan_svg import PlanError
 from genfacade.render.house3d import house_3d
+from genfacade.render.ifc import IFC_FILE, house_ifc
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import FacadeSheet, Mode, Refusal, Sample, Source, Split, refusal_record
 from genfacade.viewer import catalog, data_page, houses, markup, newhouse, review, rules
@@ -49,6 +50,7 @@ def create_app(cfg: Config, checked: Path | None = None, marked: Path | None = N
     app.exception_handler(RequestValidationError)(_invalid_request)
     app.exception_handler(StaleParts)(_stale_parts)
     _api(app, cfg, runs_dir)
+    _ifc_api(app, cfg, runs_dir)
     _samples_api(app, cfg)
     _review_api(app, cfg, checked)
     markup.api(app, cfg, marked or cfg.viewer.markup.folder)
@@ -148,6 +150,19 @@ def _api(app: FastAPI, cfg: Config, runs_dir: Path) -> None:
     @app.post("/api/runs")
     def start(req: RunRequest) -> dict:
         return {"id": _start_plan(req.plan_run, req.svg, cfg).name}
+
+
+def _ifc_api(app: FastAPI, cfg: Config, runs_dir: Path) -> None:
+    @app.get("/api/runs/{run_id}/house.ifc")
+    def run_ifc(run_id: str, download: bool = False) -> Response:
+        """Дом прогона в BIM (render/ifc.py, gf#392): текст IFC4; download — отдать файлом."""
+        folder = _run_dir(runs_dir, run_id)
+        try:
+            text = house_ifc(_run_sheet(folder), cfg, IFC_FILE)
+        except PlanError as e:
+            raise refuse(404, Refusal.HOUSE_NOT_BUILT, str(e)) from e
+        head = {"Content-Disposition": f'attachment; filename="{run_id}.ifc"'} if download else {}
+        return Response(text, media_type="application/x-step", headers=head)
 
 
 def _samples_api(app: FastAPI, cfg: Config) -> None:
@@ -290,10 +305,10 @@ def _options(cfg: Config) -> dict:
 
 def _run_sheet(folder: Path) -> FacadeSheet:
     """Лист прогона; прогон до листа не дошёл — 404 с причиной."""
-    meta = json.loads((folder / pipeline.META).read_text())
-    if not meta.get("sheet_json"):
+    sheet = pipeline.read_sheet(folder)
+    if sheet is None:
         raise refuse(404, Refusal.NO_SHEET)
-    return FacadeSheet.model_validate_json((folder / meta["sheet_json"]).read_text())
+    return sheet
 
 
 def _house(folder: Path, cfg: Config) -> dict:

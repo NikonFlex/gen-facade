@@ -1,5 +1,5 @@
 """Командная строка: genfacade run <план.svg> --text …, serve, synth, buildingnet, manual, tokens,
-train, eval, metrics, calibrate, baseline, guidelines, realtest, stability, review."""
+ifc, train, eval, metrics, calibrate, baseline, guidelines, realtest, stability, review."""
 
 import argparse
 import sys
@@ -8,7 +8,9 @@ from pathlib import Path
 from genfacade import config, pipeline
 from genfacade.baselines import Baseline
 from genfacade.datasets.synthetic import batch
-from genfacade.schema import REFUSAL_TEXT, Mode, Refused, Source, Split
+from genfacade.plan.genplan_svg import PlanError
+from genfacade.render.ifc import IFC_FILE, house_ifc
+from genfacade.schema import REFUSAL_TEXT, Mode, Refusal, Refused, Source, Split
 from genfacade.train import corpus
 from genfacade.vectorizer import Backend
 
@@ -19,6 +21,16 @@ def run(args: argparse.Namespace) -> Path:
     req = pipeline.PlanRun(plan=str(args.plan), text=args.text, mode=args.mode)
     out = args.out or pipeline.new_run_dir(cfg.viewer.paths.runs_dir, args.plan.stem)
     return pipeline.generate(req, args.plan.read_text(), out, cfg)
+
+
+def ifc(args: argparse.Namespace) -> Path:
+    """Дом прогона → файл IFC4: стены, окна, двери, этажи и крыша объектами (gf#392)."""
+    sheet = pipeline.read_sheet(args.run)
+    if sheet is None:
+        raise Refused(Refusal.NO_SHEET, str(args.run))
+    out = args.out or args.run / IFC_FILE
+    out.write_text(house_ifc(sheet, config.load(*args.config), out.name))
+    return out
 
 
 def synth(args: argparse.Namespace) -> Path:
@@ -172,6 +184,9 @@ def _parser() -> argparse.ArgumentParser:
                         f"{Mode.BLIND} — глухой куб (режим 1)")
     g.add_argument("-o", "--out", type=Path,
                    help="папка прогона; по умолчанию runs_dir/<время>-<имя>")
+    i = sub.add_parser("ifc", help="дом прогона → файл IFC4 для BIM-просмотрщика")
+    i.add_argument("run", type=Path, help="папка прогона с meta.json и sheet.json")
+    i.add_argument("-o", "--out", type=Path, help=f"файл IFC; по умолчанию <прогон>/{IFC_FILE}")
     v = sub.add_parser("serve", help="смотрелка прогонов в браузере")
     v.add_argument("--review", type=Path, help="папка genfacade realtest для слепой проверки "
                                                "листов глазами (страница /review, gf#268)")
@@ -267,6 +282,7 @@ COMMANDS = {
     "realtest": (realtest, {FileNotFoundError: "таблица не начата"}),
     "vectorize": (vectorize, {RuntimeError: "векторизатор не отработал"}),
     "run": (run, {}),
+    "ifc": (ifc, {PlanError: "дом не построен"}),
     "review": (review_summary, {}),
 }
 

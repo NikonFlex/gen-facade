@@ -19,10 +19,15 @@ export class HouseStage {
     this.view = { azimuth: -0.6, elevation: 0.45, distance: 1 };
   }
 
-  async load(url) {
+  // Ответ смотрелки или отказ с причиной; общий у дома объёмом и у просмотра IFC.
+  async _fetch(url) {
     const res = await fetch(url);
     if (!res.ok) throw await refusedFrom(res);
-    const data = await res.json();
+    return res;
+  }
+
+  async load(url) {
+    const data = await (await this._fetch(url)).json();
     threeModule ??= await import(this.look.three_url);
     this._scene(threeModule, data);
     await this._tiles(threeModule, data.swatches);
@@ -48,7 +53,8 @@ export class HouseStage {
     this.renderer.render(this.scene, this.camera);
   }
 
-  _scene(THREE, data) {
+  // Холст, камера и свет: общие у дома объёмом и у просмотра IFC (ifc_view.js).
+  _canvas(THREE) {
     const { clientWidth: w, clientHeight: h } = this.container;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
@@ -65,6 +71,10 @@ export class HouseStage {
       light.position.set(x, y, z);
       this.scene.add(light);
     }
+  }
+
+  _scene(THREE, data) {
+    this._canvas(THREE);
     const xs = data.corners.map(([x]) => x), zs = data.corners.map(([, y]) => -y);
     const mid = (v) => (Math.min(...v) + Math.max(...v)) / 2;
     this.center = new THREE.Vector3(mid(xs), data.eaves_m / 2, mid(zs));

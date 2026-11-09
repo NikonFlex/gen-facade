@@ -11,6 +11,7 @@ from simple_house import SIMPLE
 
 from genfacade import config, derive
 from genfacade.datasets import manual, store
+from genfacade.render.ifc import counts
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import (
     REFUSAL_TEXT,
@@ -272,6 +273,24 @@ def test_run_house_in_3d(client):
     assert client.get("/api/runs/nope/house3d").status_code == 404
 
 
+def test_run_house_in_ifc(client):
+    """Дом прогона в BIM (gf#392): текст IFC4 для просмотра и файл для скачивания; число окон и
+    дверей — как в листе прогона; прогона нет — 404 с отказом."""
+    run_id = client.post("/api/runs", json={"plan_run": PLAN_RUN}).json()["id"]
+    sheet = client.get(f"/files/{run_id}/sheet.json").json()
+    elements = [e["cls"] for f in sheet["facades"] for e in f["elements"]]
+    got = client.get(f"/api/runs/{run_id}/house.ifc")
+    assert got.text.startswith("ISO-10303-21;") and "attachment" not in got.headers.get(
+        "content-disposition", "")
+    kinds = counts(got.text)
+    assert kinds.get("IFCWINDOW", 0) == elements.count("window")
+    assert kinds["IFCDOOR"] == elements.count("door")
+    saved = client.get(f"/api/runs/{run_id}/house.ifc?download=true")
+    assert f'filename="{run_id}.ifc"' in saved.headers["content-disposition"]
+    assert client.get("/api/runs/nope/house.ifc").status_code == 404
+    assert client.get("/api/options").json()["house3d"]["web_ifc_url"].startswith("https://")
+
+
 def test_every_refusal_has_its_text():
     """Код без текста — ошибка сборки (docs/clean-contour.md, п. 17): текст у каждого кода свой."""
     assert set(REFUSAL_TEXT) == set(Refusal)
@@ -301,7 +320,8 @@ def test_invalid_request_lines_name_the_field(client):
 def test_page_keeps_no_refusal_codes_or_texts():
     """Отказ — только из ответа: кодов и текстов отказов в JS нет, `detail` не подменяется."""
     words = [*Refusal, *REFUSAL_TEXT.values()]
-    for name in ("app.js", "review.js", "house3d.js", "house3d_relief.js", "refusal.js"):
+    for name in ("app.js", "review.js", "house3d.js", "house3d_relief.js", "ifc_view.js",
+                 "refusal.js"):
         text = STATIC.joinpath(name).read_text()
         assert not [w for w in words if w in text], name
         assert ".detail ??" not in text and "err.detail" not in text, name
