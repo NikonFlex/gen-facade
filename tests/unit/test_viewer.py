@@ -193,15 +193,13 @@ def test_sample_thumbnail_is_its_sheet(client, sample, tmp_path, cfg):
 
 def test_sample_thumbnail_is_cached_until_file_changes(client, sample, tmp_path, monkeypatch):
     """Рендер листа ~0,7 с: повторная прокрутка его не считает, смена файла — считает."""
-    from genfacade.viewer import app as viewer_app
-
     drawn = []
 
     def counting(sheet, cfg):
         drawn.append(1)
         return sheet_svg(sheet, cfg)
 
-    monkeypatch.setattr(viewer_app, "sheet_svg", counting)
+    monkeypatch.setattr("genfacade.viewer.app.sheet_svg", counting)
     store.write(sample, tmp_path / "samples")
     url = f"/api/samples/{sample.source}/{sample.id}/sheet.svg"
     first = client.get(url).text

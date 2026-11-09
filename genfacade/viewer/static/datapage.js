@@ -4,7 +4,7 @@
 
 import { $, el } from "/static/dom.js";
 import { createFeed, Phase } from "/static/feed.js";
-import { query as apiQuery } from "/static/query.js";
+import { query } from "/static/query.js";
 
 const FEED_MARGIN = "100%"; // запас часового: подгрузка начинается за экран до конца списка
 
@@ -177,7 +177,7 @@ async function listPage(ctx, params) {
   const fields = { set: source, split: params.get("split"), q: params.get("q") };
   let first = null;
   const feed = createFeed(async (page) => {
-    const found = await ctx.api(`/api/data/${source}/samples?${apiQuery({ page, split: fields.split, q: fields.q })}`);
+    const found = await ctx.api(`/api/data/${source}/samples?${query({ page, split: fields.split, q: fields.q })}`);
     first ??= found;
     return found;
   });
