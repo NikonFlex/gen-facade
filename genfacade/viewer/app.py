@@ -7,6 +7,7 @@ gf#356).
 """
 
 import json
+from functools import lru_cache
 from importlib.resources import files
 from pathlib import Path
 
@@ -24,7 +25,7 @@ from genfacade.parts import StaleParts
 from genfacade.plan.genplan_svg import PlanError
 from genfacade.render.house3d import house_3d
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import FacadeSheet, Mode, Refusal, Sample, Source, refusal_record
+from genfacade.schema import FacadeSheet, Mode, Refusal, Sample, Source, Split, refusal_record
 from genfacade.viewer import catalog, data_page, houses, markup, newhouse, review, rules
 
 STATIC = files(__package__).joinpath("static")
@@ -150,9 +151,21 @@ def _api(app: FastAPI, cfg: Config, runs_dir: Path) -> None:
 
 
 def _samples_api(app: FastAPI, cfg: Config) -> None:
+    @lru_cache(maxsize=cfg.viewer.data_view.sheet_cache)
+    def thumbnail(source: Source, sample_id: str, mtime_ns: int) -> str:
+        """Лист примера; mtime в ключе — пересобранный файл рисуется заново."""
+        return sheet_svg(_sample(source, sample_id, cfg).sheet, cfg)
+
     @app.get("/api/data")
     def data() -> dict:
         return data_page.overview(cfg)
+
+    @app.get("/api/data/{source}/samples")
+    def data_samples(source: Source, page: int = 1, split: Split | None = None,
+                     q: str = "") -> dict:
+        if not store.ids(cfg.data.paths.samples_dir, source):
+            raise refuse(404, Refusal.NO_SAMPLE, source)
+        return data_page.listing(cfg, source, page, split, q)
 
     @app.get("/api/samples")
     def samples() -> list[dict]:
@@ -165,8 +178,10 @@ def _samples_api(app: FastAPI, cfg: Config) -> None:
 
     @app.get("/api/samples/{source}/{sample_id}/sheet.svg")
     def sample_sheet(source: Source, sample_id: str) -> Response:
-        svg = sheet_svg(_sample(source, sample_id, cfg).sheet, cfg)
-        return Response(svg, media_type="image/svg+xml")
+        _sample(source, sample_id, cfg)  # 404 для чужого имени до кэша
+        file = store.path(cfg.data.paths.samples_dir, source, sample_id)
+        return Response(thumbnail(source, sample_id, file.stat().st_mtime_ns),
+                        media_type="image/svg+xml")
 
 
 def _review_api(app: FastAPI, cfg: Config, root: Path | None) -> None:
@@ -256,7 +271,10 @@ def _samples(cfg: Config) -> list[dict]:
 
 def _sample(source: Source, sample_id: str, cfg: Config) -> Sample:
     root = cfg.data.paths.samples_dir
-    if sample_id not in store.ids(root, source):
+    # Файл примера проверяется напрямую: список имён набора в 10 000 файлов на каждую миниатюру
+    # страницы «Данные» читался бы заново.
+    known = Path(sample_id).name == sample_id and not sample_id.startswith("_")
+    if not (known and store.path(root, source, sample_id).is_file()):
         raise refuse(404, Refusal.NO_SAMPLE, f"{source}/{sample_id}")
     return store.read(root, source, sample_id)
 

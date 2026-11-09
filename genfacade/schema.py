@@ -41,10 +41,26 @@ class RunOutcome(StrEnum):
     UNCHECKED = "unchecked"  # лист без шага 5 (собран вручную): валидатор не запускался
 
 
+class DataRole(StrEnum):
+    """Роль набора в обучении модели шага 4 (страница «Данные», gf#356)."""
+
+    TRAIN = "train"
+    FINETUNE = "finetune"
+    EVAL = "eval"
+
+
+class PlanShape(StrEnum):
+    """Форма плана дома в сводке набора: прямоугольник или контур с вырезами и выступами."""
+
+    RECTANGLE = "rectangle"
+    OTHER = "other"
+
+
 class DataAttr(StrEnum):
     """Признак дома в сводке корпуса на странице «Данные» (gf#356): доли по значениям."""
 
     SIDES = "sides"
+    SHAPE = "plan_shape"
     FLOORS = "floors"
     ROOF = "roof"
     WALLS = "walls"

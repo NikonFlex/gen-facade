@@ -23,6 +23,7 @@ from genfacade.schema import (
     CheckState,
     ContourKind,
     DataAttr,
+    DataRole,
     Device,
     DoorShape,
     ElementClass,
@@ -34,6 +35,7 @@ from genfacade.schema import (
     Mode,
     PaletteRole,
     Placement,
+    PlanShape,
     Region,
     RejectReason,
     Roof,
@@ -344,7 +346,11 @@ class DataSetLabel(Section):
     """Набор данных на странице «Данные»: чем он служит и в каком порядке."""
 
     title: str
-    note: str
+    role: DataRole
+    note: str       # что это
+    origin: str     # откуда и на каких условиях
+    how: str        # как участвует в обучении и что генерирует
+    modes: str      # какие режимы шага 4 из него получаются
 
 
 class DataView(Section):
@@ -353,6 +359,10 @@ class DataView(Section):
 
     stats_sample: int = Field(gt=0)
     examples: int = Field(gt=0)
+    page_size: int = Field(gt=0)
+    sheet_cache: int = Field(gt=0)
+    roles: dict[DataRole, str]
+    shapes: dict[PlanShape, str]
     sets: dict[Source, DataSetLabel]
     attrs: dict[DataAttr, str]
 
