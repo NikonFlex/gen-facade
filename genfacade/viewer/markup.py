@@ -161,7 +161,7 @@ def _save(editor, folder: Path, file: Path, m: manual.Markup) -> None:
     if not orig.exists():  # автоматика остаётся как была: по ней считают, сколько хозяин поправил
         orig.parent.mkdir(exist_ok=True)
         shutil.copyfile(file, orig)
-    markup_toml.write(file, m, markup_toml.header(file.read_text()))
+    markup_toml.write(file, m)
 
 
 def _assembly(cfg: Config, file: Path) -> dict:
