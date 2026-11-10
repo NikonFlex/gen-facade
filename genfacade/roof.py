@@ -464,19 +464,33 @@ class Joint(NamedTuple):
 
 
 def joints(house: HouseRoof) -> list[Joint]:
-    """Примыкания: общая стена нижней части и более высокой — от кровли нижней до верха стены
-    верхней (карниз, у щипцовой стены — фронтон)."""
+    """Примыкания: общая стена нижней и более высокой по карнизу частей — от нижней из двух кровель
+    до верхней в каждой точке линии. Стена принадлежит той части, чья кровля выше; у разреза по
+    ступени карниза (gf#422) кровля нижней по карнизу части может уйти выше верхней (щипец) —
+    тогда это стена нижней части, и её примыкание идёт с обратной нормалью."""
     out = []
     for low in house.parts:
         for h, high in ((h, p) for h, p in enumerate(house.parts) if p.eaves > low.eaves + EPS):
             shared = shapely.Polygon(low.corners).intersection(shapely.Polygon(high.corners))
-            out += [_joint(low, high, h, list(seg.coords))
-                    for seg in getattr(shared, "geoms", [shared])
-                    if isinstance(seg, shapely.LineString) and seg.length > EPS]
+            for seg in getattr(shared, "geoms", [shared]):
+                if isinstance(seg, shapely.LineString) and seg.length > EPS:
+                    out += _joint(low, high, h, list(seg.coords), house.parts.index(low))
     return out
 
 
-def _joint(low: Roofline, high: Roofline, number: int, ends: list[Point]) -> Joint:
+def _crossings(low: Roofline, high: Roofline, at, xs: list[float]) -> list[float]:
+    """Где между соседними изломами xs кровля нижней части пересекает кровлю верхней."""
+    found = set(xs)
+    for x0, x1 in zip(xs, xs[1:], strict=False):
+        gap0 = high.height(at(x0)) - low.height(at(x0))
+        gap1 = high.height(at(x1)) - low.height(at(x1))
+        if gap0 * gap1 < -EPS and abs(gap1 - gap0) > EPS:
+            found.add(x0 + gap0 / (gap0 - gap1) * (x1 - x0))
+    return sorted(found)
+
+
+def _joint(low: Roofline, high: Roofline, number: int, ends: list[Point],
+           low_number: int) -> list[Joint]:
     (x0, y0), (x1, y1) = ends[0], ends[-1]
     length = math.dist(ends[0], ends[-1])
     u = ((x1 - x0) / length, (y1 - y0) / length)
@@ -485,15 +499,26 @@ def _joint(low: Roofline, high: Roofline, number: int, ends: list[Point]) -> Joi
         return x0 + u[0] * x, y0 + u[1] * x
 
     xs = sorted(set(_breaks(low, at, 0.0, length)) | set(_breaks(high, at, 0.0, length)))
-    bottom = [(*at(x), min(low.height(at(x)), high.height(at(x)))) for x in xs]
-    top = [(*at(x), high.height(at(x))) for x in xs]
+    xs = _crossings(low, high, at, xs)
     mid = at(length / 2)
     centre = shapely.Polygon(high.corners).centroid
     normal = (u[1], -u[0])  # от верхней части к нижней
     if (mid[0] - centre.x) * normal[0] + (mid[1] - centre.y) * normal[1] < 0:
         normal = (-normal[0], -normal[1])
-    walls = [[bottom[i], bottom[i + 1], top[i + 1], top[i]] for i in range(len(xs) - 1)]
-    return Joint(normal, walls, bottom, number)
+    by_owner: dict[bool, tuple[list, list]] = {True: ([], []), False: ([], [])}
+    for a, b in zip(xs, xs[1:], strict=False):
+        c = (a + b) / 2
+        higher = high.height(at(c)) >= low.height(at(c))  # кровля чья выше: стена той части
+        lo = [min(low.height(at(x)), high.height(at(x))) for x in (a, b)]
+        up = [max(low.height(at(x)), high.height(at(x))) for x in (a, b)]
+        if max(up[0] - lo[0], up[1] - lo[1]) <= EPS:
+            continue
+        walls, seam = by_owner[higher]
+        walls.append([(*at(a), lo[0]), (*at(b), lo[1]), (*at(b), up[1]), (*at(a), up[0])])
+        seam += [(*at(a), lo[0]), (*at(b), lo[1])]
+    return [Joint(normal if higher else (-normal[0], -normal[1]), walls, seam,
+                  number if higher else low_number)
+            for higher, (walls, seam) in by_owner.items() if walls]
 
 
 def joint_view(house: HouseRoof, k: int) -> tuple[list[Polygon], list[list[Point]]]:
