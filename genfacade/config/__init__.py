@@ -414,6 +414,9 @@ class IfcNames(Section):
     slab: str
     roof: str
     roof_slab: str
+    shutter: str
+    canopy: str
+    porch: str
 
 
 class IfcPset(Section):
@@ -427,6 +430,7 @@ class IfcExport(Section):
     slab_m: float = Field(gt=0)
     roof_m: float = Field(gt=0)
     joint_wall_m: float = Field(gt=0)
+    shutter_m: float = Field(gt=0)
     window_depth_m: float = Field(gt=0)
     opening_margin_m: float = Field(ge=0)
     glass_transparency: float = Field(ge=0, le=1)

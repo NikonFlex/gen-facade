@@ -7,7 +7,8 @@
 import { HouseStage } from "/static/house3d.js";
 
 const TYPES = [["IFCBUILDINGSTOREY", "этажи"], ["IFCWALL", "стены"], ["IFCWINDOW", "окна"],
-  ["IFCDOOR", "двери"], ["IFCSLAB", "плиты"], ["IFCROOF", "крыша"], ["IFCOPENINGELEMENT", "проёмы"]];
+  ["IFCDOOR", "двери"], ["IFCSLAB", "плиты"], ["IFCROOF", "крыша"], ["IFCOPENINGELEMENT", "проёмы"],
+  ["IFCSHADINGDEVICE", "ставни"]];
 const CLICK_PX = 4;  // сдвиг указателя больше этого — это вращение, а не щелчок
 
 let webIfc = null;

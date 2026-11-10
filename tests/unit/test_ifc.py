@@ -27,7 +27,8 @@ def read(ifc: str) -> dict[int, tuple[str, str]]:
 
 
 def refs(args: str) -> list[int]:
-    return [int(n) for n in re.findall(r"#(\d+)", args)]
+    bare = re.sub(r"'[^']*'", "''", args)  # без строк: '#33373b' — имя стиля-цвета, не ссылка
+    return [int(n) for n in re.findall(r"#(\d+)", bare)]
 
 
 def number(sheet: FacadeSheet, classes: tuple[ElementClass, ...]) -> int:
@@ -53,6 +54,40 @@ def test_windows_and_doors_match_the_sheet(sheets, cfg):
         assert got["IFCBUILDINGSTOREY"] == sheet.spec.floors
         assert got["IFCWALL"] >= len(sheet.facades) and got["IFCROOF"] == 1
         assert got["IFCSLAB"] >= sheet.spec.floors
+
+
+def of_class(ifc: str, cls: ElementClass) -> int:
+    """Сколько объектов IFC несут в наборе GenFacade класс элемента листа."""
+    return ifc.count(f"IFCPROPERTYSINGLEVALUE('Class',$,IFCLABEL('{cls}'),$)")
+
+
+def test_shutters_canopies_and_porches_match_the_sheet(sheets, cfg):
+    """Ставни (IfcShadingDevice SHUTTER), козырьки (IfcSlab ROOF) и крыльца (IfcSlab BASESLAB) —
+    столько же, сколько элементов этих классов на листе; есть дома, где есть каждый из видов."""
+    seen = set()
+    for sheet in sheets:
+        text = house_ifc(sheet, cfg)
+        blinds = number(sheet, (ElementClass.BLIND,))
+        canopies = number(sheet, (ElementClass.CANOPY,))
+        porches = number(sheet, (ElementClass.PORCH,))
+        assert counts(text).get("IFCSHADINGDEVICE", 0) == blinds
+        assert of_class(text, ElementClass.BLIND) == blinds
+        assert text.count(".SHUTTER.") == blinds
+        assert of_class(text, ElementClass.CANOPY) == canopies
+        assert of_class(text, ElementClass.PORCH) == porches
+        assert text.count(".BASESLAB.") == porches
+        seen |= {n for n, v in (("blind", blinds), ("canopy", canopies), ("porch", porches)) if v}
+    assert seen == {"blind", "canopy", "porch"}
+
+
+def test_shutters_stand_on_the_wall_at_config_thickness(sheets, cfg):
+    """Ставня выступает из стены на `ifc.shutter_m` и лежит на этаже своего окна."""
+    sheet = next(s for s in sheets if number(s, (ElementClass.BLIND,)))
+    text = house_ifc(sheet, cfg)
+    entities = read(text)
+    solids = [a for k, a in entities.values() if k == "IFCEXTRUDEDAREASOLID"]
+    assert any(a.endswith(f",{cfg.ifc.shutter_m:.6f}") for a in solids)
+    assert "IFCRELCONTAINEDINSPATIALSTRUCTURE" in text
 
 
 def test_every_reference_resolves(sheets, cfg):
