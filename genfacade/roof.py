@@ -239,7 +239,9 @@ def _projected(items: list[tuple[Slope, list[Point3]]], left: Point, u: Point, t
 
 
 def _polygons(shape: shapely.Geometry) -> list[Polygon]:
-    return [list(g.exterior.coords)[:-1] for g in getattr(shape, "geoms", [shape])
+    """Многоугольники фигуры; кольцо с канонической вершины — не зависит от порядка частей."""
+    return [list(shapely.normalize(g).exterior.coords)[:-1]
+            for g in getattr(shape, "geoms", [shape])
             if isinstance(g, shapely.Polygon) and g.area > EPS]
 
 
@@ -397,18 +399,17 @@ def _entrance_on(facade, part: int) -> bool:
 
 
 def _area(house: HouseRoof, k: int) -> shapely.Geometry:
-    """Площадь крыши части k: крыло со свесом без других крыльев — крыша обрывается на их стенах;
-    свес не лежит под свесом более высокой части (при равных — части с меньшим номером)."""
+    """Площадь крыши части k: крыло со свесом без других крыльев — крыша обрывается на их стенах.
+    Свес не лежит над кровлей более низкой части: её крыша идёт от своей стены до стены высокой
+    части целиком, а верхняя кончается там, где встречает нижнюю (одна крыша, gf#412); у равных
+    высот — часть с меньшим номером выше."""
     me = house.parts[k]
     rect = shapely.Polygon(me.corners)
-    area = rect.buffer(me.overhang, join_style="mitre")
-    for j, other in enumerate(house.parts):
-        if j != k:
-            area = area.difference(shapely.Polygon(other.corners))
-    for j, other in enumerate(house.parts):
-        if j != k and (other.eaves, -j) > (me.eaves, -k):
-            area = area.difference(shapely.Polygon(other.corners).buffer(
-                other.overhang, join_style="mitre"))
+    others = [(j, other) for j, other in enumerate(house.parts) if j != k]
+    cut = shapely.union_all([shapely.Polygon(other.corners) for _, other in others] + [
+        shapely.Polygon(other.corners).buffer(other.overhang, join_style="mitre")
+        for j, other in others if (other.eaves, -j) < (me.eaves, -k)])
+    area = rect.buffer(me.overhang, join_style="mitre").difference(cut)
     return area.union(rect)
 
 
