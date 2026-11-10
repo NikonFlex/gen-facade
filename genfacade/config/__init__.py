@@ -374,6 +374,9 @@ class House3d(Section):
     """Дом объёмом в смотрелке: откуда three.js, разрешение текстур фасадов, цвета сцены."""
 
     three_url: str
+    web_ifc_url: str       # просмотр IFC (gf#392): разбор файла в браузере
+    web_ifc_wasm_dir: str
+    selected: str
     px_per_m: int
     # потолки текстур стен (gf#353): сторона — не больше этого и не больше MAX_TEXTURE_SIZE
     # видеокарты; все стены вместе — не больше texture_budget_mpx млн пикселей (4 байта каждый)
@@ -393,6 +396,47 @@ class House3d(Section):
     plinth_wash_m: float = Field(ge=0)
     cornice_steps: list[tuple[float, float]] = Field(min_length=1)
     window_out_m: float = Field(ge=0)  # окно во фронтоне — на столько наружу от стены (gf#321)
+
+
+class IfcNames(Section):
+    """Имена объектов IFC; в `{…}` подставляется номер, сторона или id элемента листа."""
+
+    project: str
+    site: str
+    building: str
+    storey: str
+    wall: str
+    joint_wall: str
+    window: str
+    door: str
+    garage_door: str
+    opening: str
+    slab: str
+    roof: str
+    roof_slab: str
+
+
+class IfcPset(Section):
+    facade: str
+
+
+class IfcExport(Section):
+    """Выгрузка дома в BIM (config/ifc.toml, gf#392): размеры объектов, имена, допуск."""
+
+    wall_thickness_m: float = Field(gt=0)
+    slab_m: float = Field(gt=0)
+    roof_m: float = Field(gt=0)
+    joint_wall_m: float = Field(gt=0)
+    window_depth_m: float = Field(gt=0)
+    opening_margin_m: float = Field(ge=0)
+    glass_transparency: float = Field(ge=0, le=1)
+    tolerance: float = Field(gt=0)
+    names: IfcNames
+    pset: IfcPset
+
+
+class Ifc(Section):
+    ifc: IfcExport
 
 
 class Review(Section):
@@ -1223,6 +1267,7 @@ class Config(Section):
     baselines: Baselines
     guidelines: Guidelines
     derive: Derive
+    ifc: IfcExport
     css: str
 
     @model_validator(mode="after")
@@ -1276,6 +1321,7 @@ def load(*user_dirs: Path) -> Config:
         baselines=Baselines(**_toml("baselines.toml", user_dirs)),
         guidelines=guidelines,
         derive=Derive(**_toml("derive.toml", user_dirs)),
+        ifc=Ifc(**_toml("ifc.toml", user_dirs)).ifc,
         css=css,
     )
 

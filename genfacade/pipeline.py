@@ -371,6 +371,14 @@ def finish(sheet: FacadeSheet, out: Path, cfg: Config, extra: dict) -> Path:
                                  "preview": PREVIEW if has_png else None, **extra})
 
 
+def read_sheet(folder: Path) -> FacadeSheet | None:
+    """Лист прогона по sheet.json из meta.json; прогон до листа не дошёл — None."""
+    meta = json.loads((folder / META).read_text())
+    if not meta.get("sheet_json"):
+        return None
+    return FacadeSheet.model_validate_json((folder / meta["sheet_json"]).read_text())
+
+
 def write_meta(out: Path, cfg: Config, extra: dict) -> Path:
     """meta.json прогона; extra заменяет общие поля и называет шаги («steps»): их пишет тот, кто
     знает, что записал (`_steps`, datasets/preview.py), а не наличие файлов в папке."""
