@@ -187,7 +187,7 @@ def _element_relief(e: Element, pen: Pen, look: House3d, foot: float) -> dict:
     trim = TRIM_OF.get(e.cls)
     form = pen.cfg.derive.find(trim, pen.trim.kind(trim)) if trim is not None else None
     return _frame(shape, look.relief_cls[e.cls], element_fill(e, pen), element_material(e, pen)) | {
-        "role": None, "cls": e.cls, "shape": form.shape if form else None,
+        "role": None, "cls": e.cls, "id": e.id, "shape": form.shape if form else None,
         "steps": _steps(e, look), "foot": foot}
 
 

@@ -394,7 +394,7 @@ class IfcHouse:
         else:
             top = y1 - min(self.cfg.sheet.trim.slab_m, y1 - y0)
             parts_ = self._front(place, [(x0, top), (x1, top), (x1, y1), (x0, y1)], d, r["color"])
-        e = self._source(k, ElementClass.CANOPY, r)
+        e = r["id"]
         self._extra("IfcSlab", f"canopy/{side}-{e}", self.ifc.names.canopy.format(id=e), side, e,
                     ElementClass.CANOPY, y0, parts_, Enum("ROOF"))
 
@@ -414,16 +414,11 @@ class IfcHouse:
                 ring.append((out(i + 1), r["y0"] + i * rise))
         ring.append((0.0, r["y1"]))
         side = self.sheet.facades[k].side.index
-        e = self._source(k, ElementClass.PORCH, r)
+        e = r["id"]
         self._extra("IfcSlab", f"porch/{side}-{e}", self.ifc.names.porch.format(id=e), side, e,
                     ElementClass.PORCH, r["y0"], self._side(place, ring, r["x0"], r["x1"],
                                                              r["color"]), Enum("BASESLAB"))
 
-    def _source(self, k: int, cls: ElementClass, r: dict) -> str:
-        """Id элемента листа, из которого вышел выступ (рамка совпадает с рамкой элемента)."""
-        return next(e.id for e in self.sheet.facades[k].elements if e.cls is cls
-                    and (e.x_m, e.y_m, e.x_m + e.w_m, e.y_m + e.h_m)
-                    == (r["x0"], r["y0"], r["x1"], r["y1"]))
 
     # ——— плиты: стены над крышей нижней части, перекрытия, крыша ———
 
