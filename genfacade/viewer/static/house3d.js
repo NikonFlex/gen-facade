@@ -180,6 +180,15 @@ export class HouseStage {
     return lines;
   }
 
+  // Обводка стены по её силуэту (x от левого края, высота), а не по прямоугольнику плоскости:
+  // выше ступени текстура прозрачна, а рамка висела бы над нижней частью и шла по её крыше (gf#431).
+  _outline(THREE, w) {
+    const ring = w.outline || [[0, 0], [w.length_m, 0], [w.length_m, w.height_m], [0, w.height_m]];
+    const points = ring.map(([x, y]) => new THREE.Vector3(x - w.length_m / 2, y - w.height_m / 2, 0));
+    return new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.LineBasicMaterial({ color: this.look.edges }));
+  }
+
   async _wall(THREE, w) {
     const canvas = await rasterize(w.svg, pixels(w.length_m, this.pxPerM), pixels(w.height_m, this.pxPerM));
     const texture = new THREE.CanvasTexture(canvas);
@@ -193,7 +202,10 @@ export class HouseStage {
     // от левого края стены к правому, если смотреть снаружи.
     const [nx, ny] = w.normal;
     wall.rotation.y = Math.atan2(nx, -ny);
-    this.scene.add(wall, this._edges(THREE, geo, wall.position).rotateY(wall.rotation.y));
+    const outline = this._outline(THREE, w);
+    outline.position.copy(wall.position);
+    outline.rotation.y = wall.rotation.y;
+    this.scene.add(wall, outline);
     this._relief(THREE, w, wall.rotation.y);
     this.render();
   }

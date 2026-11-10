@@ -55,6 +55,14 @@ def test_wall_faces_outward_left_to_right(sheet, cfg):
         assert (lx - rx) * ny + (ly - ry) * (-nx) == pytest.approx(wall["length_m"])
 
 
+def test_wall_outline_follows_its_silhouette(sheet, cfg):
+    """Обводка стены — по силуэту (gf#431): у стены со ступенью рамка во всю высоту висела бы
+    над нижней частью; силуэт у стены есть — он и идёт в выгрузку, высота — его верх."""
+    for wall, f in zip(house_3d(sheet, cfg)["walls"], sheet.facades, strict=True):
+        assert f.silhouette and wall["outline"] == f.silhouette
+        assert wall["height_m"] == pytest.approx(max(y for _, y in f.silhouette))
+
+
 def test_wall_texture_is_the_facade(house, cfg):
     """SVG стены — ровно стена (длина × карниз), с элементами листа, кроме выступов, без
     подписей и осей."""

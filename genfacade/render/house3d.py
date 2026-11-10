@@ -55,6 +55,9 @@ def house_3d(sheet: FacadeSheet, cfg: Config) -> dict:
         "length_m": f.side.length_m,
         "convex_left": _convex(corners, (k + 1) % len(corners)),
         "height_m": max((y for _, y in f.silhouette or []), default=sheet.spec.eaves_m),
+        # Силуэт стены (x от левого края, высота): обводка — по нему, а не по прямоугольнику
+        # текстуры, иначе у стены со ступенью рамка висит над нижней частью (gf#431). Нет — рамка.
+        "outline": f.silhouette,
         "svg": facade_svg(_flat(f, look), pen),
         "relief": _relief(f, pen, look),
     } for k, f in enumerate(sheet.facades)]
