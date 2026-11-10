@@ -368,6 +368,34 @@ def test_door_not_lower_than_the_norm(cfg, vocab):
         assert door(10, 18) == set(range(36, 51))                         # 1,8 м … до 60
 
 
+def test_door_under_a_low_eave_may_be_lower_than_the_norm(cfg, vocab):
+    """gf#413: карниз 1,75 м (у ffh-halfstory — 1,73 м, дверь 1,42 м), норма 1,8 м не выполнима —
+    дверь не ниже доли `floor_share` высоты этажа и под карнизом; без доли — годных высот нет."""
+    wall = [WALL._replace(height=35)]
+    words = (Mark.WALL, DOOR, 30, 6, 18)
+    share = _allowed(_strict(cfg, vocab, wall, *words, door=36, door_share=0.75), vocab)
+    assert share == {27, 28, 29}                                           # 1,35 … до карниза
+    # без доли норма 1,8 м выше карниза: годных нет, страж пускает любую высоту — и дверь 0,05 м
+    assert min(_allowed(_strict(cfg, vocab, wall, *words, door=36), vocab)) < 27
+    high = [WALL._replace(height=60)]
+    assert min(_allowed(_strict(cfg, vocab, high, *words, door=36, door_share=0.75), vocab)) == 36
+
+
+def test_window_grid_keeps_the_cell_not_narrower_than_the_norm(cfg, vocab):
+    """gf#413: деление окна — столбцы и ряды, при которых ячейка не уже 0,2 м и не ниже 0,3 м
+    (окно 0,74 м писали с сеткой 9 × 9); окно 20 × 30 шагов (1,0 × 1,5 м) — до 5 × 5."""
+    words = (Mark.WALL, WINDOW, 52, 10, SIZE[1], "var:regular")
+    cols = _allowed(_strict(cfg, vocab, [WALL], *words, cell_w=4, cell_h=6), vocab)
+    assert cols == {1, 2, 3, 4, 5}
+    rows = _allowed(_strict(cfg, vocab, [WALL], *words, 2, cell_w=4, cell_h=6), vocab)
+    assert rows == {1, 2, 3, 4, 5}
+    narrow = _allowed(_strict(cfg, vocab, [WALL], *words[:4], SIZE[0], "var:regular", cell_w=4,
+                              cell_h=6), vocab)
+    assert narrow == {1, 2, 3}                                             # 12 шагов / 4
+    no_rule = _allowed(_strict(cfg, vocab, [WALL], *words), vocab)
+    assert 9 in no_rule                                                    # без нормы — любые
+
+
 def test_cornice_does_not_cover_an_opening(cfg, vocab, sizes):
     """Карниз не заходит на проём (gf#242): окно под поставленным карнизом — типоразмером, верх
     которого ниже карниза; карниз над окном — выше его верха."""
