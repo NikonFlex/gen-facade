@@ -15,8 +15,9 @@ gf#199).
 какой её строит модуль по крыше дома (`roof.gables`), — остаётся окном этажа под скатом (gf#321),
 его выводимые элементы в стене — с ним; другой элемент, заходящий за карниз или угол,
 обрезается по стене, целиком срезанный идёт в счёт `cut` описи (`data: Стена до карниза в
-данных`); дом с частями разной высоты — не пример, а строка `waiting` описи: модуль держит один
-карниз на дом (gf#322). Чего разметчик не размечает (веранда, ступени), он перечисляет в `cut`.
+данных`); дом, чьи участки карниза не ложатся на части, — не пример, а строка `waiting` описи
+(gf#322): отметка крыши не карниз (`_bare`), ступень режет крыло (`_stepped`, gf#422).
+Чего разметчик не размечает (веранда, ступени), он перечисляет в `cut`.
 
 Отделка (gf#245): цоколь — зона от земли до чистого пола (`plinth`) материалом `plinth_material`,
 основная — от цоколя до карниза, вторая отделка (акцент, пояс) — прямоугольниками стороны; карниз —
@@ -82,6 +83,9 @@ M_PER_UNIT = {Unit.FT: 0.3048, Unit.M: 1.0}  # международный фут
 # Что бывает во фронтоне (gf#321): окно и выводимые элементы окна; дверь и прочее — срезаются.
 GABLE_CLASSES = frozenset({ElementClass.WINDOW, *(derive.DERIVED[t] for t in derive.DERIVED
                                                    if derive.OWNER[t] is ElementClass.WINDOW)})
+
+# Крыши, у которых карниз дома — низкий край, а отметка выше — край ската или надстройка (gf#422).
+LOW_EDGE_ROOFS = frozenset({RoofKind.SHED, RoofKind.FLAT})
 
 FIRST_NORMAL = (0.0, 1.0)  # сторона входа смотрит в +y плана (rect_house.NORMALS[0])
 
@@ -212,11 +216,23 @@ def ids(source: str, rules: Manual) -> set[str]:
 
 
 def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
-    """Пример дома и сколько элементов обрезано целиком (за карнизом или углом)."""
+    """Пример дома и сколько элементов обрезано целиком (за карнизом или углом). Отметки разметки
+    берутся как есть; не легли на части — без отметок крыши (`_bare`), потом с виртуальными
+    крыльями по ступеням (`_stepped`), потом оба (gf#422); первый отказ — причина, если не легло."""
+    refusal = None
+    for bare, cut in ((False, False), (True, False), (False, True), (True, True)):
+        try:
+            return _house(_bare(m, cfg) if bare else m, cfg, cut)
+        except Unsupported as e:
+            refusal = refusal or e
+    raise refusal
+
+
+def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
     fp = _outline(m, cfg)
     lengths = [w.length for w in fp.walls]
     ring = [(float(v[0]) + 0.0, float(v[1]) + 0.0) for v in fp.vertices]
-    rects, found = _levels(m, ring, lengths, cfg)
+    rects, found = _levels(m, ring, lengths, cfg, cut)
     runs = [parts.side_runs(k, lengths[k], ring[k], ring[(k + 1) % len(ring)], rects, found)
             if found else [] for k in range(len(m.sides))]
     spec = _spec(m)
@@ -287,18 +303,47 @@ def _no_eaves(sheet: FacadeSheet) -> tuple[FacadeSheet, int]:
     return sheet.model_copy(update={"facades": facades}), bare
 
 
-def _levels(m: Markup, ring: list[Point], lengths: list[float], cfg: Manual
+def _bare(m: Markup, cfg: Manual) -> Markup:
+    """Разметка без отметок крыши (gf#422): у односкатной и плоской крыши карниз дома — низкий край,
+    а отметка выше него (высокий край ската, надстройка или полоса панелей) — не карниз, а крыша:
+    высоту стены под ней выводит `roof.above_eaves`, что выше карниза, — в `cut` и `roof_gaps`.
+    У других крыш не карниз — отметка выше карниза дома. Этажность не меняется: те же этажи — одна
+    высота стены; разметка в файле остаётся записью чертежа целиком (gf#323)."""
+    spec = _spec(m)
+    levels = [lv for e in m.sides for _, lv in _raw(m, e, cfg) if lv.floors == spec.floors]
+    base = spec.eaves_m
+    if m.roof_kind in LOW_EDGE_ROOFS and levels:
+        base = min(lv.eaves_m for lv in levels)
+    sides = [e.model_copy(update={"eaves": [s for s in e.eaves
+                                            if not _is_roof(m, e, s, base, cfg)]})
+             for e in m.sides]
+    heights = list(m.floor_heights)
+    heights[-1] += (base - spec.eaves_m) / m.m_per_unit
+    return m.model_copy(update={"sides": sides, "floor_heights": heights})
+
+
+def _is_roof(m: Markup, e: Elevation, s: EavesMark, base: float, cfg: Manual) -> bool:
+    """Участок карниза — край крыши, не стена: тех же этажей, что дом, и выше его карниза."""
+    eaves = m.plinth * m.m_per_unit + (e.floor - s.y) * m.m_per_unit / m.scale(e)
+    return s.floors == len(m.floor_heights) and eaves > base + cfg.eaves_tol_m
+
+
+def _levels(m: Markup, ring: list[Point], lengths: list[float], cfg: Manual, cut: bool
             ) -> tuple[list[Rect], list[parts.Level]]:
     """Крылья контура и этажность с карнизом каждого — по участкам карниза разметки; дом без
     ступеней — ([], []). Участок стороны лежит на крыле (`edge_runs`), его отметку несут участки
     карниза, заходящие на него дальше `length_tol_m`; у крыла все участки одной отметки, иначе
-    части не ложатся на крылья (ступень внутри крыла, крыло в две отметки) — `Unsupported`.
+    части не ложатся на крылья (ступень внутри крыла, крыло в две отметки) — `Unsupported`; с `cut`
+    крыло перед этим режется по линиям ступени (`_stepped`, gf#422).
     Разбиений контура несколько (`candidates`): берётся первое, на котором отметки ложатся.
-    Отметка в пределах `eaves_tol_m` от карниза дома — карниз дома."""
+    Отметка в пределах `eaves_tol_m` от карниза дома — он сам."""
     base = parts.Level(len(m.floor_heights), _spec(m).eaves_m)
     refusal = None
-    for rects in candidates(ring) or [[]]:
+    options = candidates(ring) or [[]]
+    for rects in options:
         try:
+            if cut:
+                rects = _stepped(m, ring, lengths, cfg, rects, base)
             return _levels_on(m, ring, lengths, cfg, rects, base)
         except Unsupported as e:
             refusal = refusal or e  # первый отказ — по разбиению `wings`, его и называем
@@ -314,7 +359,8 @@ def _levels_on(m: Markup, ring: list[Point], lengths: list[float], cfg: Manual,
         for part, t0, t1 in edge_runs(ring[k], ring[(k + 1) % len(ring)], rects) or [
                 (0, 0.0, lengths[k])]:
             x0, x1 = lengths[k] - t1, lengths[k] - t0
-            found = {lv for (a, b), lv in marks if min(b, x1) - max(a, x0) > cfg.length_tol_m}
+            found = _distinct([lv for (a, b), lv in marks
+                               if min(b, x1) - max(a, x0) > cfg.length_tol_m], cfg)
             if len(found) > 1:
                 raise Unsupported(f"{m.id}: части разной высоты — {e.view}: на одном участке "
                                   f"стены {len(found)} отметок карниза; модуль держит одну на "
@@ -328,20 +374,100 @@ def _levels_on(m: Markup, ring: list[Point], lengths: list[float], cfg: Manual,
     return (rects, levels) if len({lv.eaves_m for lv in levels}) > 1 else ([], [])
 
 
-def _marks(m: Markup, e: Elevation, base: parts.Level, cfg: Manual
-           ) -> list[tuple[Point, parts.Level]]:
-    """Участки карниза стороны в метрах стены: (x0, x1) и этажность с отметкой; отметка около
-    карниза дома — он сам."""
+def _distinct(levels: list[parts.Level], cfg: Manual) -> list[parts.Level]:
+    """Отметки без повторов с допуском `eaves_tol_m`: 3,14 и 3,15 м — одна."""
+    out: list[parts.Level] = []
+    for lv in levels:
+        if not any(_same(lv, o, cfg) for o in out):
+            out.append(lv)
+    return out
+
+
+def _stepped(m: Markup, ring: list[Point], lengths: list[float], cfg: Manual,
+             rects: list[Rect], base: parts.Level) -> list[Rect]:
+    """Крылья по ступеням карниза (gf#422): крыло, на грани которого карниз меняется, режется
+    линией ступени — виртуальные крылья листа. Линия ступени идёт от места на стороне, где отметка
+    карниза сменилась, поперёк стороны через всё крыло; линии одного крыла в пределах
+    `length_tol_m` — одна (у marilyn 4,79 и 4,88 м). Без ступеней — `Unsupported`."""
+    wings = rects or [_box(ring)]
+    steps: list[list[tuple[bool, float]]] = [[] for _ in wings]  # (линия x = c?, c) на крыло
+    for k, e in enumerate(m.sides):
+        a, b = ring[k], ring[(k + 1) % len(ring)]
+        along = (b[0] - a[0], b[1] - a[1])
+        horizontal = abs(along[0]) > abs(along[1])  # сторона вдоль x → линия ступени x = c
+        marks = _marks(m, e, base, cfg)
+        for at in _jumps(marks, base, lengths[k], cfg):
+            t = lengths[k] - at
+            point = (a[0] + along[0] / lengths[k] * t, a[1] + along[1] / lengths[k] * t)
+            for j, w in enumerate(wings):
+                on = min(abs(point[1] - w.y0_m), abs(point[1] - w.y1_m)) if horizontal else min(
+                    abs(point[0] - w.x0_m), abs(point[0] - w.x1_m))
+                if on <= cfg.length_tol_m:
+                    steps[j].append((horizontal, point[0] if horizontal else point[1]))
+    out: list[Rect] = []
+    for w, lines in zip(wings, steps, strict=True):
+        out.extend(_cut(w, lines, cfg))
+    if len(out) == len(wings):
+        raise Unsupported(f"{m.id}: части разной высоты — линий ступени карниза нет (gf#422)")
+    return out
+
+
+def _box(ring: list[Point]) -> Rect:
+    xs, ys = [v[0] for v in ring], [v[1] for v in ring]
+    return Rect(x0_m=min(xs), y0_m=min(ys), x1_m=max(xs), y1_m=max(ys))
+
+
+def _jumps(marks: list[tuple[Point, parts.Level]], base: parts.Level, length: float, cfg: Manual
+           ) -> list[float]:
+    """Где вдоль стороны (x стены) карниз меняется — внутри стороны, не у углов; без отметки —
+    карниз    дома. Отметка сменилась, если до и после точки (на `length_tol_m`) уровни разные."""
+    def level(x: float) -> parts.Level:
+        return next((lv for (a, b), lv in marks if a <= x <= b), base)
+
+    cands = {v for (a, b), _ in marks for v in (a, b)
+             if cfg.length_tol_m < v < length - cfg.length_tol_m}
+    return sorted(c for c in cands if not _same(level(c - cfg.length_tol_m),
+                                                level(c + cfg.length_tol_m), cfg))
+
+
+def _cut(w: Rect, lines: list[tuple[bool, float]], cfg: Manual) -> list[Rect]:
+    """Крыло w по линиям ступени: x = c (True) и y = c (False); близкие — одна, у края — нет."""
+    pieces = [w]
+    for vertical in (True, False):
+        lo, hi = (w.x0_m, w.x1_m) if vertical else (w.y0_m, w.y1_m)
+        cs = sorted(c for v, c in lines if v == vertical and lo + cfg.length_tol_m < c
+                    < hi - cfg.length_tol_m)
+        groups: list[list[float]] = []
+        for c in cs:
+            if groups and c - groups[-1][-1] <= cfg.length_tol_m:
+                groups[-1].append(c)
+            else:
+                groups.append([c])
+        edges = [lo, *(round(sum(g) / len(g), parts.SNAP) + 0.0 for g in groups), hi]
+        pieces = [Rect(x0_m=a, y0_m=p.y0_m, x1_m=b, y1_m=p.y1_m) if vertical
+                  else Rect(x0_m=p.x0_m, y0_m=a, x1_m=p.x1_m, y1_m=b)
+                  for p in pieces for a, b in zip(edges[:-1], edges[1:], strict=True)]
+    return pieces
+
+
+def _raw(m: Markup, e: Elevation, cfg: Manual) -> list[tuple[Point, parts.Level]]:
+    """Участки карниза стороны в метрах стены: (x0, x1) и этажность с отметкой, как в разметке."""
     unit, out = m.m_per_unit / m.scale(e), []
     for s in e.eaves:
         tol = cfg.length_tol_m / unit
         if s.x[0] < e.wall[0] - tol or s.x[1] > e.wall[1] + tol:
             raise BadMarkup(f"{m.id}: {e.view}: участок карниза за краем стены")
-        eaves = m.plinth * m.m_per_unit + (e.floor - s.y) * unit
-        level = parts.Level(s.floors, eaves)
         out.append((((s.x[0] - e.wall[0]) * unit, (s.x[1] - e.wall[0]) * unit),
-                    base if _same(level, base, cfg) else level))
+                    parts.Level(s.floors, m.plinth * m.m_per_unit + (e.floor - s.y) * unit)))
     return out
+
+
+def _marks(m: Markup, e: Elevation, base: parts.Level, cfg: Manual
+           ) -> list[tuple[Point, parts.Level]]:
+    """Участки карниза стороны в метрах стены: (x0, x1) и этажность с отметкой; отметка около
+    карниза дома — он сам."""
+    return [(span, base if _same(level, base, cfg) else level)
+            for span, level in _raw(m, e, cfg)]
 
 
 def _same(a: parts.Level, b: parts.Level, cfg: Manual) -> bool:
