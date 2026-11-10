@@ -72,7 +72,7 @@ jobs:
 
       - name: Список упавших для следующего прогона
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: failed-tests
           path: failed.txt
