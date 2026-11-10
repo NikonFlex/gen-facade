@@ -18,6 +18,9 @@ concurrency:
 
 jobs:
   pr-link:
+    # PR Dependabot (`build(deps): …`) — без задачи, как и его коммит (tools/commit_check.py,
+    # WITHOUT_TASK): проверка пропускается, пропущенная обязательная проверка считается пройденной.
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
