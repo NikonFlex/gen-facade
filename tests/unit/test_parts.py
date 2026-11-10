@@ -466,22 +466,26 @@ def test_roof_of_lower_part_ends_at_wall_of_higher():
         assert shapely.Polygon([(x, y) for x, y, _ in face]).intersection(main).area < EPS
 
 
-def test_roofs_of_parts_do_not_lie_on_each_other():
-    """Одна крыша (gf#412): кровля верхней части не лежит над крышей нижней — свес верхней
-    обрывается там, где встречает нижнюю, а нижняя идёт к стене верхней целиком, не вырезанная под
-    свес верхней; многоугольники скатов разных частей в плане не пересекаются."""
+def test_roofs_of_parts_are_whole_and_lower_goes_under_overhang():
+    """Одна крыша (gf#412): ни одну крышу свес другой не режет — у каждой части кровля целая (крыло
+    со свесом по контуру); где свес верхней нависает над нижней крышей, нижняя ниже его кромки."""
     for text in (GABLE, TWO_PARTS + " Hip roof."):
         house = roof.roofs(bare(text))
-        faces = [shapely.unary_union([shapely.Polygon([(x, y) for x, y, _ in face])
-                                      for _, face in roof.faces(line, roof._area(house, k))])
-                 for k, line in enumerate(house.parts)]
         high, low = sorted(range(len(house.parts)), key=lambda k: -house.parts[k].eaves)[:2]
-        main = shapely.Polygon(house.parts[high].corners)
-        wing = shapely.Polygon(house.parts[low].corners)
-        assert faces[high].intersection(faces[low]).area < EPS
-        whole = wing.buffer(house.parts[low].overhang, join_style="mitre").difference(main)
-        assert whole.difference(faces[low]).area < EPS  # кровля нижней — целиком, без выреза
-        assert faces[high].intersection(whole).area < EPS  # верхняя — не над нижней
+        shapes = []
+        for k, line in enumerate(house.parts):
+            union = shapely.unary_union([shapely.Polygon([(x, y) for x, y, _ in face])
+                                         for _, face in roof.faces(line, roof._area(house, k))])
+            whole = shapely.Polygon(line.corners).buffer(line.overhang, join_style="mitre")
+            if k == low:  # нижняя обрывается на стене верхней
+                whole = whole.difference(shapely.Polygon(house.parts[high].corners))
+            assert whole.symmetric_difference(union).area < EPS  # без вырезов свесом соседа
+            shapes.append(union)
+        both = shapes[high].intersection(shapes[low])
+        assert both.area > EPS  # свес верхней действительно над нижней
+        for g in getattr(both, "geoms", [both]):
+            x, y = g.representative_point().coords[0]
+            assert house.parts[low].height((x, y)) < house.parts[high].height((x, y))
 
 
 def test_junction_is_on_wall_of_higher_part():

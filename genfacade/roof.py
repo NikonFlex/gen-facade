@@ -16,9 +16,9 @@
 
 Дом из частей разной высоты (gf#322, `facade: Части дома`): у каждого крыла контура своя крыша
 вида дома, как у отдельного прямоугольного дома, с карнизом части. Крыша части обрывается на
-стене соседа: её площадь — крыло со свесом без других крыльев (`_area`). Стена более высокой
-части над крышей нижней — `joints`: на листе её видно со стороны нижней части, линия примыкания —
-по кровле нижней.
+стене более высокого соседа: площадь — крыло со свесом, свес не режется (`_area`). Стена более
+высокой части над крышей нижней — `joints`: на листе её видно со стороны нижней части, линия
+примыкания — по кровле нижней.
 """
 
 import math
@@ -399,18 +399,16 @@ def _entrance_on(facade, part: int) -> bool:
 
 
 def _area(house: HouseRoof, k: int) -> shapely.Geometry:
-    """Площадь крыши части k: крыло со свесом без других крыльев — крыша обрывается на их стенах.
-    Свес не лежит над кровлей более низкой части: её крыша идёт от своей стены до стены высокой
-    части целиком, а верхняя кончается там, где встречает нижнюю (одна крыша, gf#412); у равных
-    высот — часть с меньшим номером выше."""
+    """Площадь крыши части k: крыло со свесом по всему контуру. Ни одна крыша не режется свесом
+    другой (gf#412): свес верхней нависает над нижней крышей, а нижняя обрывается на стене более
+    высокой части (её крыло не вычитается из верхней). У равных высот — часть с меньшим номером
+    выше."""
     me = house.parts[k]
     rect = shapely.Polygon(me.corners)
-    others = [(j, other) for j, other in enumerate(house.parts) if j != k]
-    cut = shapely.union_all([shapely.Polygon(other.corners) for _, other in others] + [
-        shapely.Polygon(other.corners).buffer(other.overhang, join_style="mitre")
-        for j, other in others if (other.eaves, -j) < (me.eaves, -k)])
-    area = rect.buffer(me.overhang, join_style="mitre").difference(cut)
-    return area.union(rect)
+    above = [shapely.Polygon(other.corners) for j, other in enumerate(house.parts)
+             if (other.eaves, -j) > (me.eaves, -k)]
+    area = rect.buffer(me.overhang, join_style="mitre")
+    return area.difference(shapely.union_all(above)).union(rect) if above else area
 
 
 def house_above(house: HouseRoof, k: int, inset: float = 0.0) -> list[Polygon]:
