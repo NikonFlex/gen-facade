@@ -20,6 +20,16 @@ class Mode(StrEnum):
     BLIND = "blind"                  # режим 1 «глухой куб»
 
 
+class LlmProvider(StrEnum):
+    """Поставщик LLM базового подхода «без дообучения» (config/baselines.toml, [llm.providers]);
+    STUB — ответы без сети, для проверки пути до таблицы."""
+
+    CLAUDE = "claude"
+    OPENAI = "openai"
+    DEEPSEEK = "deepseek"
+    STUB = "stub"
+
+
 class CalibrationRow(StrEnum):
     """Строка калибровки метрик — подмена ответа модели; имя папки и строки таблицы
     (metrics/calibrate.py, metrics/realtest.py)."""
@@ -105,6 +115,7 @@ class Refusal(StrEnum):
     HOUSE_OUT_OF_MODEL = "house_out_of_model"  # дом модель не прочтёт: стаб, окно, словарь
     HOUSE_NOT_BUILT = "house_not_built"        # 3D: контур не собирается в дом
     SHEET_PARTS_STALE = "sheet_parts_stale"    # у листа номера частей от другого разбиения контура
+    LLM_UNAVAILABLE = "llm_unavailable"        # LLM-базовый подход: нет библиотеки или ключа
     INVALID_REQUEST = "invalid_request"        # запрос не прошёл проверку схемы
     NO_PLAN = "no_plan"
     NO_RUN = "no_run"
@@ -130,6 +141,7 @@ REFUSAL_TEXT = {
     Refusal.HOUSE_OUT_OF_MODEL: "дом модели не по силам",
     Refusal.HOUSE_NOT_BUILT: "дом не собрать по контуру",
     Refusal.SHEET_PARTS_STALE: "лист собран другим разбиением контура на части",
+    Refusal.LLM_UNAVAILABLE: "LLM недоступна",
     Refusal.INVALID_REQUEST: "запрос не прошёл проверку",
     Refusal.NO_PLAN: "нет плана",
     Refusal.NO_RUN: "нет прогона",
@@ -586,10 +598,14 @@ class Opening(Model):
 
 
 class ForbiddenZone(Model):
-    """Интервал вдоль стороны, где к наружной стене примыкает внутренняя."""
+    """Интервал вдоль стороны, где к наружной стене примыкает внутренняя; или, если задана высота
+    (`y0_m`–`y1_m`), участок стены под крышей соседней нижней части дома (gf#412): окно в нём
+    закрыто кровлей."""
 
     x0_m: float
     x1_m: float
+    y0_m: float | None = None
+    y1_m: float | None = None
 
 
 class Side(Model):

@@ -34,6 +34,7 @@ FIXED = [FixedField.X, FixedField.W]
 
 class Baseline(StrEnum):
     GENPLAN = "genplan"
+    LLM = "llm"   # gf#162, genfacade/llm.py: берёт дома реального теста, не папку листов
 
 
 def genplan(sheet: FacadeSheet, cfg: Config) -> FacadeSheet:

@@ -62,7 +62,7 @@ def run(cfg: Config, out: Path, synthetic: int, rows: Rows) -> Path:
     synth = calibrate.houses(Source.SYNTHETIC, Split.VAL, synthetic, cfg)
     for mode in Mode:
         given = {name: given_sides(sheet, mode) for name, sheet in real.items()}
-        models = [_answers(given, mode, run_cfg, out / mode / name)
+        models = [answers(given, mode, run_cfg, out / mode / name)
                   for name, run_cfg in layouts.items()]
         models += [_copied(source / mode / MODEL, out / mode / name)
                    for name, source in sheets.items()]
@@ -224,13 +224,16 @@ def good(row: dict) -> str:
     return f"{good_count(row)}/{row['count']}"
 
 
-def _answers(given: dict[str, FacadeSheet], mode: Mode, cfg: Config, out: Path) -> Path:
+def answers(given: dict[str, FacadeSheet], mode: Mode, cfg: Config, out: Path,
+            model=None) -> Path:
     """Ответ модели на каждый дом: лист после шагов 4–5 или {"refusal": …, "attempts": …} — брак
-    после попыток; у неразобранной попытки — её слова (датчик обрыва gf#257)."""
+    после попыток; у неразобранной попытки — её слова (датчик обрыва gf#257). model — не
+    чекпойнт cfg, а своя модель того же интерфейса (LLM базового подхода, `genfacade/llm.py`)."""
     out.mkdir(parents=True, exist_ok=True)
     for name, sheet in given.items():
         try:
-            got = pipeline.layout(bare(sheet), pipeline.PlanRun(plan=name, text="", mode=mode), cfg)
+            got = pipeline.layout(bare(sheet), pipeline.PlanRun(plan=name, text="", mode=mode), cfg,
+                                  model)
             text = got.sheet.model_dump_json()
         except ModelError as e:
             text = json.dumps({REFUSED: e.record(), "attempts": e.attempts}, ensure_ascii=False)

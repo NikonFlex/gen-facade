@@ -576,3 +576,107 @@ def test_sheet_without_wings_with_matching_parts_still_draws():
     sheet = annex_sheet()
     assert sheet.wings
     assert sheet_svg(sheet.model_copy(update={"wings": []}), CFG) == sheet_svg(sheet, CFG)
+
+
+# ——— крыши частей и запретные зоны под кровлей соседа (gf#412) ———
+
+U_TEXT = "A two-storey house with a single-storey wing, gable roof."
+
+
+def u_sheet(text: str = U_TEXT) -> FacadeSheet:
+    """У-образный дом: главный блок 10 × 3 м и два нижних крыла 3,15 × 2 м, двускатная крыша."""
+    return bare(text, U_SHAPE)
+
+
+def _sides(line: roof.Roofline) -> list[float]:
+    xs, ys = [c[0] for c in line.corners], [c[1] for c in line.corners]
+    return [max(xs) - min(xs), max(ys) - min(ys)]
+
+
+def test_gable_lower_wing_has_ridge_across_the_wall_not_a_lean_to():
+    """Нижнее крыло двускатной крыши опирается на стену главного блока коньком наружу: два ската
+    навстречу друг другу, а не один скат в 2–3 м, что поднимается к стене («палатка»). Верх
+    кровли — ниже карниза главного блока, конёк — на половине стороны вдоль стены."""
+    house = roof.roofs(u_sheet())
+    main = max(house.parts, key=lambda p: p.eaves)
+    lows = [p for p in house.parts if p is not main]
+    assert len(lows) == 2
+    for low in lows:
+        assert len(low.slopes) == 2
+        a, b = low.slopes
+        assert a.inward == (-b.inward[0], -b.inward[1])
+        top = max(f[2] for _, face in roof.faces(low) for f in face)
+        assert top == pytest.approx(low.eaves + low.rise * max(_sides(low)) / 2)
+        assert top < main.eaves
+
+
+def roof_zones(sheet: FacadeSheet):
+    return [(k, z) for k, f in enumerate(sheet.facades) for z in f.side.forbidden
+            if z.y0_m is not None]
+
+
+def test_wall_strips_under_roof_of_lower_wing_are_forbidden_zones():
+    """Кровля нижнего крыла со свесом закрывает полосу стены главного блока за торцом крыла: зона
+    шириной в свес, высотой от кромки свеса до карниза крыла. Зон плана у дома нет."""
+    sheet = u_sheet()
+    zones = roof_zones(sheet)
+    assert len(zones) == 2 and len({k for k, _ in zones}) == 1
+    overhang, pitch = sheet.spec.roof.overhang_m, math.radians(sheet.spec.roof.pitch_deg)
+    for _, z in zones:
+        assert z.x1_m - z.x0_m == pytest.approx(overhang)
+        assert z.y1_m == pytest.approx(3.25)
+        assert z.y0_m == pytest.approx(3.25 - overhang * math.tan(pitch))
+    assert all(z.y0_m is not None for f in sheet.facades for z in f.side.forbidden)
+
+
+def test_flat_roof_and_rectangle_have_no_roof_zones():
+    assert roof_zones(u_sheet("A two-storey house with a single-storey wing, flat roof.")) == []
+    rect = pipeline.walls(stub.spec_model("A house", CFG.models.spec),
+                          preprocess(SIMPLE.read_text(), Mode.WITH_OPENINGS, CFG.plan),
+                          CFG.plan.parts)
+    assert roof_zones(rect) == []
+
+
+def forbidden_windows(sheet: FacadeSheet, k: int, box: tuple[float, float, float, float],
+                      floor: int = 1) -> list:
+    x, y, w, h = box
+    window = Element(id="z1", cls=ElementClass.WINDOW, x_m=x, y_m=y, w_m=w, h_m=h, floor=floor)
+    walls = [f.model_copy(update={"elements": [window]}) if n == k else f
+             for n, f in enumerate(sheet.facades)]
+    out = validate(sheet.model_copy(update={"facades": walls}), CFG.checks)
+    return [v for v in out if v.rule is Rule.FORBIDDEN]
+
+
+def test_validator_rejects_window_under_neighbour_roof():
+    """Окно в зоне под кровлей нижнего крыла — ошибка `forbidden` на любом этаже; окно, что кровля
+    закрывает меньше чем наполовину, и окно выше зоны — нет."""
+    sheet = u_sheet()
+    k, z = roof_zones(sheet)[0]
+    w, h = z.x1_m - z.x0_m, z.y1_m - z.y0_m
+    assert forbidden_windows(sheet, k, (z.x0_m, z.y0_m, w, h))
+    assert forbidden_windows(sheet, k, (z.x0_m, z.y0_m, w, h), floor=2)
+    assert not forbidden_windows(sheet, k, (z.x0_m, z.y0_m, 1.2, 1.2))  # закрыто 0,11 из 1,44 м²
+    assert not forbidden_windows(sheet, k, (z.x0_m, z.y1_m + 0.1, w, h))
+
+
+def test_model_gets_roof_zones_in_its_wall():
+    """Модель видит стену участком, `forbidden` участка несёт зоны под кровлей (x — от края
+    участка): страж и токены условия берут их оттуда, как зоны плана."""
+    sheet = u_sheet()
+    k, z = roof_zones(sheet)[0]
+    run = next(r for r in sheet.facades[k].runs if r.x0_m - EPS <= z.x0_m <= r.x1_m)
+    wall, items = parts.sub_sheets(sheet)[run.floors]
+    n = next(i for i, p in enumerate(items) if p.k == k and p.run == run)
+    got = [(g.x0_m, g.x1_m) for g in wall.facades[n].side.forbidden if g.y0_m is not None]
+    want = [(a.x0_m - run.x0_m, a.x1_m - run.x0_m) for kk, a in roof_zones(sheet)
+            if kk == k and run.x0_m - EPS <= a.x0_m <= run.x1_m]
+    assert got == [pytest.approx(w) for w in want] and got
+
+
+@pytest.mark.parametrize("name", REAL)
+def test_real_houses_are_not_rejected_by_roof_zones(name):
+    """Реальные дома разметки: зоны есть, но рамки окон на них закрыты меньше чем наполовину —
+    валидатор их кровлей не бракует."""
+    sheet = real_house(name).sheet
+    assert roof_zones(sheet)
+    assert not [v for v in validate(sheet, CFG.checks) if "кровлей" in v.message]
