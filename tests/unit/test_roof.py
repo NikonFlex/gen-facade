@@ -168,3 +168,30 @@ def test_validator_keeps_gable_window_off_the_slope():
     assert rules(_with_window(sheet, k, mid - 0.3, near, 0.6, 0.6 - 0.05)) == {Rule.SLOPE}
     assert rules(_with_window(sheet, k, 0.2, eaves + 0.1, 0.6, 0.6)) == {Rule.SLOPE, Rule.OUTSIDE}
     assert Rule.OUTSIDE in rules(_with_window(sheet, eave, 1.0, eaves + 0.1, 0.6, 0.6))
+
+
+class Ramp:
+    """Кровля-заглушка: высота растёт вдоль x от `base` с уклоном `rise`, плоская при rise = 0."""
+
+    def __init__(self, eaves: float, base: float, rise: float, corners):
+        self.eaves, self.base, self.rise, self.corners, self.slopes = eaves, base, rise, corners, []
+
+    def height(self, p) -> float:
+        return self.base + self.rise * p[0]
+
+
+def test_joint_wall_stands_on_the_part_whose_roof_is_higher():
+    """Разрез по ступени карниза (gf#422): у нижней по карнизу части щипец выше кровли верхней —
+    над кровлей верхней стоит стена нижней (обратная нормаль), а не пустое небо; там, где кровля
+    верхней выше, стена её, как раньше."""
+    high = Ramp(5.0, 5.0, 0.0, [(0, 0), (6, 0), (6, 4), (0, 4)])  # плоская кровля на 5 м
+    low = Ramp(4.0, 4.0, 0.5, [(0, -3), (6, -3), (6, 0), (0, 0)])  # от 4 м, у x = 6 — 7 м
+    owned = roof._joint(low, high, 1, [(0.0, 0.0), (6.0, 0.0)], 0)
+    by_high = {j.high: j for j in owned}
+    assert set(by_high) == {0, 1}
+    assert by_high[1].normal == pytest.approx((0.0, -1.0))  # от верхней к нижней
+    assert by_high[0].normal == pytest.approx((0.0, 1.0))  # стена нижней — наружу к верхней
+    assert max(z for w in by_high[0].walls for *_, z in w) == pytest.approx(7.0)
+    assert min(z for w in by_high[0].walls for *_, z in w) == pytest.approx(5.0)
+    assert max(z for w in by_high[1].walls for *_, z in w) == pytest.approx(5.0)
+    assert {round(x, 6) for w in by_high[0].walls for x, *_ in w} == {2.0, 6.0}  # от пересечения

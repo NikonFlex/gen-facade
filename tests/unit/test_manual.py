@@ -255,6 +255,28 @@ def test_step_inside_rectangle_becomes_virtual_wings():
         [ft(PLINTH_FT + EAVE_FT - 2)] * 3 + [ft(PLINTH_FT + EAVE_FT)] * 3)
 
 
+def test_cut_by_step_has_wall_over_roof_of_lower_part():
+    """Разрез по ступени (gf#422): кровля нижней по карнизу части поднимается выше кровли верхней
+    (щипец, 3,58 м при карнизе 2,74 м) — над кровлей верхней стоит стена нижней, в данных 3D и в
+    IFC; без неё в просмотрщике открытый треугольник неба между скатами."""
+    from genfacade import roof
+    from genfacade.render.house3d import house_3d
+    from genfacade.render.ifc import counts, house_ifc
+
+    wall = markup().sides[1].wall
+    step = {"x": [wall[0], wall[0] + 8 * PT], "y": pt_y(EAVE_FT - 1), "floors": 1}
+    sheet = manual.house(drawn({"eaves": [step]}), CFG.data.manual)[0].sheet
+    house = roof.roofs(sheet)
+    low = min(range(len(house.parts)), key=lambda i: house.parts[i].eaves)
+    (gable,) = (j for j in roof.joints(house) if j.high == low)  # стена нижней части
+    top = max(z for w in gable.walls for *_, z in w)
+    assert top > max(p.eaves for p in house.parts) + 0.5
+    above = house_3d(sheet, CFG)["roof"]["above"]
+    assert any(abs(z - top) < 1e-6 for shape in above for *_, z in shape)
+    walls = sum(len(j.walls) for j in roof.joints(house))
+    assert counts(house_ifc(sheet, CFG))["IFCWALL"] == len(sheet.facades) + walls
+
+
 def test_metric_sheet_gives_the_same_house():
     """Российский лист — в метрах (gf#328): те же pt листа с масштабом и отметками в метрах дают
     тот же дом, что в футах."""
