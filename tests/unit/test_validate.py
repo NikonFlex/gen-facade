@@ -9,7 +9,15 @@ import pytest
 from simple_house import WALL_INTO_WINDOW, before_leaf, without_porches
 
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import Element, ElementClass, MaterialZone, Rule, Severity, ZoneRole
+from genfacade.schema import (
+    Element,
+    ElementClass,
+    MaterialZone,
+    OpeningVariant,
+    Rule,
+    Severity,
+    ZoneRole,
+)
 from genfacade.snap import snap
 from genfacade.unfold import unfold
 from genfacade.validate import DEFECTS, defects, errors, validate, validate_svg
@@ -122,6 +130,31 @@ def test_door_lower_than_the_norm(house, cfg):
     door = _door(house)
     assert Rule.DOOR_LOW in _rules(_edit(house, FRONT, door.id, h_m=0.1), cfg)
     assert Rule.DOOR_LOW not in _rules(_edit(house, FRONT, door.id, h_m=1.89), cfg)
+
+
+def test_door_under_a_low_eave(house, cfg):
+    """gf#413: этаж 1,42 м (карниз ffh-halfstory 1,73 м) — дверь 1,42 м не брак, а 1,0 м — брак;
+    на этаже 2,75 м норма прежняя 1,8 м."""
+    door = _door(house)
+    low = house.model_copy(update={"spec": house.spec.model_copy(
+        update={"floor_heights_m": [1.42], "eaves_m": 1.73})})
+    assert Rule.DOOR_LOW not in _rules(_edit(low, FRONT, door.id, h_m=1.42), cfg)
+    assert Rule.DOOR_LOW in _rules(_edit(low, FRONT, door.id, h_m=1.0), cfg)
+    assert Rule.DOOR_LOW in _rules(_edit(house, FRONT, door.id, h_m=1.42), cfg)
+
+
+def test_window_grid_cell_not_narrower_than_the_norm(house, cfg):
+    """gf#413: окно 0,74 м с сеткой 9 × 9 (ffh-schoolhouse, gf#373) — брак; 0,74 м в 3 столбца —
+    ячейка 0,25 м — нет; ячейка настоящих домов (0,22 × 0,31 м, ffh-southern) — нет."""
+    w = _window(house)
+
+    def grid(width, cols, rows):
+        return _edit(house, SIDE, w.id, w_m=width, h_m=1.5,
+                     variant=OpeningVariant(cols=cols, rows=rows))
+
+    assert Rule.PANES in _rules(grid(0.74, 9, 9), cfg)
+    assert Rule.PANES not in _rules(grid(0.74, 3, 4), cfg)
+    assert Rule.PANES not in _rules(grid(0.434, 2, 4), cfg)
 
 
 def test_cornice_on_an_opening(house, cfg):

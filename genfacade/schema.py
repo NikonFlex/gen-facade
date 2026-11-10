@@ -392,6 +392,7 @@ class Rule(StrEnum):
     AXIS_ALIGN = "axis_align"
     # геометрический брак листа (gf#242): validate.DEFECTS
     DOOR_LOW = "door_low"          # дверь ниже нормы свода
+    PANES = "panes"                # ячейка стекла окна уже или ниже нормы (gf#413)
     CORNICE = "cornice"            # карниз на проёме или его выводимом элементе
     FINISH = "finish"              # часть стены без отделки, зона обрывается посреди стены
     ROOF_FLAT = "roof_flat"        # скатная крыша не строится над этим контуром (gf#320)

@@ -257,6 +257,8 @@ class Checks(Section):
     slope_offset_m: float  # окно во фронтоне — не ближе к скату (gf#321)
     attic_knee_m: float    # окно под скатом — низом не ниже карниза на столько (gf#321)
     slope_share: float = Field(gt=0, le=1)  # доля рамки окна `slope` в стене (gf#319)
+    pane_min_w_m: float = Field(gt=0)  # ячейка стекла окна не уже (gf#413)
+    pane_min_h_m: float = Field(gt=0)  # ... и не ниже
     norms: dict[GuidelineCheck, GuidelineParams] = {}
 
 

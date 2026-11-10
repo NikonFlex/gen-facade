@@ -28,7 +28,7 @@ from genfacade.schema import (
     Source,
     signed_area,
 )
-from genfacade.validate import OPENINGS
+from genfacade.validate import OPENINGS, door_min_m
 
 Params = dict[str, ElementClass | float | list[float]]
 Check = Callable[[Params, FacadeSheet, Plan | None], list[bool]]
@@ -106,7 +106,8 @@ def door_size(p: Params, sheet: FacadeSheet, plan: Plan | None) -> list[bool]:
 
 
 def door_height(p: Params, sheet: FacadeSheet, plan: Plan | None) -> list[bool]:
-    return [_within(e.h_m, p) for f in sheet.facades for e in _of(f, ElementClass.DOOR)]
+    return [_within(e.h_m, {**p, "min": door_min_m(p, sheet.spec, e)})
+            for f in sheet.facades for e in _of(f, ElementClass.DOOR)]
 
 
 def window_types(p: Params, sheet: FacadeSheet, plan: Plan | None) -> list[bool]:
@@ -364,7 +365,7 @@ PARAMS: dict[GuidelineCheck, tuple[set[str], set[str]]] = {
     GuidelineCheck.FLOOR_OPENING_WIDTH: (set(), {"min", "max"}),
     GuidelineCheck.WINDOW_TYPES: ({"per_facade", "per_house", "tol_m"}, set()),
     GuidelineCheck.DOOR_SIZE: ({"min_w", "min_h"}, {"max_w", "max_h"}),
-    GuidelineCheck.DOOR_HEIGHT: ({"min"}, {"max"}),
+    GuidelineCheck.DOOR_HEIGHT: ({"min"}, {"max", "floor_share"}),
     GuidelineCheck.DOOR_HEAD_LINE: ({"tol_m"}, set()),
     GuidelineCheck.SILL_UNDER_WINDOW: ({"skip_below_m", "tol_m"}, set()),
     GuidelineCheck.CANOPY_OVER_ENTRANCE: (set(), set()),

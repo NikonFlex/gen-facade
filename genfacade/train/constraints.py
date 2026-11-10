@@ -164,6 +164,12 @@ class Norms(NamedTuple):
     head: int | None = None
     door: int = 0  # самая низкая дверь (door_height, gf#242); 0 — правило выключено
     lowest: int = 0  # самое низкое окно корпуса — низ типоразмера (gf#250); 0 — без предела
+    # при низком этаже дверь может быть ниже `door`: не ниже этой доли высоты этажа (gf#413);
+    # 0 — нет
+    door_share: float = 0
+    # ячейка стекла окна не уже и не ниже (checks.pane_min_*_m, gf#413); 0 — без предела
+    cell_w: int = 0
+    cell_h: int = 0
 
 
 class Vocab:
@@ -462,6 +468,8 @@ class WallGeometry:
             keep -= {self.vocab.token[0]}
         elif self.grammar.need[:1] == [Need.POSITIVE] and self.at < 0:
             keep &= self._size_numbers()
+        elif self._in_grid():
+            keep &= self._cells()
         else:
             # материал не из палитры дома лист не примет (у реального дома палитра — main, gf#197)
             keep = (self._tail(keep) - self.foreign) or keep  # годного нет — грамматика
@@ -495,6 +503,22 @@ class WallGeometry:
         tops = self._tops()
         lined = {i for i in out if tops is None or tops[0] <= y + sizes[i][1] <= tops[1]}
         return lined or out
+
+    def _in_grid(self) -> bool:
+        """Пишется деление окна — столбцы или ряды после вида (`var:kind cols rows`)."""
+        return (self.grammar.need[:1] == [Need.POSITIVE] and self.grammar.field == VARIANT_FIELD
+                and self.cls is ElementClass.WINDOW and bool(self.boxes)
+                and 0 <= self.at < len(self.walls))
+
+    def _cells(self) -> set[int]:
+        """Столбцы (первое число) или ряды (второе) окна, при которых ячейка стекла не уже и не
+        ниже нормы (gf#413): окно 0,74 м писали с сеткой 9 × 9, ячейка 0,08 м; одна ячейка годна
+        всегда — сетки нет."""
+        _, _, _, w, h = self.boxes[-1]
+        cell, size = ((self.norms.cell_w, w) if len(self.grammar.need) == 2
+                      else (self.norms.cell_h, h))
+        limit = max(1, size // cell) if cell else None
+        return {i for n, i in self.vocab.token.items() if n >= 1 and (limit is None or n <= limit)}
 
     def _size_numbers(self) -> set[int]:
         """Ширина типоразмера — не длиннее самой длинной стены, высота — не выше карниза: окно
@@ -534,10 +558,10 @@ class WallGeometry:
         карниз стены (gf#242); верх — под карнизами над проёмом и на линии верха окон этажа. У окна
         высота — типоразмера, правила держит выбор типоразмера (`_sizes`)."""
         wall, numbers = self.walls[self.at], self.vocab.token
-        door = self.norms.door if self.cls is ElementClass.DOOR else 0
         # дверь — в своём этаже: модель ставила дверь плана на 2,35 м, и дверь нормы заходила
         # на окно второго этажа (реальный тест, gf#242)
         top = wall.floors[0] if wall.floors else wall.height
+        door = self._door_min(top) if self.cls is ElementClass.DOOR else 0
         if place == Y and door and top:
             yield {y for y in numbers if y + door <= top}
         if place == Y and self.cls is ElementClass.WINDOW and wall.height and self.grammar.sizes:
@@ -557,6 +581,15 @@ class WallGeometry:
         if tops := self._tops():
             low, high = tops
             yield {h for h in numbers if low <= y + h <= high}
+
+    def _door_min(self, top: int) -> int:
+        """Самая низкая дверь стены в шагах: норма, а при низком этаже — доля его высоты (gf#413:
+        карниз 1,73 м, норма 1,8 м не выполнима). Высота — до карниза или до низа второго этажа
+        (с цоколем): страж не мягче валидатора."""
+        door = self.norms.door
+        if not door or not top or not self.norms.door_share:
+            return door
+        return min(door, math.ceil(self.norms.door_share * top - EPS))
 
     def _under_cornice(self, x: int, w: int, y: int, h: int) -> bool:
         """Проём x y w h не заходит на карнизы, уже поставленные на стене."""
@@ -864,10 +897,12 @@ def norms(cfg: Config) -> Norms:
     pier = on.get(GuidelineCheck.PIER_MIN, {}).get("min", 0.0)
     head = on.get(GuidelineCheck.HEAD_LINE)
     door = on.get(GuidelineCheck.DOOR_HEIGHT, {}).get("min", 0.0)
+    share = on.get(GuidelineCheck.DOOR_HEIGHT, {}).get("floor_share", 0.0)
     windows = cfg.synthetic.facade.windows  # высоты окон корпуса (`synthetic.openings`)
     return Norms(units(min(p.window_width_m[0] for p in used)), units(corner), units(pier),
                  None if head is None else units(head["tol_m"]), units(door),
-                 units(min(windows.heights_m + windows.narrow_heights_m)))
+                 units(min(windows.heights_m + windows.narrow_heights_m)), share,
+                 units(cfg.checks.pane_min_w_m), units(cfg.checks.pane_min_h_m))
 
 
 def guard(bare: FacadeSheet, mode: Mode, vocab: Vocab, cfg: Config) -> WallGeometry | None:

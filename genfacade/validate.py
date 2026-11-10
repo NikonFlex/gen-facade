@@ -12,7 +12,9 @@
 проверяются между проёмами, каждый — со своими выводимыми элементами.
 """
 
+from collections.abc import Mapping
 from itertools import combinations
+from math import inf
 from xml.etree import ElementTree
 
 import shapely
@@ -44,7 +46,8 @@ from genfacade.schema import (
 WARNINGS = {Rule.FLOOR_ALIGN, Rule.AXIS_ALIGN, Rule.PLAN_FORBIDDEN,
             Rule.ROOF_FLAT}  # остальные — ошибки
 # Геометрический брак листа (gf#242, хозяин 31.10): по этим правилам считает датчик и метрика.
-DEFECTS = (Rule.DOOR_LOW, Rule.CORNICE, Rule.OUTSIDE, Rule.OVERLAP, Rule.FINISH, Rule.SLOPE)
+DEFECTS = (Rule.DOOR_LOW, Rule.PANES, Rule.CORNICE, Rule.OUTSIDE, Rule.OVERLAP, Rule.FINISH,
+           Rule.SLOPE)
 FULL_LENGTH = (ZoneRole.PLINTH, ZoneRole.MAIN, ZoneRole.BAND)  # зоны во всю длину стены
 
 
@@ -53,7 +56,8 @@ def validate(sheet: FacadeSheet, cfg: Checks) -> list[Violation]:
     for f, above in zip(sheet.facades, roof.gables(sheet), strict=True):
         out += _outside(f, above, sheet.spec, cfg) + _slope(f, above, sheet.spec, cfg)
         out += _overlaps(f, cfg) + _forbidden(f, cfg) + _plan_openings(f, cfg)
-        out += _door_low(f, cfg) + _cornice(f, cfg) + _finish(f, sheet.spec, cfg)
+        out += _door_low(f, sheet.spec, cfg) + _panes(f, cfg) + _cornice(f, cfg)
+        out += _finish(f, sheet.spec, cfg)
         out += _floor_align(f, cfg) + _axis_align(f, cfg)
     return out + _corners(sheet, cfg) + _roof(sheet)
 
@@ -178,15 +182,33 @@ def _overlaps(f: SideFacade, cfg: Checks) -> list[Violation]:
             if owner[a.id] != owner[b.id] and _hits(a, b, cfg)]
 
 
-def _door_low(f: SideFacade, cfg: Checks) -> list[Violation]:
+def door_min_m(norm: Mapping, spec: HouseSpec, door: Element) -> float:
+    """Самая низкая дверь по норме `door_height`: `min`, а при низком этаже — не больше доли
+    `floor_share` высоты его этажа (gf#413: у ffh-halfstory этаж 1,42 м, дверь 1,42 м)."""
+    floor = min(door.floor or 1, spec.floors)
+    return min(norm["min"], norm.get("floor_share", inf) * spec.floor_heights_m[floor - 1])
+
+
+def _door_low(f: SideFacade, spec: HouseSpec, cfg: Checks) -> list[Violation]:
     """Дверь не ниже нормы свода с `use = ["validate"]` (door_height, gf#242): дверь 0,05 м
     модели — не дверь."""
     norm = cfg.norms.get(GuidelineCheck.DOOR_HEIGHT)
     if norm is None:
         return []
-    low = norm["min"]
     return [_v(f, Rule.DOOR_LOW, e, f"дверь {e.id} высотой {e.h_m:.2f} м — ниже {low:.2f} м")
-            for e in f.elements if e.cls is ElementClass.DOOR and e.h_m + cfg.eps_m < low]
+            for e in f.elements if e.cls is ElementClass.DOOR
+            and e.h_m + cfg.eps_m < (low := door_min_m(norm, spec, e))]
+
+
+def _panes(f: SideFacade, cfg: Checks) -> list[Violation]:
+    """Ячейка стекла окна не уже `pane_min_w_m` и не ниже `pane_min_h_m` (gf#413): окно 0,74 м с
+    сеткой 9 × 9 — не окно; сетка у окна, а не у двери (у двери — филёнки)."""
+    return [_v(f, Rule.PANES, e, f"окно {e.id}: ячейка {e.w_m / e.variant.cols:.2f} × "
+               f"{e.h_m / e.variant.rows:.2f} м — меньше {cfg.pane_min_w_m:.2f} × "
+               f"{cfg.pane_min_h_m:.2f} м")
+            for e in f.elements if e.cls is ElementClass.WINDOW and e.variant is not None
+            and (e.w_m / e.variant.cols + cfg.eps_m < cfg.pane_min_w_m
+                 or e.h_m / e.variant.rows + cfg.eps_m < cfg.pane_min_h_m)]
 
 
 def _cornice(f: SideFacade, cfg: Checks) -> list[Violation]:
