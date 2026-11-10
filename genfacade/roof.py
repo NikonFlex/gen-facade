@@ -412,9 +412,12 @@ def _area(house: HouseRoof, k: int) -> shapely.Geometry:
     return area.union(rect)
 
 
-def house_above(house: HouseRoof, k: int) -> list[Polygon]:
-    """Стена k выше карниза: по участку каждой части — фронтон или верх стены под односкатной."""
+def house_above(house: HouseRoof, k: int, inset: float = 0.0) -> list[Polygon]:
+    """Стена k выше карниза: по участку каждой части — фронтон или верх стены под односкатной.
+    inset — линия сечения сдвинута от стены внутрь дома на inset метров (внутренняя грань
+    стены толщиной inset): под односкатной крыша там ниже, чем над наружной гранью."""
     left, u, _ = axis(house.corners, k)
+    left = (left[0] - u[1] * inset, left[1] + u[0] * inset)
     shapes = (_above(house.parts[s.part], left, u, s.x0, s.x1) for s in house.spans[k])
     return [shape for shape in shapes if shape is not None]
 

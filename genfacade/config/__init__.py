@@ -429,6 +429,7 @@ class IfcExport(Section):
     wall_thickness_m: float = Field(gt=0)
     slab_m: float = Field(gt=0)
     roof_m: float = Field(gt=0)
+    roof_seat_m: float = Field(gt=0)
     joint_wall_m: float = Field(gt=0)
     shutter_m: float = Field(gt=0)
     window_depth_m: float = Field(gt=0)

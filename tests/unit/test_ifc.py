@@ -5,10 +5,10 @@ import re
 import pytest
 import shapely
 
-from genfacade import cli, config, pipeline
+from genfacade import cli, config, pipeline, roof
 from genfacade.datasets.synthetic import build
 from genfacade.render.house3d import house_3d
-from genfacade.render.ifc import IFC_FILE, counts, house_ifc
+from genfacade.render.ifc import IFC_FILE, IfcHouse, _normal, counts, house_ifc
 from genfacade.render.ifc_step import guid, text, value
 from genfacade.schema import ElementClass, FacadeSheet, Roof, RoofKind
 
@@ -172,6 +172,48 @@ def test_gable_roof_is_made_of_slopes(house, cfg):
         "roof": Roof(kind=RoofKind.FLAT, material="roof")})})
     assert counts(house_ifc(gabled, cfg))["IFCSLAB"] > counts(house_ifc(flat, cfg))["IFCSLAB"]
     assert house_ifc(gabled, cfg).count(".ROOF.") >= 2
+
+
+def roof_top(faces: list[list[tuple[float, float, float]]], x: float, y: float) -> float | None:
+    """Высота кровли над точкой плана — по плоскостям скатов (верх плит); нет крыши — None."""
+    top = None
+    for face in faces:
+        if shapely.Polygon([p[:2] for p in face]).buffer(1e-6).contains(shapely.Point(x, y)):
+            n = _normal(face)
+            z = face[0][2] - ((x - face[0][0]) * n[0] + (y - face[0][1]) * n[1]) / n[2]
+            top = z if top is None else max(top, z)
+    return top
+
+
+@pytest.mark.parametrize("kind", [RoofKind.GABLE, RoofKind.HIP, RoofKind.SHED])
+def test_walls_do_not_stick_out_above_the_roof(kind, sheets, cfg):
+    """Готово, когда (gf#392, 10.11): ни одна точка стены — ни на наружной, ни на внутренней
+    грани — не выше ската над ней и не вровень с ним (вровень мерцает в просмотрщике). Стена
+    толщиной t выдавлена внутрь, а скат односкатной крыши над внутренней гранью ниже, чем над
+    наружной: верх по наружной грани торчал над кровлей."""
+    t, checked = cfg.ifc.wall_thickness_m, 0
+    for sheet in sheets:
+        sheet = sheet.model_copy(update={"spec": sheet.spec.model_copy(update={
+            "roof": cfg.models.spec.roof_shape.roof(kind, "roof")})})
+        house = roof.roofs(sheet)
+        if house is None:
+            continue
+        faces = roof.house_faces(house)
+        builder = IfcHouse(sheet, cfg, IFC_FILE)
+        for k, f in enumerate(sheet.facades):
+            wall = builder.data["walls"][k]
+            (lx, ly), (rx, ry) = wall["left"], wall["right"]
+            length = ((rx - lx) ** 2 + (ry - ly) ** 2) ** 0.5
+            u = ((rx - lx) / length, (ry - ly) / length)
+            for ring in builder._trim(builder._wall_shape(k, f), wall["convex_left"]):
+                for x, z in ring:
+                    for depth in (0.0, t):  # от наружной грани внутрь: вдоль −(u[1], −u[0])
+                        px, py = lx + u[0] * x - u[1] * depth, ly + u[1] * x + u[0] * depth
+                        top = roof_top(faces, px, py)
+                        if top is not None:
+                            checked += 1
+                            assert z <= top - cfg.ifc.roof_seat_m + 1e-6, (k, x, z, depth, top)
+    assert checked
 
 
 def test_file_is_deterministic_and_ascii(house, cfg):
