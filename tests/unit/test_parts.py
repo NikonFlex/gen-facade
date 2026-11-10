@@ -466,6 +466,24 @@ def test_roof_of_lower_part_ends_at_wall_of_higher():
         assert shapely.Polygon([(x, y) for x, y, _ in face]).intersection(main).area < EPS
 
 
+def test_roofs_of_parts_do_not_lie_on_each_other():
+    """Одна крыша (gf#412): кровля верхней части не лежит над крышей нижней — свес верхней
+    обрывается там, где встречает нижнюю, а нижняя идёт к стене верхней целиком, не вырезанная под
+    свес верхней; многоугольники скатов разных частей в плане не пересекаются."""
+    for text in (GABLE, TWO_PARTS + " Hip roof."):
+        house = roof.roofs(bare(text))
+        faces = [shapely.unary_union([shapely.Polygon([(x, y) for x, y, _ in face])
+                                      for _, face in roof.faces(line, roof._area(house, k))])
+                 for k, line in enumerate(house.parts)]
+        high, low = sorted(range(len(house.parts)), key=lambda k: -house.parts[k].eaves)[:2]
+        main = shapely.Polygon(house.parts[high].corners)
+        wing = shapely.Polygon(house.parts[low].corners)
+        assert faces[high].intersection(faces[low]).area < EPS
+        whole = wing.buffer(house.parts[low].overhang, join_style="mitre").difference(main)
+        assert whole.difference(faces[low]).area < EPS  # кровля нижней — целиком, без выреза
+        assert faces[high].intersection(whole).area < EPS  # верхняя — не над нижней
+
+
 def test_junction_is_on_wall_of_higher_part():
     """Примыкание — на стене верхней части: линия кровли нижней на её плоскости, а выше — стена."""
     sheet, house = gable_house()
@@ -620,7 +638,7 @@ def test_wall_strips_under_roof_of_lower_wing_are_forbidden_zones():
     шириной в свес, высотой от кромки свеса до карниза крыла. Зон плана у дома нет."""
     sheet = u_sheet()
     zones = roof_zones(sheet)
-    assert len(zones) == 2 and len({k for k, _ in zones}) == 1
+    assert len(zones) == 4 and {k for k, _ in zones} == {1, 4, 7}  # свес по обе стороны крыла
     overhang, pitch = sheet.spec.roof.overhang_m, math.radians(sheet.spec.roof.pitch_deg)
     for _, z in zones:
         assert z.x1_m - z.x0_m == pytest.approx(overhang)
@@ -664,12 +682,13 @@ def test_model_gets_roof_zones_in_its_wall():
     участка): страж и токены условия берут их оттуда, как зоны плана."""
     sheet = u_sheet()
     k, z = roof_zones(sheet)[0]
-    run = next(r for r in sheet.facades[k].runs if r.x0_m - EPS <= z.x0_m <= r.x1_m)
+    mid = (z.x0_m + z.x1_m) / 2
+    run = next(r for r in sheet.facades[k].runs if r.x0_m <= mid <= r.x1_m)
     wall, items = parts.sub_sheets(sheet)[run.floors]
     n = next(i for i, p in enumerate(items) if p.k == k and p.run == run)
     got = [(g.x0_m, g.x1_m) for g in wall.facades[n].side.forbidden if g.y0_m is not None]
     want = [(a.x0_m - run.x0_m, a.x1_m - run.x0_m) for kk, a in roof_zones(sheet)
-            if kk == k and run.x0_m - EPS <= a.x0_m <= run.x1_m]
+            if kk == k and run.x0_m <= (a.x0_m + a.x1_m) / 2 <= run.x1_m]
     assert got == [pytest.approx(w) for w in want] and got
 
 
