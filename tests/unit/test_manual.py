@@ -4,6 +4,7 @@
 
 import json
 import math
+from pathlib import Path
 
 import pytest
 
@@ -417,3 +418,20 @@ def test_gable_window_is_not_a_storey():
                              CFG.data.manual)
     assert measures.floors_kept(sample.sheet)
     assert not measures.storeys(sample.sheet).facades[2].elements
+
+
+def _sheet_of(path: str):
+    sample, _ = manual.house(manual.read(Path(path)), CFG.data.manual)
+    return sample.sheet
+
+
+def test_real_houses_keep_the_doors_drawn_from_the_plans():
+    # gf#414: дверь западной веранды southern и остеклённый вход ghent — в собранном листе
+    # (лист из снимка до слияния разметки их не имел, хозяин видел дом без двери)
+    south = _sheet_of("markup/freefarmhouse/ffh-southern.toml")
+    west = [x for x in south.facades[1].elements if x.cls == ElementClass.DOOR]
+    assert [x.variant.kind for x in west] == ["transom"]
+    ghent = _sheet_of("markup/solar-decathlon/sd-ghent-2011.toml")
+    doors = [x for f in ghent.facades for x in f.elements if x.cls == ElementClass.DOOR]
+    assert [x.variant.kind for x in doors] == ["glazed"]
+    assert not [x for x in ghent.facades[0].elements if x.cls == ElementClass.WINDOW]
