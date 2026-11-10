@@ -233,16 +233,26 @@ def test_drawing_above_eaves_is_cut_as_before():
 
 
 def test_house_with_parts_of_different_height_waits():
-    """Участок карниза над другой этажностью или на другой отметке — у дома части разной высоты:
-    модуль держит один карниз на дом, пример не пишется (gf#322)."""
+    """Участок карниза над другой этажностью по всей стене — части разной высоты, а линии ступени
+    нет: пример не пишется (gf#322)."""
     wall = markup().sides[1].wall
-    for eaves in ({"x": wall, "y": pt_y(EAVE_FT), "floors": 2},
-                  {"x": [wall[0], wall[0] + 5 * PT], "y": pt_y(EAVE_FT - 2), "floors": 1}):
-        with pytest.raises(manual.Unsupported, match="gf#322"):
-            manual.house(drawn({"eaves": [eaves]}), CFG.data.manual)
+    with pytest.raises(manual.Unsupported, match="gf#322"):
+        manual.house(drawn({"eaves": [{"x": wall, "y": pt_y(EAVE_FT), "floors": 2}]}),
+                     CFG.data.manual)
     beyond = {"x": [wall[0], wall[1] + 2 * PT], "y": pt_y(EAVE_FT), "floors": 1}
     with pytest.raises(manual.BadMarkup, match="за краем стены"):
         manual.house(drawn({"eaves": [beyond]}), CFG.data.manual)
+
+
+def test_step_inside_rectangle_becomes_virtual_wings():
+    """Ступень карниза внутри прямоугольного контура без крыльев (gf#422): сторона меняет отметку
+    на 5' от края — контур режется линией ступени, у листа два крыла со своими карнизами."""
+    wall = markup().sides[1].wall
+    step = {"x": [wall[0], wall[0] + 5 * PT], "y": pt_y(EAVE_FT - 2), "floors": 1}
+    sample, _ = manual.house(drawn({"eaves": [step]}), CFG.data.manual)
+    assert len(sample.sheet.wings) == 2
+    assert sorted(r.eaves_m for f in sample.sheet.facades for r in f.runs) == pytest.approx(
+        [ft(PLINTH_FT + EAVE_FT - 2)] * 3 + [ft(PLINTH_FT + EAVE_FT)] * 3)
 
 
 def test_metric_sheet_gives_the_same_house():
@@ -435,3 +445,58 @@ def test_real_houses_keep_the_doors_drawn_from_the_plans():
     doors = [x for f in ghent.facades for x in f.elements if x.cls == ElementClass.DOOR]
     assert [x.variant.kind for x in doors] == ["glazed"]
     assert not [x for x in ghent.facades[0].elements if x.cls == ElementClass.WINDOW]
+
+
+def real(house_id: str) -> Markup:
+    """Настоящая разметка из `markup/` репозитория."""
+    root = Path(__file__).parents[2] / "markup"
+    return next(m for p in sorted(root.glob("*/*.toml")) if (m := manual.read(p)).id == house_id)
+
+
+def test_real_step_without_wings_is_cut_into_parts():
+    """ffh-julie: контур прямоугольный, задние 3,05 м — один этаж (gf#422): два виртуальных крыла,
+    задняя часть ниже; карниз дома — над двумя этажами."""
+    sample, _ = manual.house(real("ffh-julie"), CFG.data.manual)
+    rear = sorted(sample.sheet.wings, key=lambda w: w.y0_m)[0]
+    assert len(sample.sheet.wings) == 2 and rear.y1_m - rear.y0_m == pytest.approx(3.05, abs=0.05)
+    assert sorted({(r.floors, round(r.eaves_m, 2)) for f in sample.sheet.facades
+                   for r in f.runs}) == [(1, 3.1), (2, 4.11)]
+
+
+def test_real_marilyn_has_three_tiers_and_penny_cuts_a_wing():
+    """ffh-marilyn: две линии ступени (4,79 и 4,88 м — одна) — три части; ffh-penny-sylvia: крыло
+    задних модулей режется по x ≈ 6,15, у главного крыла и карниза дома — своё."""
+    marilyn, _ = manual.house(real("ffh-marilyn"), CFG.data.manual)
+    assert len(marilyn.sheet.wings) == 3
+    penny, _ = manual.house(real("ffh-penny-sylvia"), CFG.data.manual)
+    assert len(penny.sheet.wings) == 3
+    cut = sorted(w.x1_m - w.x0_m for w in penny.sheet.wings)[:2]
+    assert sum(cut) == pytest.approx(9.81 - 2.53, abs=0.05)
+    assert min(cut) == pytest.approx(3.6, abs=0.1)
+
+
+def test_real_roof_marks_are_not_eaves():
+    """sd-nyalfred-2015: высокий край односкатной — не карниз, карниз дома — низкий (3,37 м),
+    дом без частей; sd-northwestern-2017: полоса панелей над плоской кровлей — не карниз."""
+    nyalfred, _ = manual.house(real("sd-nyalfred-2015"), CFG.data.manual)
+    assert nyalfred.sheet.spec.eaves_m == pytest.approx(3.37, abs=0.02)
+    assert not nyalfred.sheet.wings and not any(f.runs for f in nyalfred.sheet.facades)
+    northwestern, cut = manual.house(real("sd-northwestern-2017"), CFG.data.manual)
+    assert northwestern.sheet.spec.eaves_m == pytest.approx(4.07, abs=0.02) and cut > 0
+
+
+def test_all_real_houses_are_built_and_old_ones_without_fallbacks():
+    """59 разметок — 59 листов (gf#422); 49 прежних собираются по отметкам как есть (без `_bare` и
+    разрезов), поэтому их карниз, участки и крылья прежние."""
+    root = Path(__file__).parents[2] / "markup"
+    fallback = {"ffh-julie", "ffh-virginia-ext", "ffh-marilyn", "ffh-penny-sylvia", "sd-va-2011",
+                "sd-maryland-2017", "sd-nyalfred-2015", "sd-northwestern-2017", "sd-sit-2013",
+                "sd-wvu-2013"}
+    built = 0
+    for path in sorted(root.glob("*/*.toml")):
+        m = manual.read(path)
+        manual.house(m, CFG.data.manual)
+        built += 1
+        if m.id not in fallback:
+            manual._house(m, CFG.data.manual, False)
+    assert built == 59
