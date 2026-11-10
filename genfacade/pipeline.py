@@ -21,7 +21,7 @@ from typing import NamedTuple
 import numpy
 from pydantic import BaseModel
 
-from genfacade import parts
+from genfacade import parts, roof
 from genfacade.config import Config, LayoutModel, Parts
 from genfacade.metrics import realism
 from genfacade.models import stub
@@ -334,9 +334,10 @@ def walls(spec: HouseSpec, plan: Plan, rule: Parts | None = None) -> FacadeSheet
     без него — только по `spec.wing_floors` (синтетика и разметка делят дом сами)."""
     wall_runs = parts.runs(spec, plan, rule)
     stepped = any(wall_runs)
-    return unfold(FacadeSheet(
+    sheet = unfold(FacadeSheet(
         spec=spec, wings=parts.sheet_wings(plan) if stepped else [],
         facades=[SideFacade(side=s, runs=r) for s, r in zip(plan.sides, wall_runs, strict=True)]))
+    return roof.with_covered(sheet)  # у дома из частей — зоны под кровлей нижней части (gf#412)
 
 
 def _prepare(req: PlanRun, svg: str, out: Path, cfg: Config, done: list[int]) -> FacadeSheet:
