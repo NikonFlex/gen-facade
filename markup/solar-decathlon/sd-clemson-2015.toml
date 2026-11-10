@@ -12,7 +12,7 @@ roof = "односкатная, низ на юге, панели на стойк
 roof_kind = "shed"
 pitch_deg = 3.8
 overhang_m = 0.4
-roof_gaps = ["низ односкатной не у той стены: низ на юге (сторона 3), модуль ставит низ у первой длинной стены без входа (сторона 1, север)"]
+roof_down = 3          # скат крыши к стороне 3 (gf#431; была строка roof_gaps)
 unit = "ft"
 pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36" = 54 pt
 material = "metal"        # 1/8" CNC CUT POLYMETAL PANEL SIDING

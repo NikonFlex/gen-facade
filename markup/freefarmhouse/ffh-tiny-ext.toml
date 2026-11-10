@@ -23,7 +23,9 @@ roof = "двускатная 7.5/12 (фальцевая), конёк вдоль 
 roof_kind = "gable"
 pitch_deg = 32.0
 overhang_m = 0.4
-roof_gaps = ["составная: двускатная ядра и односкатная кухня 2/12 -> одна двускатная"]
+part_roofs = [  # свои крыши частей (gf#431), часть — под серединой x на виде side
+  { side = 3, x = [278.0, 458.0], kind = "shed", pitch_deg = 9.46, down = 4 },  # кухня — односкатная 2/12, падает на север
+]
 unit = "ft"
 pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"; EAVE +17'-3" = 310.5 pt над FF1, дверь 84" = 126 pt
 material = "siding"       # CLAPBOARD SIDING

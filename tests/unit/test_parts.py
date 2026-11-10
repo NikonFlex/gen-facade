@@ -20,6 +20,7 @@ from genfacade.schema import (
     Element,
     ElementClass,
     FacadeSheet,
+    Facing,
     FixedField,
     MaterialZone,
     Mode,
@@ -27,6 +28,8 @@ from genfacade.schema import (
     OpeningKind,
     Rect,
     Refusal,
+    Roof,
+    RoofKind,
     Rule,
     SideFacade,
     ZoneRole,
@@ -456,6 +459,45 @@ def test_each_part_has_its_own_slopes_at_its_own_eaves():
     assert ridge[1] < main.eaves  # конёк нижней части ниже карниза верхней
 
 
+def with_roofs(sheet: FacadeSheet, *roofs: Roof) -> FacadeSheet:
+    """Лист с крышей каждой части — через проверку схемы, как его читает модуль."""
+    return FacadeSheet.model_validate(sheet.model_copy(update={"roofs": list(roofs)}).model_dump())
+
+
+def test_lower_part_with_its_own_shed_roof():
+    """`facade: Крыша над частями дома`, «Пристройка под односкатной крышей»: у крыла 2,05 × 3 м
+    односкатная 14° низом на восток — один скат от 3,25 м у восточной стены до 3,25 + 2,05 · tg 14°
+    у стены верхней, щипцов нет; верхняя — двускатная, как у дома."""
+    sheet = bare(GABLE)
+    house_roof = sheet.spec.roof
+    shed = Roof(kind=RoofKind.SHED, pitch_deg=14.0, overhang_m=house_roof.overhang_m,
+                material=house_roof.material, down_to=Facing.X_PLUS)
+    sheet = with_roofs(sheet, house_roof, shed)
+    main, wing = roof.roofs(sheet).parts
+    assert [s.inward for s in wing.slopes] == [(-1.0, 0.0)]
+    west, east = min(x for x, _ in wing.corners), max(x for x, _ in wing.corners)
+    y = sum(y for _, y in wing.corners) / 4
+    assert wing.height((east, y)) == pytest.approx(3.25)
+    assert wing.height((west, y)) == pytest.approx(3.25 + 2.05 * math.tan(math.radians(14.0)))
+    assert len(main.slopes) == 2 and main.rise == pytest.approx(
+        math.tan(math.radians(house_roof.pitch_deg)))
+    east_side = next(k for k, f in enumerate(sheet.facades)
+                     if f.side.length_m == pytest.approx(3.0))
+    assert east_side in roof.eave_walls(sheet)  # низ ската — карниз, а не щипец
+    south = shed.model_copy(update={"down_to": Facing.Y_MINUS})  # не то, что дало бы правило
+    _, wing = roof.roofs(with_roofs(sheet, house_roof, south)).parts
+    assert [s.inward for s in wing.slopes] == [(0.0, 1.0)]
+
+
+def test_part_roofs_match_parts_and_share_the_cover():
+    sheet = bare(GABLE)
+    with pytest.raises(ValueError, match="крыш частей 1, а крыльев 2"):
+        with_roofs(sheet, sheet.spec.roof)
+    other = sheet.spec.roof.model_copy(update={"material": None})
+    with pytest.raises(ValueError, match="покрытие крыши части"):
+        with_roofs(sheet, sheet.spec.roof, other)
+
+
 def test_roof_of_lower_part_ends_at_wall_of_higher():
     """Кровля нижней части не заходит за стену верхней: ни одна её точка не над крылом верхней."""
     _, house = gable_house()
@@ -523,9 +565,9 @@ def test_jog_narrower_than_overhang_has_no_roof_of_its_own():
     """Уступ контура уже свеса (у разметки — шум в сантиметры) крышу не несёт: он под соседними."""
     sheet, house = gable_house()
     jog = Rect(x0_m=0.0, y0_m=0.0, x1_m=5.0, y1_m=house.parts[0].overhang - 0.1)
-    line = roof._part_line(sheet, 0, jog, 3.0, 0.7, [])
+    line = roof._part_line(sheet, 0, jog, 3.0, [])
     assert not line.slopes and line.height((1.0, 0.1)) == pytest.approx(3.0)
-    assert roof._part_line(sheet, 0, Rect(x0_m=0.0, y0_m=0.0, x1_m=5.0, y1_m=2.0), 3.0, 0.7,
+    assert roof._part_line(sheet, 0, Rect(x0_m=0.0, y0_m=0.0, x1_m=5.0, y1_m=2.0), 3.0,
                            []).slopes
 
 
