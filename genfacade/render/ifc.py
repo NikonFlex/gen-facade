@@ -4,8 +4,11 @@
 выдавливания, толщина `ifc.wall_thickness_m` внутрь от контура плана), проёмы — IfcOpeningElement
 в стене с IfcWindow и IfcDoor на своих местах и размерах, перекрытия — IfcSlab, крыша — IfcRoof из
 плит скатов (roof.py) или плоской плиты. Материал стены — IfcMaterial с видом отделки, цвет — из
-палитры дома. Метры плана, как у дома объёмом (render/house3d.py). Выступы (цоколь, карниз,
-подоконник, козырёк, крыльцо) и деление рамы в IFC не идут: здесь объёмы здания, а не отделка.
+палитры дома. Метры плана, как у дома объёмом (render/house3d.py). Из того, что ставит модель на
+шаге 4, идут ещё ставни (IfcShadingDevice SHUTTER — створка на элемент листа, пара у окна),
+козырьки над дверью (IfcSlab ROOF формой из вида дома) и крыльцо (IfcSlab BASESLAB профилем
+ступеней, как в 3D). Цоколь, карниз, наличники, подоконник и деление рамы в IFC не идут: здесь
+объёмы здания, а не отделка (решение хозяина 10.11).
 """
 
 import math
@@ -21,6 +24,7 @@ from genfacade.render.svg import Pen, element_fill, pen_for
 from genfacade.schema import (
     EPS,
     OPENINGS,
+    CanopyShape,
     Element,
     ElementClass,
     FacadeSheet,
@@ -34,6 +38,7 @@ SCHEMA = "IFC4"
 IFC_FILE = "house.ifc"  # имя файла выгрузки: в папке прогона и в шапке IFC
 AUTHOR = "genfacade"
 UP, DOWN = (0.0, 0.0, 1.0), (0.0, 0.0, -1.0)
+ARCH_STEPS = 16  # звеньев свода арочного козырька (как в 3D, house3d_relief.js)
 RGB_MAX = 255
 HEX_LEN = 7  # "#rrggbb"
 DOOR_TYPE = {ElementClass.DOOR: "DOOR", ElementClass.GARAGE_DOOR: "GATE"}
@@ -289,6 +294,13 @@ class IfcHouse:
         for e in f.elements:
             if e.cls in OPENINGS:
                 self._opening(k, ref, place, e)
+            elif e.cls is ElementClass.BLIND:
+                self._shutter(k, place, e)
+        for r in self.data["walls"][k]["relief"]:
+            if r["cls"] is ElementClass.CANOPY:
+                self._canopy(k, place, r)
+            elif r["cls"] is ElementClass.PORCH:
+                self._porch(k, place, r)
 
     def _opening(self, k: int, wall: Ref, place: Ref, e: Element) -> None:
         """Проём в стене и его заполнение — окно или дверь — по рамке элемента листа."""
@@ -323,6 +335,90 @@ class IfcHouse:
         return self.w.product("IfcDoor", f"door/{key}", name.format(id=e.id), place, shape,
                               None, e.h_m, e.w_m, Enum(DOOR_TYPE[e.cls]), Enum("NOTDEFINED"),
                               None)
+
+    # ——— то, что стоит на стене: ставни, козырёк, крыльцо ———
+    # Местные оси стены: x вдоль стены от левого края, y вверх, z наружу. Выдавливание идёт вниз по
+    # z местного размещения, поэтому вынос depth — размещение на z=depth и выдавливание на depth.
+
+    def _front(self, place: Ref, ring: list[Point], depth: float, color: str) -> tuple[Ref, Ref]:
+        """Профиль в плоскости стены (x, y), вынесенный наружу на depth: размещение и тело."""
+        w = self.w
+        return w.place(place, (0.0, 0.0, depth)), w.solid(w.polygon(ring), depth, color)
+
+    def _side(self, place: Ref, ring: list[Point], x0: float, x1: float, color: str
+              ) -> tuple[Ref, Ref]:
+        """Профиль сбоку (z наружу, y вверх), вытянутый вдоль стены от x0 до x1."""
+        w = self.w
+        at = w.place(place, (x0, 0.0, 0.0), (-1.0, 0.0, 0.0), (0.0, 0.0, 1.0))
+        return at, w.solid(w.polygon(ring), x1 - x0, color)
+
+    def _extra(self, kind: str, key: str, name: str, side: int, e_id: str, cls: str,
+               y: float, parts_: tuple[Ref, Ref], *tail: object) -> None:
+        """Объект выступа: размещение и тело, свойства GenFacade, этаж по низу."""
+        w = self.w
+        storey = self._storey_at(y)
+        ref = w.product(kind, key, name, parts_[0], w.shape([parts_[1]]), None, *tail)
+        w.props(key, ref, self.ifc.pset.facade, {
+            "Side": integer(side), "Id": label(e_id), "Class": label(cls),
+            "Floor": integer(storey + 1)})
+        self.contained[storey].append(ref)
+
+    def _shutter(self, k: int, place: Ref, e: Element) -> None:
+        side = self.sheet.facades[k].side.index
+        ring = [(e.x_m, e.y_m), (e.x_m + e.w_m, e.y_m), (e.x_m + e.w_m, e.y_m + e.h_m),
+                (e.x_m, e.y_m + e.h_m)]
+        self._extra("IfcShadingDevice", f"shutter/{side}-{e.id}",
+                    self.ifc.names.shutter.format(id=e.id), side, e.id, e.cls, e.y_m,
+                    self._front(place, ring, self.ifc.shutter_m, element_fill(e, self.pen)),
+                    Enum("SHUTTER"))
+
+    def _canopy(self, k: int, place: Ref, r: dict) -> None:
+        """Козырёк формой, как в 3D (house3d_relief.js): двускатный — треугольник, арка — свод,
+        плита с уклоном — клин; на кронштейнах и столбах — плита сверху (кронштейны и столбы
+        в IFC не идут)."""
+        look, d = self.cfg.viewer.house3d, r["depth"]
+        x0, x1, y0, y1 = r["x0"], r["x1"], r["y0"], r["y1"]
+        side = self.sheet.facades[k].side.index
+        if r["shape"] == CanopyShape.GABLE:
+            parts_ = self._front(place, [(x0, y0), (x1, y0), ((x0 + x1) / 2, y1)], d, r["color"])
+        elif r["shape"] == CanopyShape.ARCHED:
+            mid, half, rise = (x0 + x1) / 2, (x1 - x0) / 2, y1 - y0
+            dome = [(mid + half * math.cos(math.pi * (1 - i / ARCH_STEPS)),
+                     y0 + rise * math.sin(math.pi * (1 - i / ARCH_STEPS)))
+                    for i in range(ARCH_STEPS + 1)]
+            parts_ = self._front(place, [(x0, y0), (x1, y0), *reversed(dome)], d, r["color"])
+        elif r["shape"] == CanopyShape.SLAB:
+            h = y1 - y0
+            ring = [(0.0, y0), (d, y0), (d, y0 + h * look.slope_edge), (0.0, y1)]
+            parts_ = self._side(place, ring, x0, x1, r["color"])
+        else:
+            top = y1 - min(self.cfg.sheet.trim.slab_m, y1 - y0)
+            parts_ = self._front(place, [(x0, top), (x1, top), (x1, y1), (x0, y1)], d, r["color"])
+        e = r["id"]
+        self._extra("IfcSlab", f"canopy/{side}-{e}", self.ifc.names.canopy.format(id=e), side, e,
+                    ElementClass.CANOPY, y0, parts_, Enum("ROOF"))
+
+    def _porch(self, k: int, place: Ref, r: dict) -> None:
+        """Крыльцо: площадка глубиной depth и ступени перед ней — профиль лестницы вдоль стены,
+        как в 3D; одна плита (IfcSlab BASESLAB)."""
+        look, n, d = self.cfg.viewer.house3d, r["steps"], r["depth"]
+        rise = (r["y1"] - r["y0"]) / n
+
+        def out(i: int) -> float:
+            return d + (n - i) * look.tread_m
+
+        ring: list[Point] = [(0.0, r["y0"]), (out(1), r["y0"])]
+        for i in range(1, n + 1):
+            ring.append((out(i), r["y0"] + i * rise))
+            if i < n:
+                ring.append((out(i + 1), r["y0"] + i * rise))
+        ring.append((0.0, r["y1"]))
+        side = self.sheet.facades[k].side.index
+        e = r["id"]
+        self._extra("IfcSlab", f"porch/{side}-{e}", self.ifc.names.porch.format(id=e), side, e,
+                    ElementClass.PORCH, r["y0"], self._side(place, ring, r["x0"], r["x1"],
+                                                             r["color"]), Enum("BASESLAB"))
+
 
     # ——— плиты: стены над крышей нижней части, перекрытия, крыша ———
 
