@@ -11,7 +11,7 @@ on:
       job:
         description: "probe — проверить GPU; train — обучить модель шага 4; finetune — дообучить её на коттеджах BuildingNet; eval — оценить на val; visual — таблица метрик с FID и KID; realtest — таблица против реального теста с FID и KID; retrain — всё сразу: корпус, обучение, дообучение по флагу, реальный тест новой и прежней модели одной таблицей; stability — реальный тест модели по вариантам сэмплинга (variants) и сводка с разбросом по seed; plans — genfacade run на непрямоугольных планах в обоих режимах моделью model_run (gf#306); owl — OWLv2 ищет окна и двери на листах фасадов строим.дом.рф (gf#342)"
         type: choice
-        options: [probe, train, finetune, eval, visual, realtest, retrain, stability, plans, owl]
+        options: [probe, train, finetune, eval, visual, realtest, retrain, stability, plans, owl, diag]
         default: probe
       houses:
         description: "train, retrain: сколько синтетических домов в корпусе (собранные раньше не пересобираются)"
@@ -332,6 +332,30 @@ jobs:
         with:
           name: pretrain-${{ github.run_id }}
           path: ${{ env.OUT }}/train
+          if-no-files-found: ignore
+
+      - name: Диагностика раннера
+        # job=diag: почему запуски отменяются посреди шага (gf#373, 10.11) — журналы самого раннера
+        # (_diag: Runner_*.log, Worker_*.log по заданиям), время загрузки машины и WSL, память, GPU.
+        if: inputs.job == 'diag'
+        run: |
+          root="$(dirname "$(dirname "$(dirname "$GITHUB_WORKSPACE")")")"
+          mkdir -p diag
+          { echo "runner: $root"; echo "загрузка: $(uptime -s)"; uptime; free -h; df -h "$root";
+            /usr/lib/wsl/lib/nvidia-smi || true; last -x 2>/dev/null | head -40 || true;
+            dmesg 2>/dev/null | tail -60 || true; } > diag/machine.txt 2>&1
+          ls -lt "$root/_diag" > diag/files.txt 2>&1 || true
+          ls -t "$root"/_diag/*.log 2>/dev/null | head -12 | xargs -r -I{} cp {} diag/
+          grep -h -i -E "cancel|shutdown|lost|signal|terminat|exception|reconnect|session" \
+            "$root"/_diag/*.log 2>/dev/null | tail -400 > diag/events.txt || true
+          cat diag/machine.txt; tail -60 diag/events.txt
+
+      - name: Журналы раннера
+        if: always() && inputs.job == 'diag'
+        uses: actions/upload-artifact@v7
+        with:
+          name: diag-${{ github.run_id }}
+          path: diag
           if-no-files-found: ignore
 
       - name: Результат реального теста
