@@ -15,6 +15,7 @@ import math
 from collections import defaultdict
 
 import shapely
+import shapely.affinity
 
 from genfacade import parts, roof, unfold
 from genfacade.config import Config
@@ -257,20 +258,29 @@ class IfcHouse:
     def _wall_shape(self, k: int, f: SideFacade) -> shapely.Geometry:
         """Силуэт стены вместе с фронтоном над карнизом (roof.house_above) — один профиль."""
         sil = f.silhouette or unfold.silhouette(f.side.length_m, self.sheet.spec.eaves_m, f.runs)
-        shapes = [shapely.Polygon(sil)]
+        body = shapely.Polygon(sil)
         house = roof.roofs(self.sheet)
-        if house is not None:
-            shapes += [shapely.Polygon(p).buffer(0) for p in roof.house_above(house, k)]
-        return shapely.union_all(shapes)
+        if house is None:
+            return body
+        above = [shapely.Polygon(p).buffer(0) for p in roof.house_above(house, k)]
+        # стена не выше кровли и на внутренней грани: под односкатной скат там ниже
+        inner = [shapely.Polygon(p).buffer(0) for p in roof.house_above(
+            house, k, self.ifc.wall_thickness_m)]
+        top = shapely.union_all([body, *above]).intersection(shapely.union_all([body, *inner]))
+        # верх стены уходит в плиту ската, а не вровень с ним: вровень он мерцает поверх кровли
+        return top.intersection(shapely.affinity.translate(top, yoff=-self.ifc.roof_seat_m))
 
     def _trim(self, shape: shapely.Geometry, convex: bool) -> list[list[Point]]:
         """Профили стены с торцом у левого угла, сдвинутым на толщину: на выпуклом углу стена
         короче — угол занимает соседняя, на вогнутом длиннее — иначе в углу дыра в толщину."""
-        shift = self.ifc.wall_thickness_m * (1 if convex else -1)
+        t = self.ifc.wall_thickness_m
         rings = []
-        for poly in getattr(shape, "geoms", [shape]):
+        if convex:  # срез по x ≥ t, а не сдвиг вершин: верх фронтона и скат не уезжают с высоты
+            x0, y0, x1, y1 = shape.bounds
+            shape = shape.intersection(shapely.box(t, y0 - 1, x1 + 1, y1 + 1))
+        for poly in (g for g in getattr(shape, "geoms", [shape]) if isinstance(g, shapely.Polygon)):
             ring = list(poly.exterior.coords)[:-1]
-            rings.append([(x + shift if abs(x) < EPS else x, y) for x, y in ring])
+            rings.append(ring if convex else [(x - t if abs(x) < EPS else x, y) for x, y in ring])
         return rings
 
     def _wall(self, k: int, f: SideFacade) -> None:
@@ -437,13 +447,25 @@ class IfcHouse:
             return
         color = self.pen.colors.get(PaletteRole.MAIN, self.cfg.library.fill.wall)
         for j, joint in enumerate(roof.joints(house)):
-            for i, wall in enumerate(joint.walls):
+            high = house.parts[joint.high]
+            for i, wall in enumerate(self._under_roof(high, joint, w) for w in joint.walls):
                 place, profile = self._plate(wall, (*joint.normal, 0.0), 0.0)
                 item = self.w.solid(profile, self.ifc.joint_wall_m, color)
                 ref = self.w.product("IfcWall", f"joint{j}/{i}", self.ifc.names.joint_wall,
                                      place, self.w.shape([item]), None, Enum("STANDARD"))
                 self.walls.append(ref)
                 self.contained[self._storey_at(wall[0][2])].append(ref)
+
+    def _under_roof(self, high: roof.Roofline, joint: roof.Joint, wall: list[Vec]) -> list[Vec]:
+        """Стена над кровлей нижней части, выдавленная к высокой: верх не выше кровли высокой на
+        внутренней грани (там скат ниже) — иначе стена торчит над скатом."""
+        t = self.ifc.joint_wall_m
+        out = list(wall)
+        for i in (2, 3):
+            x, y, z = wall[i]
+            inner = high.height((x - joint.normal[0] * t, y - joint.normal[1] * t))
+            out[i] = (x, y, max(wall[3 - i][2], min(z, inner) - self.ifc.roof_seat_m))
+        return out
 
     def _footprint(self, k: int) -> shapely.Geometry:
         """Площадь перекрытия над этажом k: этажи части дома считает лист (`WallRun.floors`);
