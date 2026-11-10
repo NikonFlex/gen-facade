@@ -336,14 +336,19 @@ jobs:
 
       - name: Диагностика раннера
         # job=diag: почему запуски отменяются посреди шага (gf#373, 10.11) — журналы самого раннера
-        # (_diag: Runner_*.log, Worker_*.log по заданиям), время загрузки машины и WSL, память, GPU.
-        if: inputs.job == 'diag'
+        # (_diag: Runner_*.log, Worker_*.log по заданиям), время загрузки машины и WSL, память, GPU,
+        # сеть (DNS и доступ к GitHub и PyPI). always(): окружение без сети не ставится, а журналы нужны.
+        if: always() && inputs.job == 'diag'
         run: |
           root="$(dirname "$(dirname "$(dirname "$GITHUB_WORKSPACE")")")"
           mkdir -p diag
           { echo "runner: $root"; echo "загрузка: $(uptime -s)"; uptime; free -h; df -h "$root";
             /usr/lib/wsl/lib/nvidia-smi || true; last -x 2>/dev/null | head -40 || true;
-            dmesg 2>/dev/null | tail -60 || true; } > diag/machine.txt 2>&1
+            dmesg 2>/dev/null | tail -60 || true; cat /etc/resolv.conf;
+            for h in github.com api.github.com pypi.org; do getent hosts "$h" || echo "DNS: нет $h"; done;
+            curl -sS -o /dev/null -m 15 -w "github %{http_code} %{time_total}s\n" https://api.github.com || true;
+            curl -sS -o /dev/null -m 15 -w "pypi %{http_code} %{time_total}s\n" https://pypi.org/simple/ || true;
+            } > diag/machine.txt 2>&1
           ls -lt "$root/_diag" > diag/files.txt 2>&1 || true
           ls -t "$root"/_diag/*.log 2>/dev/null | head -12 | xargs -r -I{} cp {} diag/
           grep -h -i -E "cancel|shutdown|lost|signal|terminat|exception|reconnect|session" \
