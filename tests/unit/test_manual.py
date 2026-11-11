@@ -237,10 +237,12 @@ def test_wing_with_two_eaves_marks_waits():
 
 
 def test_house_without_steps_keeps_one_roof_line():
-    """Отметки карниза на всех крыльях в пределах допуска от карниза дома — дом без частей."""
+    """Отметки карниза на всех крыльях в пределах допуска от карниза дома — дом без ступеней: у
+    сторон участков нет, крылья лист хранит (крыша у каждого своя, gf#431, этап В)."""
     near = EAVE_FT - 0.1
     sample, _ = manual.house(stepped_l({3: [(0, 8, near)], 5: [(20, 28, near)]}), CFG.data.manual)
-    assert sample.plan.wings == [] and not any(f.runs for f in sample.sheet.facades)
+    assert len(sample.plan.wings) == 2 and not any(f.runs for f in sample.sheet.facades)
+    assert sample.sheet.wings and roof.roofs(sample.sheet) is not None
 
 
 GABLE_FT = 14.0  # конёк над чистым полом

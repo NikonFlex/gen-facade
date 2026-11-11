@@ -271,6 +271,8 @@ def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
     rects, found = _levels(m, ring, lengths, cfg, cut)
     runs = [parts.side_runs(k, lengths[k], ring[k], ring[(k + 1) % len(ring)], rects, found)
             if found else [] for k in range(len(m.sides))]
+    spans = [parts.side_spans(k, lengths[k], ring[k], ring[(k + 1) % len(ring)], rects)
+             if rects else [] for k in range(len(m.sides))]
     spec = _spec(m)
     spec = spec.model_copy(update={"roof": spec.roof.model_copy(
         update={"down_to": _down(m, m.roof_down, normals)})})
@@ -287,10 +289,10 @@ def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
     facades = [f.model_copy(update={"zones": _zones(e, m, spec, f.side.length_m, r), "runs": r})
                for f, e, r in zip(sheet.facades, m.sides, runs, strict=True)]
     sheet = sheet.model_copy(update={"facades": facades, "wall_gables": _wall_gables(m, cfg)})
-    if found:  # силуэт — ступенями по участкам, крылья — в плане (шаг 2)
+    if rects:  # крылья — в плане (шаг 2) и на листе; силуэт ступенями — только при разных высотах
         plan = plan.model_copy(update={"wings": rects})
         sheet = roof.with_covered(unfold(sheet.model_copy(update={
-            "wings": parts.sheet_wings(plan), "roofs": _part_roofs(m, runs, spec, normals)})))
+            "wings": parts.sheet_wings(plan), "roofs": _part_roofs(m, spans, spec, normals)})))
     elif m.part_roofs:
         raise BadMarkup(f"{m.id}: крыши частей у дома без частей")
     sheet, bare = _no_eaves(sheet)
@@ -371,7 +373,8 @@ def _is_roof(m: Markup, e: Elevation, s: EavesMark, base: float, cfg: Manual) ->
 def _levels(m: Markup, ring: list[Point], lengths: list[float], cfg: Manual, cut: bool
             ) -> tuple[list[Rect], list[parts.Level]]:
     """Крылья контура и этажность с карнизом каждого — по участкам карниза разметки; дом без
-    ступеней — ([], []). Участок стороны лежит на крыле (`edge_runs`), его отметку несут участки
+    ступеней — крылья и пустой список этажностей. Участок стороны лежит на крыле (`edge_runs`), его
+    отметку несут участки
     карниза, заходящие на него дальше `length_tol_m`; у крыла все участки одной отметки, иначе
     части не ложатся на крылья (ступень внутри крыла, крыло в две отметки) — `Unsupported`; с `cut`
     крыло перед этим режется по линиям ступени (`_stepped`, gf#422).
@@ -411,7 +414,7 @@ def _levels_on(m: Markup, ring: list[Point], lengths: list[float], cfg: Manual,
         raise Unsupported(f"{m.id}: части разной высоты — ступень внутри прямоугольного контура: "
                           f"карниз над {levels[0].floors} эт., {levels[0].eaves_m:.2f} м; "
                           f"крыльев в контуре нет (gf#322)")
-    return (rects, levels) if len({lv.eaves_m for lv in levels}) > 1 else ([], [])
+    return (rects, levels) if len({lv.eaves_m for lv in levels}) > 1 else (rects, [])
 
 
 def _distinct(levels: list[parts.Level], cfg: Manual) -> list[parts.Level]:
@@ -569,18 +572,18 @@ def _down(m: Markup, down: int | None, normals: list[Point]) -> Facing | None:
     return Facing.of(normals[down])
 
 
-def _part_roofs(m: Markup, runs: list[list[WallRun]], spec: HouseSpec,
+def _part_roofs(m: Markup, spans: list[list[parts.Span]], spec: HouseSpec,
                 normals: list[Point]) -> list[Roof]:
     """Крыша каждой части: своя из разметки (`part_roofs`) или крыша дома. Часть — та, чей участок
-    стороны под серединой отрезка разметки."""
-    count = 1 + max(r.part for side in runs for r in side)
+    стороны (крыло на ней) под серединой отрезка разметки."""
+    count = 1 + max(r.part for side in spans for r in side)
     out: list[Roof | None] = [None] * count
     for mark in m.part_roofs:
         if mark.side >= len(m.sides):
             raise BadMarkup(f"{m.id}: крыша части на стороне {mark.side}, а сторон {len(m.sides)}")
         e = m.sides[mark.side]
         mid = ((mark.x[0] + mark.x[1]) / 2 - e.wall[0]) * m.m_per_unit / m.scale(e)
-        part = next((r.part for r in runs[mark.side] if r.x0_m <= mid <= r.x1_m), None)
+        part = next((r.part for r in spans[mark.side] if r.x0 <= mid <= r.x1), None)
         if part is None or out[part] is not None:
             raise BadMarkup(f"{m.id}: {e.view}: крыша части на x {mark.x} — "
                             f"{'нет участка' if part is None else 'у части уже есть крыша'}")

@@ -212,6 +212,8 @@ class IfcHouse:
         self.pen: Pen = pen_for(sheet, cfg)
         self.w = Writer(name, cfg.ifc.tolerance)
         self.data = house_3d(sheet, cfg)
+        house = roof.roofs(sheet)
+        self.faces = roof.house_faces(house) if house is not None else []
         self.levels = sheet.spec.floor_levels()
         self.storeys: list[Ref] = []
         self.contained: dict[int, list[Ref]] = defaultdict(list)  # этаж → объекты
@@ -270,29 +272,58 @@ class IfcHouse:
         # верх стены уходит в плиту ската, а не вровень с ним: вровень он мерцает поверх кровли
         return top.intersection(shapely.affinity.translate(top, yoff=-self.ifc.roof_seat_m))
 
-    def _trim(self, shape: shapely.Geometry, convex: bool) -> list[list[Point]]:
-        """Профили стены с торцом у левого угла, сдвинутым на толщину: на выпуклом углу стена
+    def _trim(self, k: int, shape: shapely.Geometry) -> list[list[Point]]:
+        """Профили стены k с торцом у левого угла, сдвинутым на толщину: на выпуклом углу стена
         короче — угол занимает соседняя, на вогнутом длиннее — иначе в углу дыра в толщину."""
+        if self.data["walls"][k]["convex_left"]:  # срез по x ≥ t, а не сдвиг вершин: верх
+            x0, y0, x1, y1 = shape.bounds  # фронтона и скат не уезжают с высоты
+            shape = shape.intersection(shapely.box(self.ifc.wall_thickness_m, y0 - 1, x1 + 1,
+                                                   y1 + 1))
+        else:
+            shape = self._inner_corner(k, shape)
+        return roof.polygons(shape)
+
+    def _inner_corner(self, k: int, shape: shapely.Geometry) -> shapely.Geometry:
+        """Стена k на вогнутом левом углу, продолженная за угол на толщину t. Квадрат угла — не выше
+        кровли над ним с посадкой: у дома из крыльев кровля над углом бывает ниже торца стены
+        (односкатные крылья одной высоты, gf#431)."""
         t = self.ifc.wall_thickness_m
-        rings = []
-        if convex:  # срез по x ≥ t, а не сдвиг вершин: верх фронтона и скат не уезжают с высоты
-            x0, y0, x1, y1 = shape.bounds
-            shape = shape.intersection(shapely.box(t, y0 - 1, x1 + 1, y1 + 1))
-        for poly in (g for g in getattr(shape, "geoms", [shape]) if isinstance(g, shapely.Polygon)):
-            ring = list(poly.exterior.coords)[:-1]
-            rings.append(ring if convex else [(x - t if abs(x) < EPS else x, y) for x, y in ring])
-        return rings
+        moved = shapely.union_all([
+            shapely.Polygon([(x - t if abs(x) < EPS else x, y) for x, y in ring])
+            for ring in roof.polygons(shape)])
+        (lx, ly), u = self._axis(k)
+        tops = [self.roof_top((lx + u[0] * x - u[1] * d, ly + u[1] * x + u[0] * d))
+                for x in (-t, 0.0) for d in (0.0, t)]
+        if any(top is None for top in tops):
+            return moved
+        cap = min(tops) - self.ifc.roof_seat_m
+        return moved.intersection(shapely.box(-t, -1.0, 0.0, cap).union(
+            shapely.box(0.0, -1.0, roof.FAR, roof.FAR)))
+
+    def roof_top(self, p: Point) -> float | None:
+        """Верх кровли над точкой плана — самая высокая из граней над ней; кровли нет — None."""
+        tops = []
+        for face in self.faces:
+            if shapely.Polygon([q[:2] for q in face]).buffer(EPS).contains(shapely.Point(p)):
+                n = _normal(face)
+                tops.append(face[0][2] - ((p[0] - face[0][0]) * n[0]
+                                          + (p[1] - face[0][1]) * n[1]) / n[2])
+        return max(tops, default=None)
+
+    def _axis(self, k: int) -> tuple[Point, Vec]:
+        """Левый край стены k снаружи и единичное направление вдоль неё."""
+        wall = self.data["walls"][k]
+        (lx, ly), (rx, ry) = wall["left"], wall["right"]
+        return (lx, ly), _unit((rx - lx, ry - ly, 0.0))
 
     def _wall(self, k: int, f: SideFacade) -> None:
         w, t = self.w, self.ifc.wall_thickness_m
-        wall = self.data["walls"][k]
-        (lx, ly), (rx, ry) = wall["left"], wall["right"]
-        u = _unit((rx - lx, ry - ly, 0.0))
+        (lx, ly), u = self._axis(k)
         out = (u[1], -u[0], 0.0)
         place = w.place(self.building_place, (lx, ly, 0.0), out, u)
         color = self.pen.colors.get(PaletteRole.MAIN, self.cfg.library.fill.wall)
         items = [w.solid(w.polygon(ring), t, color)
-                 for ring in self._trim(self._wall_shape(k, f), wall["convex_left"])]
+                 for ring in self._trim(k, self._wall_shape(k, f))]
         name = self.ifc.names.wall.format(side=f.side.index)
         ref = w.product("IfcWall", f"wall{k}", name, place, w.shape(items), None,
                         Enum("STANDARD"))

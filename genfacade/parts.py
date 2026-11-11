@@ -96,10 +96,18 @@ def stepped_runs(plan: Plan, found: list[Level]) -> list[list[WallRun]]:
             for i, s in enumerate(plan.sides)]
 
 
-def side_runs(index: int, length: float, a: Point, b: Point, wings: list[Rect],
-              found: list[Level]) -> list[WallRun]:
-    """Участки стороны ab слева направо снаружи (x = длина − t); части должны покрыть сторону
-    без щелей, границы соседних участков — одно число."""
+class Span(NamedTuple):
+    """Участок стороны на крыле: [x0, x1] вдоль стороны слева направо снаружи, номер крыла."""
+
+    x0: float
+    x1: float
+    part: int
+
+
+def side_spans(index: int, length: float, a: Point, b: Point, wings: list[Rect]) -> list[Span]:
+    """Крылья вдоль стороны ab слева направо снаружи (x = длина − t); они должны покрыть сторону
+    без щелей, границы соседних участков — одно число. Высоты не знает: нужна и дому из частей
+    разной высоты (`side_runs`), и дому одной высоты (крыша по крыльям, `roof._wing_house`)."""
     along = edge_runs(a, b, wings)  # по возрастанию t от начала стороны
     starts = [0.0, *(t1 for _, _, t1 in along)]
     whole = bool(along) and all(abs(t0 - end) <= EPS for (_, t0, _), end in zip(
@@ -108,9 +116,16 @@ def side_runs(index: int, length: float, a: Point, b: Point, wings: list[Rect],
         raise ValueError(f"части дома не покрывают сторону {index}: {along}")
     ordered = list(reversed(along))
     xs = [0.0, *(length - t0 for _, t0, _ in ordered)]
-    return [WallRun(x0_m=x0 + 0.0, x1_m=x1, part=k, floors=found[k].floors,
-                    eaves_m=found[k].eaves_m)
-            for (k, _, _), x0, x1 in zip(ordered, xs[:-1], xs[1:], strict=True)]
+    return [Span(x0 + 0.0, x1, k) for (k, _, _), x0, x1 in zip(ordered, xs[:-1], xs[1:],
+                                                            strict=True)]
+
+
+def side_runs(index: int, length: float, a: Point, b: Point, wings: list[Rect],
+              found: list[Level]) -> list[WallRun]:
+    """Участки стороны ab по частям с их этажностью и карнизом (`side_spans`)."""
+    return [WallRun(x0_m=s.x0, x1_m=s.x1, part=s.part, floors=found[s.part].floors,
+                    eaves_m=found[s.part].eaves_m)
+            for s in side_spans(index, length, a, b, wings)]
 
 
 def home_run(o: Opening, runs: list[WallRun]) -> WallRun:
@@ -158,13 +173,13 @@ def _show(runs: list[tuple[int, float, float]]) -> list[tuple[int, float, float]
 
 
 def parts_of(sheet: FacadeSheet, corners: list[Point]) -> list[Rect]:
-    """Крылья листа с частями. Хранимые `sheet.wings` — как есть; у листа без них (собран до того,
+    """Крылья листа. Хранимые `sheet.wings` — как есть; у листа без них (собран до того,
     как лист стал их хранить) — разбиение контура, но только если участки сторон на нём ложатся:
     те же номера и границы. Иначе отказ `StaleParts`, а не чужая крыша под чужими номерами."""
     if sheet.wings:
         return sheet.wings
     rects = wings(corners)
-    for k, f in enumerate(sheet.facades):
+    for k, f in enumerate(sheet.facades if stepped(sheet) else []):  # без участков сверять нечего
         length = f.side.length_m
         want = sorted((part, length - t1, length - t0) for part, t0, t1 in edge_runs(
             corners[k], corners[(k + 1) % len(corners)], rects))

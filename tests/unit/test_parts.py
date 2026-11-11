@@ -565,10 +565,10 @@ def test_jog_narrower_than_overhang_has_no_roof_of_its_own():
     """Уступ контура уже свеса (у разметки — шум в сантиметры) крышу не несёт: он под соседними."""
     sheet, house = gable_house()
     jog = Rect(x0_m=0.0, y0_m=0.0, x1_m=5.0, y1_m=house.parts[0].overhang - 0.1)
-    line = roof._part_line(sheet, 0, jog, 3.0, [])
+    line = roof._part_line(sheet, house.spans, 0, roof.Wing(jog, 3.0, []))
     assert not line.slopes and line.height((1.0, 0.1)) == pytest.approx(3.0)
-    assert roof._part_line(sheet, 0, Rect(x0_m=0.0, y0_m=0.0, x1_m=5.0, y1_m=2.0), 3.0,
-                           []).slopes
+    wide = roof.Wing(Rect(x0_m=0.0, y0_m=0.0, x1_m=5.0, y1_m=2.0), 3.0, [])
+    assert roof._part_line(sheet, house.spans, 0, wide).slopes
 
 
 def test_roof_view_hides_part_behind_nearer_wall():
@@ -745,3 +745,18 @@ def test_real_houses_are_not_rejected_by_roof_zones(name):
     sheet = real_house(name).sheet
     assert roof_zones(sheet)
     assert not [v for v in validate(sheet, CFG.checks) if "кровлей" in v.message]
+
+
+@pytest.mark.parametrize(("text", "faces", "area", "heights"), [
+    (GABLE, 4, 60.22, 92.7127), (TWO_PARTS + " Hip roof.", 7, 60.22, 155.1345),
+    (TWO_PARTS + " Shed roof.", 2, 60.22, 51.0543)])
+def test_roof_of_parts_of_different_height_is_as_before_ranking(text, faces, area, heights):
+    """Старшинство частей по карнизу, площади и номеру (gf#431, этап В) не меняет дом из частей
+    разной высоты: грани, их площадь на плане, высоты вершин и примыкание — как до правки (числа
+    сняты с кода до неё)."""
+    house = roof.roofs(bare(text))
+    found = roof.house_faces(house)
+    assert len(found) == faces and len(roof.joints(house)) == 1
+    assert sum(shapely.Polygon([(x, y) for x, y, _ in f]).area for f in found) == pytest.approx(
+        area, abs=1e-3)
+    assert sum(z for f in found for _, _, z in f) == pytest.approx(heights, abs=1e-3)

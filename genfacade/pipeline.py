@@ -333,9 +333,10 @@ def walls(spec: HouseSpec, plan: Plan, rule: Parts | None = None) -> FacadeSheet
     разной высоты — ступенями (`parts.py`). rule — какие крылья ниже главного, если текст молчит;
     без него — только по `spec.wing_floors` (синтетика и разметка делят дом сами)."""
     wall_runs = parts.runs(spec, plan, rule)
-    stepped = any(wall_runs)
+    # крылья лист хранит у любого непрямоугольного контура: крыша у крыла своя, даже когда высоты
+    # одни и участков у сторон нет (gf#431)
     sheet = unfold(FacadeSheet(
-        spec=spec, wings=parts.sheet_wings(plan) if stepped else [],
+        spec=spec, wings=parts.sheet_wings(plan) if plan.wings else [],
         facades=[SideFacade(side=s, runs=r) for s, r in zip(plan.sides, wall_runs, strict=True)]))
     return roof.with_covered(sheet)  # у дома из частей — зоны под кровлей нижней части (gf#412)
 
