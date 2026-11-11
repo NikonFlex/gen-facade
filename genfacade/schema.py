@@ -242,6 +242,31 @@ class RoofKind(StrEnum):
     SHED = "shed"    # односкатная: скат от одной длинной стороны вверх к другой
 
 
+class Facing(StrEnum):
+    """Сторона плана по наружной нормали стены, оси плана (y — вверх): куда спускается скат
+    крыши (gf#431, `facade: Направление ската`)."""
+
+    X_PLUS = "+x"
+    X_MINUS = "-x"
+    Y_PLUS = "+y"
+    Y_MINUS = "-y"
+
+    @property
+    def normal(self) -> Point:
+        return FACING_NORMAL[self]
+
+    @classmethod
+    def of(cls, normal: Point) -> "Facing":
+        """Ближайшая сторона плана к нормали стены."""
+        return max(cls, key=lambda f: f.normal[0] * normal[0] + f.normal[1] * normal[1])
+
+
+FACING_NORMAL: dict[Facing, Point] = {Facing.X_PLUS: (1.0, 0.0), Facing.X_MINUS: (-1.0, 0.0),
+                                      Facing.Y_PLUS: (0.0, 1.0), Facing.Y_MINUS: (0.0, -1.0)}
+# Виды крыши, у которых есть направление: у вальмовой скаты от всех стен, у плоской их нет.
+DIRECTED_ROOFS = frozenset({RoofKind.GABLE, RoofKind.SHED})
+
+
 class OpeningKind(StrEnum):
     """Проём плана (спека plan-input, «Проём плана», вид)."""
 
@@ -526,12 +551,17 @@ class Roof(Model):
     material: str | None = None  # покрытие из палитры
     pitch_deg: float = Field(default=0.0, ge=0, lt=90)  # уклон ската; у плоской — 0
     overhang_m: float = Field(default=0.0, ge=0)        # свес за стену по горизонтали
+    # Куда спускается скат: у односкатной — низ, у двускатной — одна из карнизных стен (gf#431).
+    # Пусто — правило вида (`roof._eave_sides`): двускатная — карнизы на длинных стенах.
+    down_to: Facing | None = None
 
     @model_validator(mode="after")
     def _check_pitch(self) -> "Roof":
         if (self.kind is RoofKind.FLAT) != (self.pitch_deg == 0):
             raise ValueError(f"крыша {self.kind}: уклон {self.pitch_deg}° — у плоской 0, "
                              "у скатной больше")
+        if self.down_to is not None and self.kind not in DIRECTED_ROOFS:
+            raise ValueError(f"крыша {self.kind}: направления ската у неё нет")
         return self
 
 
@@ -767,9 +797,16 @@ class FacadeSheet(Model):
     # листа (`unfold.plan_corners`), номер — `WallRun.part`. Пусто — дом без частей. Номера хранит
     # лист, а не пересчитывает разбиение контура: оно менялось, а лист остаётся тем, каким собран.
     wings: list[Rect] = []
+    # Крыша каждого крыла (gf#431, `facade: Крыша над частями дома`), номер — как у `wings`.
+    # Пусто — над всеми частями крыша дома (`spec.roof`).
+    roofs: list[Roof] = []
 
     @model_validator(mode="after")
     def _check_parts(self) -> "FacadeSheet":
+        if self.roofs and len(self.roofs) != len(self.wings):
+            raise ValueError(f"крыш частей {len(self.roofs)}, а крыльев {len(self.wings)}")
+        if any(r.material != self.spec.roof.material for r in self.roofs):
+            raise ValueError("покрытие крыши части — не покрытие дома: оно одно на дом")
         for f in self.facades:
             for r in f.runs:
                 if self.wings and r.part >= len(self.wings):

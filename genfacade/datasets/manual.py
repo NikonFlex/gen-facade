@@ -11,7 +11,9 @@ gf#199).
 ступенью (`outline`), участки карниза со своей этажностью (`eaves`), крыша на виде (`roof`) и
 элементы выше карниза. Вид, уклон и свес крыши дома — полями разметки (`roof_kind`, `pitch_deg`,
 `overhang_m`, gf#336): с gf#320 вид крыши — условие модели шага 4 и решает, у каких стен
-карниз. Сборщик берёт то, что модуль держит: окно во фронтоне — целиком в стене с фронтоном,
+карниз. Куда спускается скат — `roof_down`, номер стороны; своя крыша части — `part_roofs`:
+часть под отрезком x вида стороны, вид, уклон и сторона низа ската (gf#431).
+Сборщик берёт то, что модуль держит: окно во фронтоне — целиком в стене с фронтоном,
 какой её строит модуль по крыше дома (`roof.gables`), — остаётся окном этажа под скатом (gf#321),
 его выводимые элементы в стене — с ним; другой элемент, заходящий за карниз или угол,
 обрезается по стене, целиком срезанный идёт в счёт `cut` описи (`data: Стена до карниза в
@@ -36,7 +38,7 @@ from pathlib import Path
 
 import numpy
 import shapely
-from pydantic import Field, ValidationError
+from pydantic import Field, ValidationError, model_validator
 
 from genfacade import derive, parts, roof, window_shape
 from genfacade.config import Config, Manual
@@ -48,6 +50,7 @@ from genfacade.schema import (
     Element,
     ElementClass,
     FacadeSheet,
+    Facing,
     HouseSpec,
     HouseTrim,
     Material,
@@ -149,6 +152,28 @@ class Elevation(Model):
     roof: list[list[Point]] = []   # крыша на виде — многоугольники в pt
 
 
+class PartRoofMark(Model):
+    """Своя крыша части дома (gf#431), как её видно на фасаде: часть — та, чей участок стороны
+    `side` лежит под серединой отрезка x (pt вида); `down` — номер стороны, к которой спускается
+    скат (у односкатной — низ, у двускатной — одна из карнизных стен)."""
+
+    side: int = Field(ge=0)
+    x: tuple[float, float]
+    kind: RoofKind
+    pitch_deg: float = Field(ge=0, lt=90)
+    down: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _check(self) -> "PartRoofMark":
+        _checked(self.kind, self.pitch_deg, self.down)
+        return self
+
+
+def _checked(kind: RoofKind, pitch: float, down: int | None) -> None:
+    """Вид, уклон и направление крыши разметки сходятся (`Roof`): ошибка — при чтении файла."""
+    Roof(kind=kind, pitch_deg=pitch, down_to=None if down is None else Facing.X_PLUS)
+
+
 class Markup(Model):
     id: str
     pdf: str             # имя листа в pdf/ рядом с разметкой
@@ -156,6 +181,10 @@ class Markup(Model):
     roof_kind: RoofKind  # вид крыши дома в параметрах (gf#336): ближайший из строящихся модулем
     pitch_deg: float = Field(ge=0, lt=90)  # уклон ската; у плоской 0 (проверяет `Roof`)
     overhang_m: float = Field(ge=0)        # свес за стену по горизонтали
+    # Номер стороны, к которой спускается скат крыши дома (`facade: Направление ската`, gf#431);
+    # пусто — правило вида: двускатная — карнизы на длинных стенах, односкатная — низ у входа.
+    roof_down: int | None = Field(default=None, ge=0)
+    part_roofs: list[PartRoofMark] = []  # свои крыши частей; у остальных — крыша дома
     unit: Unit           # единица отметок и масштаба
     pt_per_unit: float = Field(gt=0)
     material: str        # вид основной отделки из library.toml
@@ -169,6 +198,11 @@ class Markup(Model):
     # (гамбрел, бабочка, составная), или конёк поперёк правила модуля. Дом остаётся в тесте.
     roof_gaps: list[str] = []
     sides: list[Elevation]
+
+    @model_validator(mode="after")
+    def _check_roof(self) -> "Markup":
+        _checked(self.roof_kind, self.pitch_deg, self.roof_down)
+        return self
 
     def scale(self, e: Elevation) -> float:
         """pt на единицу вида: свой у стороны, если её вид начерчен в другом масштабе (gf#323)."""
@@ -232,10 +266,13 @@ def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
     fp = _outline(m, cfg)
     lengths = [w.length for w in fp.walls]
     ring = [(float(v[0]) + 0.0, float(v[1]) + 0.0) for v in fp.vertices]
+    normals = [(float(w.normal[0]), float(w.normal[1])) for w in fp.walls]
     rects, found = _levels(m, ring, lengths, cfg, cut)
     runs = [parts.side_runs(k, lengths[k], ring[k], ring[(k + 1) % len(ring)], rects, found)
             if found else [] for k in range(len(m.sides))]
     spec = _spec(m)
+    spec = spec.model_copy(update={"roof": spec.roof.model_copy(
+        update={"down_to": _down(m, m.roof_down, normals)})})
     raw = [_side_elements(e, m, spec) for e in m.sides]
     # стороны плана — по проёмам первого этажа, фронтон — по крыше и сторонам: окна выше
     # карниза на них не влияют. У дома из частей фронтона нет (`roof.gables`): его лист без
@@ -251,8 +288,10 @@ def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
     sheet = sheet.model_copy(update={"facades": facades})
     if found:  # силуэт — ступенями по участкам, крылья — в плане (шаг 2)
         plan = plan.model_copy(update={"wings": rects})
-        sheet = roof.with_covered(unfold(sheet.model_copy(
-            update={"wings": parts.sheet_wings(plan)})))
+        sheet = roof.with_covered(unfold(sheet.model_copy(update={
+            "wings": parts.sheet_wings(plan), "roofs": _part_roofs(m, runs, spec, normals)})))
+    elif m.part_roofs:
+        raise BadMarkup(f"{m.id}: крыши частей у дома без частей")
     sheet, bare = _no_eaves(sheet)
     return (Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet),
             dropped + bare)
@@ -518,6 +557,36 @@ def _spec(m: Markup) -> HouseSpec:
                      floor_heights_m=heights, plinth_m=plinth, eaves_m=plinth + sum(heights),
                      roof=Roof(kind=m.roof_kind, pitch_deg=m.pitch_deg, overhang_m=m.overhang_m),
                      materials=_palette(m))
+
+
+def _down(m: Markup, down: int | None, normals: list[Point]) -> Facing | None:
+    """Куда спускается скат: сторона плана по наружной нормали стороны down."""
+    if down is None:
+        return None
+    if down >= len(normals):
+        raise BadMarkup(f"{m.id}: скат к стороне {down}, а сторон {len(normals)}")
+    return Facing.of(normals[down])
+
+
+def _part_roofs(m: Markup, runs: list[list[WallRun]], spec: HouseSpec,
+                normals: list[Point]) -> list[Roof]:
+    """Крыша каждой части: своя из разметки (`part_roofs`) или крыша дома. Часть — та, чей участок
+    стороны под серединой отрезка разметки."""
+    count = 1 + max(r.part for side in runs for r in side)
+    out: list[Roof | None] = [None] * count
+    for mark in m.part_roofs:
+        if mark.side >= len(m.sides):
+            raise BadMarkup(f"{m.id}: крыша части на стороне {mark.side}, а сторон {len(m.sides)}")
+        e = m.sides[mark.side]
+        mid = ((mark.x[0] + mark.x[1]) / 2 - e.wall[0]) * m.m_per_unit / m.scale(e)
+        part = next((r.part for r in runs[mark.side] if r.x0_m <= mid <= r.x1_m), None)
+        if part is None or out[part] is not None:
+            raise BadMarkup(f"{m.id}: {e.view}: крыша части на x {mark.x} — "
+                            f"{'нет участка' if part is None else 'у части уже есть крыша'}")
+        out[part] = spec.roof.model_copy(update={  # вид и направление проверены при чтении
+            "kind": mark.kind, "pitch_deg": mark.pitch_deg,
+            "down_to": _down(m, mark.down, normals)})
+    return [r or spec.roof for r in out] if m.part_roofs else []
 
 
 def _palette(m: Markup) -> list[Material]:

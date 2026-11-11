@@ -39,6 +39,7 @@ from genfacade.schema import (
     OpeningKind,
     Point,
     Polygon,
+    Roof,
     RoofKind,
 )
 from genfacade.unfold import plan_corners
@@ -83,7 +84,7 @@ def roofline(sheet: FacadeSheet) -> Roofline | None:
     if stepped(sheet) or not builds(sheet):
         return None
     corners = plan_corners(sides)
-    eaves = _eave_sides([s.length_m for s in sides], [s.has_entrance for s in sides], roof.kind)
+    eaves = _eave_sides(*_walls(sheet), roof)
     slopes = [Slope(corners[k], (-s.orientation[0], -s.orientation[1]))
               for k, s in enumerate(sides) if k in eaves]
     rise = math.tan(math.radians(roof.pitch_deg))
@@ -91,13 +92,23 @@ def roofline(sheet: FacadeSheet) -> Roofline | None:
 
 
 def builds(sheet: FacadeSheet) -> bool:
-    """Скаты строятся: вид крыши скатный и контур — прямоугольник или дом из частей."""
-    kind = sheet.spec.roof.kind
+    """Скаты строятся: контур — прямоугольник со скатной крышей дома или дом из частей, у одной из
+    которых крыша скатная."""
     if stepped(sheet):
-        return kind is not RoofKind.FLAT
+        return any(r.kind is not RoofKind.FLAT for r in sheet.roofs or [sheet.spec.roof])
+    return len(sheet.facades) == RECT_SIDES and bool(_eave_sides(*_walls(sheet), sheet.spec.roof))
+
+
+def part_roof(sheet: FacadeSheet, part: int) -> Roof:
+    """Крыша части: своя у листа, без неё — крыша дома (`facade: Крыша над частями дома`)."""
+    return sheet.roofs[part] if sheet.roofs else sheet.spec.roof
+
+
+def _walls(sheet: FacadeSheet) -> tuple[list[float], list[bool], list[Point]]:
+    """Длины, входы и наружные нормали сторон листа — для `_eave_sides`."""
     sides = [f.side for f in sheet.facades]
-    return len(sides) == RECT_SIDES and bool(_eave_sides(
-        [s.length_m for s in sides], [s.has_entrance for s in sides], kind))
+    return [s.length_m for s in sides], [s.has_entrance for s in sides], [s.orientation
+                                                                           for s in sides]
 
 
 def eave_walls(sheet: FacadeSheet) -> set[int]:
@@ -105,26 +116,31 @@ def eave_walls(sheet: FacadeSheet) -> set[int]:
     и высокой стены односкатной крыши края ската нет, свес идёт по скату или торцом. Скатов нет
     (крыша плоская или контур не прямоугольник) — край крыши над всеми стенами. У дома из частей
     стена с карнизом, если у любой её части скат идёт от этой стены."""
-    sides = [f.side for f in sheet.facades]
     if not builds(sheet):
-        return set(range(len(sides)))
+        return set(range(len(sheet.facades)))
     if stepped(sheet):
         house = roofs(sheet)
         return {k for k, f in enumerate(sheet.facades) if any(
             math.dist(s.inward, (-f.side.orientation[0], -f.side.orientation[1])) <= EPS
             for span in house.spans[k] for s in house.parts[span.part].slopes)}
-    return _eave_sides([s.length_m for s in sides], [s.has_entrance for s in sides],
-                       sheet.spec.roof.kind)
+    return _eave_sides(*_walls(sheet), sheet.spec.roof)
 
 
-def _eave_sides(lengths: list[float], entrances: list[bool], kind: RoofKind) -> set[int]:
-    """Стены прямоугольника, от которых идут скаты, по виду крыши; стороны 0, 2 и 1, 3 — пары
-    напротив. Односкатная: низ — у длинной стены со входом, иначе у первой из длинных."""
+def _eave_sides(lengths: list[float], entrances: list[bool], normals: list[Point], roof: Roof
+                ) -> set[int]:
+    """Стены прямоугольника, от которых идут скаты (`facade: Направление ската`); стороны 0, 2 и
+    1, 3 — пары напротив, normals — их наружные нормали. С направлением крыши низ ската — на стене,
+    что смотрит в его сторону, у двускатной — и на стене напротив. Без него двускатная — от длинных
+    стен, односкатная — низ у длинной стены со входом, иначе у первой из длинных."""
+    if roof.down_to is not None:
+        to = roof.down_to.normal
+        down = max(range(RECT_SIDES), key=lambda k: normals[k][0] * to[0] + normals[k][1] * to[1])
+        return {down, (down + 2) % RECT_SIDES} if roof.kind is RoofKind.GABLE else {down}
     first = 0 if lengths[0] >= lengths[1] - EPS else 1  # пара длинных стен
     long = (first, first + 2)
     low = next((k for k in long if entrances[k]), first)
     return {RoofKind.FLAT: set(), RoofKind.HIP: set(range(RECT_SIDES)), RoofKind.GABLE: set(long),
-            RoofKind.SHED: {low}}[kind]
+            RoofKind.SHED: {low}}[roof.kind]
 
 
 def wall_axis(line: Roofline, k: int) -> tuple[Point, Point, float]:
@@ -339,40 +355,40 @@ def roofs(sheet: FacadeSheet) -> HouseRoof | None:
             [Span(0.0, wall_axis(line, k)[2], 0)] for k in range(RECT_SIDES)])
     if not (stepped(sheet) and builds(sheet)):
         return None
-    sides = [f.side for f in sheet.facades]
-    corners = plan_corners(sides)
-    spec = sheet.spec
-    rise = math.tan(math.radians(spec.roof.pitch_deg))
+    corners = plan_corners([f.side for f in sheet.facades])
     eaves = {r.part: r.eaves_m for f in sheet.facades for r in f.runs}
     rects = parts_of(sheet, corners)
-    lines = [_part_line(sheet, k, w, eaves[k], rise,
+    lines = [_part_line(sheet, k, w, eaves[k],
                         [r for j, r in enumerate(rects) if eaves[j] > eaves[k] + EPS])
              for k, w in enumerate(rects)]
     return HouseRoof(corners, lines, [[Span(r.x0_m, r.x1_m, r.part) for r in f.runs]
                                       for f in sheet.facades])
 
 
-def _part_line(sheet: FacadeSheet, part: int, w, eaves: float, rise: float,
-               taller: list) -> Roofline:
-    """Скаты крыла w как отдельного прямоугольного дома: углы по часовой, сторона k идёт от
-    угла k к k+1; вход на стороне — если он на участке этой части с такой наружной нормалью.
-    Скат не идёт от стены, на которую крыло опирается более высокая часть (taller): кровля
-    поднимается к этой стене и примыкает к ней выше карниза (пристройка «в один скат»); если
-    скатов не осталось — вид крыши как есть."""
+def _part_line(sheet: FacadeSheet, part: int, w, eaves: float, taller: list) -> Roofline:
+    """Скаты крыла w крышей части (`part_roof`) как отдельного прямоугольного дома: углы по
+    часовой, сторона k идёт от угла k к k+1; вход на стороне — если он на участке этой части с
+    такой наружной нормалью. Без направления крыши скат не идёт от стены, на которую крыло
+    опирается более высокая часть (taller): кровля поднимается к этой стене и примыкает к ней выше
+    карниза (пристройка «в один скат»); если скатов не осталось — вид крыши как есть. Заданное
+    направление — как на чертеже, без поправки."""
+    roof = part_roof(sheet, part)
     corners = [(w.x0_m, w.y1_m), (w.x1_m, w.y1_m), (w.x1_m, w.y0_m), (w.x0_m, w.y0_m)]
     normals = [(0.0, 1.0), (1.0, 0.0), (0.0, -1.0), (-1.0, 0.0)]
     entrance = [any(_entrance_on(f, part) for f in sheet.facades
                     if math.dist(f.side.orientation, n) <= EPS) for n in normals]
     lengths = [w.x1_m - w.x0_m, w.y1_m - w.y0_m] * 2
-    on = _eave_sides(lengths, entrance, sheet.spec.roof.kind)
-    butts = {k for k in on if any(shapely.LineString([corners[k], corners[(k + 1) % 4]])
-                                  .intersection(shapely.box(r.x0_m, r.y0_m, r.x1_m, r.y1_m)
-                                                ).length > EPS for r in taller)}
-    on = _off_walls(on, butts, sheet.spec.roof.kind)
+    on = _eave_sides(lengths, entrance, normals, roof)
+    if roof.down_to is None:
+        butts = {k for k in on if any(shapely.LineString([corners[k], corners[(k + 1) % 4]])
+                                      .intersection(shapely.box(r.x0_m, r.y0_m, r.x1_m, r.y1_m)
+                                                    ).length > EPS for r in taller)}
+        on = _off_walls(on, butts, roof.kind)
     slopes = [Slope(corners[k], (-n[0], -n[1])) for k, n in enumerate(normals) if k in on]
-    if min(lengths[:2]) <= sheet.spec.roof.overhang_m:  # уже собственного свеса — уступ контура
+    if min(lengths[:2]) <= roof.overhang_m:  # уже собственного свеса — уступ контура
         slopes = []  # (у разметки — шум в сантиметры): крыши у него нет, он под соседними
-    return Roofline(corners, slopes, eaves, rise, sheet.spec.roof.overhang_m)
+    return Roofline(corners, slopes, eaves, math.tan(math.radians(roof.pitch_deg)),
+                    roof.overhang_m)
 
 
 def _off_walls(on: set[int], butts: set[int], kind: RoofKind) -> set[int]:

@@ -11,7 +11,7 @@ from genfacade import config, pipeline, roof
 from genfacade.models import stub
 from genfacade.plan.preprocess import preprocess
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import Element, ElementClass, Mode, RoofKind, Rule
+from genfacade.schema import Element, ElementClass, Facing, Mode, Roof, RoofKind, Rule
 from genfacade.unfold import unfold
 from genfacade.validate import validate
 
@@ -29,6 +29,11 @@ def bare(kind: RoofKind, svg: str | None = None):
 
 def rise(kind: RoofKind) -> float:
     return math.tan(math.radians(PITCH[kind]))
+
+
+def ridge(sheet, span: float) -> float:
+    """Конёк двускатной над карнизом дома: половина пролёта span на подъём ската."""
+    return sheet.spec.eaves_m + span / 2 * rise(RoofKind.GABLE)
 
 
 def corner_heights(line: roof.Roofline, k: int) -> tuple[float, float]:
@@ -60,10 +65,48 @@ def test_gable_has_gables_on_short_walls():
         if length > span:
             assert shape is None  # длинная стена — карнизная
         else:  # фронтон: конёк над серединой короткой стены
-            assert max(y for _, y in shape) == pytest.approx(
-                sheet.spec.eaves_m + span / 2 * rise(RoofKind.GABLE))
+            assert max(y for _, y in shape) == pytest.approx(ridge(sheet, span))
             apex = max(shape, key=lambda p: p[1])
             assert apex[0] == pytest.approx(length / 2)
+
+
+def directed(kind: RoofKind, k: int):
+    """Простой дом с крышей вида kind, скат которой спускается к стороне k листа."""
+    sheet = bare(kind)
+    to = Facing.of(sheet.facades[k].side.orientation)
+    house_roof = sheet.spec.roof.model_copy(update={"down_to": to})
+    spec = sheet.spec.model_copy(update={"roof": house_roof})
+    return sheet.model_copy(update={"spec": spec})
+
+
+def test_gable_with_direction_has_eaves_where_it_points():
+    """`facade: Направление ската`, «Двускатная с коньком поперёк»: направление на короткую стену —
+    карнизы на коротких, фронтоны на длинных, конёк на половине длинной стороны."""
+    sides = [f.side for f in bare(RoofKind.GABLE).facades]
+    short = min(range(4), key=lambda k: sides[k].length_m)
+    sheet = directed(RoofKind.GABLE, short)
+    line = roof.roofline(sheet)
+    span = max(s.length_m for s in sides)
+    for k in range(4):
+        shape = roof.above_eaves(line, k)
+        assert (shape is None) if k % 2 == short % 2 else (
+            max(y for _, y in shape) == pytest.approx(ridge(sheet, span)))
+    assert roof.eave_walls(sheet) == {short, (short + 2) % 4}
+
+
+def test_shed_with_direction_is_low_where_it_points():
+    """Направление односкатной — против правила входа: низ на стене напротив входа."""
+    sides = [f.side for f in bare(RoofKind.SHED).facades]
+    entrance = next(k for k, s in enumerate(sides) if s.has_entrance)
+    low = (entrance + 2) % 4
+    line = roof.roofline(directed(RoofKind.SHED, low))
+    assert roof.above_eaves(line, low) is None and roof.above_eaves(line, entrance) is not None
+
+
+def test_direction_only_for_gable_and_shed():
+    with pytest.raises(ValueError, match="направления ската у неё нет"):
+        Roof(kind=RoofKind.HIP, pitch_deg=25.0, down_to=Facing.X_PLUS)
+    assert Facing.of((0.0, -0.9999)) is Facing.Y_MINUS
 
 
 def test_hip_slopes_from_all_walls():

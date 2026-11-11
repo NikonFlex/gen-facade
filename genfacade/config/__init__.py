@@ -386,6 +386,7 @@ class House3d(Section):
     ground: str
     background: str
     edges: str
+    outline: bool  # рёбра стен, кровли и выступов линией цвета edges; выкл — углы читает свет
     # выступы стены (gf#268): глубина в метрах для зон этих ролей и элементов этих классов
     relief_role: dict[ZoneRole, float]
     relief_cls: dict[ElementClass, float]

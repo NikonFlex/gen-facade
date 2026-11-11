@@ -8,11 +8,21 @@ from pathlib import Path
 
 import pytest
 
-from genfacade import config
+from genfacade import config, roof
 from genfacade.datasets import manual, markup_toml, store
 from genfacade.datasets.manual import M_PER_UNIT, Markup, Unit
 from genfacade.metrics import measures
-from genfacade.schema import ElementClass, Mode, OpeningKind, RoofKind, Rule, Source, Split, Trim
+from genfacade.schema import (
+    ElementClass,
+    Facing,
+    Mode,
+    OpeningKind,
+    RoofKind,
+    Rule,
+    Source,
+    Split,
+    Trim,
+)
 from genfacade.train import tokens
 from genfacade.train.tokens import Mark
 from genfacade.validate import errors, validate
@@ -189,6 +199,33 @@ def test_parts_of_different_eaves_become_steps():
     assert len(sample.sheet.facades[5].silhouette) == 6  # ступень
     assert errors(validate(sample.sheet, CFG.checks)) == []
     assert Rule.ROOF_FLAT not in {v.rule for v in validate(sample.sheet, CFG.checks)}
+
+
+def test_roof_direction_and_part_roofs_from_markup():
+    """Направление ската и крыша части из разметки (gf#431): скат дома — к стороне 1, у крыла
+    Г-дома, видного на стороне 3, — односкатная 3:12 низом к стороне 4 (торец крыла)."""
+    sample, _ = manual.house(markup(roof_down=1), CFG.data.manual)
+    assert sample.sheet.spec.roof.down_to is Facing.of(sample.sheet.facades[1].side.orientation)
+    lines = {3: [(0, 8, LOW_FT)], 4: [(0, 6, LOW_FT)], 5: [(0, 20, EAVE_FT), (20, 28, LOW_FT)]}
+    shed = {"side": 3, "x": [100.0, 100.0 + 8 * PT], "kind": "shed",
+            "pitch_deg": math.degrees(math.atan(3 / 12)), "down": 4}
+    m = stepped_l(lines)
+    sheet = manual.house(m.model_copy(update={"part_roofs": [manual.PartRoofMark(**shed)]}),
+                         CFG.data.manual)[0].sheet
+    house_roof, wing_roof = sheet.roofs
+    assert house_roof == sheet.spec.roof and wing_roof.kind is RoofKind.SHED
+    end = sheet.facades[4].side.orientation
+    assert wing_roof.down_to is Facing.of(end)
+    (slope,) = roof.roofs(sheet).parts[1].slopes
+    assert slope.inward == pytest.approx((-end[0], -end[1]))
+
+
+def test_wrong_roof_marks_are_refused():
+    with pytest.raises(manual.BadMarkup, match="крыши частей у дома без частей"):
+        manual.house(markup(part_roofs=[{"side": 0, "x": [100.0, 150.0], "kind": "shed",
+                                         "pitch_deg": 10.0}]), CFG.data.manual)
+    with pytest.raises(ValueError, match="направления ската у неё нет"):
+        markup(roof_kind="hip", roof_down=1)
 
 
 def test_wing_with_two_eaves_marks_waits():
