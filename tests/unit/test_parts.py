@@ -60,9 +60,14 @@ def l_plan(replacements=L_PARTS):
     return preprocess(text, Mode.WITH_OPENINGS, CFG.plan)
 
 
+# Правило частей генерации без крыши пристройки: у всех частей крыша дома — так заданы требования
+# крыши частей (gf#322, gf#412); своя крыша пристройки — `test_part_roofs.py` (gf#431)
+HOUSE_ROOF = CFG.plan.parts.model_copy(update={"annex_shed": False})
+
+
 def bare(text: str = TWO_PARTS, replacements=L_PARTS) -> FacadeSheet:
     return pipeline.walls(stub.spec_model(text, CFG.models.spec), l_plan(replacements),
-                          CFG.plan.parts)
+                          HOUSE_ROOF)
 
 
 _CLASS = {OpeningKind.WINDOW: ElementClass.WINDOW, OpeningKind.DOOR: ElementClass.DOOR,
