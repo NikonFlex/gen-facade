@@ -244,3 +244,12 @@ def test_relief_of_patterned_material_knows_its_swatch(cfg):
     assert zones and all(r["material"] == plinth for r in zones)
     assert plinth in data["swatches"]
     assert all(r["material"] in data["swatches"] for r in zones)
+
+
+def test_roof_data_carries_the_sheet_thickness(house, cfg):
+    """3D берёт толщину кровли из настроек листа (gf#447): и для скатов, и для плоской плиты —
+    в JS своей константы нет."""
+    gabled = house.model_copy(update={"spec": house.spec.model_copy(update={
+        "roof": cfg.models.spec.roof_shape.roof(RoofKind.GABLE, "roof")})})
+    for sheet in (gabled, _flat_roofed(house)):
+        assert house_3d(sheet, cfg)["roof"]["thickness_m"] == cfg.sheet.roof.thickness_m == 0.2

@@ -1,5 +1,6 @@
 """Выгрузка дома в BIM (gf#392): объекты IFC4 по листу — стены, окна, двери, этажи, плиты, крыша."""
 
+import math
 import re
 
 import pytest
@@ -10,6 +11,7 @@ from genfacade.datasets.synthetic import build
 from genfacade.render.house3d import house_3d
 from genfacade.render.ifc import IFC_FILE, IfcHouse, counts, house_ifc
 from genfacade.render.ifc_step import guid, text, value
+from genfacade.render.svg import sheet_svg
 from genfacade.schema import ElementClass, FacadeSheet, Roof, RoofKind
 
 WINDOWS = (ElementClass.WINDOW,)
@@ -237,3 +239,68 @@ def test_cli_writes_the_run_house(house, cfg, tmp_path):
     out = cli.ifc(cli._parser().parse_args(["ifc", str(run)]))
     assert out == run / IFC_FILE
     assert counts(out.read_text())["IFCWINDOW"] == number(house, WINDOWS)
+
+
+def _roof_plates(text: str) -> list[tuple[list[float], list[float]]]:
+    """Плиты кровли файла, прочитанные обратно: (z верхней грани, z нижней) по вершинам профиля,
+    перенесённым в мир по размещению плиты и направлению выдавливания."""
+    ents = read(text)
+    nums = lambda n: [float(v) for v in re.findall(r"-?\d+\.\d+", ents[n][1])]  # noqa: E731
+    plates = []
+    for _, (kind, args) in ents.items():
+        if kind != "IFCSLAB" or ".ROOF." not in args:
+            continue
+        shape_ref, place_ref = refs(args)[1], refs(args)[0]
+        rep = refs(ents[refs(ents[shape_ref][1])[0]][1])[1:]
+        solid = ents[rep[0]][1] if ents[rep[0]][0] == "IFCEXTRUDEDAREASOLID" else None
+        assert solid, ents[rep[0]]
+        profile, _, direction = refs(solid)
+        depth = float(solid.rsplit(",", 1)[1])
+        origin, zref, xref = refs(ents[refs(ents[place_ref][1])[1]][1])
+        o, z, x = nums(origin), nums(zref), nums(xref)
+        y = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]]
+        pts = refs(ents[refs(ents[profile][1])[0]][1])
+        d = nums(direction)
+        dz = d[0] * x[2] + d[1] * y[2] + d[2] * z[2]  # вертикальная составляющая направления
+        tops = [o[2] + nums(p)[0] * x[2] + nums(p)[1] * y[2] for p in pts]
+        plates.append((tops, [t + depth * dz for t in tops]))
+    return plates
+
+
+def _gabled_35(house):
+    """Простой дом с двускатной крышей 35°, свесом 0,4 м (толщина кровли — из настроек)."""
+    sheet = house.model_copy(update={"spec": house.spec.model_copy(update={"roof": Roof(
+        kind=RoofKind.GABLE, material="roof", pitch_deg=35, overhang_m=0.4)}), "roofs": [],
+        "wall_gables": []})
+    return sheet
+
+
+def test_roof_plate_stands_on_the_slope_by_config_thickness(house, cfg):
+    """Требование «Толщина кровли» (gf#447): низ плиты ската — грань ската, верх выше неё на
+    толщину по вертикали, торец вертикальный. Двускатная 35°, карниз 3,25, свес 0,4, толщина 0,2:
+    низ у края свеса 3,25 − 0,4·tg35° ≈ 2,97, верх торца ≈ 3,17."""
+    sheet = _gabled_35(house)
+    t = cfg.sheet.roof.thickness_m
+    plates = _roof_plates(house_ifc(sheet, cfg))
+    assert len(plates) >= 2
+    for tops, bottoms in plates:
+        assert all(top - bottom == pytest.approx(t, abs=1e-5) for top, bottom in zip(
+            tops, bottoms, strict=True))
+    edge = 3.25 - 0.4 * math.tan(math.radians(35))
+    assert min(b for _, bottoms in plates for b in bottoms) == pytest.approx(edge, abs=1e-3)
+    assert min(t_ for tops, _ in plates for t_ in tops) == pytest.approx(edge + t, abs=1e-3)
+
+
+def test_sheet_ifc_and_3d_take_one_roof_thickness(house, cfg, tmp_path):
+    """Одно значение `[roof] thickness_m` листа: поменяли в настройках — меняется и полоса кровли
+    на листе, и плита в IFC, и толщина в данных 3D."""
+    sheet = _gabled_35(house)
+    (tmp_path / "sheet.toml").write_text("[roof]\nthickness_m = 0.35\n")
+    thick = config.load(tmp_path)
+    assert thick.sheet.roof.thickness_m == 0.35 != cfg.sheet.roof.thickness_m
+    for conf, t in ((cfg, cfg.sheet.roof.thickness_m), (thick, 0.35)):
+        plates = _roof_plates(house_ifc(sheet, conf))
+        assert all(top - bottom == pytest.approx(t, abs=1e-5)
+                   for tops, bottoms in plates for top, bottom in zip(tops, bottoms, strict=True))
+        assert house_3d(sheet, conf)["roof"]["thickness_m"] == t
+    assert sheet_svg(sheet, cfg) != sheet_svg(sheet, thick)

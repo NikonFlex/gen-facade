@@ -87,7 +87,14 @@ def _roof(sheet: FacadeSheet, pen: Pen, corners: list[Point], look: House3d) -> 
     Цвет кровли — материала крыши, если он в палитре (нет — цвет крыши просмотра). `material` и
     `wall_material` — id материалов кровли и стены над карнизом: рисунком их выкладывает 3D
     (gf#353, `swatches` дома); материала нет в палитре — None. У дома из частей (gf#322) плиты
-    частей — того же материала кровли."""
+    частей — того же материала кровли. `thickness_m` — толщина кровли: низ плиты — грань ската или
+    уровень карниза, верх — выше на неё по вертикали (gf#447)."""
+    data = _roof_shape(sheet, pen, corners, look)
+    data["thickness_m"] = pen.cfg.sheet.roof.thickness_m  # одна на лист, 3D и IFC (gf#447)
+    return data
+
+
+def _roof_shape(sheet: FacadeSheet, pen: Pen, corners: list[Point], look: House3d) -> dict:
     house = roof.roofs(sheet)
     material = pen.roof if pen.roof in pen.colors else None
     wall_material = PaletteRole.MAIN if PaletteRole.MAIN in pen.colors else None
