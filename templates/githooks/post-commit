@@ -1,0 +1,9 @@
+#!/bin/sh
+# После коммита: база testmon в фоне (tools/quick_scope.sh, gf#443) — хук перед коммитом выбирает
+# по ней тесты без трассировки. Коммит из одних .md тестов не менял — обновлять нечего.
+# Раскладывает tools/install_hooks.sh (core.hooksPath).
+root="$(git rev-parse --show-toplevel)"
+cd "$root" || exit 0
+. "$root/tools/quick_scope.sh"
+git diff-tree --no-commit-id --name-only -r HEAD | grep -qv '\.md$' || exit 0
+refresh_testmon_later

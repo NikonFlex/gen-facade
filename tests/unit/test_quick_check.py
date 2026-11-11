@@ -16,9 +16,11 @@ MARK = "pytestmark = pytest.mark.slow"
 
 
 def test_quick_check_skips_slow_tests():
-    """Без --testmon-forceselect testmon при `-m` гоняет все быстрые тесты (gf#293)."""
-    quick = '--testmon --testmon-forceselect -m "not slow"'
+    """Без --testmon-forceselect testmon при `-m` гоняет все быстрые тесты (gf#293); хук выбирает
+    по базе без трассировки, базу обновляет фон после коммита (gf#443)."""
+    quick = '--testmon-nocollect --testmon-forceselect -m "not slow"'
     assert quick in (ROOT / "tools" / "check.sh").read_text()
+    assert '--testmon --testmon-forceselect' in SCOPE.read_text()
 
 
 @pytest.mark.parametrize("path", sorted((ROOT / "tests").rglob("test_*.py")), ids=lambda p: p.name)
@@ -103,7 +105,7 @@ def test_quick_and_pr_checks_run_on_every_core():
     """Новая функция в общем модуле выбирает больше половины тестов — в один поток 15+ минут
     (gf#443): хук и проверка PR идут процессом на ядро."""
     check = (ROOT / "tools" / "check.sh").read_text()
-    assert '-n auto --testmon --testmon-forceselect -m "not slow"' in check
+    assert '-n auto --dist loadfile --testmon-nocollect' in check
     assert 'pytest -q -n auto -m "not slow"' in check
 
 
@@ -117,3 +119,23 @@ def test_long_unmarked_test_is_named_with_its_setup():
     t.add("c", "teardown", 30.0, {})
     t.add("d", "call", 4.0, {})
     assert t.unmarked_over(10.0) == [("a", 11.0)]
+
+
+def test_refresh_after_commit_runs_testmon_in_background_without_git_env(clone, tmp_path):
+    """Фон после коммита (gf#443): pytest с трассировкой testmon, без переменных GIT_* хука, один
+    на дерево; post-commit его зовёт."""
+    _, wt = clone
+    seen = tmp_path / "seen"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake = bin_dir / "python3"
+    fake.write_text(f'#!/bin/sh\n{{ env | grep ^GIT_; echo "$@"; }} > {seen}\n')
+    fake.chmod(0o755)
+    env = {**CLEAN_ENV, "PATH": f"{bin_dir}:{os.environ['PATH']}", "GIT_INDEX_FILE": "x"}
+    code = subprocess.run(["sh", "-c", f". {SCOPE}; refresh_testmon_later; wait"],  # noqa: S603, S607
+                          cwd=wt, env=env).returncode
+    assert code == 0
+    text = seen.read_text()
+    assert "GIT_" not in text and "--testmon --testmon-forceselect" in text
+    hook = (ROOT / "templates" / "githooks" / "post-commit")
+    assert "refresh_testmon_later" in hook.read_text() and os.access(hook, os.X_OK)

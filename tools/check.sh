@@ -15,13 +15,15 @@ fast=""
 [ "${1:-}" = "--fast" ] && fast=1
 . tools/quick_scope.sh
 
+# У шага — его секунды: датчик долгого хука (gf#443), чтобы видеть, какой шаг тянет.
 run() {
     name=$1
     shift
+    start=$(date +%s)
     if out=$("$@" 2>&1); then
-        echo "ok    $name"
+        echo "ok    $name ($(( $(date +%s) - start )) с)"
     else
-        echo "FAIL  $name"
+        echo "FAIL  $name ($(( $(date +%s) - start )) с)"
         printf '%s\n' "$out" | tail -n 30 | sed 's/^/      /'
         failed=1
     fi
@@ -32,13 +34,19 @@ run() {
 # editable-пакет из другой папки. testmon следит за кодом на Python, а не за конфигами и
 # данными, — их ловит полный прогон в CI. `--testmon-forceselect`: с `-m` testmon сам отключает
 # отбор и гоняет все быстрые тесты — 7 минут на коммит вместо 16 с (замер 05.11, gf#293).
-# `-n auto` — процесс на ядро (pytest-xdist, testmon 2.2 его поддерживает): новая функция в общем
-# модуле выбирает больше половины тестов, в один поток — 15+ минут (замер 11.11, gf#443).
+# `-n auto --dist loadfile` — процесс на ядро, тесты файла — в одном процессе (фикстура модуля
+# строится раз): новая функция в общем модуле выбирает больше половины тестов (gf#443).
+# `--testmon-nocollect` — выбор по базе без трассировки: она вдвое замедляет тесты (546 тестов —
+# 464 с с ней, 208 без, замер 11.11); базу обновляет фон после коммита (`refresh_testmon_later`).
 pytest_or_none() {
+    # Кэш байткода — и переписанных assert pytest: без него каждый процесс xdist заново
+    # компилирует все модули, сборка тестов 28 с вместо 16 (окружение агента ставит
+    # PYTHONDONTWRITEBYTECODE=1, замер 11.11, gf#443); __pycache__ — в .gitignore.
+    unset PYTHONDONTWRITEBYTECODE
     if [ -n "$quick" ]; then
         docs_only && return 0    # одни .md — тестам нечего проверять (tools/quick_scope.sh)
         seed_testmon             # новое дерево — база testmon соседнего дерева, а не все тесты
-        python3 -m pytest -q -n auto --testmon --testmon-forceselect -m "not slow"
+        python3 -m pytest -q -n auto --dist loadfile --testmon-nocollect --testmon-forceselect -m "not slow"
     elif [ -n "$fast" ]; then
         python3 -m pytest -q -n auto -m "not slow"
     else
