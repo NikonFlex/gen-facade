@@ -10,9 +10,9 @@
 Модель шага 4 крыши не касается: её стена — силуэт до карниза. Отсюда только то, что рисуется
 выше: стена над карнизом (фронтон, верх стены под односкатной крышей) и кровля на виде. В JSON
 листа их нет: их однозначно задают крыша дома (HouseSpec) и план, лист и дом объёмом считают здесь.
-Контур не из четырёх сторон и без частей — скатов нет (крыша плоская), валидатор предупреждает
-(`Rule.ROOF_FLAT`): нижняя огибающая скатов от всех стен верна только для выпуклого контура, а
-для Г-, Т-образного нужен прямой скелет.
+Контур не из четырёх сторон — крыша по крыльям (`roofs`, ниже): нижняя огибающая скатов от всех
+стен верна только для выпуклого контура, поэтому у Г-, Т-, П-дома она своя у каждого крыла. Контур,
+что не разбивается на крылья (косой), — скатов нет, валидатор предупреждает (`Rule.ROOF_FLAT`).
 
 Дом из частей разной высоты (gf#322, `facade: Части дома`): у каждого крыла контура своя крыша
 вида дома, как у отдельного прямоугольного дома, с карнизом части. Крыша части обрывается на
@@ -23,13 +23,14 @@
 
 import dataclasses
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import combinations
 from typing import NamedTuple
 
 import shapely
 
-from genfacade.parts import parts_of, stepped
+from genfacade.parts import Span, parts_of, side_spans, stepped
 from genfacade.plan.genplan_svg import PlanError
 from genfacade.schema import (
     EPS,
@@ -40,6 +41,7 @@ from genfacade.schema import (
     OpeningKind,
     Point,
     Polygon,
+    Rect,
     Roof,
     RoofKind,
     WallGable,
@@ -83,7 +85,7 @@ def roofline(sheet: FacadeSheet) -> Roofline | None:
     (дом из частей — `roofs`)."""
     sides = [f.side for f in sheet.facades]
     roof = sheet.spec.roof
-    if stepped(sheet) or not builds(sheet):
+    if _parted(sheet) or not builds(sheet):
         return None
     corners = plan_corners(sides)
     eaves = _eave_sides(*_walls(sheet), roof)
@@ -94,11 +96,28 @@ def roofline(sheet: FacadeSheet) -> Roofline | None:
 
 
 def builds(sheet: FacadeSheet) -> bool:
-    """Скаты строятся: контур — прямоугольник со скатной крышей дома или дом из частей, у одной из
-    которых крыша скатная."""
-    if stepped(sheet):
+    """Скаты строятся: контур — прямоугольник со скатной крышей дома или дом из частей (разной
+    высоты или Г-, Т-, П-дом одной), у одной из которых крыша скатная."""
+    if _parted(sheet):
         return any(r.kind is not RoofKind.FLAT for r in sheet.roofs or [sheet.spec.roof])
     return len(sheet.facades) == RECT_SIDES and bool(_eave_sides(*_walls(sheet), sheet.spec.roof))
+
+
+def _wing_rects(sheet: FacadeSheet) -> list[Rect]:
+    """Крылья контура не из четырёх сторон — хранимые листом, без них разбиение контура. Контур,
+    что не разбивается на прямоугольники (косой), — пусто: скатов у него нет, как раньше."""
+    if len(sheet.facades) == RECT_SIDES:
+        return []
+    try:
+        return parts_of(sheet, plan_corners([f.side for f in sheet.facades]))
+    except (PlanError, ValueError):
+        return []
+
+
+def _parted(sheet: FacadeSheet) -> bool:
+    """Дом из частей: разной высоты (участки сторон) или контур из крыльев — крыша у каждого
+    крыла своя (`roofs`)."""
+    return stepped(sheet) or bool(_wing_rects(sheet))
 
 
 def part_roof(sheet: FacadeSheet, part: int) -> Roof:
@@ -120,7 +139,7 @@ def eave_walls(sheet: FacadeSheet) -> set[int]:
     стена с карнизом, если у любой её части скат идёт от этой стены."""
     if not builds(sheet):
         return set(range(len(sheet.facades)))
-    if stepped(sheet):
+    if _parted(sheet):
         house = roofs(sheet)
         return {k for k, f in enumerate(sheet.facades) if any(
             math.dist(s.inward, (-f.side.orientation[0], -f.side.orientation[1])) <= EPS
@@ -238,7 +257,7 @@ def roof_view(line: Roofline, k: int, thickness: float) -> list[Polygon]:
     повёрнутые к нему (на фронтоне скат виден с ребра — полосой). Скат, уходящий от зрителя, —
     за стеной. Многоугольники в метрах вида: x от левого края стены, y — высота."""
     left, u, _ = wall_axis(line, k)
-    return _polygons(_projected(faces(line), left, u, thickness))
+    return polygons(_projected(faces(line), left, u, thickness))
 
 
 def _on_view(p: Point3, left: Point, u: Point) -> Point:
@@ -264,7 +283,7 @@ def _projected(items: list[tuple[Slope, list[Point3]]], left: Point, u: Point, t
     return shapely.union_all([p.buffer(0) for p in flat if p.area > EPS])
 
 
-def _polygons(shape: shapely.Geometry) -> list[Polygon]:
+def polygons(shape: shapely.Geometry) -> list[Polygon]:
     """Многоугольники фигуры; кольцо с канонической вершины — не зависит от порядка частей."""
     return [list(shapely.normalize(g).exterior.coords)[:-1]
             for g in getattr(shape, "geoms", [shape])
@@ -341,14 +360,6 @@ def room(length: float, eaves: float, above: Polygon | None, offset: float) -> s
 # ——— Дом из частей разной высоты (gf#322) ———
 
 
-class Span(NamedTuple):
-    """Участок стены: [x0, x1] вдоль стены от левого края, номер части."""
-
-    x0: float
-    x1: float
-    part: int
-
-
 class Extension(NamedTuple):
     """Кровля части `part`, продолженная над соседней частью `into` (поперечный щипец, gf#431):
     zone — площадь продолжения в плане; в ней видна та из двух кровель, что выше."""
@@ -388,29 +399,86 @@ def _parts_roof(sheet: FacadeSheet) -> HouseRoof | None:
     if (line := roofline(sheet)) is not None:
         return HouseRoof(line.corners, [line], [
             [Span(0.0, wall_axis(line, k)[2], 0)] for k in range(RECT_SIDES)])
-    if not (stepped(sheet) and builds(sheet)):
+    if not stepped(sheet):
+        return _wing_house(sheet)
+    if not builds(sheet):
         return None
     corners = plan_corners([f.side for f in sheet.facades])
     eaves = {r.part: r.eaves_m for f in sheet.facades for r in f.runs}
-    rects = parts_of(sheet, corners)
-    lines = [_part_line(sheet, k, w, eaves[k],
-                        [r for j, r in enumerate(rects) if eaves[j] > eaves[k] + EPS])
+    spans = [[Span(r.x0_m, r.x1_m, r.part) for r in f.runs] for f in sheet.facades]
+    lines = _lines(sheet, parts_of(sheet, corners), eaves, spans)
+    return HouseRoof(corners, lines, spans, _extensions(lines))
+
+
+def _wing_house(sheet: FacadeSheet) -> HouseRoof | None:
+    """Скаты Г-, Т-, П-дома одной высоты: у каждого крыла своя крыша (`part_roof`) с карнизом дома,
+    участки сторон — по геометрии крыльев, участков листа у такого дома нет (модель видит стены
+    целиком). Стыки — поперечный щипец и примыкания, как у частей разной высоты."""
+    if not builds(sheet):
+        return None
+    corners = plan_corners([f.side for f in sheet.facades])
+    rects = _wing_rects(sheet)
+    spans = [side_spans(k, f.side.length_m, corners[k], corners[(k + 1) % len(corners)], rects)
+             for k, f in enumerate(sheet.facades)]
+    lines = _lines(sheet, rects, [sheet.spec.eaves_m] * len(rects), spans)
+    return HouseRoof(corners, lines, spans, _extensions(lines))
+
+
+class Rank(NamedTuple):
+    """Старшинство части: карниз, потом площадь крыла, потом меньший номер (order = −номер)."""
+
+    eaves: float
+    area: float
+    order: int
+
+
+def _rank(eaves: float, area: float, number: int) -> Rank:
+    return Rank(eaves, area, -number)
+
+
+def _line_rank(line: Roofline, number: int) -> Rank:
+    return _rank(line.eaves, shapely.Polygon(line.corners).area, number)
+
+
+def _outranks(a: Rank, b: Rank) -> bool:
+    """Часть a главнее b: у главной кровля выше у общей стены, и скат другой не идёт от этой стены.
+    Карниз и площадь равны с допуском EPS; в остальном всё решает номер."""
+    for x, y in ((a.eaves, b.eaves), (a.area, b.area)):
+        if abs(x - y) > EPS:
+            return x > y
+    return a.order > b.order
+
+
+class Wing(NamedTuple):
+    """Крыло дома для скатов: прямоугольник, карниз и крылья главнее него (`_outranks`)."""
+
+    rect: Rect
+    eaves: float
+    taller: list[Rect]
+
+
+def _lines(sheet: FacadeSheet, rects: list[Rect], eaves: Sequence[float],
+           spans: list[list[Span]]) -> list[Roofline]:
+    """Скаты каждого крыла rects с карнизом eaves[k]."""
+    ranks = [_rank(eaves[k], shapely.box(w.x0_m, w.y0_m, w.x1_m, w.y1_m).area, k)
              for k, w in enumerate(rects)]
-    return HouseRoof(corners, lines, [[Span(r.x0_m, r.x1_m, r.part) for r in f.runs]
-                                      for f in sheet.facades], _extensions(lines))
+    return [_part_line(sheet, spans, k, Wing(w, eaves[k], [
+        r for j, r in enumerate(rects) if _outranks(ranks[j], ranks[k])]))
+            for k, w in enumerate(rects)]
 
 
-def _part_line(sheet: FacadeSheet, part: int, w, eaves: float, taller: list) -> Roofline:
-    """Скаты крыла w крышей части (`part_roof`) как отдельного прямоугольного дома: углы по
+def _part_line(sheet: FacadeSheet, spans: list[list[Span]], part: int, wing: Wing) -> Roofline:
+    """Скаты крыла крышей части (`part_roof`) как отдельного прямоугольного дома: углы по
     часовой, сторона k идёт от угла k к k+1; вход на стороне — если он на участке этой части с
     такой наружной нормалью. Без направления крыши скат не идёт от стены, на которую крыло
-    опирается более высокая часть (taller): кровля поднимается к этой стене и примыкает к ней выше
-    карниза (пристройка «в один скат»); если скатов не осталось — вид крыши как есть. Заданное
+    опирается более главная часть (wing.taller): кровля поднимается к этой стене и примыкает к ней
+    выше карниза (пристройка «в один скат»); если скатов не осталось — вид крыши как есть. Заданное
     направление — как на чертеже, без поправки."""
+    w, eaves, taller = wing
     roof = part_roof(sheet, part)
     corners = [(w.x0_m, w.y1_m), (w.x1_m, w.y1_m), (w.x1_m, w.y0_m), (w.x0_m, w.y0_m)]
     normals = [(0.0, 1.0), (1.0, 0.0), (0.0, -1.0), (-1.0, 0.0)]
-    entrance = [any(_entrance_on(f, part) for f in sheet.facades
+    entrance = [any(_entrance_on(f, spans[i], part) for i, f in enumerate(sheet.facades)
                     if math.dist(f.side.orientation, n) <= EPS) for n in normals]
     lengths = [w.x1_m - w.x0_m, w.y1_m - w.y0_m] * 2
     on = _eave_sides(lengths, entrance, normals, roof)
@@ -443,21 +511,20 @@ def _off_walls(on: set[int], butts: set[int], kind: RoofKind) -> set[int]:
     return free or on
 
 
-def _entrance_on(facade, part: int) -> bool:
-    return any(o.kind is OpeningKind.ENTRANCE and r.x0_m - EPS <= o.x_m
-               and o.x_m + o.width_m <= r.x1_m + EPS
-               for r in facade.runs if r.part == part for o in facade.side.openings)
+def _entrance_on(facade, spans: list[Span], part: int) -> bool:
+    return any(o.kind is OpeningKind.ENTRANCE and r.x0 - EPS <= o.x_m
+               and o.x_m + o.width_m <= r.x1 + EPS
+               for r in spans if r.part == part for o in facade.side.openings)
 
 
 def _area(house: HouseRoof, k: int) -> shapely.Geometry:
     """Площадь крыши части k: крыло со свесом по всему контуру. Ни одна крыша не режется свесом
     другой (gf#412): свес верхней нависает над нижней крышей, а нижняя обрывается на стене более
-    высокой части (её крыло не вычитается из верхней). У равных высот — часть с меньшим номером
-    выше."""
+    высокой части (её крыло не вычитается из верхней). Какая выше — `_outranks`."""
     me = house.parts[k]
     rect = shapely.Polygon(me.corners)
     above = [shapely.Polygon(other.corners) for j, other in enumerate(house.parts)
-             if (other.eaves, -j) > (me.eaves, -k)]
+             if _outranks(_line_rank(other, j), _line_rank(me, k))]
     area = rect.buffer(me.overhang, join_style="mitre")
     area = area.difference(shapely.union_all(above)).union(rect) if above else area
     zones = [e.zone for e in house.extensions if e.part == k]
@@ -648,7 +715,7 @@ def house_above(house: HouseRoof, k: int, inset: float = 0.0) -> list[Polygon]:
             out += [base] if base is not None else []
             continue
         top = shapely.box(span.x0, house.parts[span.part].eaves, span.x1, FAR)
-        out += _polygons(shapely.union_all([shapely.Polygon(p) for p in [base, *over] if p])
+        out += polygons(shapely.union_all([shapely.Polygon(p) for p in [base, *over] if p])
                          .intersection(top))
     return out
 
@@ -695,7 +762,7 @@ def house_view(house: HouseRoof, k: int, thickness: float) -> list[Polygon]:
             xs = [(c[0] - left[0]) * u[0] + (c[1] - left[1]) * u[1] for c in q.corners]
             shape = shape.difference(shapely.box(min(xs), -1.0, max(xs), q.eaves))
         shapes.append(shape)
-    return _polygons(shapely.union_all(shapes).intersection(window))
+    return polygons(shapely.union_all(shapes).intersection(window))
 
 
 class Joint(NamedTuple):
@@ -715,8 +782,9 @@ def joints(house: HouseRoof) -> list[Joint]:
     тогда это стена нижней части, и её примыкание идёт с обратной нормалью."""
     out = []
     through = {(e.part, e.into) for e in house.extensions}
+    ranks = [_line_rank(p, j) for j, p in enumerate(house.parts)]
     for n, low in enumerate(house.parts):
-        for h, high in ((h, p) for h, p in enumerate(house.parts) if p.eaves > low.eaves + EPS):
+        for h, high in ((h, p) for h, p in enumerate(house.parts) if _outranks(ranks[h], ranks[n])):
             shared = shapely.Polygon(low.corners).intersection(shapely.Polygon(high.corners))
             for seg in getattr(shared, "geoms", [shared]):
                 if isinstance(seg, shapely.LineString) and seg.length > EPS:
@@ -782,7 +850,7 @@ def joint_view(house: HouseRoof, k: int) -> tuple[list[Polygon], list[list[Point
 
         shape = shapely.union_all([shapely.Polygon([_on_view(p, left, u) for p in w]).buffer(0)
                                    for w in joint.walls]).intersection(window)
-        walls += _polygons(shape)
+        walls += polygons(shape)
         line = shapely.LineString([_on_view(p, left, u) for p in joint.seam]).intersection(window)
         seams += [list(g.coords) for g in getattr(line, "geoms", [line])
                   if isinstance(g, shapely.LineString) and g.length > EPS]

@@ -141,14 +141,16 @@ def test_shed_is_low_at_the_entrance():
     assert min(y for shape in view for _, y in shape) >= top - 1e-6
 
 
-def test_flat_and_l_shaped_houses_have_no_slopes(simple_svg):
-    """Плоская — скатов нет; скатная над Г-образным планом пока не строится — предупреждение."""
+def test_flat_house_and_l_shaped_house_have_no_single_roofline(simple_svg):
+    """Плоская — скатов нет; у Г-образного дома нет одной крыши на все стены — она по крыльям
+    (`roofs`), и предупреждения нет (gf#431, этап В); плоская над Г — нечего предупреждать."""
     assert roof.roofline(bare(RoofKind.FLAT)) is None
     l_house = bare(RoofKind.GABLE, simple_svg(*L_SHAPE))
-    assert roof.roofline(l_house) is None
-    warned = [v for v in validate(l_house, CFG.checks) if v.rule is Rule.ROOF_FLAT]
-    assert len(warned) == 1 and warned[0].severity == "warning"
-    assert not [v for v in validate(bare(RoofKind.GABLE), CFG.checks) if v.rule is Rule.ROOF_FLAT]
+    assert roof.roofline(l_house) is None and roof.roofs(l_house) is not None
+    assert not [v for v in validate(l_house, CFG.checks) if v.rule is Rule.ROOF_FLAT]
+    flat = bare(RoofKind.FLAT, simple_svg(*L_SHAPE))
+    assert roof.roofs(flat) is None
+    assert not [v for v in validate(flat, CFG.checks) if v.rule is Rule.ROOF_FLAT]
 
 
 def test_sheet_draws_roof_and_gables():
@@ -329,3 +331,152 @@ def test_wall_gable_must_stand_on_the_wall():
                                                   "pitch_deg": 45.0}]}
     with pytest.raises(ValueError, match="не на стене"):
         type(sheet).model_validate(data)
+
+
+
+# ——— Г-, Т-, П-дом одной высоты (gf#431, этап В) ———
+
+WALL_M = 0.15  # толщина стены плана, как в simple_house.svg
+PX_PER_M = 100
+DOOR_PX = 90  # ширина входной двери плана, как у simple_house.svg
+
+# Г: крыло 10 × 6 м и крыло 4 × 4 м у его длинной стены, у края; Т — то же посреди стены;
+# П — крыло 10 × 4 м и два крыла 3 × 4 м по его краям
+L_HOUSE = [(1, 1), (11, 1), (11, 11), (7, 11), (7, 7), (1, 7)]
+T_HOUSE = [(1, 1), (11, 1), (11, 7), (8, 7), (8, 11), (4, 11), (4, 7), (1, 7)]
+U_HOUSE = [(1, 1), (11, 1), (11, 9), (8, 9), (8, 5), (4, 5), (4, 9), (1, 9)]
+
+
+def outline_svg(outline: list[tuple[float, float]]) -> str:
+    """План по ортогональному контуру в метрах: стена каждой стороны — прямоугольник толщиной
+    WALL_M внутрь контура (контур плана — внешняя грань стен, как у simple_house.svg); в середине
+    первой стороны (горизонтальной, y = const) — входная дверь: разрыв, створка и дуга, как на
+    плане GenPlan, без входа план не читается."""
+    shape = shapely.Polygon(outline)
+    ring = list(shape.exterior.coords)
+    strips = [shapely.LineString([a, b]).buffer(WALL_M, cap_style="square").intersection(shape)
+              for a, b in zip(ring, ring[1:], strict=False)]
+    (x0, y0), (x1, _) = ring[0], ring[1]
+    left, right = (round(((x0 + x1) / 2) * PX_PER_M) + sign * DOOR_PX // 2 for sign in (-1, 1))
+    wall_y = round(y0 * PX_PER_M)
+    gap = shapely.box(left / PX_PER_M, y0 - 1, right / PX_PER_M, y0 + 1)
+    cut = [strip.difference(gap) for strip in strips]
+    pieces = [g for c in cut for g in getattr(c, "geoms", [c])
+              if isinstance(g, shapely.Polygon) and g.area > 0]
+    rects = [tuple(round(v * PX_PER_M) for v in g.bounds) for g in pieces]
+    body = "".join(f'<rect x="{x}" y="{y}" width="{xe - x}" height="{ye - y}" fill="#000000" />'
+                   for x, y, xe, ye in rects)
+    door = (f'<rect x="{left}" y="{wall_y + WALL_M * PX_PER_M:.0f}" width="5" height="{DOOR_PX}" '
+            'fill="#000000" />'
+            f'<path d="M{right},{wall_y + WALL_M * PX_PER_M:.0f} A{DOOR_PX},{DOOR_PX},0,0,1,'
+            f'{left},{wall_y + WALL_M * PX_PER_M + DOOR_PX:.0f}" stroke="#000000" fill="none" '
+            'stroke-width="5" />')
+    return ('<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1200" '
+            f'viewBox="0 0 1400 1200">{body}{door}</svg>')
+
+
+def wing_house(outline: list[tuple[float, float]], kind: RoofKind = RoofKind.GABLE):
+    """Лист дома одной высоты по контуру outline и его крыша по крыльям."""
+    sheet = bare(kind, outline_svg(outline))
+    return sheet, roof.roofs(sheet)
+
+
+def projection(house) -> shapely.Geometry:
+    """Проекция всех граней кровли на план."""
+    return shapely.union_all([shapely.Polygon([(x, y) for x, y, _ in face]).buffer(0)
+                              for face in roof.house_faces(house)])
+
+
+def uncovered(sheet, house) -> float:
+    """Площадь контура дома, над которой нет ни одной грани кровли."""
+    corners = roof.plan_corners([f.side for f in sheet.facades])
+    return shapely.Polygon(corners).difference(projection(house)).area
+
+
+def test_l_house_of_one_height_has_roof_over_each_wing():
+    """Г-дом одной высоты: скат у каждого крыла; конёк крыла 4 × 4 — поперёк главного, его кровля
+    продолжена над главным до его конька, стенки на общей линии нет (gf#431, этап В)."""
+    sheet, house = wing_house(L_HOUSE)
+    assert [f.runs for f in sheet.facades] == [[]] * 6 and len(sheet.wings) == 2
+    main, wing = sorted(range(2), key=lambda k: -shapely.Polygon(house.parts[k].corners).area)
+    assert {abs(s.inward[1]) for s in house.parts[main].slopes} == {1.0}  # конёк вдоль x
+    assert {abs(s.inward[0]) for s in house.parts[wing].slopes} == {1.0}  # конёк вдоль y
+    assert all(line.eaves == sheet.spec.eaves_m for line in house.parts)
+    (ext,) = house.extensions
+    assert (ext.part, ext.into) == (wing, main)
+    assert roof.joints(house) == []
+    assert uncovered(sheet, house) == pytest.approx(0.0, abs=1e-6)
+
+
+@pytest.mark.parametrize("outline", [T_HOUSE, U_HOUSE], ids=["T", "U"])
+def test_t_and_u_houses_of_one_height_are_roofed_without_holes(outline):
+    sheet, house = wing_house(outline)
+    assert len(house.parts) >= 2 and all(line.slopes for line in house.parts)
+    assert uncovered(sheet, house) == pytest.approx(0.0, abs=1e-6)
+    reach = shapely.Polygon(house.corners).buffer(house.parts[0].overhang + 1e-6,
+                                                  join_style="mitre")
+    assert projection(house).difference(reach).area == pytest.approx(0.0, abs=1e-6)
+
+
+def test_wing_house_with_pitched_roof_has_no_roof_flat_warning():
+    """`Rule.ROOF_FLAT` — только когда скатная крыша над непрямоугольным контуром не строится
+    (gf#431, этап В)."""
+    sheet, house = wing_house(L_HOUSE)
+    assert roof.roofline(sheet) is None and house is not None
+    assert Rule.ROOF_FLAT not in {v.rule for v in validate(sheet, CFG.checks)}
+
+
+def test_skewed_contour_keeps_roof_flat_warning():
+    """Контур, что не делится на крылья (сторона повёрнута не на 90°), — скатов нет, у скатной
+    крыши предупреждение `Rule.ROOF_FLAT` (`evaluation: Скатная крыша над непрямоугольным
+    домом`)."""
+    sheet, _ = wing_house(L_HOUSE)
+    f = sheet.facades[1]
+    turn = math.radians(20)
+    (nx, ny) = f.side.orientation
+    skew = f.model_copy(update={"side": f.side.model_copy(update={"orientation": (
+        nx * math.cos(turn) - ny * math.sin(turn), nx * math.sin(turn) + ny * math.cos(turn))})})
+    skewed = sheet.model_copy(update={"wings": [], "facades": [
+        skew if k == 1 else g for k, g in enumerate(sheet.facades)]})
+    assert roof.roofs(skewed) is None
+    assert Rule.ROOF_FLAT in {v.rule for v in validate(skewed, CFG.checks)}
+
+
+def test_part_rank_is_eaves_then_area_then_number():
+    """Старшинство частей: карниз, площадь крыла, меньший номер; при разном карнизе площадь не
+    считается — как было у частей разной высоты."""
+    rank = roof._rank
+    assert roof._outranks(rank(6.0, 1.0, 5), rank(3.0, 99.0, 0))
+    assert roof._outranks(rank(3.0, 8.0, 5), rank(3.0, 2.0, 0))
+    assert roof._outranks(rank(3.0, 2.0, 0), rank(3.0, 2.0, 1))
+    assert not roof._outranks(rank(3.0, 2.0, 1), rank(3.0, 2.0, 0))
+    assert not roof._outranks(rank(3.0, 2.0, 0), rank(3.0, 2.0, 0))
+
+
+def sorted_faces(house) -> list:
+    return sorted([tuple(round(v, 6) for p in face for v in p) for face in roof.house_faces(house)])
+
+
+def test_wing_roof_does_not_depend_on_wing_numbers():
+    """Кто главнее при равном карнизе — по площади крыла, а не по номеру в листе (gf#431, этап В):
+    те же крылья в обратном порядке дают те же грани и ту же кровлю над общей линией."""
+    sheet, house = wing_house(L_HOUSE)
+    turned = sheet.model_copy(update={"wings": sheet.wings[::-1]})
+    back = roof.roofs(turned)
+    assert sorted_faces(back) == sorted_faces(house)
+    assert [(e.part, e.into) for e in back.extensions] == [(0, 1)]
+    assert uncovered(turned, back) == pytest.approx(0.0, abs=1e-6)
+
+
+def test_wing_with_higher_ridge_than_main_has_gable_wall_over_the_main_roof():
+    """Над общей линией крыла и главного крыла одного карниза нет продолжения, когда конёк крыла
+    выше конька главного (крутой скат): стена щипца крыла над кровлей главного — примыкание
+    (gf#431, этап В, пары равного карниза)."""
+    sheet, _ = wing_house(L_HOUSE)
+    steep = sheet.spec.roof.model_copy(update={"pitch_deg": 70.0})
+    sheet = sheet.model_copy(update={"roofs": [sheet.spec.roof, steep]})
+    house = roof.roofs(sheet)
+    assert house.extensions == ()
+    (joint,) = roof.joints(house)
+    assert joint.high == 1 and joint.walls and min(z for w in joint.walls for *_, z in w) >= (
+        sheet.spec.eaves_m - 1e-6)
