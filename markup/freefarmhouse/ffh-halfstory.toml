@@ -25,7 +25,10 @@ roof = "двускатная 10:12 (кедровая дранка), конёк �
 roof_kind = "gable"
 pitch_deg = 39.8
 overhang_m = 0.4
-roof_gaps = ["составная: двускатная с поперечными щипцами на торцах рукавов -> одна двускатная"]
+part_roofs = [  # свои крыши частей (gf#431), часть — под серединой x на виде side
+  { side = 1, x = [972.0, 1180.0], kind = "gable", pitch_deg = 39.8, down = 1 },  # западный рукав: конёк поперёк основного, щипец на торце (FRONT ELEVATION)
+  { side = 9, x = [440.0, 648.0], kind = "gable", pitch_deg = 39.8, down = 9 },  # восточный рукав: то же (REAR ELEVATION)
+]
 unit = "ft"
 pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"
 material = "siding"       # CLAPBOARD SIDING
