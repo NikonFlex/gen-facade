@@ -788,6 +788,23 @@ class SideFacade(Model):
         return self
 
 
+class WallGable(Model):
+    """Щипец над карнизной стеной (gf#431, `facade: Щипец над карнизной стеной`): над участком
+    [x0, x1] стороны `side` (x — как у элементов) — треугольник от карниза части с уклоном
+    pitch_deg; его кровля идёт от стены над скатом дома до конька."""
+
+    side: int = Field(ge=0)
+    x0_m: float = Field(ge=0)
+    x1_m: float
+    pitch_deg: float = Field(gt=0, lt=90)
+
+    @model_validator(mode="after")
+    def _check_span(self) -> "WallGable":
+        if self.x1_m <= self.x0_m + EPS:
+            raise ValueError(f"щипец на стороне {self.side}: x {self.x0_m}–{self.x1_m}")
+        return self
+
+
 class FacadeSheet(Model):
     """Результат запроса: параметры дома и фасады всех сторон."""
 
@@ -800,6 +817,8 @@ class FacadeSheet(Model):
     # Крыша каждого крыла (gf#431, `facade: Крыша над частями дома`), номер — как у `wings`.
     # Пусто — над всеми частями крыша дома (`spec.roof`).
     roofs: list[Roof] = []
+    # Щипцы над карнизными стенами (gf#431): пока только из разметки настоящих домов.
+    wall_gables: list[WallGable] = []
 
     @model_validator(mode="after")
     def _check_parts(self) -> "FacadeSheet":
@@ -812,6 +831,9 @@ class FacadeSheet(Model):
                 if self.wings and r.part >= len(self.wings):
                     raise ValueError(f"сторона {f.side.index}: участок части {r.part}, "
                                      f"а крыльев {len(self.wings)}")
+        for g in self.wall_gables:
+            if g.side >= len(self.facades) or g.x1_m > self.facades[g.side].side.length_m + EPS:
+                raise ValueError(f"щипец на стороне {g.side} x {g.x0_m}–{g.x1_m} — не на стене")
         return self
 
     @model_validator(mode="after")
