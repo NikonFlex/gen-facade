@@ -33,14 +33,19 @@ def _winged(sheet: FacadeSheet) -> bool:
 
 
 def _entrance_gable(sheet: FacadeSheet, cfg: Config):
-    """Щипец, что мог бы встать над входом дома без своего: самый широкий из допустимых."""
+    """Щипец, что мог бы встать над входом дома без своего: самый широкий из допустимых и такой,
+    что крыша его строит (у части, чей скат от этой стены не поднимается, щипца нет)."""
     rules = cfg.synthetic.spec.composite
     bare = sheet.model_copy(update={"wall_gables": []})
     house = roof.roofs(bare)
     if sheet.spec.roof.kind is not RoofKind.GABLE or house is None:
         return None
-    return roofs._over_entrance(bare, house, rules.wall_gable_share[1],
-                                rules.wall_gable_pitch_deg[0], rules)
+    found = roofs._over_entrance(bare, house, rules.wall_gable_share[1],
+                                 rules.wall_gable_pitch_deg[0], rules)
+    if found is None:
+        return None
+    built = roof.roofs(bare.model_copy(update={"wall_gables": [found]}))
+    return found if len(built.parts) == len(house.parts) + 1 else None
 
 
 def test_share_of_own_part_roofs_follows_config(sheets, cfg):
@@ -51,10 +56,13 @@ def test_share_of_own_part_roofs_follows_config(sheets, cfg):
 
 
 def test_share_of_wall_gables_follows_config(sheets, cfg):
-    suited = [s for s in sheets if _entrance_gable(s, cfg) is not None]
-    gabled = [s for s in sheets if s.wall_gables]
+    """Доля щипцов среди домов, где он встаёт: такие дома — щипец при вероятности 1 (тот же seed —
+    те же ширина и уклон щипца: жребии тянутся всегда)."""
+    always = composite(cfg, wall_gable_p=1.0)
+    suited = {seed for seed in SEEDS if build.sample(seed, always).sheet.wall_gables}
+    gabled = {seed for seed, s in zip(SEEDS, sheets, strict=True) if s.wall_gables}
     assert len(suited) > 30
-    assert all(_entrance_gable(s, cfg) is not None for s in gabled)  # щипцы — только где можно
+    assert gabled <= suited  # щипцы — только где можно
     assert abs(len(gabled) / len(suited) - cfg.synthetic.spec.composite.wall_gable_p) <= SHARE_TOL
 
 

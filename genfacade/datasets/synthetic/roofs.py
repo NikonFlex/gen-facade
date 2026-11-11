@@ -58,7 +58,7 @@ def _away(main: Rect, wing: Rect) -> Facing | None:
     (крыло — то же главное или стоит не на нём) — None."""
     shared = shapely.box(main.x0_m, main.y0_m, main.x1_m, main.y1_m).intersection(
         shapely.box(wing.x0_m, wing.y0_m, wing.x1_m, wing.y1_m))
-    if shared.geom_type != "LineString" or shared.length <= EPS:
+    if not isinstance(shared, shapely.LineString) or shared.length <= EPS:
         return None
     x0, y0, x1, y1 = shared.bounds
     if x1 - x0 <= EPS:  # общая стена — вертикальная, крыло правее или левее неё
