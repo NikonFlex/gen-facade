@@ -524,8 +524,10 @@ def test_roofs_of_parts_are_whole_and_lower_goes_under_overhang():
             union = shapely.unary_union([shapely.Polygon([(x, y) for x, y, _ in face])
                                          for _, face in roof.faces(line, roof._area(house, k))])
             whole = shapely.Polygon(line.corners).buffer(line.overhang, join_style="mitre")
-            if k == low:  # нижняя обрывается на стене верхней
-                whole = whole.difference(shapely.Polygon(house.parts[high].corners))
+            if k == low:  # нижняя обрывается на стене верхней и на линии общей стены (gf#431)
+                top = shapely.Polygon(house.parts[high].corners)
+                whole = whole.difference(top).difference(
+                    roof._past_shared_wall(shapely.Polygon(line.corners), top, line.overhang))
             assert whole.symmetric_difference(union).area < EPS  # без вырезов свесом соседа
             shapes.append(union)
         both = shapes[high].intersection(shapes[low])
@@ -681,17 +683,35 @@ def test_gable_lower_wing_has_ridge_across_the_wall_not_a_lean_to():
         assert top < main.eaves
 
 
+def test_lower_roof_overhang_ends_at_line_of_shared_wall():
+    """Свес нижней части не висит перед стеной верхней (gf#431, снимок хозяина 11.11 — полоса
+    «сквозь дом»): у Г-дома крыло 2,05 × 3 м вровень с фасадом главного — квадрат свеса крыла за
+    линией их общей стены, перед фасадом главного, без кровли; свес вдоль фасада крыла остаётся."""
+    house = roof.roofs(bare(GABLE))
+    low = min(range(len(house.parts)), key=lambda k: house.parts[k].eaves)
+    over = house.parts[low].overhang
+    xs = [c[0] for c in house.parts[low].corners]
+    shared_x, front = min(xs), min(c[1] for c in house.parts[low].corners)
+    found = roof.faces(house.parts[low], roof._area(house, low))
+    union = shapely.unary_union([shapely.Polygon([(x, y) for x, y, _ in f]) for _, f in found])
+    corner = shapely.box(shared_x - over, front - over, shared_x, front)
+    assert union.intersection(corner).area < EPS
+    assert union.intersection(shapely.box(shared_x, front - over, max(xs), front)).area == \
+        pytest.approx(over * (max(xs) - shared_x))
+
+
 def roof_zones(sheet: FacadeSheet):
     return [(k, z) for k, f in enumerate(sheet.facades) for z in f.side.forbidden
             if z.y0_m is not None]
 
 
 def test_wall_strips_under_roof_of_lower_wing_are_forbidden_zones():
-    """Кровля нижнего крыла со свесом закрывает полосу стены главного блока за торцом крыла: зона
-    шириной в свес, высотой от кромки свеса до карниза крыла. Зон плана у дома нет."""
+    """Кровля нижнего крыла со свесом закрывает полосу стены главного блока у торцов крыла: зона
+    шириной в свес, высотой от кромки свеса до карниза крыла. За линией общей стены свеса крыла нет
+    (gf#431): на стенах блока по сторонам крыла зон нет. Зон плана у дома нет."""
     sheet = u_sheet()
     zones = roof_zones(sheet)
-    assert len(zones) == 4 and {k for k, _ in zones} == {1, 4, 7}  # свес по обе стороны крыла
+    assert len(zones) == 2 and {k for k, _ in zones} == {4}
     overhang, pitch = sheet.spec.roof.overhang_m, math.radians(sheet.spec.roof.pitch_deg)
     for _, z in zones:
         assert z.x1_m - z.x0_m == pytest.approx(overhang)
@@ -756,12 +776,13 @@ def test_real_houses_are_not_rejected_by_roof_zones(name):
 
 
 @pytest.mark.parametrize(("text", "faces", "area", "heights"), [
-    (GABLE, 4, 60.22, 92.7127), (TWO_PARTS + " Hip roof.", 7, 60.22, 155.1345),
-    (TWO_PARTS + " Shed roof.", 2, 60.22, 51.0543)])
+    (GABLE, 4, 60.06, 89.4627), (TWO_PARTS + " Hip roof.", 7, 60.06, 151.8845),
+    (TWO_PARTS + " Shed roof.", 2, 60.06, 47.1985)])
 def test_roof_of_parts_of_different_height_is_as_before_ranking(text, faces, area, heights):
     """Старшинство частей по карнизу, площади и номеру (gf#431, этап В) не меняет дом из частей
     разной высоты: грани, их площадь на плане, высоты вершин и примыкание — как до правки (числа
-    сняты с кода до неё)."""
+    сняты с кода до неё; после — без квадрата свеса нижней перед стеной верхней, 0,4 × 0,4 м:
+    `facade: Крыша над частями дома`, свес обрывается на линии общей стены, gf#431)."""
     house = roof.roofs(bare(text))
     found = roof.house_faces(house)
     assert len(found) == faces and len(roof.joints(house)) == 1

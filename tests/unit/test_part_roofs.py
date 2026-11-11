@@ -34,14 +34,15 @@ def test_lower_wing_on_main_gets_shed_roof_away_from_main():
 
 def test_shed_of_annex_rises_to_wall_of_main():
     """Высокая сторона ската пристройки — у стены главного: 3,25 + 2,05 · tg 14° ≈ 3,76 м; зона под
-    кровлей на стене главного — по этому скату со свесом, а не по щипцу крыши дома (≈ 4,3 м)."""
+    кровлей на стене главного — по этому скату, а не по щипцу крыши дома (≈ 4,3 м); свеса за линией
+    общей стены нет (gf#431)."""
     sheet = walls(GABLE)
     tan = math.tan(math.radians(RULE.annex_pitch_deg))
     annex = min(roof.roofs(sheet).parts, key=lambda p: p.eaves)
     assert len(annex.slopes) == 1 and annex.eaves == pytest.approx(3.25)
     assert 3.25 + 2.05 * tan == pytest.approx(3.76, abs=0.01)
     under = [z for f in sheet.facades for z in f.side.forbidden if z.y1_m is not None]
-    assert max(z.y1_m for z in under) == pytest.approx(3.25 + (2.05 + annex.overhang) * tan)
+    assert max(z.y1_m for z in under) == pytest.approx(3.25 + 2.05 * tan)
 
 
 def test_same_height_wings_keep_house_roof():

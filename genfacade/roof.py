@@ -534,15 +534,36 @@ def _entrance_on(facade, spans: list[Span], part: int) -> bool:
 def _area(house: HouseRoof, k: int) -> shapely.Geometry:
     """Площадь крыши части k: крыло со свесом по всему контуру. Ни одна крыша не режется свесом
     другой (gf#412): свес верхней нависает над нижней крышей, а нижняя обрывается на стене более
-    высокой части (её крыло не вычитается из верхней). Какая выше — `_outranks`."""
+    высокой части (её крыло не вычитается из верхней) — и на линии их общей стены: за ней свес
+    нижней висел бы перед стеной верхней (gf#431). Какая выше — `_outranks`."""
     me = house.parts[k]
     rect = shapely.Polygon(me.corners)
     above = [shapely.Polygon(other.corners) for j, other in enumerate(house.parts)
              if _outranks(_line_rank(other, j), _line_rank(me, k))]
     area = rect.buffer(me.overhang, join_style="mitre")
-    area = area.difference(shapely.union_all(above)).union(rect) if above else area
+    if above:
+        cut = [z for a in above if (z := _past_shared_wall(rect, a, me.overhang)) is not None]
+        area = area.difference(shapely.union_all([*above, *cut])).union(rect)
     zones = [e.zone for e in house.extensions if e.part == k]
     return area.union(shapely.union_all(zones)) if zones else area
+
+
+def _past_shared_wall(rect: shapely.Polygon, above: shapely.Polygon,
+                      overhang: float) -> shapely.Geometry | None:
+    """Зона свеса верхнего крыла above за линией его общей стены с rect — там свес rect висел бы
+    перед стеной above; где rect длиннее above, свес над стеной rect — дальше этой зоны. Общей
+    стены нет — None."""
+    shared = rect.intersection(above)
+    if not isinstance(shared, shapely.LineString) or shared.length <= EPS:
+        return None
+    (x0, y0), (x1, y1) = shared.coords[0], shared.coords[-1]
+    ux, uy = (x1 - x0) / shared.length, (y1 - y0) / shared.length
+    far = rect.length + above.length  # дальше любого свеса обоих крыльев
+    line = shapely.LineString([(x0 - ux * far, y0 - uy * far), (x1 + ux * far, y1 + uy * far)])
+    mine = line.buffer(far, cap_style="flat", single_sided=True)
+    if mine.intersection(rect).area <= EPS:  # сторона rect — с другой стороны линии
+        mine = line.buffer(-far, cap_style="flat", single_sided=True)
+    return above.buffer(overhang, join_style="mitre").difference(mine)
 
 
 # ——— Поперечный щипец: кровля части над соседней (gf#431, `facade: Поперечный щипец`) ———
@@ -641,9 +662,11 @@ def _wall_gable(house: HouseRoof, g: WallGable) -> tuple[Roofline, int, shapely.
         return None
     rise = min(math.tan(math.radians(g.pitch_deg)),
                (_ridge(base, zone) - base.eaves) / (mid - g.x0_m))
+    # бокового свеса у щипца нет: скат щипца круче ската части, и за краями участка его свес
+    # висел бы под кромкой свеса части (gf#431); свес вперёд — полоса перед стеной ниже
     line = Roofline(list(shapely.Polygon(zone).exterior.coords)[:-1],
                     [Slope(at(g.x0_m), u), Slope(at(g.x1_m), (-u[0], -u[1]))], base.eaves,
-                    rise, base.overhang)
+                    rise, 0.0)
     if not _meets(line, base, seg, zone):
         return None
     # свес части под щипцом прерывается, как карниз на листе: перед стеной видна кровля щипца
