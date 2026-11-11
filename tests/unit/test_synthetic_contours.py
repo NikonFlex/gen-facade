@@ -27,6 +27,7 @@ def test_step2_reads_as_many_sides_as_drawn(houses, kind):
     assert {len(h.plan.sides) for h in houses[kind]} == {SIDES[kind]}
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("kind", list(ContourKind))
 def test_plan_scale_is_one_centimetre_and_one_entrance(houses, kind):
     """Вход узнан верно — дверь 90 px, масштаб 0,01 м/px, вход один: перегородка, продолжающая
@@ -37,10 +38,12 @@ def test_plan_scale_is_one_centimetre_and_one_entrance(houses, kind):
         assert sum(s.has_entrance for s in h.plan.sides) == 1, h.id
 
 
+@pytest.mark.slow
 def test_rect_stays_four_sided(houses):
     assert {len(h.plan.sides) for h in houses[ContourKind.RECT]} == {4}
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("kind", list(SIDES))
 def test_windows_keep_off_every_corner_and_partition(houses, cfg, kind):
     """Окно не ближе нормы к углу стороны — выпуклому и входящему — и не в запретной зоне у
@@ -58,6 +61,7 @@ def test_windows_keep_off_every_corner_and_partition(houses, cfg, kind):
     assert seen > 0
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("kind", list(ContourKind))
 @pytest.mark.parametrize("mode", [Mode.BLIND, Mode.WITH_OPENINGS])
 def test_house_record_decodes_back(houses, cfg, kind, mode):
@@ -68,6 +72,7 @@ def test_house_record_decodes_back(houses, cfg, kind, mode):
         assert tokens.answer(back, mode, cfg) == written
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("kind", list(ContourKind))
 def test_houses_pass_validator(houses, cfg, kind):
     """У домов любого контура нет ошибок валидатора (их батч отбраковывает); предупреждение —

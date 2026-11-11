@@ -68,6 +68,7 @@ def test_share_of_wall_gables_follows_config(sheets, cfg):
     assert abs(len(gabled) / len(suited) - cfg.synthetic.spec.composite.wall_gable_p) <= SHARE_TOL
 
 
+@pytest.mark.slow
 def test_extension_is_shed_sloping_away_from_main_wing(sheets):
     """Скат пристройки поднимается от внешней стены к главному крылу: на общей стене кровля выше,
     чем на противоположной."""
@@ -88,11 +89,13 @@ def test_extension_is_shed_sloping_away_from_main_wing(sheets):
     assert seen > 20
 
 
+@pytest.mark.slow
 def test_main_wing_keeps_house_roof(sheets):
     for s in (s for s in sheets if s.roofs):
         assert s.roofs[main_wing(s.wings)] == s.spec.roof
 
 
+@pytest.mark.slow
 def test_wall_gable_is_over_entrance_inside_its_span(sheets, cfg):
     rules = cfg.synthetic.spec.composite
     seen = 0

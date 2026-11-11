@@ -45,6 +45,7 @@ def test_generator_passes_every_check(calibrated, mode):
     assert (r["valid"], r["geometry"], r["plan"], r["description"]) == (1.0, 1.0, 1.0, 1.0)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(("column", "substitutes"), [
     ("geometry", ("random", "foreign", "constant")),
     ("plan", ("foreign", "constant", "empty")),
@@ -57,12 +58,14 @@ def test_generator_beats_substitutes(calibrated, column, substitutes):
         assert rows[name][column] < rows["generator"][column], name
 
 
+@pytest.mark.slow
 def test_structure_is_closer_for_generator(calibrated):
     rows = calibrated[Mode.BLIND]
     for name in ("random", "constant", "empty"):
         assert rows[name]["structure"] > rows["generator"]["structure"], name
 
 
+@pytest.mark.slow
 def test_svd_is_perfect_on_empty_facade(calibrated):
     """Сценарий «Пустой фасад»: SVD-метрика идеальна, а окон на стену — 0, это видно рядом."""
     r = calibrated[Mode.BLIND]["empty"]
