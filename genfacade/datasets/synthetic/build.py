@@ -5,7 +5,16 @@ import random
 from genfacade import derive, pipeline
 from genfacade.config import Config, Synthetic
 from genfacade.datasets import genplan_writer
-from genfacade.datasets.synthetic import contour, decor, gable, openings, sizes, upper, zones
+from genfacade.datasets.synthetic import (
+    contour,
+    decor,
+    gable,
+    openings,
+    roofs,
+    sizes,
+    upper,
+    zones,
+)
 from genfacade.datasets.synthetic.house import Look, house
 from genfacade.plan.preprocess import preprocess
 from genfacade.schema import (
@@ -54,6 +63,8 @@ def sample(seed: int, cfg: Config) -> Sample:
     sheet = lay_out(pipeline.walls(spec, floor), look, cfg,
                     random.Random(f"upper/{seed}"),  # noqa: S311 — не криптография
                     random.Random(f"gable/{seed}"))  # noqa: S311 — не криптография
+    # Крыши частей и щипец — после раскладки и со своим потоком: стены от них не зависят.
+    sheet = roofs.compose(random.Random(f"roofs/{seed}"), sheet, cfg)  # noqa: S311
     return Sample(id=sample_id(seed), source=Source.SYNTHETIC, split=split(seed, syn),
                   plan=floor, sheet=sheet)
 

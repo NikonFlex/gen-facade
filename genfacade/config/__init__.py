@@ -665,12 +665,24 @@ class Contours(Section):
     bay_depth_m: Range                 # эркер глубже 0,6 м — часть контура (gf#199)
 
 
+class Composite(Section):
+    """Составные крыши синтетики (config/synthetic.toml, [spec.composite], gf#431)."""
+
+    part_p: float                  # доля скатных домов с крыльями, у которых у пристроек своя крыша
+    part_pitch_deg: list[float]    # уклон односкатной крыши пристройки
+    wall_gable_p: float            # доля двускатных домов со щипцом над входом
+    wall_gable_share: Range        # ширина щипца — доля длины участка стены
+    wall_gable_min_m: float        # щипец уже не строится
+    wall_gable_pitch_deg: list[float]
+
+
 class SpecRules(Section):
     floors_weights: list[float]
     grid_m: float
     styles: list[str]
     palette: dict[PaletteRole, list[str]]  # виды — из library.toml
     roof_weights: dict[RoofKind, float]    # вид крыши дома → вес (gf#320)
+    composite: Composite
 
 
 class Windows(Section):

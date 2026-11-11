@@ -181,10 +181,19 @@ def test_walls_do_not_stick_out_above_the_roof(kind, sheets, cfg):
     толщиной t выдавлена внутрь, а скат односкатной крыши над внутренней гранью ниже, чем над
     наружной: верх по наружной грани торчал над кровлей. На вогнутом углу Г-дома одной высоты
     (gf#431) стена продолжена за угол, а кровля над углом ниже её торца."""
+    assert _checked_below_roof([_with_roof(s, kind, cfg) for s in sheets], cfg)
+
+
+def _with_roof(sheet: FacadeSheet, kind: RoofKind, cfg) -> FacadeSheet:
+    """Лист с крышей дома вида kind и без крыш частей: они у синтетики другого вида."""
+    return sheet.model_copy(update={"spec": sheet.spec.model_copy(update={
+        "roof": cfg.models.spec.roof_shape.roof(kind, "roof")}), "roofs": [], "wall_gables": []})
+
+
+def _checked_below_roof(sheets: list[FacadeSheet], cfg) -> int:
+    """Сколько точек стен проверено: каждая не выше ската над ней и не вровень с ним."""
     t, checked = cfg.ifc.wall_thickness_m, 0
     for sheet in sheets:
-        sheet = sheet.model_copy(update={"spec": sheet.spec.model_copy(update={
-            "roof": cfg.models.spec.roof_shape.roof(kind, "roof")})})
         house = roof.roofs(sheet)
         if house is None:
             continue
@@ -202,7 +211,7 @@ def test_walls_do_not_stick_out_above_the_roof(kind, sheets, cfg):
                         if top is not None:
                             checked += 1
                             assert z <= top - cfg.ifc.roof_seat_m + 1e-6, (k, x, z, depth, top)
-    assert checked
+    return checked
 
 
 def test_file_is_deterministic_and_ascii(house, cfg):
