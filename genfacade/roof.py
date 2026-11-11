@@ -315,6 +315,20 @@ def gables(sheet: FacadeSheet) -> list[Polygon | None]:
     return [None if line is None else above_eaves(line, k) for k in range(len(sheet.facades))]
 
 
+def sheet_gables(sheet: FacadeSheet) -> list[Polygon | None]:
+    """Зона фронтона листа для проверок, отрисовки и метрик: `gables` модели, а у стены со щипцом
+    над карнизом (`facade: Щипец над карнизной стеной`) — треугольник, который строит крыша (окно
+    мансарды в щипце остаётся окном под скатом). Условие и разметка шага 4 остаются на `gables`:
+    щипцов над стеной в корпусе обучения окон нет. Два щипца на одной стене — зона модели."""
+    base = gables(sheet)
+    house = roofs(sheet) if sheet.wall_gables else None
+    if house is None:
+        return base
+    sides = {g.side for g in sheet.wall_gables}
+    found = [house_above(house, k) if k in sides else [] for k in range(len(base))]
+    return [f[0] if len(f) == 1 else above for above, f in zip(base, found, strict=True)]
+
+
 def under_roof(e: Element, floors: int) -> bool:
     """Элемент этажа под скатом — окно во фронтоне и его выводимые элементы — по записи: этаж
     `floors + 1` ставят сборщик разметки, синтетика и модель, по нему ведут себя привязка, уровни

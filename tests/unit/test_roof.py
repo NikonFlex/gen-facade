@@ -315,6 +315,19 @@ def test_wall_gable_on_shed_runs_up_to_the_high_wall():
     assert sorted([x1 - x0, y1 - y0]) == pytest.approx(sorted([2.0, depth + overhang]))
 
 
+def test_sheet_gables_add_the_wall_gable_zone_and_keep_the_model_ones():
+    """Зона фронтона листа у стены со щипцом — его треугольник (окно мансарды стоит в нём), у
+    остальных сторон — как у модели (`roof.gables`: условие шага 4 щипца над стеной не видит)."""
+    sheet, k, _ = gabled(45.0)
+    assert roof.gables(sheet) == roof.gables(sheet.model_copy(update={"wall_gables": []}))
+    assert roof.gables(sheet)[k] is None
+    zones = roof.sheet_gables(sheet)
+    assert zones[k] is not None and max(y for _, y in zones[k]) == pytest.approx(
+        sheet.spec.eaves_m + 1.0)
+    assert [z for i, z in enumerate(zones) if i != k] == [
+        z for i, z in enumerate(roof.gables(sheet)) if i != k]
+
+
 def test_wall_gable_on_a_gable_end_is_not_built():
     """На торцевой стене скат дома от стены не поднимается — щипцу некуда идти."""
     sheet, _, _ = gabled(45.0, end=True)

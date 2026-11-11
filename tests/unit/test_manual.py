@@ -659,6 +659,22 @@ def test_real_wall_gables():
     assert gable == pytest.approx(roof._ridge(house.parts[ext.into], ext.zone))
 
 
+def test_window_in_a_wall_gable_stays_on_the_sheet():
+    """Окно мансарды в щипце над карнизной стеной (ffh-julie, ffh-april, gf#431) остаётся окном
+    под скатом: в листе, выше карниза, этаж над домом; карниз под щипцом прерван, лист без брака."""
+    for house, side, n in (("ffh-julie", 0, 1), ("ffh-april", 0, 1)):
+        sheet = manual.house(real(house), CFG.data.manual)[0].sheet
+        high = [e for e in sheet.facades[side].elements if e.cls is ElementClass.WINDOW
+                and roof.under_roof(e, sheet.spec.floors)]
+        assert len(high) == n and all(e.y_m + e.h_m > sheet.spec.eaves_m for e in high)
+        assert not errors(validate(sheet, CFG.checks))
+    april = manual.house(real("ffh-april"), CFG.data.manual)[0].sheet
+    (g, *_) = april.wall_gables
+    cornice = [e for e in april.facades[g.side].elements if e.cls is ElementClass.CORNICE]
+    assert len(cornice) == 2 and not any(
+        e.x_m < g.x1_m - 1e-6 and e.x_m + e.w_m > g.x0_m + 1e-6 for e in cornice)
+
+
 @pytest.mark.slow
 def test_real_flat_part_has_a_slab():
     """sd-sit-2013 (gf#431): южное крыло — плоская зелёная кровля, северный объём — односкатная. У

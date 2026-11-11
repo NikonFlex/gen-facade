@@ -283,13 +283,14 @@ def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
     none = [None] * len(raw)
     _, walls = rect_house.assemble(spec, fp, _laid(raw, none, lengths, runs, spec, cfg)[0],
                                    Source.MANUAL)
-    laid, dropped = _laid(raw, none if found else roof.gables(walls), lengths, runs, spec, cfg)
+    tents = _wall_gables(m, cfg, bool(rects))
+    zones = _gable_zones(none if found else roof.gables(walls), tents, spec.eaves_m)
+    laid, dropped = _laid(raw, zones, lengths, runs, spec, cfg)
     spec = spec.model_copy(update={"trim": _trim([xs for _, xs in laid], cfg.trim)})
     plan, sheet = rect_house.assemble(spec, fp, laid, Source.MANUAL)
     facades = [f.model_copy(update={"zones": _zones(e, m, spec, f.side.length_m, r), "runs": r})
                for f, e, r in zip(sheet.facades, m.sides, runs, strict=True)]
-    gables = _wall_gables(m, cfg, bool(rects))
-    sheet = sheet.model_copy(update={"facades": facades, "wall_gables": gables})
+    sheet = sheet.model_copy(update={"facades": facades, "wall_gables": tents})
     if rects:  # крылья — в плане (шаг 2) и на листе; силуэт ступенями — только при разных высотах
         plan = plan.model_copy(update={"wings": rects})
         sheet = roof.with_covered(unfold(sheet.model_copy(update={
@@ -299,6 +300,21 @@ def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
     sheet, bare = _no_eaves(sheet)
     return (Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet),
             dropped + bare)
+
+
+def _gable_zones(base: list[Polygon | None], tents: list[WallGable], eaves: float
+                 ) -> list[Polygon | None]:
+    """Зона фронтона каждой стороны: у крыши дома (`roof.gables`), а у стены с одним щипцом над
+    карнизом — его треугольник по разметке: окно мансарды в щипце остаётся окном под скатом."""
+    out = list(base)
+    for k, above in enumerate(base):
+        mine = [g for g in tents if g.side == k]
+        if above is None and len(mine) == 1:
+            g = mine[0]
+            peak = ((g.x0_m + g.x1_m) / 2, eaves + math.tan(math.radians(g.pitch_deg))
+                    * (g.x1_m - g.x0_m) / 2)
+            out[k] = [(g.x0_m, eaves), peak, (g.x1_m, eaves)]
+    return out
 
 
 def _laid(raw: list[list[Element]], gables: list[Polygon | None], lengths: list[float],
@@ -342,8 +358,25 @@ def _no_eaves(sheet: FacadeSheet) -> tuple[FacadeSheet, int]:
     for k, f in enumerate(sheet.facades):
         keep = [x for x in f.elements if not (x.cls is ElementClass.CORNICE and k not in eaves)]
         bare += len(f.elements) - len(keep)
-        facades.append(f.model_copy(update={"elements": keep}))
+        gaps = [(g.x0_m, g.x1_m) for g in sheet.wall_gables if g.side == k]
+        facades.append(f.model_copy(update={"elements": _cornice_gaps(keep, gaps)}))
     return sheet.model_copy(update={"facades": facades}), bare
+
+
+def _cornice_gaps(elements: list[Element], gaps: list[tuple[float, float]]) -> list[Element]:
+    """Карниз прерывается под щипцом над стеной (`facade: Щипец над карнизной стеной`): перед
+    стеной видна кровля щипца, и окно в нём стоит на уровне карниза. Кусок — под тем же классом,
+    с id от id карниза; уже не шире допуска — снимается."""
+    out = []
+    for x in elements:
+        if x.cls is not ElementClass.CORNICE or not gaps:
+            out.append(x)
+            continue
+        edges = [x.x_m, *(v for g in sorted(gaps) for v in g), x.x_m + x.w_m]
+        pieces = [(a, b) for a, b in zip(edges[::2], edges[1::2], strict=True) if b - a > EPS]
+        out += [x.model_copy(update={"id": x.id if i == 0 else f"{x.id}_{i}",
+                                     "x_m": a, "w_m": b - a}) for i, (a, b) in enumerate(pieces)]
+    return out
 
 
 def _bare(m: Markup, cfg: Manual) -> Markup:
