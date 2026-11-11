@@ -174,11 +174,14 @@ def _breaks(line: Roofline, at, x0: float, x1: float) -> list[float]:
     return sorted(xs)
 
 
+def _walker(left: Point, u: Point):
+    """Точка линии (начало left, направление u) по расстоянию x вдоль неё."""
+    return lambda x: (left[0] + u[0] * x, left[1] + u[1] * x)
+
+
 def _above(line: Roofline, left: Point, u: Point, x0: float, x1: float) -> Polygon | None:
     """Стена над карнизом на участке [x0, x1] стены (начало left, направление u)."""
-    def at(x: float) -> Point:
-        return left[0] + u[0] * x, left[1] + u[1] * x
-
+    at = _walker(left, u)
     top = [(x, line.height(at(x))) for x in _breaks(line, at, x0, x1)]
     ring = [(x0, line.eaves), *top, (x1, line.eaves)]
     if max(y for _, y in top) - line.eaves <= EPS:
@@ -210,9 +213,14 @@ def _not_above(s: Slope, other: Slope) -> shapely.Polygon:
     n = (s.inward[0] - other.inward[0], s.inward[1] - other.inward[1])
     c = s.inward[0] * s.at[0] + s.inward[1] * s.at[1] - (
         other.inward[0] * other.at[0] + other.inward[1] * other.at[1])
-    size = math.hypot(*n)
-    if size <= EPS:  # скаты параллельны в одну сторону — у прямоугольника не бывает
+    if math.hypot(*n) <= EPS:  # скаты параллельны в одну сторону — у прямоугольника не бывает
         raise ValueError("два ската от параллельных стен с одной стороны")
+    return _halfplane(n, c)
+
+
+def _halfplane(n: Point, c: float) -> shapely.Polygon:
+    """Полуплоскость n·p ≤ c (n ненулевой) — полосой длины FAR."""
+    size = math.hypot(*n)
     unit = (n[0] / size, n[1] / size)
     on = (unit[0] * c / size, unit[1] * c / size)  # точка на границе
     along = (-unit[1] * FAR, unit[0] * FAR)
@@ -339,13 +347,24 @@ class Span(NamedTuple):
     part: int
 
 
+class Extension(NamedTuple):
+    """Кровля части `part`, продолженная над соседней частью `into` (поперечный щипец, gf#431):
+    zone — площадь продолжения в плане; в ней видна та из двух кровель, что выше."""
+
+    part: int
+    into: int
+    zone: shapely.Polygon
+
+
 @dataclass(frozen=True)
 class HouseRoof:
-    """Крыша дома: контур, скаты каждой части (прямоугольный дом — одна часть) и участки сторон."""
+    """Крыша дома: контур, скаты каждой части (прямоугольный дом — одна часть), участки сторон и
+    продолжения кровель над соседними частями."""
 
     corners: list[Point]
     parts: list[Roofline]
     spans: list[list[Span]]
+    extensions: tuple[Extension, ...] = ()
 
 
 def roofs(sheet: FacadeSheet) -> HouseRoof | None:
@@ -362,7 +381,7 @@ def roofs(sheet: FacadeSheet) -> HouseRoof | None:
                         [r for j, r in enumerate(rects) if eaves[j] > eaves[k] + EPS])
              for k, w in enumerate(rects)]
     return HouseRoof(corners, lines, [[Span(r.x0_m, r.x1_m, r.part) for r in f.runs]
-                                      for f in sheet.facades])
+                                      for f in sheet.facades], _extensions(lines))
 
 
 def _part_line(sheet: FacadeSheet, part: int, w, eaves: float, taller: list) -> Roofline:
@@ -424,7 +443,139 @@ def _area(house: HouseRoof, k: int) -> shapely.Geometry:
     above = [shapely.Polygon(other.corners) for j, other in enumerate(house.parts)
              if (other.eaves, -j) > (me.eaves, -k)]
     area = rect.buffer(me.overhang, join_style="mitre")
-    return area.difference(shapely.union_all(above)).union(rect) if above else area
+    area = area.difference(shapely.union_all(above)).union(rect) if above else area
+    zones = [e.zone for e in house.extensions if e.part == k]
+    return area.union(shapely.union_all(zones)) if zones else area
+
+
+# ——— Поперечный щипец: кровля части над соседней (gf#431, `facade: Поперечный щипец`) ———
+
+
+class Plane(NamedTuple):
+    """Плоскость ската: высота h = a·x + b·y + c над точкой плана."""
+
+    a: float
+    b: float
+    c: float
+
+
+def _plane(line: Roofline, s: Slope) -> Plane:
+    k = line.rise
+    return Plane(k * s.inward[0], k * s.inward[1],
+                 line.eaves - k * (s.at[0] * s.inward[0] + s.at[1] * s.inward[1]))
+
+
+def _extensions(parts: list[Roofline]) -> tuple[Extension, ...]:
+    """Продолжения кровель: часть упирается в соседа не ниже её по карнизу торцом щипца, и её
+    кровля над общей линией где-то выше кровли соседа — она идёт над соседом до его кровли
+    (ендова), а не обрывается стенкой (`_joint`)."""
+    return tuple(e for k, me in enumerate(parts) for j, other in enumerate(parts)
+                 if j != k and other.eaves >= me.eaves - EPS for e in _through(k, j, parts))
+
+
+def _through(k: int, j: int, parts: list[Roofline]) -> list[Extension]:
+    me, other = parts[k], parts[j]
+    shared = shapely.Polygon(me.corners).intersection(shapely.Polygon(other.corners))
+    out = []
+    for seg in getattr(shared, "geoms", [shared]):
+        if not isinstance(seg, shapely.LineString) or seg.length <= EPS:
+            continue
+        zone = _sweep(me, other, seg)
+        if zone is not None and _meets(me, other, seg, zone):
+            out.append(Extension(k, j, zone))
+    return out
+
+
+def _meets(me: Roofline, other: Roofline, seg: shapely.LineString, zone: shapely.Polygon) -> bool:
+    """Кровля me у общей линии где-то выше кровли other и уходит под неё в zone, не выше её конька:
+    иначе она прошла бы соседа насквозь (эркер у торца щипца — под щипцом, а не под кровлей)."""
+    top = max((z for _, face in faces(other, zone) for _, _, z in face), default=other.eaves)
+    return _rises_over(me, other, seg) and _top(me, seg) <= top + EPS
+
+
+def _sweep(me: Roofline, other: Roofline, seg: shapely.LineString) -> shapely.Polygon | None:
+    """Площадь над соседом, куда идёт кровля me через общую линию seg: полоса шириной seg по
+    скату соседа, что поднимается от этой линии, до его конька — за коньком скат соседа опускается,
+    и щипец вышел бы над ним снова. None — seg не торец щипца me (от этой стены или напротив идёт
+    скат) или кровля соседа от seg не поднимается (торец его щипца, плоская)."""
+    (x0, y0), (x1, y1) = seg.coords[0], seg.coords[-1]
+    centre = shapely.Polygon(me.corners).centroid
+    along_x = abs(y1 - y0) <= EPS  # общая линия вдоль x — кровля идёт по y
+    n = (0.0, math.copysign(1.0, y0 - centre.y)) if along_x else (
+        math.copysign(1.0, x0 - centre.x), 0.0)
+    if any(abs(s.inward[0] * n[0] + s.inward[1] * n[1]) > EPS for s in me.slopes):
+        return None
+    rising = [face for s, face in faces(other, shapely.Polygon(other.corners))
+              if math.dist(s.inward, n) <= EPS]
+    if not rising:
+        return None
+    reach = [x * n[0] + y * n[1] for face in rising for x, y, _ in face]
+    far = max(reach) * (n[0] + n[1])  # дальняя точка ската соседа по n — линия конька
+    if along_x:
+        return shapely.box(min(x0, x1), min(y0, far), max(x0, x1), max(y0, far))
+    return shapely.box(min(x0, far), min(y0, y1), max(x0, far), max(y0, y1))
+
+
+def _along(seg: shapely.LineString):
+    """Точка отрезка seg по расстоянию x от его начала и длина отрезка."""
+    (x0, y0), (x1, y1) = seg.coords[0], seg.coords[-1]
+    u = ((x1 - x0) / seg.length, (y1 - y0) / seg.length)
+    return (lambda x: (x0 + u[0] * x, y0 + u[1] * x)), seg.length
+
+
+def _rises_over(me: Roofline, other: Roofline, seg: shapely.LineString) -> bool:
+    """Кровля me над линией seg где-то выше кровли other — иначе она уходит под неё сама."""
+    at, length = _along(seg)
+    xs = set(_breaks(me, at, 0.0, length)) | set(_breaks(other, at, 0.0, length))
+    return any(me.height(at(x)) > other.height(at(x)) + EPS for x in xs)
+
+
+def _top(line: Roofline, seg: shapely.LineString) -> float:
+    """Верх кровли line над отрезком seg — конёк щипца на торце."""
+    at, length = _along(seg)
+    return max(line.height(at(x)) for x in _breaks(line, at, 0.0, length))
+
+
+def _surface(line: Roofline, zone: shapely.Geometry) -> list[tuple[shapely.Geometry, Plane]]:
+    """Кровля line над zone плоскими кусками; у плоской крыши — карниз по всей zone."""
+    if not line.slopes:
+        return [(zone, Plane(0.0, 0.0, line.eaves))]
+    return [(shapely.Polygon([(x, y) for x, y, _ in face]), _plane(line, s))
+            for s, face in faces(line, zone)]
+
+
+def _higher(pieces: list[tuple[shapely.Geometry, Plane]], plane: Plane) -> shapely.Geometry:
+    """Где кровля из кусков pieces не ниже плоскости plane."""
+    out = []
+    for shape, q in pieces:
+        n, c = (q.a - plane.a, q.b - plane.b), plane.c - q.c  # plane ≤ q ⇔ −n·p ≤ −c
+        if math.hypot(*n) <= EPS:
+            if q.c >= plane.c - EPS:
+                out.append(shape)
+            continue
+        out.append(shape.intersection(_halfplane((-n[0], -n[1]), -c)))
+    return shapely.union_all(out) if out else shapely.Polygon()
+
+
+def _part_faces(house: HouseRoof, k: int) -> list[tuple[Slope, list[Point3]]]:
+    """Скаты части k на её площади; где кровля продолжена над соседом (или сосед — над ней),
+    остаётся только та из двух, что выше: так получаются ендовы поперечного щипца."""
+    line = house.parts[k]
+    found = faces(line, _area(house, k))
+    rivals = [(e.zone, house.parts[e.into if e.part == k else e.part])
+              for e in house.extensions if k in (e.part, e.into)]
+    if not rivals:
+        return found
+    out = []
+    for s, face in found:
+        plane, shape = _plane(line, s), shapely.Polygon([(x, y) for x, y, _ in face])
+        for zone, rival in rivals:
+            shape = shape.difference(_higher(_surface(rival, zone), plane).intersection(zone))
+        for piece in getattr(shape, "geoms", [shape]):
+            if isinstance(piece, shapely.Polygon) and piece.area > EPS:
+                out.append((s, [(x, y, plane.a * x + plane.b * y + plane.c)
+                                for x, y in list(shapely.normalize(piece).exterior.coords)[:-1]]))
+    return out
 
 
 def house_above(house: HouseRoof, k: int, inset: float = 0.0) -> list[Polygon]:
@@ -433,15 +584,37 @@ def house_above(house: HouseRoof, k: int, inset: float = 0.0) -> list[Polygon]:
     стены толщиной inset): под односкатной крыша там ниже, чем над наружной гранью."""
     left, u, _ = axis(house.corners, k)
     left = (left[0] - u[1] * inset, left[1] + u[0] * inset)
-    shapes = (_above(house.parts[s.part], left, u, s.x0, s.x1) for s in house.spans[k])
-    return [shape for shape in shapes if shape is not None]
+    out = []
+    for span in house.spans[k]:
+        base = _above(house.parts[span.part], left, u, span.x0, span.x1)
+        over = [o for e in house.extensions if e.into == span.part
+                if (o := _above_zone(house.parts[e.part], e.zone, left, u, span)) is not None]
+        if not over:
+            out += [base] if base is not None else []
+            continue
+        top = shapely.box(span.x0, house.parts[span.part].eaves, span.x1, FAR)
+        out += _polygons(shapely.union_all([shapely.Polygon(p) for p in [base, *over] if p])
+                         .intersection(top))
+    return out
+
+
+def _above_zone(line: Roofline, zone: shapely.Polygon, left: Point, u: Point,
+                span: Span) -> Polygon | None:
+    """Щипец продолженной кровли line на участке стены span: там, где её площадь zone выходит на
+    линию стены (поперечный щипец проходит соседа насквозь, gf#431)."""
+    at = _walker(left, u)
+    on = zone.intersection(shapely.LineString([at(span.x0), at(span.x1)]))
+    if on.length <= EPS:
+        return None
+    xs = [(p[0] - left[0]) * u[0] + (p[1] - left[1]) * u[1] for p in on.coords]
+    return _above(line, left, u, min(xs), max(xs))
 
 
 def house_faces(house: HouseRoof) -> list[list[Point3]]:
     """Скаты всех частей в объёме."""
     if len(house.parts) == 1:
         return [face for _, face in faces(house.parts[0])]
-    return [face for k, line in enumerate(house.parts) for _, face in faces(line, _area(house, k))]
+    return [face for k in range(len(house.parts)) for _, face in _part_faces(house, k)]
 
 
 def house_view(house: HouseRoof, k: int, thickness: float) -> list[Polygon]:
@@ -460,8 +633,9 @@ def house_view(house: HouseRoof, k: int, thickness: float) -> list[Polygon]:
     shapes = []
     shown = {s.part for s in house.spans[k]} | {
         j.high for j in joints(house) if j.normal[0] * toward[0] + j.normal[1] * toward[1] > EPS}
+    shown |= {e.part for e in house.extensions if e.into in shown}
     for p, line in ((p, line) for p, line in enumerate(house.parts) if p in shown):
-        shape = _projected(faces(line, _area(house, p)), left, u, thickness)
+        shape = _projected(_part_faces(house, p), left, u, thickness)
         for q in (q for q in house.parts if front(q) > front(line) + EPS):
             xs = [(c[0] - left[0]) * u[0] + (c[1] - left[1]) * u[1] for c in q.corners]
             shape = shape.difference(shapely.box(min(xs), -1.0, max(xs), q.eaves))
@@ -485,12 +659,15 @@ def joints(house: HouseRoof) -> list[Joint]:
     ступени карниза (gf#422) кровля нижней по карнизу части может уйти выше верхней (щипец) —
     тогда это стена нижней части, и её примыкание идёт с обратной нормалью."""
     out = []
-    for low in house.parts:
+    through = {(e.part, e.into) for e in house.extensions}
+    for n, low in enumerate(house.parts):
         for h, high in ((h, p) for h, p in enumerate(house.parts) if p.eaves > low.eaves + EPS):
             shared = shapely.Polygon(low.corners).intersection(shapely.Polygon(high.corners))
             for seg in getattr(shared, "geoms", [shared]):
                 if isinstance(seg, shapely.LineString) and seg.length > EPS:
-                    out += _joint(low, high, h, list(seg.coords), house.parts.index(low))
+                    # кровля нижней продолжена над верхней — её стенки на этой линии нет
+                    out += [j for j in _joint(low, high, h, list(seg.coords), n)
+                            if j.high != n or (n, h) not in through]
     return out
 
 
@@ -576,7 +753,7 @@ def covered(house: HouseRoof, k: int) -> list[ForbiddenZone]:
         for q, line in enumerate(house.parts):
             if line.eaves >= high.eaves - EPS:
                 continue
-            for _, face in faces(line, _area(house, q)):
+            for _, face in _part_faces(house, q):
                 zones += _under(face, line, left, u, toward, strip)
         found += _joined(zones)
     return found

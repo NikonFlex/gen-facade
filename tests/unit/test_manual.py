@@ -7,6 +7,7 @@ import math
 from pathlib import Path
 
 import pytest
+import shapely
 
 from genfacade import config, roof
 from genfacade.datasets import manual, markup_toml, store
@@ -292,12 +293,12 @@ def test_step_inside_rectangle_becomes_virtual_wings():
         [ft(PLINTH_FT + EAVE_FT - 2)] * 3 + [ft(PLINTH_FT + EAVE_FT)] * 3)
 
 
-def test_cut_by_step_has_wall_over_roof_of_lower_part():
+def test_cut_by_step_lower_roof_runs_over_the_higher():
     """Разрез по ступени (gf#422): кровля нижней по карнизу части поднимается выше кровли верхней
-    (щипец, 3,58 м при карнизе 2,74 м) — над кровлей верхней стоит стена нижней, в данных 3D и в
-    IFC; без неё в просмотрщике открытый треугольник неба между скатами."""
+    (щипец, 3,58 м при карнизе 2,74 м). С `facade: Поперечный щипец` (gf#431) она идёт над верхней
+    до её конька — ендова, а не стена нижней части: треугольника неба между скатами нет, в зоне
+    продолжения видна более высокая кровля; IFC — стены сторон и примыканий."""
     from genfacade import roof
-    from genfacade.render.house3d import house_3d
     from genfacade.render.ifc import counts, house_ifc
 
     wall = markup().sides[1].wall
@@ -305,11 +306,13 @@ def test_cut_by_step_has_wall_over_roof_of_lower_part():
     sheet = manual.house(drawn({"eaves": [step]}), CFG.data.manual)[0].sheet
     house = roof.roofs(sheet)
     low = min(range(len(house.parts)), key=lambda i: house.parts[i].eaves)
-    (gable,) = (j for j in roof.joints(house) if j.high == low)  # стена нижней части
-    top = max(z for w in gable.walls for *_, z in w)
-    assert top > max(p.eaves for p in house.parts) + 0.5
-    above = house_3d(sheet, CFG)["roof"]["above"]
-    assert any(abs(z - top) < 1e-6 for shape in above for *_, z in shape)
+    (ext,) = house.extensions
+    assert ext.part == low and not [j for j in roof.joints(house) if j.high == low]
+    lines = (house.parts[ext.part], house.parts[ext.into])
+    seen = [(x, y, z) for k in (ext.part, ext.into) for _, f in roof._part_faces(house, k)
+            for x, y, z in f if ext.zone.buffer(-1e-3).contains(shapely.Point(x, y))]
+    assert seen and all(z == pytest.approx(max(ln.height((x, y)) for ln in lines), abs=1e-6)
+                        for x, y, z in seen)
     walls = sum(len(j.walls) for j in roof.joints(house))
     assert counts(house_ifc(sheet, CFG))["IFCWALL"] == len(sheet.facades) + walls
 
@@ -532,6 +535,27 @@ def test_real_marilyn_has_three_tiers_and_penny_cuts_a_wing():
     cut = sorted(w.x1_m - w.x0_m for w in penny.sheet.wings)[:2]
     assert sum(cut) == pytest.approx(9.81 - 2.53, abs=0.05)
     assert min(cut) == pytest.approx(3.6, abs=0.1)
+
+
+def test_real_cross_gable_runs_under_the_main_roof():
+    """`facade: Поперечный щипец` (gf#431): у ffh-penny-sylvia задний щипец 10/12 при карнизе фронта
+    идёт над фронтальной частью до её ската — ендова, без стенки щипца на общей линии; видна та
+    кровля, что выше. У ffh-halfstory оба рукава идут над главным крылом, а эркер у торца щипца —
+    нет: щипец прошёл бы его насквозь."""
+    sheet = manual.house(real("ffh-penny-sylvia"), CFG.data.manual)[0].sheet
+    house = roof.roofs(sheet)
+    (ext,) = house.extensions
+    rear, front = house.parts[ext.part], house.parts[ext.into]
+    line = shapely.Polygon(rear.corners).intersection(shapely.Polygon(front.corners))
+    assert not [j for j in roof.joints(house) if j.high == ext.part
+                and all(line.distance(shapely.Point(x, y)) < 1e-6 for x, y, _ in j.seam)]
+    seen = [(x, y, z) for k in (ext.part, ext.into) for _, f in roof._part_faces(house, k)
+            for x, y, z in f if ext.zone.buffer(-1e-3).contains(shapely.Point(x, y))]
+    assert seen
+    for x, y, z in seen:  # в зоне видна та кровля, что выше
+        assert z == pytest.approx(max(rear.height((x, y)), front.height((x, y))), abs=1e-6)
+    halfstory = roof.roofs(manual.house(real("ffh-halfstory"), CFG.data.manual)[0].sheet)
+    assert sorted((e.part, e.into) for e in halfstory.extensions) == [(1, 0), (3, 0)]
 
 
 def test_real_roof_marks_are_not_eaves():
