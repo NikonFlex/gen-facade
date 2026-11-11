@@ -675,6 +675,18 @@ def test_window_in_a_wall_gable_stays_on_the_sheet():
         e.x_m < g.x1_m - 1e-6 and e.x_m + e.w_m > g.x0_m + 1e-6 for e in cornice)
 
 
+def test_roofs_of_adjacent_parts_have_no_overhang_over_each_other():
+    """ffh-julie, боковые виды (gf#431): у стыка пристройки и ядра кровли смыкаются — свес одной не
+    висит над другой засечкой: у границы участков вершин кровли на расстоянии свеса нет."""
+    sheet = manual.house(real("ffh-julie"), CFG.data.manual)[0].sheet
+    house = roof.roofs(sheet)
+    over = sheet.spec.roof.overhang_m
+    for k in (1, 3):
+        joint = next(s.x1 for s in house.spans[k] if s.x1 < sheet.facades[k].side.length_m - 1e-6)
+        xs = [x for p in roof.house_view(house, k, 0.1) for x, _ in p]
+        assert not [x for x in xs if abs(abs(x - joint) - over) < 1e-3]
+
+
 @pytest.mark.slow
 def test_real_flat_part_has_a_slab():
     """sd-sit-2013 (gf#431): южное крыло — плоская зелёная кровля, северный объём — односкатная. У

@@ -797,8 +797,22 @@ def house_view(house: HouseRoof, k: int, thickness: float) -> list[Polygon]:
         for q in (q for q in house.parts if front(q) > front(line) + EPS):
             xs = [(c[0] - left[0]) * u[0] + (c[1] - left[1]) * u[1] for c in q.corners]
             shape = shape.difference(shapely.box(min(xs), -1.0, max(xs), q.eaves))
-        shapes.append(shape)
+        shapes.append(_within_spans(shape, house, k, p))
     return polygons(shapely.union_all(shapes).intersection(window))
+
+
+def _within_spans(shape: shapely.Geometry, house: HouseRoof, k: int, part: int
+                  ) -> shapely.Geometry:
+    """Кровля части на виде стены k — в пределах её участков стены, свес — только у края стены:
+    у стыка с соседней частью кровли смыкаются, и свес одной не висит над другой засечкой. Часть,
+    что идёт над соседом (`extensions`), и часть без участка на стене — без обрезки."""
+    mine = [s for s in house.spans[k] if s.part == part]
+    if not mine or any(e.part == part for e in house.extensions):
+        return shape
+    length, over = axis(house.corners, k)[2], house.parts[part].overhang
+    return shape.intersection(shapely.union_all([
+        shapely.box(s.x0 - (over if s.x0 <= EPS else 0.0), -1.0,
+                    s.x1 + (over if s.x1 >= length - EPS else 0.0), FAR) for s in mine]))
 
 
 class Joint(NamedTuple):
