@@ -7,8 +7,6 @@ import { refusedFrom } from "/static/refusal.js";
 import { Relief } from "/static/house3d_relief.js";
 import { faceUV, pixels, wallScale, worldUV } from "/static/house3d_texture.js";
 
-const ROOF_M = 0.15;  // толщина плиты крыши — только чтобы край был виден
-
 let threeModule = null;
 
 export class HouseStage {
@@ -126,7 +124,7 @@ export class HouseStage {
 
   _slab(THREE, outline, height, roof) {
     const shape = new THREE.Shape(outline.map(([x, y]) => new THREE.Vector2(x, y)));
-    const geo = new THREE.ExtrudeGeometry(shape, { depth: ROOF_M, bevelEnabled: false });
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: roof.thickness_m, bevelEnabled: false });
     geo.rotateX(-Math.PI / 2);  // (x, y) плана → (x, −z); выдавливание — вверх
     const slab = new THREE.Mesh(geo, this._material(THREE, roof.material, roof.color || this.look.roof));
     slab.position.y = height;
@@ -143,7 +141,8 @@ export class HouseStage {
     for (const [shapes, id, color] of parts) {
       const material = this._material(THREE, id, color, THREE.DoubleSide);
       for (const shape of shapes) {
-        const points = shape.map(([x, y, h]) => new THREE.Vector3(x, h, -y));
+        const lift = shapes === roof.faces ? roof.thickness_m : 0;  // грань ската — низ плиты (gf#447)
+        const points = shape.map(([x, y, h]) => new THREE.Vector3(x, h + lift, -y));
         let tris = fan(points.map((_, i) => i));
         if (shapes === roof.faces) {
           // скат плоский, но после обрыва на стене соседней части не обязательно выпуклый: по плану
@@ -154,8 +153,27 @@ export class HouseStage {
         geo.computeVertexNormals();
         if (this.tiles.has(id)) this._faceUV(THREE, geo, points, tris, this.tiles.get(id).size_m);
         this.scene.add(new THREE.Mesh(geo, material), this._edges(THREE, geo));
+        if (lift) this._slopeBody(THREE, points, tris, lift, material);
       }
     }
+  }
+
+  // Толща ската (gf#447): points — верх плиты (грань, поднятая на t), низ — грань, торцы —
+  // вертикальные четырёхугольники по всем рёбрам: внутренние спрятаны под соседними скатами.
+  _slopeBody(THREE, points, tris, t, material) {
+    const down = new THREE.Vector3(0, -t, 0);
+    const low = points.map((p) => p.clone().add(down));
+    const pos = [];
+    const add = (...ps) => ps.forEach((p) => pos.push(p.x, p.y, p.z));
+    tris.forEach((i) => add(low[i]));
+    points.forEach((a, i) => {
+      const j = (i + 1) % points.length;
+      add(low[i], low[j], points[j], low[i], points[j], points[i]);
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    geo.computeVertexNormals();
+    this.scene.add(new THREE.Mesh(geo, material), this._edges(THREE, geo));
   }
 
   // UV по метрам рисунка: ряды идут по скату вверх, как на фасаде листа.

@@ -79,6 +79,13 @@ def _up(n: Vec) -> Vec:
     return n if n[2] >= 0 else tuple(-c for c in n)
 
 
+def _frame(points: list[Vec], normal: Vec) -> tuple[Vec, Vec, Vec, Vec]:
+    """Местные оси плоского многоугольника: начало, x, y и z — единичная нормаль."""
+    p0, z = points[0], _unit(normal)
+    x = _unit(next(d for q in points[1:] if _length(d := _perp(_sub(q, p0), z)) > EPS))
+    return p0, x, _cross(z, x), z
+
+
 def _cross(a: Vec, b: Vec) -> Vec:
     return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
 
@@ -152,8 +159,13 @@ class Writer:
     def solid(self, profile: Ref, depth: float, color: str | None = None,
               transparency: float = 0.0) -> Ref:
         """Выдавливание профиля на depth вдоль −z местных осей; color — цвет, нет — без стиля."""
+        return self.solid_along(profile, DOWN, depth, color, transparency)
+
+    def solid_along(self, profile: Ref, direction: Vec, depth: float, color: str | None,
+                    transparency: float = 0.0) -> Ref:
+        """Выдавливание профиля на depth вдоль direction (в местных осях профиля)."""
         item = self.s.add("IfcExtrudedAreaSolid", profile, self.axis((0.0, 0.0, 0.0)),
-                          self.direction(DOWN), depth)
+                          self.direction(direction), depth)
         if color is not None:
             self.s.add("IfcStyledItem", item, [self.style(color, transparency)], None)
         return item
@@ -215,6 +227,7 @@ class IfcHouse:
         house = roof.roofs(sheet)
         self.faces = roof.house_faces(house) if house is not None else []
         self.levels = sheet.spec.floor_levels()
+        self.roof_m = cfg.sheet.roof.thickness_m  # одна толщина кровли с листом и 3D (gf#447)
         self.storeys: list[Ref] = []
         self.contained: dict[int, list[Ref]] = defaultdict(list)  # этаж → объекты
         self.walls: list[Ref] = []
@@ -269,8 +282,10 @@ class IfcHouse:
         inner = [shapely.Polygon(p).buffer(0) for p in roof.house_above(
             house, k, self.ifc.wall_thickness_m)]
         top = shapely.union_all([body, *above]).intersection(shapely.union_all([body, *inner]))
-        # верх стены уходит в плиту ската, а не вровень с ним: вровень он мерцает поверх кровли
-        return top.intersection(shapely.affinity.translate(top, yoff=-self.ifc.roof_seat_m))
+        # грань ската — низ плиты кровли: верх стены уходит в её толщу, до верха плиты минус посадка
+        # (вровень с верхом он мерцает поверх кровли)
+        return top.union(shapely.affinity.translate(
+            top, yoff=self.roof_m - self.ifc.roof_seat_m))
 
     def _trim(self, k: int, shape: shapely.Geometry) -> list[list[Point]]:
         """Профили стены k с торцом у левого угла, сдвинутым на толщину: на выпуклом углу стена
@@ -301,14 +316,15 @@ class IfcHouse:
             shapely.box(0.0, -1.0, roof.FAR, roof.FAR)))
 
     def roof_top(self, p: Point) -> float | None:
-        """Верх кровли над точкой плана — самая высокая из граней над ней; кровли нет — None."""
+        """Верх плиты кровли над точкой плана — самая высокая из граней (низов плит) над ней плюс
+        толщина кровли; кровли нет — None."""
         tops = []
         for face in self.faces:
             if shapely.Polygon([q[:2] for q in face]).buffer(EPS).contains(shapely.Point(p)):
                 n = _normal(face)
                 tops.append(face[0][2] - ((p[0] - face[0][0]) * n[0]
                                           + (p[1] - face[0][1]) * n[1]) / n[2])
-        return max(tops, default=None)
+        return max(tops) + self.roof_m if tops else None
 
     def _axis(self, k: int) -> tuple[Point, Vec]:
         """Левый край стены k снаружи и единичное направление вдоль неё."""
@@ -466,9 +482,7 @@ class IfcHouse:
     def _plate(self, points: list[Vec], normal: Vec, depth: float) -> tuple[Ref, Ref]:
         """Плоский многоугольник в объёме: размещение и профиль в его плоскости; выдавливание —
         на depth против normal."""
-        p0, z = points[0], _unit(normal)
-        x = _unit(next(d for q in points[1:] if _length(d := _perp(_sub(q, p0), z)) > EPS))
-        y = _cross(z, x)
+        p0, x, y, z = _frame(points, normal)
         ring = [(_dot(_sub(p, p0), x), _dot(_sub(p, p0), y)) for p in points]
         return self.w.place(self.building_place, p0, z, x), self.w.polygon(ring)
 
@@ -488,14 +502,15 @@ class IfcHouse:
                 self.contained[self._storey_at(wall[0][2])].append(ref)
 
     def _under_roof(self, high: roof.Roofline, joint: roof.Joint, wall: list[Vec]) -> list[Vec]:
-        """Стена над кровлей нижней части, выдавленная к высокой: верх не выше кровли высокой на
-        внутренней грани (там скат ниже) — иначе стена торчит над скатом."""
+        """Стена над кровлей нижней части, выдавленная к высокой: верх не выше плиты кровли высокой
+        (скат + толщина) на внутренней грани (там скат ниже) — иначе стена торчит над кровлей."""
         t = self.ifc.joint_wall_m
         out = list(wall)
         for i in (2, 3):
             x, y, z = wall[i]
             inner = high.height((x - joint.normal[0] * t, y - joint.normal[1] * t))
-            out[i] = (x, y, max(wall[3 - i][2], min(z, inner) - self.ifc.roof_seat_m))
+            cap = min(z, inner + self.roof_m) - self.ifc.roof_seat_m
+            out[i] = (x, y, max(wall[3 - i][2], cap))
         return out
 
     def _footprint(self, k: int) -> shapely.Geometry:
@@ -530,7 +545,9 @@ class IfcHouse:
         slabs = []
         for n, (points, normal) in enumerate(faces, 1):
             place, profile = self._plate(points, normal, 0.0)
-            item = self.w.solid(profile, self.ifc.roof_m, self._roof_color())
+            _, x, y, z = _frame(points, normal)
+            down = (_dot(DOWN, x), _dot(DOWN, y), _dot(DOWN, z))  # вертикаль в осях профиля
+            item = self.w.solid_along(profile, down, self.roof_m, self._roof_color())
             slabs.append(self.w.product("IfcSlab", f"roofslab{n}", self.ifc.names.roof_slab.format(
                 n=n), place, self.w.shape([item]), None, Enum("ROOF")))
         self.roof_slabs = slabs
@@ -543,16 +560,18 @@ class IfcHouse:
         return self.pen.colors.get(self.pen.roof or "", self.cfg.viewer.house3d.roof)
 
     def _roof_faces(self) -> list[tuple[list[Vec], Vec]]:
-        """Многоугольники крыши и их нормали вверх. Плиты плоской крыши — выше карниза на
-        толщину плиты: выдавливание идёт вниз и ложится на стены."""
+        """Верхние многоугольники плит кровли и их нормали вверх: грань ската (низ плиты),
+        поднятая на толщину по вертикали; плита плоской крыши — на толщину выше карниза. Плита
+        выдавливается вниз по вертикали на толщину: низ — грань, торцы вертикальные (gf#447)."""
         house = roof.roofs(self.sheet)
         if house is not None:
-            return [(face, _up(_normal(face))) for face in roof.house_faces(house)]
+            return [([(x, y, z + self.roof_m) for x, y, z in face], _up(_normal(face)))
+                    for face in roof.house_faces(house)]
         data = self.data["roof"]
         flat = [(shape["shape"], shape["height_m"]) for shape in data.get("slabs", [])]
         if data.get("flat"):
             flat.append((data["flat"], self.sheet.spec.eaves_m))
-        return [([(x, y, h + self.ifc.roof_m) for x, y in shape], UP) for shape, h in flat]
+        return [([(x, y, h + self.roof_m) for x, y in shape], UP) for shape, h in flat]
 
     # ——— материалы и этажи ———
 

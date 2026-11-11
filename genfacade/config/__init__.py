@@ -196,7 +196,7 @@ class TrimLook(Section):
 
 
 class RoofDrawing(Section):
-    thickness_m: float  # кровля на виде: толщина ската, видного с ребра (gf#320)
+    thickness_m: float = Field(gt=0)  # кровля: одна толщина на листе, в 3D и в IFC (gf#447)
 
 
 class Sheet(Section):
@@ -431,7 +431,6 @@ class IfcExport(Section):
 
     wall_thickness_m: float = Field(gt=0)
     slab_m: float = Field(gt=0)
-    roof_m: float = Field(gt=0)
     roof_seat_m: float = Field(gt=0)
     joint_wall_m: float = Field(gt=0)
     shutter_m: float = Field(gt=0)
