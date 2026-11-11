@@ -60,6 +60,7 @@ def test_default_placement_is_rules(cfg):
     assert cfg.synthetic.openings.placement is Placement.RULES
 
 
+@pytest.mark.slow
 def test_random_windows_do_not_share_head_line_unlike_rules(by_placement):
     """Правила ставят верх окон этажа на одну линию (доля ≈ 1); случайная расстановка — нет:
     остаются только случайные совпадения на сетке."""

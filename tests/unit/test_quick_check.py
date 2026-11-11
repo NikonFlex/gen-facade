@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from slow_report import Timings
 
 ROOT = Path(__file__).parents[2]
 # Признаки долгого модуля: обучение, оценка модели, признаки Inception, torch напрямую.
@@ -96,3 +97,23 @@ def test_docs_only_commit_skips_hook_queue(clone, tmp_path):
     hook = (ROOT / "templates" / "githooks" / "pre-commit").read_text()
     branch = hook[hook.index("if docs_only"):hook.index("hook_lock.sh\" sh")]
     assert "exit" in branch and _sh(wt, "docs_only") == 0
+
+
+def test_quick_and_pr_checks_run_on_every_core():
+    """Новая функция в общем модуле выбирает больше половины тестов — в один поток 15+ минут
+    (gf#443): хук и проверка PR идут процессом на ядро."""
+    check = (ROOT / "tools" / "check.sh").read_text()
+    assert '-n auto --testmon --testmon-forceselect -m "not slow"' in check
+    assert 'pytest -q -n auto -m "not slow"' in check
+
+
+def test_long_unmarked_test_is_named_with_its_setup():
+    """Время теста — подготовка и вызов: тяжёлая фикстура ложится на первый тест; помеченный slow
+    и уборка не в счёт."""
+    t = Timings()
+    t.add("a", "setup", 8.0, {})
+    t.add("a", "call", 3.0, {})
+    t.add("b", "call", 12.0, {"slow": 1})
+    t.add("c", "teardown", 30.0, {})
+    t.add("d", "call", 4.0, {})
+    assert t.unmarked_over(10.0) == [("a", 11.0)]

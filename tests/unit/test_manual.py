@@ -540,6 +540,7 @@ def test_real_marilyn_has_three_tiers_and_penny_cuts_a_wing():
     assert min(cut) == pytest.approx(3.6, abs=0.1)
 
 
+@pytest.mark.slow
 def test_real_cross_gable_runs_under_the_main_roof():
     """`facade: Поперечный щипец` (gf#431): у ffh-penny-sylvia задний щипец 10/12 при карнизе фронта
     идёт над фронтальной частью до её ската — ендова, без стенки щипца на общей линии; видна та
@@ -571,6 +572,7 @@ def test_real_roof_marks_are_not_eaves():
     assert northwestern.sheet.spec.eaves_m == pytest.approx(4.07, abs=0.02) and cut > 0
 
 
+@pytest.mark.slow
 def test_all_real_houses_are_built_and_old_ones_without_fallbacks():
     """59 разметок — 59 листов (gf#422); 49 прежних собираются по отметкам как есть (без `_bare` и
     разрезов), поэтому их карниз, участки и крылья прежние."""

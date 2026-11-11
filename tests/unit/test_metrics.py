@@ -38,6 +38,7 @@ def test_fid_is_off_before_module_fixtures(fid_at_module_setup):
     assert fid_at_module_setup is False
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("mode", list(Mode))
 def test_generator_passes_every_check(calibrated, mode):
     r = calibrated[mode]["generator"]

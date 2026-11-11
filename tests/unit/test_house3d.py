@@ -128,6 +128,7 @@ def _rich_houses(cfg) -> list[FacadeSheet]:
     return found
 
 
+@pytest.mark.slow
 def test_relief_tells_its_class_and_kind(cfg):
     """gf#305: форму выступа строит просмотр по его классу и форме — `house_3d` отдаёт класс
     (элемент) или роль (зона), а у козырька и подоконника — форма записи вида дома (derive.toml)."""

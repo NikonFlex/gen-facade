@@ -163,6 +163,7 @@ TEXTS = ["A house in the forest", "Cozy cottage by the lake", "Дом для с�
          "Family home, quiet street", "House with a terrace", "Загородный дом", "Country house"]
 
 
+@pytest.mark.slow
 def test_same_text_same_house_in_any_process(cfg):
     """`generation: Отделка без слов — от текста`: тот же текст — тот же дом, и не из-за случайного
     `hash()` процесса: два процесса с разным PYTHONHASHSEED дают тот же дом."""

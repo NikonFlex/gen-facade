@@ -20,6 +20,7 @@ def houses(cfg):
     return {k: [build.sample(s, only(cfg, k)) for s in SEEDS] for k in ContourKind}
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("kind", list(SIDES))
 def test_step2_reads_as_many_sides_as_drawn(houses, kind):
     """Препроцессор читает у Г, Т, П, пристройки и эркера столько сторон, сколько нарисовано."""

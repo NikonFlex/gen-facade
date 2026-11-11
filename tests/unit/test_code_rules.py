@@ -5,6 +5,8 @@ import inspect
 from enum import Enum
 from pathlib import Path
 
+import pytest
+
 from genfacade import schema
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -68,6 +70,7 @@ def test_no_import_aliases():
     assert not found, "сокращения при импорте:\n" + "\n".join(found)
 
 
+@pytest.mark.slow
 def test_closed_sets_are_enums():
     # Хозяин 01.10: закрытый набор значений — enum, а не строки. В тестах сравнение со строкой
     # остаётся там, где читается записанный JSON, поэтому проверяется только пакет.

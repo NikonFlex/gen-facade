@@ -103,6 +103,7 @@ def test_client_without_library_or_key_is_a_refusal(cfg, monkeypatch):
         llm.client(LlmProvider.DEEPSEEK, {}, cfg)
 
 
+@pytest.mark.slow
 def test_stub_path_reaches_the_realtest_table(real, cfg, pool, monkeypatch, tmp_path):
     monkeypatch.setattr(llm.Pool, "load", lambda _: pool)
     folder = llm.run(LlmProvider.STUB, cfg, tmp_path / "llm", 0)

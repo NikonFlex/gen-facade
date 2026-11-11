@@ -48,6 +48,7 @@ def _entrance_gable(sheet: FacadeSheet, cfg: Config):
     return found if len(built.parts) == len(house.parts) + 1 else None
 
 
+@pytest.mark.slow
 def test_share_of_own_part_roofs_follows_config(sheets, cfg):
     suited = [s for s in sheets if _winged(s)]
     own = [s for s in suited if s.roofs and any(r != s.spec.roof for r in s.roofs)]
@@ -55,6 +56,7 @@ def test_share_of_own_part_roofs_follows_config(sheets, cfg):
     assert abs(len(own) / len(suited) - cfg.synthetic.spec.composite.part_p) <= SHARE_TOL
 
 
+@pytest.mark.slow
 def test_share_of_wall_gables_follows_config(sheets, cfg):
     """Доля щипцов среди домов, где он встаёт: такие дома — щипец при вероятности 1 (тот же seed —
     те же ширина и уклон щипца: жребии тянутся всегда)."""
