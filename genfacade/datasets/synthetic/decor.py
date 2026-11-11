@@ -6,22 +6,30 @@
 Материал карниза — роль `trim` палитры.
 """
 
+import shapely
+
 from genfacade import derive, roof
 from genfacade.derive import Flags
-from genfacade.schema import Element, ElementClass, HouseSpec, PaletteRole, Trim, VariantKind
+from genfacade.schema import EPS, Element, ElementClass, HouseSpec, PaletteRole, Trim, VariantKind
 
 
-def flags(windows: list[Element], doors: list[Element], wall: derive.Wall) -> Flags:
+def flags(windows: list[Element], doors: list[Element], wall: derive.Wall,
+          shape: shapely.Geometry | None = None) -> Flags:
     """Признаки по правилу: подоконник и наличник — у окна не в пол (у окна в пол подоконной
-    стены нет), ставни — у такого окна, если им хватает места, козырёк — над входом."""
+    стены нет), ставни — у такого окна, если им хватает места, козырёк — над входом.
+
+    Окно во фронтоне (этажа под скатом, gf#321) — те же признаки, что у окна этажа (у настоящих
+    домов со ставнями они есть у каждого окна выше карниза, gf#373), но ставни — только если пара
+    целиком в силуэте стены с фронтоном `shape`: за скат они не выходят (валидатор: `outside`).
+    У окна по скату (gf#319) рамка выходит за скат, и ставни по этой же проверке не встают."""
     has = wall.spec.trim.has
     out: Flags = {}
     for w in windows:
-        # окно во фронтоне (этажа под скатом, gf#321) — без ставен: им не место у ската
-        if roof.under_roof(w, wall.spec.floors):
-            out[w.id] = {t for t in (Trim.SILL, Trim.CASING) if has(t)}
-        elif not _panoramic(w):
+        if not _panoramic(w):
             out[w.id] = {t for t in (Trim.SILL, Trim.CASING, Trim.SHUTTERS) if has(t)}
+        if (roof.under_roof(w, wall.spec.floors) and Trim.SHUTTERS in out.get(w.id, ())
+                and not _in_shape(w, out, wall, shape)):
+            out.get(w.id, set()).discard(Trim.SHUTTERS)
     for d in doors:
         out[d.id] = {Trim.CANOPY} if has(Trim.CANOPY) else set()
     fit = derive.shutter_fits([*windows, *doors], out, wall)
@@ -29,6 +37,15 @@ def flags(windows: list[Element], doors: list[Element], wall: derive.Wall) -> Fl
         if w.id not in fit:
             out.get(w.id, set()).discard(Trim.SHUTTERS)
     return out
+
+
+def _in_shape(w: Element, out: Flags, wall: derive.Wall, shape: shapely.Geometry | None) -> bool:
+    """Пара ставен окна во фронтоне лежит в силуэте стены с фронтоном; силуэта нет — не лежит."""
+    if shape is None:
+        return False
+    grown = shape.buffer(EPS, join_style="mitre")
+    return all(grown.contains(shapely.box(s.x_m, s.y_m, s.x_m + s.w_m, s.y_m + s.h_m))
+               for s in derive.shutters_of(w, out, wall))
 
 
 def porch(door: Element, spec: HouseSpec, pad_m: float) -> Element:

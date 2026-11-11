@@ -10,11 +10,11 @@
 """
 
 import random
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 import shapely
 
-from genfacade import roof, window_shape
+from genfacade import derive, roof, window_shape
 from genfacade.config import Config
 from genfacade.datasets.synthetic.plan import on_grid
 from genfacade.schema import (
@@ -22,8 +22,11 @@ from genfacade.schema import (
     Element,
     ElementClass,
     FacadeSheet,
+    HouseSpec,
     OpeningVariant,
+    Polygon,
     RoofKind,
+    Trim,
     VariantKind,
 )
 from genfacade.train import tokens
@@ -54,8 +57,29 @@ def windows(rng: random.Random, sheet: FacadeSheet, cfg: Config) -> list[list[El
         axes = [w.x_m + w.w_m / 2 for w in f.elements if w.cls is ElementClass.WINDOW]
         top = max(p[1] for p in above)
         out.append(_fit(rng, k, count, (apex, y), templates, (room, axes, top), spec.floors + 1,
-                        cfg))
+                        cfg, _shuttered(spec, f.side.length_m, above, cfg)))
     return out
+
+
+Shuttered = Callable[[Element, list[float], float], bool]
+
+
+def _shuttered(spec: HouseSpec, length: float, above: Polygon,
+               cfg: Config) -> Shuttered | None:
+    """Проверка ряда окон: у каждого пара ставен (и наличник, как у окна этажа) целиком в силуэте
+    стены с фронтоном (gf#373); у дома без ставен проверки нет."""
+    if not spec.trim.has(Trim.SHUTTERS):
+        return None
+    shape = roof.wall_shape(length, spec.eaves_m, above).buffer(EPS, join_style="mitre")
+    marks = {Trim.SILL, Trim.CASING, Trim.SHUTTERS}
+    wall = derive.Wall(spec, length, cfg.derive)
+
+    def fits(t: Element, xs: list[float], y: float) -> bool:
+        windows = [t.model_copy(update={"id": f"w{i}", "x_m": x, "y_m": y})
+                   for i, x in enumerate(xs)]
+        return all(shape.contains(shapely.box(b.x_m, b.y_m, b.x_m + b.w_m, b.y_m + b.h_m))
+                   for w in windows for b in derive.shutters_of(w, {w.id: marks}, wall))
+    return fits
 
 
 def _templates(sheet: FacadeSheet, cfg: Config) -> list[Element]:
@@ -81,12 +105,14 @@ def _templates(sheet: FacadeSheet, cfg: Config) -> list[Element]:
 
 def _fit(rng: random.Random, k: int, count: int, at: tuple[float, float],
          templates: list[Element], wall: tuple[shapely.Geometry, list[float], float], floor: int,
-         cfg: Config) -> list[Element]:
+         cfg: Config, shuttered: Shuttered | None = None) -> list[Element]:
     """Больше всего окон, не больше count, случайного из размеров, что влезают во фронтон; at —
     ось конька и низ окна; wall — место во фронтоне и оси окон этажей стены. Края — на сетке
     синтетики, как у всех проёмов; ряд сдвигается на шаг, если ось окна почти (но не точно)
     совпала с осью окна этажа — валидатор предупредил бы (`axis_align`). Окно вида `slope` (gf#319)
-    ставится рамкой через скат (`_crossing`); не нашлось места — окно как у этажа."""
+    ставится рамкой через скат (`_crossing`); не нашлось места — окно как у этажа. У дома со
+    ставнями (`shuttered`) из рядов берутся те, где ставни не выходят за скат, если такие есть:
+    у настоящих домов со ставнями они у каждого окна выше карниза (gf#373)."""
     (apex, y), (room, axes, top) = at, wall
     for n in range(count, 0, -1):
         rows = []
@@ -97,6 +123,8 @@ def _fit(rng: random.Random, k: int, count: int, at: tuple[float, float],
                     rows.append((t, xs))
                     break
         if rows:
+            if shuttered is not None:
+                rows = [r for r in rows if shuttered(r[0], r[1], y)] or rows
             t, xs = rng.choice(rows)
             variant = _shaped(rng, t.variant, cfg)
             if variant is not None and variant.kind is VariantKind.SLOPE:

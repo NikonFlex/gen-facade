@@ -218,7 +218,8 @@ def test_shutters_beside_their_window(houses):
             shuttered += bool(blinds)
             for b in blinds:
                 w = by_id[b.parent]
-                assert w.cls is ElementClass.WINDOW and w.variant.kind is VariantKind.REGULAR
+                assert w.cls is ElementClass.WINDOW
+                assert w.variant.kind is VariantKind.REGULAR or w.floor > h.sheet.spec.floors
             busy = [*blinds, *(e for e in f.elements if e.cls in OPENINGS)]
             for a, b in combinations(busy, 2):
                 apart = a.x_m + a.w_m <= b.x_m + EPS or b.x_m + b.w_m <= a.x_m + EPS
@@ -461,3 +462,23 @@ def test_gable_shares_stay_within_real_houses(cfg):
     roofs = cfg.synthetic.spec.roof_weights
     sloped = {k: w for k, w in roofs.items() if k is not RoofKind.FLAT}
     assert roofs[RoofKind.GABLE] / sum(sloped.values()) >= 0.9 * REAL_GABLE_OF_SLOPED
+
+
+def test_gable_window_gets_shutters_inside_the_wall(gable_houses, gable_cfg):
+    """Окно во фронтоне дома со ставнями получает ставни, как окно этажа (gf#373: у настоящих
+    домов — у 6 из 6 окон выше карниза), и пара не выходит за скат; валидатор не бракует."""
+    found = 0
+    for h in gable_houses:
+        spec = h.sheet.spec
+        for f, above in zip(h.sheet.facades, roof.gables(h.sheet), strict=True):
+            blinds = {b.parent for b in _of(f, ElementClass.BLIND)}
+            shape = roof.wall_shape(f.side.length_m, spec.eaves_m, above).buffer(EPS)
+            for w in _roofed(f, spec):
+                if w.id in blinds:
+                    found += 1
+                    pair = [b for b in _of(f, ElementClass.BLIND) if b.parent == w.id]
+                    assert len(pair) == 2 and spec.trim.has(Trim.SHUTTERS), (h.id, w.id)
+                    assert all(shape.contains(shapely.box(b.x_m, b.y_m, b.x_m + b.w_m,
+                                                          b.y_m + b.h_m)) for b in pair)
+        assert [v.message for v in validate(h.sheet, gable_cfg.checks)] == [], h.id
+    assert found > 0

@@ -2,7 +2,9 @@
 
 import random
 
-from genfacade import derive, pipeline
+import shapely
+
+from genfacade import derive, pipeline, roof
 from genfacade.config import Config, Synthetic
 from genfacade.datasets import genplan_writer
 from genfacade.datasets.synthetic import (
@@ -85,15 +87,17 @@ def lay_out(sheet: FacadeSheet, look: Look, cfg: Config, rng: random.Random,
     storeys = sheet.model_copy(update={"facades": placed})
     over = (gable.windows(roof_rng, storeys, cfg) if roof_rng is not None
             else [[] for _ in placed])
+    above = roof.gables(storeys)
     # стена с окнами во фронтоне — щипцовая, карниза на ней нет (`facade: Карниз под скатом`)
     walls = [_wall(f.model_copy(update={"elements": [*f.elements, *extra]}), spec, look, cfg,
-                   cornice=not extra)
-             for f, extra in zip(placed, over, strict=True)]
+                   cornice=not extra,
+                   shape=roof.wall_shape(f.side.length_m, spec.eaves_m, up) if extra else None)
+             for f, extra, up in zip(placed, over, above, strict=True)]
     return sheet.model_copy(update={"facades": walls})
 
 
 def _wall(wall: SideFacade, spec: HouseSpec, look: Look, cfg: Config,
-          cornice: bool = True) -> SideFacade:
+          cornice: bool = True, shape: shapely.Geometry | None = None) -> SideFacade:
     """Стена с уже поставленными окнами (`wall.elements`) — дверь, декор и зоны. Подоконники,
     наличники, ставни и козырёк правило только отмечает у проёма, ставит их код (derive.py)."""
     rules, side, windows = cfg.synthetic.facade, wall.side, wall.elements
@@ -103,6 +107,6 @@ def _wall(wall: SideFacade, spec: HouseSpec, look: Look, cfg: Config,
     ctx = derive.Wall(spec, side.length_m, cfg.derive)
     laid = [*windows, *doors, *porches,
             *([decor.cornice(side.length_m, spec, look.cornice_m)] if cornice else [])]
-    elements = derive.place(laid, decor.flags(windows, doors, ctx), ctx)
+    elements = derive.place(laid, decor.flags(windows, doors, ctx, shape), ctx)
     placed = wall.model_copy(update={"elements": elements})
     return placed.model_copy(update={"zones": zones.zones(placed, spec, look, rules.finish)})

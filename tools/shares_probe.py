@@ -15,6 +15,8 @@
 - своя крыша части (gf#431) — доля скатных домов с двумя и более крыльями, у которых крыша хотя бы
   одной части отличается от крыши дома видом или уклоном;
 - щипец над стеной (gf#431) — доля двускатных домов с непустым `wall_gables`.
+- ставни у окон выше карниза — доля таких окон с парой ставен среди домов со ставнями по виду
+  (gf#373); наличник и подоконник у них — среди всех окон выше карниза.
 У настоящих домов — интервал разброса: бутстреп по домам, 2,5–97,5 %.
 """
 
@@ -49,6 +51,11 @@ class House:
     winged: bool = False     # крыльев две и больше
     own_roof: bool = False   # у части крыша другого вида или уклона, чем у дома
     wall_gable: bool = False  # есть щипец над карнизной стеной
+    up_windows: int = 0   # окон выше карниза у дома со ставнями по виду
+    up_shuttered: int = 0  # из них с парой ставен
+    up_all: int = 0        # окон выше карниза у дома с наличником и подоконником по виду
+    up_casing: int = 0     # из них с наличником
+    up_sill: int = 0       # из них с подоконником
 
     @property
     def sloped(self) -> bool:
@@ -65,18 +72,28 @@ def has_own_roof(sheet: FacadeSheet) -> bool:
 def house(sheet: FacadeSheet) -> House:
     spec = sheet.spec
     has = spec.trim.has(Trim.SHUTTERS)
-    windows = shuttered = slope = gable = 0
+    windows = shuttered = slope = gable = up = up_sh = up_all = up_cas = up_sill = 0
     for facade in sheet.facades:  # id элементов — в пределах стены
         parents = {e.parent for e in facade.elements if e.cls is ElementClass.BLIND}
+        casings = {e.parent for e in facade.elements if e.cls is ElementClass.MOLDING}
+        sills = {e.parent for e in facade.elements if e.cls is ElementClass.SILL}
         for w in (e for e in facade.elements if e.cls is ElementClass.WINDOW):
             windows += 1
             shuttered += w.id in parents
             slope += w.variant is not None and w.variant.kind is VariantKind.SLOPE
-            gable += w.y_m + w.h_m > spec.eaves_m
+            if w.y_m + w.h_m > spec.eaves_m:
+                gable += 1
+                up += has
+                up_sh += has and w.id in parents
+                up_all += 1
+                up_cas += w.id in casings
+                up_sill += w.id in sills
     return House(roof=spec.roof.kind, gable=gable > 0,
                  windows=windows if has else 0, shuttered=shuttered if has else 0,
                  slope_windows=slope, winged=len(sheet.wings) >= 2,
-                 own_roof=has_own_roof(sheet), wall_gable=bool(sheet.wall_gables))
+                 own_roof=has_own_roof(sheet), wall_gable=bool(sheet.wall_gables),
+                 up_windows=up, up_shuttered=up_sh, up_all=up_all,
+                 up_casing=up_cas, up_sill=up_sill)
 
 
 def read_sheet(path: Path) -> FacadeSheet | None:
@@ -126,6 +143,15 @@ def span(value: str, bounds: tuple[float, float] | None, digits: int = 2) -> str
     return value if bounds is None else f"{value} [{bounds[0]:.{digits}f}–{bounds[1]:.{digits}f}]"
 
 
+def _up(houses: list[House]) -> list[str]:
+    """Окна выше карниза: ставни (среди домов со ставнями по виду), наличник, подоконник —
+    доля окон и сколько окон."""
+    n, sh = sum(h.up_windows for h in houses), sum(h.up_shuttered for h in houses)
+    a = sum(h.up_all for h in houses)
+    cas, sill = sum(h.up_casing for h in houses), sum(h.up_sill for h in houses)
+    return [f"{sh / max(n, 1):.2f} ({sh}/{n})", f"{cas / max(a, 1):.2f}", f"{sill / max(a, 1):.2f}"]
+
+
 def row(name: str, houses: list[House], bounds: list[tuple[float, float]] | None = None) -> str:
     gable, shutters, slope, own, wall = shares(houses)
     sloped = [h for h in houses if h.sloped]
@@ -133,9 +159,10 @@ def row(name: str, houses: list[House], bounds: list[tuple[float, float]] | None
     b = bounds or [None] * SHARES
     winged = sum(h.winged for h in sloped)
     slope_n = sum(h.slope_windows for h in sloped)
+    up = _up(houses)
     cells = [span(f"{gable:.2f}", b[0]), span(f"{shutters:.2f}", b[1]),
              span(f"{slope:.1f} ({slope_n})", b[2], 1), f"{gable_roofs(houses):.2f}",
-             span(f"{own:.2f} ({winged})", b[3]), span(f"{wall:.2f}", b[4])]
+             span(f"{own:.2f} ({winged})", b[3]), span(f"{wall:.2f}", b[4]), *up]
     return f"| {name} | {len(houses)} / {len(sloped)} / {gabled} | " + " | ".join(cells) + " |"
 
 
@@ -160,8 +187,9 @@ def main() -> int:
     args = ap.parse_args()
     print("| источник | домов / скатных / двускатных | фронтон (скатные) | ставен на окно "
           "| окон по скату на 100 скатных (всего) | фронтон (двускатные) "
-          "| своя крыша части (скатных с крыльями) | щипец над стеной (двускатные) |")
-    print("|---|---|---|---|---|---|---|---|")
+          "| своя крыша части (скатных с крыльями) | щипец над стеной (двускатные) "
+          "| ставни у окон выше карниза | наличник у них | подоконник у них |")
+    print("|---|---|---|---|---|---|---|---|---|---|---|")
     for name, houses, real in sources(args):
         print(row(name, houses, interval(houses) if real else None))
     return 0

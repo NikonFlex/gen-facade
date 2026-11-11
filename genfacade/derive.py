@@ -66,7 +66,7 @@ def place(elements: list[Element], marks: Flags, wall: Wall) -> list[Element]:
     casings = [[_casing(w, wall)] for w in marked(Trim.CASING)]
     sills = [[_sill(w, wall)] for w in marked(Trim.SILL)]
     fit = shutter_fits(elements, marks, wall)
-    shutters = [_shutters(w, marks, wall) for w in marked(Trim.SHUTTERS) if w.id in fit]
+    shutters = [shutters_of(w, marks, wall) for w in marked(Trim.SHUTTERS) if w.id in fit]
     canopies = [[c] for d in marked(Trim.CANOPY) if (c := _canopy(d, elements, wall)) is not None]
     keep = _apart([*casings, *sills, *shutters, *canopies], elements)
     return [*(e for g in casings for e in g if e.id in keep), *elements,
@@ -124,7 +124,8 @@ def _shutter_w(w: Element, wall: Wall) -> float:
     return round(wall.cfg.look("shutters", wall.spec.trim.shutters).share * w.w_m, 3)
 
 
-def _shutters(w: Element, marks: Flags, wall: Wall) -> list[Element]:
+def shutters_of(w: Element, marks: Flags, wall: Wall) -> list[Element]:
+    """Пара ставен окна: левая и правая створка."""
     off, width = _offset(w, marks, wall), _shutter_w(w, wall)
     left = _child(w, Trim.SHUTTERS, (w.x_m - off - width, w.y_m, width, w.h_m), wall)
     right = _child(w, Trim.SHUTTERS, (w.x_m + w.w_m + off, w.y_m, width, w.h_m), wall)
