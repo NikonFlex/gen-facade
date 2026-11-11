@@ -329,6 +329,13 @@ def sheet_gables(sheet: FacadeSheet) -> list[Polygon | None]:
     return [f[0] if len(f) == 1 else above for above, f in zip(base, found, strict=True)]
 
 
+def gable_windows(sheet: FacadeSheet) -> list[Element]:
+    """Окна выше карниза на стенах с фронтоном (`sheet_gables`) — как их видят лист, валидатор,
+    метрики и 3D (gf#453)."""
+    return [e for f, zone in zip(sheet.facades, sheet_gables(sheet), strict=True)
+            if zone is not None for e in f.elements if over_eaves(e, sheet.spec.eaves_m)]
+
+
 def under_roof(e: Element, floors: int) -> bool:
     """Элемент этажа под скатом — окно во фронтоне и его выводимые элементы — по записи: этаж
     `floors + 1` ставят сборщик разметки, синтетика и модель, по нему ведут себя привязка, уровни

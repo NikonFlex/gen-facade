@@ -3,19 +3,23 @@
 import math
 
 import pytest
+from test_roof import L_HOUSE, wing_house
 from test_unfold import L_SIDES, sides_of
 
+from genfacade import roof
 from genfacade.datasets.synthetic import build
 from genfacade.render import hatch
 from genfacade.render.house3d import house_3d
 from genfacade.render.sheet_format import num
 from genfacade.render.svg import element_fill, pen_for, sheet_svg
 from genfacade.schema import (
+    Element,
     ElementClass,
     FacadeSheet,
     Roof,
     RoofKind,
     SideFacade,
+    WallGable,
     ZoneRole,
 )
 from genfacade.unfold import unfold
@@ -253,3 +257,38 @@ def test_roof_data_carries_the_sheet_thickness(house, cfg):
         "roof": cfg.models.spec.roof_shape.roof(RoofKind.GABLE, "roof")})})
     for sheet in (gabled, _flat_roofed(house)):
         assert house_3d(sheet, cfg)["roof"]["thickness_m"] == cfg.sheet.roof.thickness_m == 0.2
+
+
+def _gable_window_house(low: bool = False) -> tuple[FacadeSheet, int]:
+    """Г-дом одной высоты (из частей: `roof.roofline` пуст) со щипцом 4 м на карнизной стене 0 и
+    окном в нём; low — ещё окно ниже карниза, оно в текстуре стены, а не во фронтоне."""
+    sheet, _ = wing_house(L_HOUSE)
+    k = 0
+    gable = WallGable(side=k, x0_m=3.0, x1_m=7.0, pitch_deg=45.0)
+    eaves = sheet.spec.eaves_m
+    windows = [Element(id="g1", cls=ElementClass.WINDOW, x_m=4.7, y_m=eaves + 0.3, w_m=0.6,
+                       h_m=0.6, floor=sheet.spec.floors + 1)]
+    if low:
+        windows.append(Element(id="w1", cls=ElementClass.WINDOW, x_m=1.0, y_m=1.0, w_m=1.0,
+                               h_m=1.2, floor=1))
+    facades = [f.model_copy(update={"elements": windows}) if i == k else f
+               for i, f in enumerate(sheet.facades)]
+    return sheet.model_copy(update={"wall_gables": [gable], "facades": facades}), k
+
+
+@pytest.mark.parametrize("low", [False, True], ids=["gable-only", "plus-wall-window"])
+def test_house_of_parts_draws_gable_window_where_the_sheet_does(cfg, low):
+    """Окно в щипце над карнизной стеной дома из частей (gf#453) — в 3D выше карниза, чуть
+    наружу от стены; сколько окон выше карниза на листе, столько и в 3D; окно под карнизом — в
+    текстуре стены, во фронтоне не дублируется."""
+    sheet, k = _gable_window_house(low)
+    assert roof.roofline(sheet) is None and roof.roofs(sheet) is not None
+    assert len(roof.gable_windows(sheet)) == 1
+    quads = house_3d(sheet, cfg)["roof"]["windows"]
+    assert len(quads) == len(roof.gable_windows(sheet))
+    wall = house_3d(sheet, cfg)["walls"][k]
+    left, nx, ny = wall["left"], *wall["normal"]
+    assert all(z >= sheet.spec.eaves_m - 1e-9 for q in quads for *_, z in q)
+    out = cfg.viewer.house3d.window_out_m
+    assert all(((x - left[0]) * nx + (y - left[1]) * ny) == pytest.approx(out)
+               for q in quads for x, y, _ in q)
