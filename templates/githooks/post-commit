@@ -5,5 +5,5 @@
 root="$(git rev-parse --show-toplevel)"
 cd "$root" || exit 0
 . "$root/tools/quick_scope.sh"
-git diff-tree --no-commit-id --name-only -r HEAD | grep -qv '\.md$' || exit 0
+docs_only HEAD && exit 0
 refresh_testmon_later

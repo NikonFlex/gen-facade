@@ -15,8 +15,13 @@ seed_testmon() {
 
 # Коммит, где все файлы — .md: тестам нечего проверять, pytest не гоняется (ruff, gitleaks и
 # проверки задач остаются; полный набор — в CI).
+# С ревизией — файлы этого коммита (post-commit), без — индекс (pre-commit).
 docs_only() {
-    files=$(git -c core.quotePath=false diff --cached --name-only)
+    if [ -n "${1:-}" ]; then
+        files=$(git -c core.quotePath=false diff-tree --no-commit-id --name-only -r "$1")
+    else
+        files=$(git -c core.quotePath=false diff --cached --name-only)
+    fi
     [ -n "$files" ] && ! printf '%s\n' "$files" | grep -qv '\.md$'
 }
 

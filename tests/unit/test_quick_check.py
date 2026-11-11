@@ -82,6 +82,20 @@ def test_docs_only_commit_skips_tests(clone):
     assert _sh(wt, "docs_only") != 0
 
 
+def test_docs_only_of_a_commit_reads_its_files(clone):
+    """post-commit спрашивает о сделанном коммите (gf#443): одни .md — базу testmon не обновлять."""
+    _, wt = clone
+    commit = ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m"]
+    (wt / "b.md").write_text("b\n")
+    _git(wt, "add", "b.md")
+    _git(wt, *commit, "b")
+    assert _sh(wt, "docs_only HEAD") == 0
+    (wt / "c.py").write_text("x = 1\n")
+    _git(wt, "add", "c.py")
+    _git(wt, *commit, "c")
+    assert _sh(wt, "docs_only HEAD") != 0
+
+
 def test_docs_only_with_cyrillic_name(clone):
     """git берёт в кавычки имя с не-ASCII буквами («Таблица.md» → "...md\"") —
     всё равно документ."""
