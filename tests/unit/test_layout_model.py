@@ -140,6 +140,7 @@ def _tuned(cfg, **layout):
     return cfg.model_copy(update={"models": cfg.models.model_copy(update={"layout": settings})})
 
 
+@pytest.mark.slow
 def test_bad_wall_is_redone_alone(run, cfg):
     """`wall_retry` (gf#213): брак на одной стене — досэмплируется она, а не весь дом."""
     model = Fake(_without_door, _good)
@@ -151,6 +152,7 @@ def test_bad_wall_is_redone_alone(run, cfg):
     assert whole.walls == []                                    # по умолчанию — весь дом
 
 
+@pytest.mark.slow
 def test_undecodable_wall_is_redone_alone(run, cfg):
     """gf#294: ответ, не разобранный на стене 1, — досэмплируется она, а не весь дом; в трассе
     названы стена и причина. Без стены (обрыв до первой метки) — брак целиком, как раньше."""

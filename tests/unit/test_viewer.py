@@ -88,6 +88,7 @@ def test_one_plan_listed_and_served(client):
     assert client.get("/api/plans/nope").status_code == 404
 
 
+@pytest.mark.slow
 def test_plan_run_traces_every_step(client):
     run_id = client.post("/api/runs", json={"plan_run": PLAN_RUN}).json()["id"]
     assert [r["id"] for r in client.get("/api/runs").json()] == [run_id]
@@ -264,6 +265,7 @@ def test_unknown_sample_and_source(client):
     assert client.post("/api/samples/nope/simple_house").status_code == 422
 
 
+@pytest.mark.slow
 def test_run_house_in_3d(client):
     """Дом объёмом по листу прогона: стена на сторону, у стены — SVG фасада."""
     run_id = client.post("/api/runs", json={"plan_run": PLAN_RUN}).json()["id"]
@@ -340,6 +342,7 @@ def test_page_waits_for_its_own_answers():
     assert "withData(step, renderJsonStep)" in js and "withData(step, renderTokensStep)" in js
 
 
+@pytest.mark.slow
 def test_run_with_stale_part_numbers_is_refused_not_crashed(client, tmp_path):
     """Сохранённый лист со старыми номерами частей: лист и 3D отвечают 409 с кодом отказа, а не 500
     (gf#322): прогоны живут дольше разбиения контура на крылья."""

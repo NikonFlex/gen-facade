@@ -64,7 +64,10 @@ openspec_validate() {
 }
 
 run "ruff" ruff check .
-run "pytest" pytest_or_none
+# pytest — фоном, пока идут остальные проверки (их ~50 с, gf#443); его строка — в конце.
+tests_out=$(mktemp)
+( run "pytest" pytest_or_none; echo "failed=$failed" ) >"$tests_out" 2>&1 &
+tests_pid=$!
 run "backlog.py --selftest" python3 tools/backlog.py --selftest
 run "secret_scan.py --selftest" python3 tools/secret_scan.py --selftest
 run "changelog.py --selftest" python3 tools/changelog.py --selftest
@@ -106,4 +109,8 @@ run "openspec validate --strict: docs/examples/project" openspec_validate docs/e
 run "context_check.py" python3 tools/context_check.py
 # data/ и materials/ — гигабайты чужих файлов вне git, поэтому только наши папки
 run "jscpd" npx -y jscpd@5.3.3 -c .jscpd.json genfacade tests tools .agents
+wait "$tests_pid"
+grep -v '^failed=' "$tests_out"
+grep -q '^failed=1' "$tests_out" && failed=1
+rm -f "$tests_out"
 exit $failed

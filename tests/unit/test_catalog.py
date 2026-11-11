@@ -81,6 +81,7 @@ def test_every_item_is_drawn(client):
             assert res.text.startswith("<svg"), item["image"]
 
 
+@pytest.mark.slow
 def test_new_kind_added_by_records_appears(tmp_path, client):
     """Вид, добавленный записью во временную копию конфига, появляется в каталоге без правки кода
     и страницы: материал стен, кровли, цвет и отделка."""

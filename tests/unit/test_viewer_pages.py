@@ -54,6 +54,7 @@ def test_form_choices_come_from_stub_config(client, cfg):
     assert set(got["shapes"]) == set(options["shape"])
 
 
+@pytest.mark.slow
 def test_form_text_reads_back_without_loss(cfg):
     """Параметры → текст → параметры: всё, что названо, стаб прочитал так же."""
     spec = cfg.models.spec

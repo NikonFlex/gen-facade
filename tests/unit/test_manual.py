@@ -636,6 +636,7 @@ def test_real_wall_gables():
     assert gable == pytest.approx(roof._ridge(house.parts[ext.into], ext.zone))
 
 
+@pytest.mark.slow
 def test_real_flat_part_has_a_slab():
     """sd-sit-2013 (gf#431): южное крыло — плоская зелёная кровля, северный объём — односкатная. У
     плоской части в 3D плита на её карнизе: над всем контуром кровля, дыр нет; у уступа контура

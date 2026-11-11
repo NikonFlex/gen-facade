@@ -11,6 +11,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 SOURCES = sorted([*(ROOT / "tools").glob("*.py"), *(ROOT / ".agents/guards").glob("*.py")])
 
@@ -79,5 +81,6 @@ def test_literals_are_not_compared_outside_their_file():
     assert not stray(COMPARED, compared)
 
 
+@pytest.mark.slow
 def test_rule_fragments_are_written_once():
     assert not stray(WRITTEN, written)

@@ -70,6 +70,7 @@ def test_random_windows_do_not_share_head_line_unlike_rules(by_placement):
     assert rand < 0.5 and rand < rules / 2
 
 
+@pytest.mark.slow
 def test_answer_grammar_is_same_in_both_placements(by_placement):
     """Ответ в обоих режимах расстановки пишется токенами и разбирается обратно, в обоих режимах
     модели; брака мало — расстановка не ломает дома."""

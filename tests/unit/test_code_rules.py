@@ -64,6 +64,7 @@ def _compared_with_enum_value(tree: ast.AST) -> list[tuple[int, str]]:
     ]
 
 
+@pytest.mark.slow
 def test_no_import_aliases():
     # Хозяин 29.09: без сокращений вроде `import xml.etree.ElementTree as ET`.
     found = _found(OUR_CODE, _aliases)
