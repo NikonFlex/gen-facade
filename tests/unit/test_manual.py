@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 import shapely
+from roof_cover import uncovered
 
 from genfacade import config, roof
 from genfacade.datasets import manual, markup_toml, store
@@ -631,3 +632,17 @@ def test_real_wall_gables():
     (ext,) = [e for e in house.extensions if e.part >= len(mae.wings)]
     gable = max(z for _, f in roof._part_faces(house, ext.part) for *_, z in f)
     assert gable == pytest.approx(roof._ridge(house.parts[ext.into], ext.zone))
+
+
+def test_real_flat_part_has_a_slab():
+    """sd-sit-2013 (gf#431): южное крыло — плоская зелёная кровля, северный объём — односкатная. У
+    плоской части в 3D плита на её карнизе: над всем контуром кровля, дыр нет; у уступа контура
+    (ffh-canadian) плиты нет — он под соседними крышами."""
+    sheet = manual.house(real("sd-sit-2013"), CFG.data.manual)[0].sheet
+    house = roof.roofs(sheet)
+    flat = [k for k, line in enumerate(house.parts) if not line.slopes]
+    assert flat and all(roof._faces_of(house, k) for k in flat)
+    assert uncovered(house) == pytest.approx(0.0, abs=1e-6)
+    canadian = roof.roofs(manual.house(real("ffh-canadian"), CFG.data.manual)[0].sheet)
+    assert not [f for k, line in enumerate(canadian.parts) if not line.slopes
+                for f in roof._faces_of(canadian, k)]

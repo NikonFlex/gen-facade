@@ -488,8 +488,8 @@ def _part_line(sheet: FacadeSheet, spans: list[list[Span]], part: int, wing: Win
                                                     ).length > EPS for r in taller)}
         on = _off_walls(on, butts, roof.kind)
     slopes = [Slope(corners[k], (-n[0], -n[1])) for k, n in enumerate(normals) if k in on]
-    if min(lengths[:2]) <= roof.overhang_m:  # уже собственного свеса — уступ контура
-        slopes = []  # (у разметки — шум в сантиметры): крыши у него нет, он под соседними
+    if _ledge(corners, roof.overhang_m):
+        slopes = []
     return Roofline(corners, slopes, eaves, math.tan(math.radians(roof.pitch_deg)),
                     roof.overhang_m)
 
@@ -733,10 +733,32 @@ def _above_zone(line: Roofline, zone: shapely.Polygon, left: Point, u: Point,
 
 
 def house_faces(house: HouseRoof) -> list[list[Point3]]:
-    """Скаты всех частей в объёме."""
+    """Скаты всех частей в объёме; у части с плоской крышей — плита на её карнизе по площади
+    крыши части: иначе над ней в 3D и IFC дыра (sd-sit-2013: плоская часть при односкатной)."""
     if len(house.parts) == 1:
         return [face for _, face in faces(house.parts[0])]
-    return [face for k in range(len(house.parts)) for _, face in _part_faces(house, k)]
+    return [face for k in range(len(house.parts)) for face in _faces_of(house, k)]
+
+
+def _ledge(corners: list[Point], overhang: float) -> bool:
+    """Крыло уже собственного свеса — уступ контура (у разметки — шум в сантиметры): крыши у него
+    нет, он под соседними."""
+    xs, ys = [c[0] for c in corners], [c[1] for c in corners]
+    return min(max(xs) - min(xs), max(ys) - min(ys)) <= overhang
+
+
+def _faces_of(house: HouseRoof, k: int) -> list[list[Point3]]:
+    """Грани части k. Плита плоской части — без площади крыш частей главнее неё (`_outranks`):
+    под их свесом её не видно; у уступа (`_ledge`) плиты нет."""
+    line = house.parts[k]
+    if line.slopes:
+        return [face for _, face in _part_faces(house, k)]
+    if _ledge(line.corners, line.overhang):
+        return []
+    over = [_area(house, j) for j, other in enumerate(house.parts)
+            if _outranks(_line_rank(other, j), _line_rank(line, k))]
+    slab = _area(house, k).difference(shapely.union_all(over)) if over else _area(house, k)
+    return [[(x, y, line.eaves) for x, y in ring] for ring in polygons(slab)]
 
 
 def house_view(house: HouseRoof, k: int, thickness: float) -> list[Polygon]:

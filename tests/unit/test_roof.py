@@ -5,6 +5,7 @@ import math
 
 import pytest
 import shapely
+from roof_cover import projection, uncovered
 from simple_house import L_SHAPE, SIMPLE
 
 from genfacade import config, pipeline, roof
@@ -292,9 +293,7 @@ def test_wall_gable_runs_from_the_wall_to_the_ridge():
     seen = visible(house, ext.zone)
     assert seen and all(z == pytest.approx(max(p.height((x, y)) for p in parts), abs=1e-6)
                         for x, y, z in seen)
-    cover = shapely.union_all([shapely.Polygon([(x, y) for x, y, _ in f]).buffer(0)
-                               for f in roof.house_faces(house)])
-    assert shapely.Polygon(house.corners).difference(cover).area == pytest.approx(0.0, abs=1e-9)
+    assert uncovered(house) == pytest.approx(0.0, abs=1e-9)
 
 
 def test_wall_gable_above_the_ridge_stops_at_it():
@@ -381,18 +380,6 @@ def wing_house(outline: list[tuple[float, float]], kind: RoofKind = RoofKind.GAB
     return sheet, roof.roofs(sheet)
 
 
-def projection(house) -> shapely.Geometry:
-    """Проекция всех граней кровли на план."""
-    return shapely.union_all([shapely.Polygon([(x, y) for x, y, _ in face]).buffer(0)
-                              for face in roof.house_faces(house)])
-
-
-def uncovered(sheet, house) -> float:
-    """Площадь контура дома, над которой нет ни одной грани кровли."""
-    corners = roof.plan_corners([f.side for f in sheet.facades])
-    return shapely.Polygon(corners).difference(projection(house)).area
-
-
 def test_l_house_of_one_height_has_roof_over_each_wing():
     """Г-дом одной высоты: скат у каждого крыла; конёк крыла 4 × 4 — поперёк главного, его кровля
     продолжена над главным до его конька, стенки на общей линии нет (gf#431, этап В)."""
@@ -405,14 +392,14 @@ def test_l_house_of_one_height_has_roof_over_each_wing():
     (ext,) = house.extensions
     assert (ext.part, ext.into) == (wing, main)
     assert roof.joints(house) == []
-    assert uncovered(sheet, house) == pytest.approx(0.0, abs=1e-6)
+    assert uncovered(house) == pytest.approx(0.0, abs=1e-6)
 
 
 @pytest.mark.parametrize("outline", [T_HOUSE, U_HOUSE], ids=["T", "U"])
 def test_t_and_u_houses_of_one_height_are_roofed_without_holes(outline):
     sheet, house = wing_house(outline)
     assert len(house.parts) >= 2 and all(line.slopes for line in house.parts)
-    assert uncovered(sheet, house) == pytest.approx(0.0, abs=1e-6)
+    assert uncovered(house) == pytest.approx(0.0, abs=1e-6)
     reach = shapely.Polygon(house.corners).buffer(house.parts[0].overhang + 1e-6,
                                                   join_style="mitre")
     assert projection(house).difference(reach).area == pytest.approx(0.0, abs=1e-6)
@@ -465,7 +452,7 @@ def test_wing_roof_does_not_depend_on_wing_numbers():
     back = roof.roofs(turned)
     assert sorted_faces(back) == sorted_faces(house)
     assert [(e.part, e.into) for e in back.extensions] == [(0, 1)]
-    assert uncovered(turned, back) == pytest.approx(0.0, abs=1e-6)
+    assert uncovered(back) == pytest.approx(0.0, abs=1e-6)
 
 
 def test_wing_with_higher_ridge_than_main_has_gable_wall_over_the_main_roof():
