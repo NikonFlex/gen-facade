@@ -700,3 +700,19 @@ def test_real_flat_part_has_a_slab():
     canadian = roof.roofs(manual.house(real("ffh-canadian"), CFG.data.manual)[0].sheet)
     assert not [f for k, line in enumerate(canadian.parts) if not line.slopes
                 for f in roof._faces_of(canadian, k)]
+
+
+def test_markup_overhangs_and_their_source_go_into_the_roof():
+    """Свес карнизный и фронтонный и откуда они (gf#451): читаются, сборщик кладёт оба в `Roof`."""
+    plain = markup()
+    assert (plain.gable_overhang_m, plain.overhang_by) == (None, manual.OverhangBy.DEFAULT)
+    m = markup(gable_overhang_m=0.1, overhang_by="drawing")
+    assert m.overhang_by is manual.OverhangBy.DRAWING
+    house_roof = manual.house(m, CFG.data.manual)[0].sheet.spec.roof
+    assert (house_roof.overhang_m, house_roof.gable_overhang_m) == (OVERHANG, 0.1)
+    assert manual.house(plain, CFG.data.manual)[0].sheet.spec.roof.gable_overhang == OVERHANG
+
+
+def test_unknown_overhang_source_is_an_error():
+    with pytest.raises(ValueError, match="overhang_by"):
+        markup(overhang_by="guess")

@@ -523,11 +523,11 @@ def test_roofs_of_parts_are_whole_and_lower_goes_under_overhang():
         for k, line in enumerate(house.parts):
             union = shapely.unary_union([shapely.Polygon([(x, y) for x, y, _ in face])
                                          for _, face in roof.faces(line, roof._area(house, k))])
-            whole = shapely.Polygon(line.corners).buffer(line.overhang, join_style="mitre")
+            whole = line.outline()  # каждая сторона — на свой свес (gf#451)
             if k == low:  # нижняя обрывается на стене верхней и на линии общей стены (gf#431)
                 top = shapely.Polygon(house.parts[high].corners)
                 whole = whole.difference(top).difference(
-                    roof._past_shared_wall(shapely.Polygon(line.corners), top, line.overhang))
+                    roof._past_shared_wall(shapely.Polygon(line.corners), top, line.reach))
             assert whole.symmetric_difference(union).area < EPS  # без вырезов свесом соседа
             shapes.append(union)
         both = shapes[high].intersection(shapes[low])
@@ -776,13 +776,15 @@ def test_real_houses_are_not_rejected_by_roof_zones(name):
 
 
 @pytest.mark.parametrize(("text", "faces", "area", "heights"), [
-    (GABLE, 4, 60.06, 89.4627), (TWO_PARTS + " Hip roof.", 7, 60.06, 151.8845),
-    (TWO_PARTS + " Shed roof.", 2, 60.06, 47.1985)])
+    (GABLE, 4, 53.8, 90.3029), (TWO_PARTS + " Hip roof.", 7, 67.86, 149.9856),
+    (TWO_PARTS + " Shed roof.", 2, 55.1225, 47.2197)])
 def test_roof_of_parts_of_different_height_is_as_before_ranking(text, faces, area, heights):
     """Старшинство частей по карнизу, площади и номеру (gf#431, этап В) не меняет дом из частей
     разной высоты: грани, их площадь на плане, высоты вершин и примыкание — как до правки (числа
     сняты с кода до неё; после — без квадрата свеса нижней перед стеной верхней, 0,4 × 0,4 м:
-    `facade: Крыша над частями дома`, свес обрывается на линии общей стены, gf#431)."""
+    `facade: Крыша над частями дома`, свес обрывается на линии общей стены, gf#431; площадь и
+    высоты — при свесах шага 1 по виду крыши, медианы разметки gf#451: двускатная 0,25 / 0,2,
+    вальмовая 0,6, односкатная 0,3 / 0,25)."""
     house = roof.roofs(bare(text))
     found = roof.house_faces(house)
     assert len(found) == faces and len(roof.joints(house)) == 1

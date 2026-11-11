@@ -836,17 +836,21 @@ class DoorLeaf(Section):
 
 
 class RoofShape(Section):
-    """Крыша дома (gf#320): уклон по виду скатной крыши и свес — для стаба шага 1 и синтетики."""
+    """Крыша дома (gf#320): уклон и свесы по виду скатной крыши — для стаба шага 1 и синтетики.
+    Свес карнизный — за стену со скатом, фронтонный — за стену без ската (gf#451); у вальмовой
+    фронтонного нет."""
 
     pitch_deg: dict[RoofKind, float]
-    overhang_m: float
+    overhang_m: dict[RoofKind, float]
+    gable_overhang_m: dict[RoofKind, float]
 
     def roof(self, kind: RoofKind, material: str | None) -> Roof:
-        """Крыша вида kind: у плоской уклона и свеса нет."""
+        """Крыша вида kind: у плоской уклона и свеса нет, у вальмовой нет фронтонного свеса."""
         if kind is RoofKind.FLAT:
             return Roof(kind=kind, material=material)
         return Roof(kind=kind, material=material, pitch_deg=self.pitch_deg[kind],
-                    overhang_m=self.overhang_m)
+                    overhang_m=self.overhang_m[kind],
+                    gable_overhang_m=self.gable_overhang_m.get(kind))
 
 
 class Derive(Section):

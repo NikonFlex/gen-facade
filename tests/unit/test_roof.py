@@ -495,3 +495,54 @@ def test_wing_with_higher_ridge_than_main_has_gable_wall_over_the_main_roof():
     (joint,) = roof.joints(house)
     assert joint.high == 1 and joint.walls and min(z for w in joint.walls for *_, z in w) >= (
         sheet.spec.eaves_m - 1e-6)
+
+
+# ——— Свес карнизный и фронтонный (gf#451, `facade: Свес карнизный и фронтонный`) ———
+
+
+def plan_extent(line: roof.Roofline) -> tuple[float, float]:
+    """Размеры кровли в плане (x, y) — габарит союза её граней."""
+    area = shapely.union_all([shapely.Polygon([(x, y) for x, y, _ in f])
+                              for _, f in roof.faces(line)])
+    x0, y0, x1, y1 = area.bounds
+    return x1 - x0, y1 - y0
+
+
+def house_10x6(eave: float, gable: float) -> roof.Roofline:
+    """Дом 10 × 6, двускатная 35°, конёк вдоль длинной стороны: карнизы на длинных сторонах."""
+    corners = [(0.0, 0.0), (10.0, 0.0), (10.0, 6.0), (0.0, 6.0)]
+    slopes = [roof.Slope(corners[0], (0.0, 1.0)), roof.Slope(corners[2], (0.0, -1.0))]
+    return roof.Roofline(corners, slopes, 3.0, math.tan(math.radians(35)), eave, gable)
+
+
+def test_gable_roof_hangs_over_eave_and_gable_walls_by_their_own_overhang():
+    assert plan_extent(house_10x6(0.5, 0.0)) == pytest.approx((10.0, 7.0))
+    assert plan_extent(house_10x6(0.0, 0.5)) == pytest.approx((11.0, 6.0))
+    assert plan_extent(house_10x6(0.5, 0.3)) == pytest.approx((10.6, 7.0))
+
+
+def test_roof_without_gable_overhang_hangs_as_before():
+    """Фронтонный не задан — равен карнизному: контур с одним свесом по всем сторонам."""
+    assert Roof(kind=RoofKind.GABLE, pitch_deg=35, overhang_m=0.5).gable_overhang == 0.5
+    sheet = bare(RoofKind.GABLE)
+    plain = sheet.spec.roof.model_copy(update={"overhang_m": 0.5, "gable_overhang_m": None})
+    same = plain.model_copy(update={"gable_overhang_m": 0.5})
+    extents = [plan_extent(_line_with(sheet, r)) for r in (plain, same)]
+    line = _line_with(sheet, same)
+    xs = [c[0] for c in line.corners]
+    ys = [c[1] for c in line.corners]
+    assert extents[0] == pytest.approx(extents[1])
+    assert extents[0] == pytest.approx((max(xs) - min(xs) + 1.0, max(ys) - min(ys) + 1.0))
+
+
+def _line_with(sheet, r: Roof) -> roof.Roofline:
+    """Скаты листа с крышей r вместо его крыши."""
+    return roof.roofline(sheet.model_copy(update={"spec": sheet.spec.model_copy(
+        update={"roof": r})}))
+
+
+def test_hip_roof_ignores_gable_overhang():
+    sheet = bare(RoofKind.HIP)
+    extents = [plan_extent(_line_with(sheet, sheet.spec.roof.model_copy(
+        update={"overhang_m": 0.5, "gable_overhang_m": gable}))) for gable in (None, 0.9)]
+    assert extents[0] == pytest.approx(extents[1])

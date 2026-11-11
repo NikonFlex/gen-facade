@@ -13,7 +13,9 @@ pdf = "2015/stevens-drawings.pdf"
 roof = "плоская за парапетом, общая для дома, крыльца входа, восточной веранды и южной террасы; панели на подставках"
 roof_kind = "flat"
 pitch_deg = 0.0
+# свес: плоская за парапетом — Ф. S стр. 55, кровля 986–1680 = wall, выноса нет
 overhang_m = 0.0
+overhang_by = "drawing"
 unit = "ft"
 pt_per_unit = 18.0          # SCALE 1/4" = 1'-0"; парапет − пол 11'-7 1/4" = 208,9 pt
 material = "wood"         # CEDAR SHAKE SIDING

@@ -1,14 +1,17 @@
 # The Barnhouse (carriage house) — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
 # archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#180 — та же лицензия.
 # Контур 24'x24' с нишей входа 8'x6' под крышей: дверь спроецирована на плоскость фасада.
-# Крыша (gf#336): свес — по умолчанию ([spec.roof_shape], на листе не подписан).
+# Крыша (gf#336); свесы — с чертежа (gf#451), строка у `overhang_m`.
 # Крыша (gf#336): уклон — по умолчанию ([spec.roof_shape], на листе не подписан).
 id = "ffh-barnhouse"
 pdf = "Barnhouse - Blueprints - Jay Osborne.pdf"
 roof = "гамбрел (ломаная двускатная), купол; второй этаж под крышей"
 roof_kind = "gable"
 pitch_deg = 35.0
-overhang_m = 0.4
+# свес: карнизный — Ф. задний (RESIDENCE FRONT ENTRY) стр. 5, кончик карниза на 14 pt за стеной (986,0/1418,8 pt), 18 pt/фут = 0,24 м; фронтонный — Ф. правый боковой стр. 5, 14 pt = 0,24 м
+overhang_m = 0.25
+gable_overhang_m = 0.25
+overhang_by = "drawing"
 roof_gaps = ["гамбрел (ломаная двускатная) -> двускатная: модуль не строит ломаный скат; уклон на листе не подписан"]
 roof_down = 1          # скат крыши к стороне 1 (gf#431; была строка roof_gaps)
 unit = "ft"

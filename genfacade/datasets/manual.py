@@ -84,6 +84,13 @@ class Unit(StrEnum):
     M = "m"
 
 
+class OverhangBy(StrEnum):
+    """Откуда свес разметки (gf#451): с чертежа или по умолчанию вида крыши."""
+
+    DRAWING = "drawing"  # снят с чертежа
+    DEFAULT = "default"  # на чертеже не виден — по умолчанию
+
+
 M_PER_UNIT = {Unit.FT: 0.3048, Unit.M: 1.0}  # международный фут — определение единицы, не настройка
 
 # Что бывает во фронтоне (gf#321): окно и выводимые элементы окна; дверь и прочее — срезаются.
@@ -183,7 +190,10 @@ class Markup(Model):
     roof: str            # исходное описание крыши — в опись; вид, уклон и свес — полями ниже
     roof_kind: RoofKind  # вид крыши дома в параметрах (gf#336): ближайший из строящихся модулем
     pitch_deg: float = Field(ge=0, lt=90)  # уклон ската; у плоской 0 (проверяет `Roof`)
-    overhang_m: float = Field(ge=0)        # свес за стену по горизонтали
+    overhang_m: float = Field(ge=0)        # свес карнизный: за стену со скатом
+    # Свес фронтонный — за стену без ската; нет — равен карнизному (gf#451).
+    gable_overhang_m: float | None = Field(default=None, ge=0)
+    overhang_by: OverhangBy = OverhangBy.DEFAULT  # откуда свесы: с чертежа или по умолчанию
     # Номер стороны, к которой спускается скат крыши дома (`facade: Направление ската`, gf#431);
     # пусто — правило вида: двускатная — карнизы на длинных стенах, односкатная — низ у входа.
     roof_down: int | None = Field(default=None, ge=0)
@@ -606,7 +616,8 @@ def _spec(m: Markup) -> HouseSpec:
     plinth, heights = m.plinth * m.m_per_unit, [h * m.m_per_unit for h in m.floor_heights]
     return HouseSpec(building_type=BuildingType.COTTAGE, floors=len(heights),
                      floor_heights_m=heights, plinth_m=plinth, eaves_m=plinth + sum(heights),
-                     roof=Roof(kind=m.roof_kind, pitch_deg=m.pitch_deg, overhang_m=m.overhang_m),
+                     roof=Roof(kind=m.roof_kind, pitch_deg=m.pitch_deg, overhang_m=m.overhang_m,
+                               gable_overhang_m=m.gable_overhang_m),
                      materials=_palette(m))
 
 

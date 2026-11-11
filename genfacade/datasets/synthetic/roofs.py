@@ -75,7 +75,7 @@ def _over_entrance(sheet: FacadeSheet, house: roof.HouseRoof, share: float, pitc
         span = next(s for s in house.spans[k] if s.x0 - EPS <= mid <= s.x1 + EPS)
         if sheet.roofs and sheet.roofs[span.part].kind is not RoofKind.GABLE:
             continue
-        gap = house.parts[span.part].overhang
+        gap = house.parts[span.part].reach
         room = span.x1 - span.x0 - 2 * gap
         width = min(share * (span.x1 - span.x0), room)
         if width < rules.wall_gable_min_m:

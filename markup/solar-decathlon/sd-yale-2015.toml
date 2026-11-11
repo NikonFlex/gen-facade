@@ -19,7 +19,9 @@ pdf = "2015/yale-drawings.pdf"
 roof = "плоская, с PV-панелями на стойках над T.O. STRUCTURE (15'-5 17/32\" верх панелей); скатов нет"
 roof_kind = "flat"
 pitch_deg = 0.0
+# свес: плоская — Ф. E стр. 32, кровля вровень со стеной, выноса нет
 overhang_m = 0.0
+overhang_by = "drawing"
 unit = "ft"
 pt_per_unit = 18.0          # 1/4" = 1'-0"; T.O. STRUCTURE − FIRST FLOOR = 11'-2 1/2" = 201,7 pt
 material = "siding"         # CEMENT FIBRE BOARD SIDING, VERTICAL, SMOOTH

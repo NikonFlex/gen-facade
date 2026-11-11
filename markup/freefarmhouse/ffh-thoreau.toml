@@ -1,13 +1,16 @@
 # Thoreau Cabin (tiny house) — Jay Osborne, FreeFarmhouse; CC BY-SA 4.0
 # archive.org/details/freefarmhouse_and_other_patreon_plans; разметка gf#180 — та же лицензия.
 # Лист Letter, но масштаб 1/4" = 1'-0" настоящий: шаг обшивки 9 pt = 6", дверь 80" = 120 pt.
-# Крыша (gf#336): свес — по умолчанию ([spec.roof_shape], на листе не подписан).
+# Крыша (gf#336); свесы — с чертежа (gf#451), строка у `overhang_m`.
 id = "ffh-thoreau"
 pdf = "Thoreau Blueprints 2024-11-24 By Jay Osborne.pdf"
 roof = "двускатная 10/12, спальный чердак; кирпичные столбы"
 roof_kind = "gable"
 pitch_deg = 39.8
-overhang_m = 0.4
+# свес: карнизный — Ф. фронт стр. 4, кончики карниза на 15,5 pt за стеной (96,6/322,4 pt), 18 pt/фут = 0,26 м; фронтонный — Ф. левый стр. 5, 7,6 pt = 0,13 м
+overhang_m = 0.25
+gable_overhang_m = 0.15
+overhang_by = "drawing"
 unit = "ft"
 pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"
 material = "wood"         # CEDAR BEVEL SIDING

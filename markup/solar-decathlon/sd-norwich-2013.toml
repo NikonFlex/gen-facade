@@ -12,7 +12,9 @@ pdf = "2013/nu_cd.pdf"
 roof = "плоская с малым уклоном; PV и окно-фонарь (ROOF WINDOW) на кровле"
 roof_kind = "flat"
 pitch_deg = 0.0
+# свес: плоская с парапетом — Ф. W стр. 43, парапет вровень со стеной, выноса нет
 overhang_m = 0.0
+overhang_by = "drawing"
 unit = "ft"
 pt_per_unit = 36.0          # 1/2" = 1'-0"
 material = "siding"       # горизонтальная обшивка

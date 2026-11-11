@@ -74,10 +74,46 @@ class Roofline:
     slopes: list[Slope]
     eaves: float
     rise: float
-    overhang: float
+    overhang: float  # карнизный свес — за стену со скатом
+    gable_overhang: float  # фронтонный — за стену без ската (щипец, торец)
 
     def height(self, p: Point) -> float:
         return self.eaves + self.rise * min((s.depth(p) for s in self.slopes), default=0.0)
+
+    @property
+    def reach(self) -> float:
+        """Наибольший свес — для рамок и отсечек, которым важен вынос кровли, а не его сторона."""
+        return max(self.overhang, self.gable_overhang)
+
+    def side_overhangs(self) -> list[float]:
+        """Свес каждой стороны контура: карнизный у стороны со скатом, фронтонный — у остальных.
+        Скатов нет (плоская крыша) — карнизный по всем сторонам."""
+        if not self.slopes:
+            return [self.overhang] * len(self.corners)
+        sloped = [any(math.dist(s.at, c) <= EPS for s in self.slopes) for c in self.corners]
+        return [self.overhang if on else self.gable_overhang for on in sloped]
+
+    def outline(self) -> shapely.Geometry:
+        """Контур кровли в плане: каждая сторона вынесена наружу на свой свес. Свесы равны —
+        контур с митровыми углами; разные — пересечение полуплоскостей сторон (крылья — выпуклые
+        прямоугольники)."""
+        base, over = shapely.Polygon(self.corners), self.side_overhangs()
+        if len(set(over)) == 1:
+            return base.buffer(over[0], join_style="mitre")
+        sign = 1.0 if shapely.is_ccw(base.exterior) else -1.0
+        far = 4.0 * (base.length + max(over))
+        area = base.buffer(far, join_style="mitre")
+        for k, d in enumerate(over):
+            (x0, y0), (x1, y1) = self.corners[k], self.corners[(k + 1) % len(self.corners)]
+            n = math.dist((x0, y0), (x1, y1))
+            out = (sign * (y1 - y0) / n, -sign * (x1 - x0) / n)  # наружу от стороны
+            ux, uy = (x1 - x0) / n, (y1 - y0) / n
+            ax, ay = x0 + out[0] * d - ux * far, y0 + out[1] * d - uy * far
+            bx, by = x1 + out[0] * d + ux * far, y1 + out[1] * d + uy * far
+            half = shapely.Polygon([(ax, ay), (bx, by), (bx - out[0] * far, by - out[1] * far),
+                                    (ax - out[0] * far, ay - out[1] * far)])
+            area = area.intersection(half)
+        return area
 
 
 def roofline(sheet: FacadeSheet) -> Roofline | None:
@@ -92,7 +128,8 @@ def roofline(sheet: FacadeSheet) -> Roofline | None:
     slopes = [Slope(corners[k], (-s.orientation[0], -s.orientation[1]))
               for k, s in enumerate(sides) if k in eaves]
     rise = math.tan(math.radians(roof.pitch_deg))
-    return Roofline(corners, slopes, sheet.spec.eaves_m, rise, roof.overhang_m)
+    return Roofline(corners, slopes, sheet.spec.eaves_m, rise, roof.overhang_m,
+                    roof.gable_overhang)
 
 
 def builds(sheet: FacadeSheet) -> bool:
@@ -216,7 +253,7 @@ def faces(line: Roofline, base: shapely.Geometry | None = None
     (x, y плана, высота). base — площадь крыши вместо контура со свесом (дом из частей)."""
     out = []
     if base is None:
-        base = shapely.Polygon(line.corners).buffer(line.overhang, join_style="mitre")
+        base = line.outline()
     for s in line.slopes:
         area = base
         for other in (o for o in line.slopes if o is not s):
@@ -509,10 +546,10 @@ def _part_line(sheet: FacadeSheet, spans: list[list[Span]], part: int, wing: Win
                                                     ).length > EPS for r in taller)}
         on = _off_walls(on, butts, roof.kind)
     slopes = [Slope(corners[k], (-n[0], -n[1])) for k, n in enumerate(normals) if k in on]
-    if _ledge(corners, roof.overhang_m):
+    if _ledge(corners, roof.reach):
         slopes = []
     return Roofline(corners, slopes, eaves, math.tan(math.radians(roof.pitch_deg)),
-                    roof.overhang_m)
+                    roof.overhang_m, roof.gable_overhang)
 
 
 def _off_walls(on: set[int], butts: set[int], kind: RoofKind) -> set[int]:
@@ -547,9 +584,9 @@ def _area(house: HouseRoof, k: int) -> shapely.Geometry:
     rect = shapely.Polygon(me.corners)
     above = [shapely.Polygon(other.corners) for j, other in enumerate(house.parts)
              if _outranks(_line_rank(other, j), _line_rank(me, k))]
-    area = rect.buffer(me.overhang, join_style="mitre")
+    area = me.outline()
     if above:
-        cut = [z for a in above if (z := _past_shared_wall(rect, a, me.overhang)) is not None]
+        cut = [z for a in above if (z := _past_shared_wall(rect, a, me.reach)) is not None]
         area = area.difference(shapely.union_all([*above, *cut])).union(rect)
     zones = [e.zone for e in house.extensions if e.part == k]
     return area.union(shapely.union_all(zones)) if zones else area
@@ -673,7 +710,7 @@ def _wall_gable(house: HouseRoof, g: WallGable) -> tuple[Roofline, int, shapely.
     # висел бы под кромкой свеса части (gf#431); свес вперёд — полоса перед стеной ниже
     line = Roofline(list(shapely.Polygon(zone).exterior.coords)[:-1],
                     [Slope(at(g.x0_m), u), Slope(at(g.x1_m), (-u[0], -u[1]))], base.eaves,
-                    rise, 0.0)
+                    rise, 0.0, 0.0)
     if not _meets(line, base, seg, zone):
         return None
     # свес части под щипцом прерывается, как карниз на листе: перед стеной видна кровля щипца
@@ -797,7 +834,7 @@ def _faces_of(house: HouseRoof, k: int) -> list[list[Point3]]:
     line = house.parts[k]
     if line.slopes:
         return [face for _, face in _part_faces(house, k)]
-    if _ledge(line.corners, line.overhang):
+    if _ledge(line.corners, line.reach):
         return []
     over = [_area(house, j) for j, other in enumerate(house.parts)
             if _outranks(_line_rank(other, j), _line_rank(line, k))]
@@ -817,7 +854,7 @@ def house_view(house: HouseRoof, k: int, thickness: float) -> list[Polygon]:
     def front(line: Roofline) -> float:
         return max(c[0] * toward[0] + c[1] * toward[1] for c in line.corners)
 
-    window = shapely.box(-house.parts[0].overhang, -1.0, length + house.parts[0].overhang, FAR)
+    window = shapely.box(-house.parts[0].reach, -1.0, length + house.parts[0].reach, FAR)
     shapes = []
     shown = {s.part for s in house.spans[k]} | {
         j.high for j in joints(house) if j.normal[0] * toward[0] + j.normal[1] * toward[1] > EPS}
@@ -839,7 +876,7 @@ def _within_spans(shape: shapely.Geometry, house: HouseRoof, k: int, part: int
     mine = [s for s in house.spans[k] if s.part == part]
     if not mine or any(e.part == part for e in house.extensions):
         return shape
-    length, over = axis(house.corners, k)[2], house.parts[part].overhang
+    length, over = axis(house.corners, k)[2], house.parts[part].reach
     return shape.intersection(shapely.union_all([
         shapely.box(s.x0 - (over if s.x0 <= EPS else 0.0), -1.0,
                     s.x1 + (over if s.x1 >= length - EPS else 0.0), FAR) for s in mine]))
