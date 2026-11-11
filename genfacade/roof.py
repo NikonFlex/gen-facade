@@ -21,6 +21,7 @@
 примыкания — по кровле нижней.
 """
 
+import dataclasses
 import math
 from dataclasses import dataclass
 from itertools import combinations
@@ -41,6 +42,7 @@ from genfacade.schema import (
     Polygon,
     Roof,
     RoofKind,
+    WallGable,
 )
 from genfacade.unfold import plan_corners
 
@@ -368,7 +370,21 @@ class HouseRoof:
 
 
 def roofs(sheet: FacadeSheet) -> HouseRoof | None:
-    """Скаты дома — прямоугольного и из частей; крыша плоская или скатов не построить — None."""
+    """Скаты дома — прямоугольного и из частей, со щипцами над карнизными стенами
+    (`wall_gables`); крыша плоская или скатов не построить — None."""
+    house = _parts_roof(sheet)
+    if house is None or not sheet.wall_gables:
+        return house
+    lines, through = list(house.parts), list(house.extensions)
+    for g in sheet.wall_gables:
+        if (found := _wall_gable(house, g)) is not None:
+            through.append(Extension(len(lines), found[1], found[2]))
+            lines.append(found[0])
+    return dataclasses.replace(house, parts=lines, extensions=tuple(through))
+
+
+def _parts_roof(sheet: FacadeSheet) -> HouseRoof | None:
+    """Скаты дома без щипцов над карнизными стенами."""
     if (line := roofline(sheet)) is not None:
         return HouseRoof(line.corners, [line], [
             [Span(0.0, wall_axis(line, k)[2], 0)] for k in range(RECT_SIDES)])
@@ -489,8 +505,12 @@ def _through(k: int, j: int, parts: list[Roofline]) -> list[Extension]:
 def _meets(me: Roofline, other: Roofline, seg: shapely.LineString, zone: shapely.Polygon) -> bool:
     """Кровля me у общей линии где-то выше кровли other и уходит под неё в zone, не выше её конька:
     иначе она прошла бы соседа насквозь (эркер у торца щипца — под щипцом, а не под кровлей)."""
-    top = max((z for _, face in faces(other, zone) for _, _, z in face), default=other.eaves)
-    return _rises_over(me, other, seg) and _top(me, seg) <= top + EPS
+    return _rises_over(me, other, seg) and _top(me, seg) <= _ridge(other, zone) + EPS
+
+
+def _ridge(line: Roofline, zone: shapely.Geometry) -> float:
+    """Верх кровли line над zone."""
+    return max((z for _, face in faces(line, zone) for _, _, z in face), default=line.eaves)
 
 
 def _sweep(me: Roofline, other: Roofline, seg: shapely.LineString) -> shapely.Polygon | None:
@@ -498,22 +518,57 @@ def _sweep(me: Roofline, other: Roofline, seg: shapely.LineString) -> shapely.Po
     скату соседа, что поднимается от этой линии, до его конька — за коньком скат соседа опускается,
     и щипец вышел бы над ним снова. None — seg не торец щипца me (от этой стены или напротив идёт
     скат) или кровля соседа от seg не поднимается (торец его щипца, плоская)."""
-    (x0, y0), (x1, y1) = seg.coords[0], seg.coords[-1]
+    (x0, y0), y1 = seg.coords[0], seg.coords[-1][1]
     centre = shapely.Polygon(me.corners).centroid
     along_x = abs(y1 - y0) <= EPS  # общая линия вдоль x — кровля идёт по y
     n = (0.0, math.copysign(1.0, y0 - centre.y)) if along_x else (
         math.copysign(1.0, x0 - centre.x), 0.0)
     if any(abs(s.inward[0] * n[0] + s.inward[1] * n[1]) > EPS for s in me.slopes):
         return None
+    return _up_to_ridge(other, seg, n)
+
+
+def _up_to_ridge(other: Roofline, seg: shapely.LineString, n: Point) -> shapely.Polygon | None:
+    """Полоса шириной seg (вдоль оси плана) в сторону n по скату other, что поднимается от seg,
+    до его конька; такого ската нет — None."""
+    (x0, y0), (x1, y1) = seg.coords[0], seg.coords[-1]
     rising = [face for s, face in faces(other, shapely.Polygon(other.corners))
               if math.dist(s.inward, n) <= EPS]
     if not rising:
         return None
     reach = [x * n[0] + y * n[1] for face in rising for x, y, _ in face]
     far = max(reach) * (n[0] + n[1])  # дальняя точка ската соседа по n — линия конька
-    if along_x:
+    if abs(y1 - y0) <= EPS:  # линия вдоль x — полоса идёт по y
         return shapely.box(min(x0, x1), min(y0, far), max(x0, x1), max(y0, far))
     return shapely.box(min(x0, far), min(y0, y1), max(x0, far), max(y0, y1))
+
+
+def _wall_gable(house: HouseRoof, g: WallGable) -> tuple[Roofline, int, shapely.Polygon] | None:
+    """Щипец над карнизной стеной (`facade: Щипец над карнизной стеной`): скаты от линий x0 и x1
+    поперёк стены, карниз и свес — части под серединой участка; площадь — полоса участка от стены
+    по скату части до её конька. Вершина щипца не выше конька части — иначе его конёк прошёл бы
+    крышу насквозь: уклон уменьшается до щипца «до конька» (у разметки конёк ядра по уклону и
+    глубине из параметров бывает ниже, чем на листе). Скат части от стены не поднимается (торец) —
+    None."""
+    left, u, _ = axis(house.corners, g.side)
+    at, mid = _walker(left, u), (g.x0_m + g.x1_m) / 2
+    host = next(s.part for s in house.spans[g.side] if s.x0 - EPS <= mid <= s.x1 + EPS)
+    base = house.parts[host]
+    seg = shapely.LineString([at(g.x0_m), at(g.x1_m)])
+    zone = _up_to_ridge(base, seg, (-u[1], u[0]))  # внутрь дома от стены
+    if zone is None:
+        return None
+    rise = min(math.tan(math.radians(g.pitch_deg)),
+               (_ridge(base, zone) - base.eaves) / (mid - g.x0_m))
+    line = Roofline(list(shapely.Polygon(zone).exterior.coords)[:-1],
+                    [Slope(at(g.x0_m), u), Slope(at(g.x1_m), (-u[0], -u[1]))], base.eaves,
+                    rise, base.overhang)
+    if not _meets(line, base, seg, zone):
+        return None
+    # свес части под щипцом прерывается, как карниз на листе: перед стеной видна кровля щипца
+    eave = seg.buffer(base.overhang, cap_style="flat", single_sided=True)
+    return line, host, zone.union(eave if eave.intersection(zone).area <= EPS else
+                                  seg.buffer(-base.overhang, cap_style="flat", single_sided=True))
 
 
 def _along(seg: shapely.LineString):

@@ -583,3 +583,49 @@ def test_all_real_houses_are_built_and_old_ones_without_fallbacks():
         if m.id not in fallback:
             manual._house(m, CFG.data.manual, False)
     assert built == 59
+
+
+def tented(*rise: tuple[float, float]) -> Markup:
+    """Дом `drawn` с силуэтом правой (карнизной, 20') стены: над карнизом — ломаная rise из точек
+    (отступ от левого края, высота над карнизом), футы."""
+    raw = drawn().model_dump(mode="json")
+    wall, line = raw["sides"][3]["wall"], pt_y(EAVE_FT)
+    top = [[wall[0] + x * PT, line - h * PT] for x, h in rise]
+    raw["sides"][3] |= {"outline": [[wall[0], pt_y(-PLINTH_FT)], [wall[0], line], *top,
+                                    [wall[1], line], [wall[1], pt_y(-PLINTH_FT)]]}
+    return Markup.model_validate(raw)
+
+
+def test_tent_on_eaves_wall_becomes_wall_gable():
+    """Треугольник над карнизом внутри стены (gf#431, `facade: Щипец над карнизной стеной`) —
+    щипец листа: участок 7'–13', уклон 45° по вершине 3' над карнизом; крыша его строит. Подъём
+    стеной (вертикаль от карниза) и фронтон от края до края стены (левая стена `drawn`) — нет."""
+    sample, _ = manual.house(tented((7, 0), (10, 3), (13, 0)), CFG.data.manual)
+    (g,) = sample.sheet.wall_gables
+    assert (g.side, g.x0_m, g.x1_m) == (3, pytest.approx(ft(7)), pytest.approx(ft(13)))
+    assert g.pitch_deg == pytest.approx(45.0)
+    assert len(roof.roofs(sample.sheet).parts) == 2
+    step = tented((7, 0), (7, 3), (13, 3), (13, 0))
+    assert not manual.house(step, CFG.data.manual)[0].sheet.wall_gables
+
+
+def test_real_wall_gables():
+    """Фронтоны над карнизной стеной настоящих домов: ffh-julie — передний 14/12 над ядром,
+    ffh-western — 16/12 спереди и сзади; все строятся. У ffh-mae вершина фронтона по разметке выше
+    конька ядра (уклон и глубина ядра в параметрах дают конёк ниже листа) — щипец до конька."""
+    julie = manual.house(real("ffh-julie"), CFG.data.manual)[0].sheet
+    (g,) = julie.wall_gables
+    assert (g.side, round(g.x0_m, 2), round(g.x1_m, 2)) == (0, 2.05, 5.32)
+    assert math.tan(math.radians(g.pitch_deg)) * 12 == pytest.approx(14, abs=0.1)
+    house = roof.roofs(julie)  # на листе фронтон не закрыт ни скатом ядра, ни кровлей пристройки
+    (above,) = roof.house_above(house, 0)
+    view = shapely.union_all([shapely.Polygon(p) for p in roof.house_view(house, 0, 0.1)])
+    assert shapely.Polygon(above).intersection(view).area == pytest.approx(0.0, abs=1e-9)
+    western = manual.house(real("ffh-western"), CFG.data.manual)[0].sheet
+    assert [g.side for g in western.wall_gables] == [0, 6]
+    assert len(roof.roofs(western).parts) == len(western.wings) + 2
+    mae = manual.house(real("ffh-mae"), CFG.data.manual)[0].sheet
+    house = roof.roofs(mae)
+    (ext,) = [e for e in house.extensions if e.part >= len(mae.wings)]
+    gable = max(z for _, f in roof._part_faces(house, ext.part) for *_, z in f)
+    assert gable == pytest.approx(roof._ridge(house.parts[ext.into], ext.zone))

@@ -11,7 +11,16 @@ from genfacade import config, pipeline, roof
 from genfacade.models import stub
 from genfacade.plan.preprocess import preprocess
 from genfacade.render.svg import sheet_svg
-from genfacade.schema import Element, ElementClass, Facing, Mode, Roof, RoofKind, Rule
+from genfacade.schema import (
+    Element,
+    ElementClass,
+    Facing,
+    Mode,
+    Roof,
+    RoofKind,
+    Rule,
+    WallGable,
+)
 from genfacade.unfold import unfold
 from genfacade.validate import validate
 
@@ -238,3 +247,85 @@ def test_joint_wall_stands_on_the_part_whose_roof_is_higher():
     assert min(z for w in by_high[0].walls for *_, z in w) == pytest.approx(5.0)
     assert max(z for w in by_high[1].walls for *_, z in w) == pytest.approx(5.0)
     assert {round(x, 6) for w in by_high[0].walls for x, *_ in w} == {2.0, 6.0}  # от пересечения
+
+
+# ——— Щипец над карнизной стеной (gf#431, `facade: Щипец над карнизной стеной`) ———
+
+
+def gabled(pitch: float, *, end: bool = False, kind: RoofKind = RoofKind.GABLE):
+    """Простой дом с крышей вида kind и щипцом 2 м посередине карнизной стены (end — без карниза);
+    лист, номер стены и глубина дома поперёк неё."""
+    sheet = bare(kind)
+    eaves = roof.eave_walls(sheet)
+    k = next(k for k in range(4) if (k in eaves) != end)
+    length = sheet.facades[k].side.length_m
+    gable = WallGable(side=k, x0_m=length / 2 - 1, x1_m=length / 2 + 1, pitch_deg=pitch)
+    return sheet.model_copy(update={"wall_gables": [gable]}), k, sheet.facades[k - 1].side.length_m
+
+
+def visible(house: roof.HouseRoof, zone) -> list[tuple[float, float, float]]:
+    """Вершины граней обеих кровель внутри зоны продолжения."""
+    return [(x, y, z) for k in range(len(house.parts)) for _, f in roof._part_faces(house, k)
+            for x, y, z in f if zone.buffer(-1e-3).contains(shapely.Point(x, y))]
+
+
+def test_wall_gable_runs_from_the_wall_to_the_ridge():
+    """Щипец 2 м под 45° на карнизной стене: на стене — треугольник до карниза + 1 м над серединой
+    участка, на листе кровля его не закрывает; кровля щипца идёт от стены над скатом дома до конька
+    (глубина — половина дома), свес дома под щипцом прерван; в зоне видна более высокая кровля,
+    дыр в крыше нет."""
+    sheet, k, depth = gabled(45.0)
+    house = roof.roofs(sheet)
+    (ext,) = house.extensions
+    assert (ext.part, ext.into) == (1, 0) and len(house.parts) == 2
+    x0, y0, x1, y1 = ext.zone.bounds  # до конька и полоса свеса перед стеной
+    overhang = sheet.spec.roof.overhang_m
+    assert sorted([x1 - x0, y1 - y0]) == pytest.approx(sorted([2.0, depth / 2 + overhang]))
+    eaves = sheet.spec.eaves_m
+    (above,) = roof.house_above(house, k)
+    assert max(y for _, y in above) == pytest.approx(eaves + 1.0)
+    view = shapely.union_all([shapely.Polygon(p) for p in roof.house_view(house, k, 0.1)])
+    assert shapely.Polygon(above).intersection(view).area == pytest.approx(0.0, abs=1e-9)
+    parts = house.parts
+    seen = visible(house, ext.zone)
+    assert seen and all(z == pytest.approx(max(p.height((x, y)) for p in parts), abs=1e-6)
+                        for x, y, z in seen)
+    cover = shapely.union_all([shapely.Polygon([(x, y) for x, y, _ in f]).buffer(0)
+                               for f in roof.house_faces(house)])
+    assert shapely.Polygon(house.corners).difference(cover).area == pytest.approx(0.0, abs=1e-9)
+
+
+def test_wall_gable_above_the_ridge_stops_at_it():
+    """Щипец круче, чем позволяет конёк дома, — до конька: его вершина на высоте конька."""
+    sheet, k, depth = gabled(80.0)
+    house = roof.roofs(sheet)
+    assert len(house.parts) == 2
+    top = max(z for _, f in roof._part_faces(house, 1) for *_, z in f)
+    assert top == pytest.approx(ridge(sheet, depth))
+
+
+def test_wall_gable_on_shed_runs_up_to_the_high_wall():
+    """У односкатной скат поднимается от низкой стены до высокой — щипец на низкой идёт через весь
+    дом."""
+    sheet, k, depth = gabled(30.0, kind=RoofKind.SHED)
+    (ext,) = roof.roofs(sheet).extensions
+    x0, y0, x1, y1 = ext.zone.bounds
+    overhang = sheet.spec.roof.overhang_m
+    assert sorted([x1 - x0, y1 - y0]) == pytest.approx(sorted([2.0, depth + overhang]))
+
+
+def test_wall_gable_on_a_gable_end_is_not_built():
+    """На торцевой стене скат дома от стены не поднимается — щипцу некуда идти."""
+    sheet, _, _ = gabled(45.0, end=True)
+    assert len(roof.roofs(sheet).parts) == 1
+
+
+def test_wall_gable_must_stand_on_the_wall():
+    sheet, k, _ = gabled(45.0)
+    length = sheet.facades[k].side.length_m
+    with pytest.raises(ValueError, match="x"):
+        WallGable(side=k, x0_m=2.0, x1_m=2.0, pitch_deg=45.0)
+    data = sheet.model_dump() | {"wall_gables": [{"side": k, "x0_m": 1.0, "x1_m": length + 1,
+                                                  "pitch_deg": 45.0}]}
+    with pytest.raises(ValueError, match="не на стене"):
+        type(sheet).model_validate(data)

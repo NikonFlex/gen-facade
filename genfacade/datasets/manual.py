@@ -67,6 +67,7 @@ from genfacade.schema import (
     Split,
     Trim,
     VariantKind,
+    WallGable,
     WallRun,
     ZoneRole,
 )
@@ -285,7 +286,7 @@ def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
     plan, sheet = rect_house.assemble(spec, fp, laid, Source.MANUAL)
     facades = [f.model_copy(update={"zones": _zones(e, m, spec, f.side.length_m, r), "runs": r})
                for f, e, r in zip(sheet.facades, m.sides, runs, strict=True)]
-    sheet = sheet.model_copy(update={"facades": facades})
+    sheet = sheet.model_copy(update={"facades": facades, "wall_gables": _wall_gables(m, cfg)})
     if found:  # силуэт — ступенями по участкам, крылья — в плане (шаг 2)
         plan = plan.model_copy(update={"wings": rects})
         sheet = roof.with_covered(unfold(sheet.model_copy(update={
@@ -587,6 +588,36 @@ def _part_roofs(m: Markup, runs: list[list[WallRun]], spec: HouseSpec,
             "kind": mark.kind, "pitch_deg": mark.pitch_deg,
             "down_to": _down(m, mark.down, normals)})
     return [r or spec.roof for r in out] if m.part_roofs else []
+
+
+def _wall_gables(m: Markup, cfg: Manual) -> list[WallGable]:
+    """Щипцы над карнизными стенами по силуэту стены (gf#431): треугольник, что поднимается от
+    карниза и возвращается к нему внутри стены. У края стены — фронтон или ступень части, их
+    строит крыша части; вертикальный подъём от карниза — стена более высокой части."""
+    return [g for k, e in enumerate(m.sides) for g in _tents(m, k, e, cfg)]
+
+
+def _tents(m: Markup, k: int, e: Elevation, cfg: Manual) -> list[WallGable]:
+    """Треугольники над карнизом на силуэте стороны k: уклон — по высоте вершины над карнизом и
+    половине основания (масштаб вида один по обеим осям)."""
+    scale = m.px_per_m(e)
+    tol, edge, ring, out = cfg.eaves_tol_m * scale, cfg.length_tol_m * scale, e.outline, []
+    for i, a in enumerate(ring[:-1]):
+        j = next((j for j in range(i + 1, len(ring)) if ring[j][1] >= a[1] - tol), len(ring))
+        if j == i + 1 or j == len(ring) or ring[i + 1][0] - a[0] <= edge:
+            continue
+        b, top = ring[j], min(p[1] for p in ring[i + 1:j])
+        inside = e.wall[0] + edge < a[0] and b[0] < e.wall[1] - edge
+        if inside and abs(b[1] - a[1]) <= tol and abs(a[1] - _eaves_y(m, e, a[0], edge)) <= tol:
+            out.append(WallGable(side=k, x0_m=(a[0] - e.wall[0]) / scale,
+                                 x1_m=(b[0] - e.wall[0]) / scale,
+                                 pitch_deg=math.degrees(math.atan2(a[1] - top, (b[0] - a[0]) / 2))))
+    return out
+
+
+def _eaves_y(m: Markup, e: Elevation, x: float, tol: float) -> float:
+    """Карниз на виде в точке x стены, pt: участка карниза разметки, без него — дома."""
+    return next((s.y for s in e.eaves if s.x[0] - tol <= x <= s.x[1] + tol), m.tops_y(e)[-1])
 
 
 def _palette(m: Markup) -> list[Material]:
