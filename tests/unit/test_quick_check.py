@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from slow_report import Timings
 
 ROOT = Path(__file__).parents[2]
 # Признаки долгого модуля: обучение, оценка модели, признаки Inception, torch напрямую.
@@ -15,9 +16,11 @@ MARK = "pytestmark = pytest.mark.slow"
 
 
 def test_quick_check_skips_slow_tests():
-    """Без --testmon-forceselect testmon при `-m` гоняет все быстрые тесты (gf#293)."""
-    quick = '--testmon --testmon-forceselect -m "not slow"'
+    """Без --testmon-forceselect testmon при `-m` гоняет все быстрые тесты (gf#293); хук выбирает
+    по базе без трассировки, базу обновляет фон после коммита (gf#443)."""
+    quick = '--testmon-nocollect --testmon-forceselect -m "not slow"'
     assert quick in (ROOT / "tools" / "check.sh").read_text()
+    assert '--testmon --testmon-forceselect' in SCOPE.read_text()
 
 
 @pytest.mark.parametrize("path", sorted((ROOT / "tests").rglob("test_*.py")), ids=lambda p: p.name)
@@ -79,6 +82,20 @@ def test_docs_only_commit_skips_tests(clone):
     assert _sh(wt, "docs_only") != 0
 
 
+def test_docs_only_of_a_commit_reads_its_files(clone):
+    """post-commit спрашивает о сделанном коммите (gf#443): одни .md — базу testmon не обновлять."""
+    _, wt = clone
+    commit = ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m"]
+    (wt / "b.md").write_text("b\n")
+    _git(wt, "add", "b.md")
+    _git(wt, *commit, "b")
+    assert _sh(wt, "docs_only HEAD") == 0
+    (wt / "c.py").write_text("x = 1\n")
+    _git(wt, "add", "c.py")
+    _git(wt, *commit, "c")
+    assert _sh(wt, "docs_only HEAD") != 0
+
+
 def test_docs_only_with_cyrillic_name(clone):
     """git берёт в кавычки имя с не-ASCII буквами («Таблица.md» → "...md\"") —
     всё равно документ."""
@@ -96,3 +113,43 @@ def test_docs_only_commit_skips_hook_queue(clone, tmp_path):
     hook = (ROOT / "templates" / "githooks" / "pre-commit").read_text()
     branch = hook[hook.index("if docs_only"):hook.index("hook_lock.sh\" sh")]
     assert "exit" in branch and _sh(wt, "docs_only") == 0
+
+
+def test_quick_and_pr_checks_run_on_every_core():
+    """Новая функция в общем модуле выбирает больше половины тестов — в один поток 15+ минут
+    (gf#443): хук и проверка PR идут процессом на ядро."""
+    check = (ROOT / "tools" / "check.sh").read_text()
+    assert '-n auto --dist loadfile --testmon-nocollect' in check
+    assert 'pytest -q -n auto -m "not slow"' in check
+
+
+def test_long_unmarked_test_is_named_with_its_setup():
+    """Время теста — подготовка и вызов: тяжёлая фикстура ложится на первый тест; помеченный slow
+    и уборка не в счёт."""
+    t = Timings()
+    t.add("a", "setup", 8.0, {})
+    t.add("a", "call", 3.0, {})
+    t.add("b", "call", 12.0, {"slow": 1})
+    t.add("c", "teardown", 30.0, {})
+    t.add("d", "call", 4.0, {})
+    assert t.unmarked_over(10.0) == [("a", 11.0)]
+
+
+def test_refresh_after_commit_runs_testmon_in_background_without_git_env(clone, tmp_path):
+    """Фон после коммита (gf#443): pytest с трассировкой testmon, без переменных GIT_* хука, один
+    на дерево; post-commit его зовёт."""
+    _, wt = clone
+    seen = tmp_path / "seen"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake = bin_dir / "python3"
+    fake.write_text(f'#!/bin/sh\n{{ env | grep ^GIT_; echo "$@"; }} > {seen}\n')
+    fake.chmod(0o755)
+    env = {**CLEAN_ENV, "PATH": f"{bin_dir}:{os.environ['PATH']}", "GIT_INDEX_FILE": "x"}
+    code = subprocess.run(["sh", "-c", f". {SCOPE}; refresh_testmon_later; wait"],  # noqa: S603, S607
+                          cwd=wt, env=env).returncode
+    assert code == 0
+    text = seen.read_text()
+    assert "GIT_" not in text and "--testmon --testmon-forceselect" in text
+    hook = (ROOT / "templates" / "githooks" / "post-commit")
+    assert "refresh_testmon_later" in hook.read_text() and os.access(hook, os.X_OK)

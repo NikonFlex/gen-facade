@@ -70,6 +70,7 @@ def test_counts_match_config(client, cfg):
     assert set(names(client, "walls")) | set(names(client, "roofing")) == set(cfg.library.kinds)
 
 
+@pytest.mark.slow
 def test_every_item_is_drawn(client):
     """Каждый вид из выдачи рисуется: картинка по адресу из выдачи — SVG."""
     for section in client.get("/api/catalog").json()["sections"]:
@@ -80,6 +81,7 @@ def test_every_item_is_drawn(client):
             assert res.text.startswith("<svg"), item["image"]
 
 
+@pytest.mark.slow
 def test_new_kind_added_by_records_appears(tmp_path, client):
     """Вид, добавленный записью во временную копию конфига, появляется в каталоге без правки кода
     и страницы: материал стен, кровли, цвет и отделка."""

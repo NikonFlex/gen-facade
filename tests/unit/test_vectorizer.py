@@ -65,6 +65,7 @@ def test_palette_class_is_found_by_its_own_color(cfg):
         assert vectorizer.nearest(visual.rgb(color), cfg) is cls
 
 
+@pytest.mark.slow
 def test_clean_raster_gives_back_every_window_in_place(real, cfg, traced_by_stub, tmp_path):
     """Растр чистый, векторизатор не врёт: окна, двери и их число — как у эталона."""
     vectorizer.run(Backend.VTRACER, cfg, tmp_path, 0)
@@ -82,6 +83,7 @@ def test_clean_raster_gives_back_every_window_in_place(real, cfg, traced_by_stub
     assert report["window.matched"] == report["window.ref"] == len(real) * len(_windows(ref))
 
 
+@pytest.mark.slow
 def test_row_sheet_keeps_house_and_swaps_walls(real, cfg, traced_by_stub, tmp_path):
     vectorizer.run(Backend.VTRACER, cfg, tmp_path / "v", 0)
     row = vectorizer.write_row(real, tmp_path / "v", tmp_path / "row")
@@ -114,6 +116,7 @@ def test_damage_outcome_of_a_window(found, expected, cfg):
     assert damage.outcome(ref, found, cfg.baselines.vectorizer.match_iou) == expected
 
 
+@pytest.mark.slow
 def test_vectorizer_row_is_counted_on_the_houses_it_finished(real, cfg, traced_by_stub, tmp_path):
     """Не все дома готовы: в строке — готовые, остальные строки — и против тех же домов."""
     done = tmp_path / "evo"
@@ -215,6 +218,7 @@ def _two_windows_in_one_path(real, cfg, tmp_path) -> int:
     return len(windows)
 
 
+@pytest.mark.slow
 def test_visible_reading_splits_what_the_path_reading_merges(real, cfg, traced_by_stub, tmp_path):
     """Путь склеен из окон: картинка по-прежнему даёт каждое окно, а раздел путей — одно слитое."""
     count = _two_windows_in_one_path(real, cfg, tmp_path)
@@ -233,6 +237,7 @@ def _first_wall(cfg, tmp_path) -> str:
     return next((tmp_path / vectorizer.RASTERS).glob("*__h0__0.npy")).stem
 
 
+@pytest.mark.slow
 def test_path_whose_color_is_not_on_the_picture_is_hidden(real, cfg, traced_by_stub, tmp_path):
     _first_wall(cfg, tmp_path)
     answer = vectorizer._answers(tmp_path / vectorizer.TRACED)["h0"][0]
@@ -243,6 +248,7 @@ def test_path_whose_color_is_not_on_the_picture_is_hidden(real, cfg, traced_by_s
     assert vectorizer.hidden_paths(vectorizer.Answer(traced, answer.picture), cfg) == 1
 
 
+@pytest.mark.slow
 def test_panels_put_input_drawing_and_found_side_by_side(real, cfg, traced_by_stub, tmp_path):
     stem = _first_wall(cfg, tmp_path)
     (file,) = vectorizer.panels(tmp_path, [stem], cfg)

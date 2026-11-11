@@ -600,6 +600,7 @@ def real_house(name: str):
     return manual.house(manual.read(CONTOURS / f"{name}.toml"), CFG.data.manual)[0]
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("name", REAL)
 def test_real_house_with_narrow_steps_assembles_and_draws(name):
     """Выбор разреза не ломает сборку: крылья, на которых отметки карниза ложатся, находятся
@@ -612,6 +613,7 @@ def test_real_house_with_narrow_steps_assembles_and_draws(name):
     assert house_3d(sheet, CFG)["walls"]
 
 
+@pytest.mark.slow
 def test_sheet_keeps_its_own_part_numbers():
     """Крыша берёт крылья из листа, а не пересчитывает разбиение контура: лист с другим порядком
     крыльев (и номерами в участках) строится так же, как исходный."""
@@ -738,6 +740,7 @@ def test_model_gets_roof_zones_in_its_wall():
     assert got == [pytest.approx(w) for w in want] and got
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("name", REAL)
 def test_real_houses_are_not_rejected_by_roof_zones(name):
     """Реальные дома разметки: зоны есть, но рамки окон на них закрыты меньше чем наполовину —

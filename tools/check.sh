@@ -15,13 +15,15 @@ fast=""
 [ "${1:-}" = "--fast" ] && fast=1
 . tools/quick_scope.sh
 
+# У шага — его секунды: датчик долгого хука (gf#443), чтобы видеть, какой шаг тянет.
 run() {
     name=$1
     shift
+    start=$(date +%s)
     if out=$("$@" 2>&1); then
-        echo "ok    $name"
+        echo "ok    $name ($(( $(date +%s) - start )) с)"
     else
-        echo "FAIL  $name"
+        echo "FAIL  $name ($(( $(date +%s) - start )) с)"
         printf '%s\n' "$out" | tail -n 30 | sed 's/^/      /'
         failed=1
     fi
@@ -32,13 +34,21 @@ run() {
 # editable-пакет из другой папки. testmon следит за кодом на Python, а не за конфигами и
 # данными, — их ловит полный прогон в CI. `--testmon-forceselect`: с `-m` testmon сам отключает
 # отбор и гоняет все быстрые тесты — 7 минут на коммит вместо 16 с (замер 05.11, gf#293).
+# `-n auto --dist loadfile` — процесс на ядро, тесты файла — в одном процессе (фикстура модуля
+# строится раз): новая функция в общем модуле выбирает больше половины тестов (gf#443).
+# `--testmon-nocollect` — выбор по базе без трассировки: она вдвое замедляет тесты (546 тестов —
+# 464 с с ней, 208 без, замер 11.11); базу обновляет фон после коммита (`refresh_testmon_later`).
 pytest_or_none() {
+    # Кэш байткода — и переписанных assert pytest: без него каждый процесс xdist заново
+    # компилирует все модули, сборка тестов 28 с вместо 16 (окружение агента ставит
+    # PYTHONDONTWRITEBYTECODE=1, замер 11.11, gf#443); __pycache__ — в .gitignore.
+    unset PYTHONDONTWRITEBYTECODE
     if [ -n "$quick" ]; then
         docs_only && return 0    # одни .md — тестам нечего проверять (tools/quick_scope.sh)
         seed_testmon             # новое дерево — база testmon соседнего дерева, а не все тесты
-        python3 -m pytest -q --testmon --testmon-forceselect -m "not slow"
+        python3 -m pytest -q -n auto --dist loadfile --testmon-nocollect --testmon-forceselect -m "not slow"
     elif [ -n "$fast" ]; then
-        python3 -m pytest -q -m "not slow"
+        python3 -m pytest -q -n auto -m "not slow"
     else
         python3 -m pytest -q
     fi
@@ -54,7 +64,10 @@ openspec_validate() {
 }
 
 run "ruff" ruff check .
-run "pytest" pytest_or_none
+# pytest — фоном, пока идут остальные проверки (их ~50 с, gf#443); его строка — в конце.
+tests_out=$(mktemp)
+( run "pytest" pytest_or_none; echo "failed=$failed" ) >"$tests_out" 2>&1 &
+tests_pid=$!
 run "backlog.py --selftest" python3 tools/backlog.py --selftest
 run "secret_scan.py --selftest" python3 tools/secret_scan.py --selftest
 run "changelog.py --selftest" python3 tools/changelog.py --selftest
@@ -96,4 +109,8 @@ run "openspec validate --strict: docs/examples/project" openspec_validate docs/e
 run "context_check.py" python3 tools/context_check.py
 # data/ и materials/ — гигабайты чужих файлов вне git, поэтому только наши папки
 run "jscpd" npx -y jscpd@5.3.3 -c .jscpd.json genfacade tests tools .agents
+wait "$tests_pid"
+grep -v '^failed=' "$tests_out"
+grep -q '^failed=1' "$tests_out" && failed=1
+rm -f "$tests_out"
 exit $failed

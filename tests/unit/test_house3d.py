@@ -128,6 +128,7 @@ def _rich_houses(cfg) -> list[FacadeSheet]:
     return found
 
 
+@pytest.mark.slow
 def test_relief_tells_its_class_and_kind(cfg):
     """gf#305: форму выступа строит просмотр по его классу и форме — `house_3d` отдаёт класс
     (элемент) или роль (зона), а у козырька и подоконника — форма записи вида дома (derive.toml)."""
@@ -160,6 +161,7 @@ def _porch_of_height(cfg, height_m: float) -> dict:
     return next(b for w in walls for b in w["relief"] if b["cls"] is ElementClass.PORCH)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(("height_m", "steps"), [(0.61, 4), (7 * 0.17, 7), (0.17, 1), (0.18, 2)])
 def test_porch_steps_from_height(cfg, height_m, steps):
     """Число ступеней — высота крыльца, поделённая на высоту ступени (0,17 м), вверх: 0,61 м —

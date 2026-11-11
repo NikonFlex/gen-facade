@@ -174,6 +174,7 @@ def test_gable_roof_is_made_of_slopes(house, cfg):
     assert house_ifc(gabled, cfg).count(".ROOF.") >= 2
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("kind", [RoofKind.GABLE, RoofKind.HIP, RoofKind.SHED])
 def test_walls_do_not_stick_out_above_the_roof(kind, sheets, cfg):
     """Готово, когда (gf#392, 10.11): ни одна точка стены — ни на наружной, ни на внутренней

@@ -11,6 +11,7 @@ from itertools import count
 import pytest
 from contours import only, only_toml
 from simple_house import SIMPLE
+from slow_report import Timings
 
 from genfacade import config, pipeline
 from genfacade.datasets.synthetic import batch
@@ -28,6 +29,27 @@ from genfacade.schema import (
     Split,
     TextKind,
 )
+
+LIMIT = "slow_after_s"  # порог долгого теста — в pyproject.toml (gf#443)
+_timings = Timings()
+
+
+def pytest_addoption(parser):
+    parser.addini(LIMIT, "тест быстрого набора дольше, с, — кандидат в метку slow (gf#443)")
+
+
+def pytest_runtest_logreport(report):
+    _timings.add(report.nodeid, report.when, report.duration, report.keywords)
+
+
+def pytest_terminal_summary(terminalreporter, config):
+    """Тесты без метки slow дольше порога — строкой в выводе хука и CI: их пометить."""
+    limit = float(config.getini(LIMIT))
+    if found := _timings.unmarked_over(limit):
+        terminalreporter.write_sep("-", f"дольше {limit:g} с без метки slow (gf#443)")
+        for nodeid, seconds in found:
+            terminalreporter.write_line(f"{seconds:6.1f} с  {nodeid}")
+
 
 # Обучение и модель — в группе [train] с torch; CI её не ставит, и там эти тесты не собираются.
 collect_ignore = [] if find_spec("torch") else [

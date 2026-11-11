@@ -28,6 +28,7 @@ def _half(out, mode) -> dict:
     return json.loads((out / mode / "half" / "metrics.json").read_text())["rows"]
 
 
+@pytest.mark.slow
 def test_realtest_builds_rows_and_tables(real, cfg, tmp_path):
     realtest.run(cfg, tmp_path, 0, NO_ROWS)
     for mode in Mode:
@@ -38,6 +39,7 @@ def test_realtest_builds_rows_and_tables(real, cfg, tmp_path):
         assert [r["count"] for r in half.values()] == [2] * (len(realtest.SUBSTITUTES) + 1)
 
 
+@pytest.mark.slow
 def test_substitutes_never_meet_their_own_houses(real, cfg, tmp_path):
     """Подмена копирует у дома всё, кроме места окон (gf#268): она — из первой половины домов и
     сравнивается со второй, а не с теми домами, из которых сделана."""
@@ -49,6 +51,7 @@ def test_substitutes_never_meet_their_own_houses(real, cfg, tmp_path):
             assert own and not own & against, name
 
 
+@pytest.mark.slow
 def test_summary_has_every_row_of_both_modes(real, cfg, tmp_path):
     realtest.run(cfg, tmp_path, 0, NO_ROWS)
     lines = (tmp_path / realtest.SUMMARY).read_text().splitlines()
@@ -61,6 +64,7 @@ def test_summary_has_every_row_of_both_modes(real, cfg, tmp_path):
                     for m in Mode for n in names]
 
 
+@pytest.mark.slow
 def test_sheets_of_earlier_run_become_a_model_row(real, cfg, tmp_path):
     """Модель другой записи токенов ответила своим кодом: её листы — строкой этой таблицы."""
     earlier = tmp_path / "earlier"
@@ -93,6 +97,7 @@ def test_substitutes_are_calibration_rows():
     assert set(realtest.SUBSTITUTES) <= set(calibrate.ROWS)
 
 
+@pytest.mark.slow
 def test_slice_rows_hold_only_the_houses_of_the_slice(house, cfg, tmp_path, monkeypatch):
     """Срез `russian` (gf#328): строка `genplan@russian` — против эталона только домов из разметки
     папки источника; дом с похожим именем вне папки в срез не входит."""

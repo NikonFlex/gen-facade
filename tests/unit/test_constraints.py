@@ -497,6 +497,7 @@ def _second_wall(cfg, lay_out, mode, **side):
     return constraints.walls(bare.model_copy(update={"facades": facades}), mode, cfg)[1]
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("mode", list(Mode))
 def test_guard_never_bans_every_token(cfg, lay_out, vocab, mode):
     """Случайный ответ, которому страж не мешает: на каждом шаге есть что выбрать — иначе сэмплер
@@ -578,6 +579,7 @@ def test_window_types_one_value(cfg):
     assert tokens.size_tok(tokens.window_types(cfg)) not in tokens.vocabulary(cfg)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("mode", list(Mode))
 def test_reference_answer_passes_the_guard(cfg, vocab, mode):
     """Эталон корпуса — ответ синтетики — страж пропускает целиком: порядок проёмов плана

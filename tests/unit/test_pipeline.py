@@ -31,6 +31,7 @@ def _meta(out):
     return json.loads((out / pipeline.META).read_text())
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("mode", list(Mode))
 def test_simple_house_traces_all_six_steps(cfg, tmp_path, mode):
     """Вся цепочка на простом доме: шесть файлов шагов, лист без нарушений."""
@@ -67,6 +68,7 @@ def test_marks_only_on_sheet(cfg, tmp_path):
     assert "±0,000" in sheet and "Фасад в осях" in sheet
 
 
+@pytest.mark.slow
 def test_text_is_saved_and_same_text_gives_same_house(cfg, tmp_path):
     """Текст сохраняется в запросе; шаг 1 читает его (этажность, стиль, отделка), но тот же
     текст даёт тот же дом (`generation: Отделка без слов — от текста`)."""
@@ -80,6 +82,7 @@ def test_text_is_saved_and_same_text_gives_same_house(cfg, tmp_path):
     assert specs[0] == specs[1]
 
 
+@pytest.mark.slow
 def test_unfold_step_has_walls_but_no_elements(cfg, tmp_path):
     unfold_svg = (_generate(cfg, tmp_path / "run") / pipeline.UNFOLD).read_text()
     assert unfold_svg.count('class="wall"') == 4

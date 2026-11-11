@@ -15,7 +15,7 @@ genfacade = "genfacade.cli:main"
 
 [project.optional-dependencies]
 # pyyaml — для tools/spec_check.py, он проверяет входящие и в пакет не входит
-dev = ["pytest", "pytest-testmon>=2.2", "ruff", "pyyaml>=6", "httpx2", "pdfplumber>=0.11", "genfacade[viewer]"]
+dev = ["pytest", "pytest-testmon>=2.2", "pytest-xdist>=3.6", "ruff", "pyyaml>=6", "httpx2", "pdfplumber>=0.11", "genfacade[viewer]"]
 # смотрелка прогонов: genfacade serve
 # pdfplumber и Pillow — листы домов на странице /markup (gf#348)
 viewer = ["fastapi>=0.142", "uvicorn>=0.54", "pdfplumber>=0.11"]
@@ -38,4 +38,7 @@ testpaths = ["tests"]
 # общие данные тестов — tests/simple_house.py
 pythonpath = ["tests"]
 # долгие — вне быстрой проверки перед коммитом (`check.sh --quick`), в полном прогоне и CI (gf#165)
-markers = ["slow: тест дольше 30 с на машине разработки — Inception, калибровка, обучение"]
+# порог — время теста (подготовка и вызов) при прогоне в 4 процесса на машине разработки; дольше —
+# метка slow, датчик в выводе называет непомеченные (tests/slow_report.py, gf#443)
+slow_after_s = "5"
+markers = ["slow: тест дольше slow_after_s — сборка всех домов, синтетика на сотнях seed, Inception, обучение"]

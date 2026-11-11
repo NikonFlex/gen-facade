@@ -77,6 +77,7 @@ def _walls(houses):
     return [(h, f) for h in houses for f in h.sheet.facades]
 
 
+@pytest.mark.slow
 def test_every_house_passes_validator(houses, cfg):
     """Ни ошибок, ни предупреждений: окна разной высоты стоят верхом на одной линии."""
     assert [(h.id, v.message) for h in houses for v in validate(h.sheet, cfg.checks)] == []
@@ -353,6 +354,7 @@ def test_houses_differ_in_character(looks, cfg):
         assert kinds == set(getattr(cfg.synthetic.facade.trim, trim)), trim
 
 
+@pytest.mark.slow
 def test_sheets_survive_svg(houses, cfg):
     """JSON → SVG → разбор SVG даёт те же элементы и зоны (`facade: JSON и SVG — одно содержимое`) —
     на домах со всеми видами дверей, крыльцом и козырьком."""
@@ -369,6 +371,7 @@ def test_manifest_counts_blind_walls(houses, tmp_path):
     assert 0 < store.manifest(tmp_path, Source.SYNTHETIC)["blind_walls"] == blind < 40
 
 
+@pytest.mark.slow
 def test_slope_windows_cross_the_slope_and_zero_share_keeps_the_houses(houses, rect_cfg):
     """`data: Синтетика своим генератором` (gf#319): окно во фронтоне вида `slope` — рамка выходит
     за скат, контур не меньше `slope_share` рамки, дом проходит валидатор (в том числе наличник по

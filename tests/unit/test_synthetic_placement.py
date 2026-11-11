@@ -60,6 +60,7 @@ def test_default_placement_is_rules(cfg):
     assert cfg.synthetic.openings.placement is Placement.RULES
 
 
+@pytest.mark.slow
 def test_random_windows_do_not_share_head_line_unlike_rules(by_placement):
     """Правила ставят верх окон этажа на одну линию (доля ≈ 1); случайная расстановка — нет:
     остаются только случайные совпадения на сетке."""
@@ -69,6 +70,7 @@ def test_random_windows_do_not_share_head_line_unlike_rules(by_placement):
     assert rand < 0.5 and rand < rules / 2
 
 
+@pytest.mark.slow
 def test_answer_grammar_is_same_in_both_placements(by_placement):
     """Ответ в обоих режимах расстановки пишется токенами и разбирается обратно, в обоих режимах
     модели; брака мало — расстановка не ломает дома."""
@@ -80,6 +82,7 @@ def test_answer_grammar_is_same_in_both_placements(by_placement):
                 assert len(_windows(back)) == len(_windows(h.sheet)), h.id
 
 
+@pytest.mark.slow
 def test_house_has_at_most_allowed_window_types(by_placement):
     """Типоразмер окна — ширина и высота в шагах сетки; у дома их не больше, чем допускает свод
     (window_types) — в обоих режимах расстановки."""
@@ -103,6 +106,7 @@ def _wall_limits(wall, rules, eps, floors):
         assert all(c - b >= between - eps for (_, b), (c, _) in zip(row, row[1:], strict=False))
 
 
+@pytest.mark.slow
 def test_random_windows_keep_limits_of_plan_and_floor(by_placement):
     """Окна случайной расстановки: пределы стены (`_wall_limits`); целиком в своём этаже под
     перемычкой, не ниже нормы стража."""
@@ -119,6 +123,7 @@ def test_random_windows_keep_limits_of_plan_and_floor(by_placement):
             assert w.y_m + w.h_m <= levels[w.floor] - rules.facade.windows.lintel_m + eps, h.id
 
 
+@pytest.mark.slow
 def test_random_upper_floors_have_their_own_rows(by_placement):
     """У трёх этажей верхние ряды стены — не повтор нижнего и не повтор друг друга; у правил
     третий этаж повторяет второй."""
@@ -150,6 +155,7 @@ def test_random_batch_is_marked_with_its_placement(at):
     assert '"placement": "random"' in saved.read_text()
 
 
+@pytest.mark.slow
 def test_blind_walls_stay_blind_on_every_floor_when_random(by_placement):
     cfg, houses = by_placement[Placement.RANDOM]
     for h in houses:
