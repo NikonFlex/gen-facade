@@ -30,7 +30,7 @@ def _l_house(house: FacadeSheet) -> FacadeSheet:
 def _flat_roofed(sheet: FacadeSheet) -> FacadeSheet:
     """Дом под плоской крышей: карниз у него — выступ (под скатом — полоса на стене, gf#320)."""
     return sheet.model_copy(update={"spec": sheet.spec.model_copy(
-        update={"roof": Roof(kind=RoofKind.FLAT)})})
+        update={"roof": Roof(kind=RoofKind.FLAT)}), "roofs": [], "wall_gables": []})
 
 
 @pytest.fixture(params=["rectangle", "l-shape"])

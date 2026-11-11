@@ -54,7 +54,7 @@ def levels(spec: HouseSpec, plan: Plan, rule: Parts | None = None) -> list[Level
     уже `wing_min_m`; этажей у него `spec.wing_floors`, а без него — на `drop_floors` меньше.
     Без rule нижнее — любое неглавное крыло с `wing_floors`."""
     sizes = [_area(w) for w in plan.wings]
-    main = sizes.index(max(sizes)) if sizes else 0
+    main = main_wing(plan.wings)
     below = spec.wing_floors if spec.wing_floors is not None else (
         spec.floors - (rule.drop_floors if rule else 0))
     out = []
@@ -62,6 +62,12 @@ def levels(spec: HouseSpec, plan: Plan, rule: Parts | None = None) -> list[Level
         lower = k != main and _minor(w, sizes[main], rule)
         out.append(level(spec, max(1, min(below, spec.floors)) if lower else spec.floors))
     return out
+
+
+def main_wing(wings: list[Rect]) -> int:
+    """Номер главного крыла — наибольшего по площади (первого из равных); без крыльев — 0."""
+    sizes = [_area(w) for w in wings]
+    return sizes.index(max(sizes)) if sizes else 0
 
 
 def level(spec: HouseSpec, floors: int) -> Level:
