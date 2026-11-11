@@ -296,6 +296,21 @@ def test_wall_gable_runs_from_the_wall_to_the_ridge():
     assert uncovered(house) == pytest.approx(0.0, abs=1e-9)
 
 
+def test_wall_gable_roof_has_no_side_overhang_below_the_house_eave():
+    """Кровля щипца 53° не выходит за края участка (gf#431, снимок хозяина 11.11 — «плавники»):
+    за краями её свес висел бы под кромкой свеса дома 35°; ни одна её вершина не ниже карниза."""
+    sheet, _, _ = gabled(53.0)
+    house = roof.roofs(sheet)
+    (ext,) = house.extensions
+    eaves = sheet.spec.eaves_m
+    found = [p for _, f in roof._part_faces(house, ext.part) for p in f]
+    assert found and min(z for _, _, z in found) == pytest.approx(eaves)
+    union = shapely.union_all([shapely.Polygon([(x, y) for x, y, _ in f])
+                               for _, f in roof._part_faces(house, ext.part)])
+    assert union.difference(ext.zone).area == pytest.approx(0.0, abs=1e-9)
+    assert uncovered(house) == pytest.approx(0.0, abs=1e-9)
+
+
 def test_wall_gable_above_the_ridge_stops_at_it():
     """Щипец круче, чем позволяет конёк дома, — до конька: его вершина на высоте конька."""
     sheet, k, depth = gabled(80.0)
