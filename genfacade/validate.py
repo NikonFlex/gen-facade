@@ -54,7 +54,7 @@ FULL_LENGTH = (ZoneRole.PLINTH, ZoneRole.MAIN, ZoneRole.BAND)  # зоны во �
 
 def validate(sheet: FacadeSheet, cfg: Checks) -> list[Violation]:
     out = []
-    for f, above in zip(sheet.facades, roof.gables(sheet), strict=True):
+    for f, above in zip(sheet.facades, roof.sheet_gables(sheet), strict=True):
         out += _outside(f, above, sheet.spec, cfg) + _slope(f, above, sheet.spec, cfg)
         out += _overlaps(f, cfg) + _forbidden(f, cfg) + _plan_openings(f, cfg)
         out += _door_low(f, sheet.spec, cfg) + _panes(f, cfg) + _cornice(f, cfg)

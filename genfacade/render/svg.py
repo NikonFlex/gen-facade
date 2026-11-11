@@ -75,7 +75,7 @@ def tops(sheet: FacadeSheet, cfg: Config) -> list[Top]:
     house = roof.roofs(sheet)
     if house is None:
         return [NOTHING_ABOVE for _ in sheet.facades]
-    gables = roof.gables(sheet)
+    gables = roof.sheet_gables(sheet)
     out = []
     for k in range(len(sheet.facades)):
         walls, seams = roof.joint_view(house, k)

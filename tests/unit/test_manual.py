@@ -614,6 +614,29 @@ def test_tent_on_eaves_wall_becomes_wall_gable():
     assert not manual.house(step, CFG.data.manual)[0].sheet.wall_gables
 
 
+def test_tent_from_the_wall_corner_is_a_wall_gable_of_a_house_without_wings():
+    """Треугольник над карнизом, основание которого стоит на углу стены, у дома без крыльев —
+    щипец над стеной (ffh-georgia, gf#431): участок от угла, кровля без дыр; от угла до угла —
+    фронтон крыши дома, не щипец; у дома с крыльями угловой треугольник — часть крыла."""
+    sample, _ = manual.house(tented((0, 0), (3, 3), (6, 0)), CFG.data.manual)
+    (g,) = sample.sheet.wall_gables
+    assert (g.side, g.x0_m, g.x1_m) == (3, pytest.approx(0.0), pytest.approx(ft(6)))
+    assert uncovered(roof.roofs(sample.sheet)) == pytest.approx(0.0, abs=1e-6)
+    gable_end = tented((0, 0), (10, 5), (20, 0))
+    assert not manual.house(gable_end, CFG.data.manual)[0].sheet.wall_gables
+    marilyn = manual.house(real("ffh-marilyn"), CFG.data.manual)[0].sheet
+    assert marilyn.wings and not marilyn.wall_gables
+
+
+def test_real_georgia_has_wall_gables_at_the_corner():
+    """ffh-georgia: щипцы над карнизными стенами у угла — западная и восточная стены (16' от угла);
+    северный стоит на торце крыши дома, её фронтон его не строит. Кровля без дыр."""
+    sheet = manual.house(real("ffh-georgia"), CFG.data.manual)[0].sheet
+    assert sorted(g.side for g in sheet.wall_gables) == [1, 2, 3]
+    house = roof.roofs(sheet)
+    assert len(house.parts) == 3 and uncovered(house) == pytest.approx(0.0, abs=1e-6)
+
+
 def test_real_wall_gables():
     """Фронтоны над карнизной стеной настоящих домов: ffh-julie — передний 14/12 над ядром,
     ffh-western — 16/12 спереди и сзади; все строятся. У ffh-mae вершина фронтона по разметке выше
@@ -634,6 +657,34 @@ def test_real_wall_gables():
     (ext,) = [e for e in house.extensions if e.part >= len(mae.wings)]
     gable = max(z for _, f in roof._part_faces(house, ext.part) for *_, z in f)
     assert gable == pytest.approx(roof._ridge(house.parts[ext.into], ext.zone))
+
+
+def test_window_in_a_wall_gable_stays_on_the_sheet():
+    """Окно мансарды в щипце над карнизной стеной (ffh-julie, ffh-april, gf#431) остаётся окном
+    под скатом: в листе, выше карниза, этаж над домом; карниз под щипцом прерван, лист без брака."""
+    for house, side, n in (("ffh-julie", 0, 1), ("ffh-april", 0, 1)):
+        sheet = manual.house(real(house), CFG.data.manual)[0].sheet
+        high = [e for e in sheet.facades[side].elements if e.cls is ElementClass.WINDOW
+                and roof.under_roof(e, sheet.spec.floors)]
+        assert len(high) == n and all(e.y_m + e.h_m > sheet.spec.eaves_m for e in high)
+        assert not errors(validate(sheet, CFG.checks))
+    april = manual.house(real("ffh-april"), CFG.data.manual)[0].sheet
+    (g, *_) = april.wall_gables
+    cornice = [e for e in april.facades[g.side].elements if e.cls is ElementClass.CORNICE]
+    assert len(cornice) == 2 and not any(
+        e.x_m < g.x1_m - 1e-6 and e.x_m + e.w_m > g.x0_m + 1e-6 for e in cornice)
+
+
+def test_roofs_of_adjacent_parts_have_no_overhang_over_each_other():
+    """ffh-julie, боковые виды (gf#431): у стыка пристройки и ядра кровли смыкаются — свес одной не
+    висит над другой засечкой: у границы участков вершин кровли на расстоянии свеса нет."""
+    sheet = manual.house(real("ffh-julie"), CFG.data.manual)[0].sheet
+    house = roof.roofs(sheet)
+    over = sheet.spec.roof.overhang_m
+    for k in (1, 3):
+        joint = next(s.x1 for s in house.spans[k] if s.x1 < sheet.facades[k].side.length_m - 1e-6)
+        xs = [x for p in roof.house_view(house, k, 0.1) for x, _ in p]
+        assert not [x for x in xs if abs(abs(x - joint) - over) < 1e-3]
 
 
 @pytest.mark.slow

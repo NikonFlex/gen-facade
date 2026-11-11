@@ -9,17 +9,14 @@
 
 import random
 
-import shapely
-
 from genfacade import roof
 from genfacade.config import Composite, Config
+from genfacade.part_roofs import away
 from genfacade.parts import main_wing
 from genfacade.schema import (
     EPS,
     FacadeSheet,
-    Facing,
     OpeningKind,
-    Rect,
     Roof,
     RoofKind,
     WallGable,
@@ -46,24 +43,11 @@ def part_roofs(rng: random.Random, sheet: FacadeSheet, rules: Composite) -> list
     main = wings[main_wing(wings)]
     own = []
     for w in wings:
-        down = _away(main, w)
+        down = away(main, w)
         pitch = rng.choice(rules.part_pitch_deg)  # жребий — на каждое крыло, как бы ни вышло
         own.append(house if down is None else house.model_copy(update={
             "kind": RoofKind.SHED, "pitch_deg": pitch, "down_to": down}))
     return own
-
-
-def _away(main: Rect, wing: Rect) -> Facing | None:
-    """Сторона плана, в которую от общей стены с главным крылом уходит крыло; нет общей стороны
-    (крыло — то же главное или стоит не на нём) — None."""
-    shared = shapely.box(main.x0_m, main.y0_m, main.x1_m, main.y1_m).intersection(
-        shapely.box(wing.x0_m, wing.y0_m, wing.x1_m, wing.y1_m))
-    if not isinstance(shared, shapely.LineString) or shared.length <= EPS:
-        return None
-    x0, y0, x1, y1 = shared.bounds
-    if x1 - x0 <= EPS:  # общая стена — вертикальная, крыло правее или левее неё
-        return Facing.X_PLUS if wing.x0_m >= x0 - EPS else Facing.X_MINUS
-    return Facing.Y_PLUS if wing.y0_m >= y0 - EPS else Facing.Y_MINUS
 
 
 def _with_gable(rng: random.Random, sheet: FacadeSheet, rules: Composite) -> FacadeSheet:

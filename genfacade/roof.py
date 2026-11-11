@@ -315,6 +315,20 @@ def gables(sheet: FacadeSheet) -> list[Polygon | None]:
     return [None if line is None else above_eaves(line, k) for k in range(len(sheet.facades))]
 
 
+def sheet_gables(sheet: FacadeSheet) -> list[Polygon | None]:
+    """Зона фронтона листа для проверок, отрисовки и метрик: `gables` модели, а у стены со щипцом
+    над карнизом (`facade: Щипец над карнизной стеной`) — треугольник, который строит крыша (окно
+    мансарды в щипце остаётся окном под скатом). Условие и разметка шага 4 остаются на `gables`:
+    щипцов над стеной в корпусе обучения окон нет. Два щипца на одной стене — зона модели."""
+    base = gables(sheet)
+    house = roofs(sheet) if sheet.wall_gables else None
+    if house is None:
+        return base
+    sides = {g.side for g in sheet.wall_gables}
+    found = [house_above(house, k) if k in sides else [] for k in range(len(base))]
+    return [f[0] if len(f) == 1 else above for above, f in zip(base, found, strict=True)]
+
+
 def under_roof(e: Element, floors: int) -> bool:
     """Элемент этажа под скатом — окно во фронтоне и его выводимые элементы — по записи: этаж
     `floors + 1` ставят сборщик разметки, синтетика и модель, по нему ведут себя привязка, уровни
@@ -783,8 +797,22 @@ def house_view(house: HouseRoof, k: int, thickness: float) -> list[Polygon]:
         for q in (q for q in house.parts if front(q) > front(line) + EPS):
             xs = [(c[0] - left[0]) * u[0] + (c[1] - left[1]) * u[1] for c in q.corners]
             shape = shape.difference(shapely.box(min(xs), -1.0, max(xs), q.eaves))
-        shapes.append(shape)
+        shapes.append(_within_spans(shape, house, k, p))
     return polygons(shapely.union_all(shapes).intersection(window))
+
+
+def _within_spans(shape: shapely.Geometry, house: HouseRoof, k: int, part: int
+                  ) -> shapely.Geometry:
+    """Кровля части на виде стены k — в пределах её участков стены, свес — только у края стены:
+    у стыка с соседней частью кровли смыкаются, и свес одной не висит над другой засечкой. Часть,
+    что идёт над соседом (`extensions`), и часть без участка на стене — без обрезки."""
+    mine = [s for s in house.spans[k] if s.part == part]
+    if not mine or any(e.part == part for e in house.extensions):
+        return shape
+    length, over = axis(house.corners, k)[2], house.parts[part].overhang
+    return shape.intersection(shapely.union_all([
+        shapely.box(s.x0 - (over if s.x0 <= EPS else 0.0), -1.0,
+                    s.x1 + (over if s.x1 >= length - EPS else 0.0), FAR) for s in mine]))
 
 
 class Joint(NamedTuple):

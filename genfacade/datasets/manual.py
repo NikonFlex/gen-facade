@@ -35,6 +35,7 @@ import tomllib
 from collections import Counter
 from enum import StrEnum
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy
 import shapely
@@ -58,6 +59,7 @@ from genfacade.schema import (
     Model,
     OpeningVariant,
     PaletteRole,
+    Plan,
     Polygon,
     Rect,
     Roof,
@@ -263,53 +265,81 @@ def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
     raise refusal
 
 
-def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
-    fp = _outline(m, cfg)
+class _Contour(NamedTuple):
+    """Контур дома по разметке: длины, углы и нормали сторон, крылья, этажности частей, участки
+    сторон по частям (`runs`, у дома разной высоты) и по крыльям (`spans`), щипцы над стенами."""
+
+    lengths: list[float]
+    ring: list[Point]
+    normals: list[Point]
+    rects: list[Rect]
+    found: list[parts.Level]
+    runs: list[list[WallRun]]
+    spans: list[list[parts.Span]]
+    tents: list[WallGable]
+
+
+def _contour(m: Markup, fp: rect_house.Footprint, cfg: Manual, cut: bool) -> _Contour:
     lengths = [w.length for w in fp.walls]
     ring = [(float(v[0]) + 0.0, float(v[1]) + 0.0) for v in fp.vertices]
     normals = [(float(w.normal[0]), float(w.normal[1])) for w in fp.walls]
     rects, found = _levels(m, ring, lengths, cfg, cut)
-    runs = [parts.side_runs(k, lengths[k], ring[k], ring[(k + 1) % len(ring)], rects, found)
-            if found else [] for k in range(len(m.sides))]
-    spans = [parts.side_spans(k, lengths[k], ring[k], ring[(k + 1) % len(ring)], rects)
-             if rects else [] for k in range(len(m.sides))]
+    ends = [(ring[k], ring[(k + 1) % len(ring)]) for k in range(len(m.sides))]
+    runs = [parts.side_runs(k, lengths[k], *ends[k], rects, found) if found else []
+            for k in range(len(m.sides))]
+    spans = [parts.side_spans(k, lengths[k], *ends[k], rects) if rects else []
+             for k in range(len(m.sides))]
+    return _Contour(lengths, ring, normals, rects, found, runs, spans,
+                    _wall_gables(m, cfg, bool(rects)))
+
+
+def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
+    fp = _outline(m, cfg)
+    c = _contour(m, fp, cfg, cut)
     spec = _spec(m)
     spec = spec.model_copy(update={"roof": spec.roof.model_copy(
-        update={"down_to": _down(m, m.roof_down, normals)})})
+        update={"down_to": _down(m, m.roof_down, c.normals)})})
     raw = [_side_elements(e, m, spec) for e in m.sides]
-    # стороны плана — по проёмам первого этажа, фронтон — по крыше и сторонам: окна выше
-    # карниза на них не влияют. У дома из частей фронтона нет (`roof.gables`): его лист без
-    # участков, и контур читался бы одной крышей
-    none = [None] * len(raw)
-    _, walls = rect_house.assemble(spec, fp, _laid(raw, none, lengths, runs, spec, cfg)[0],
-                                   Source.MANUAL)
-    laid, dropped = _laid(raw, none if found else roof.gables(walls), lengths, runs, spec, cfg)
+    # стороны плана — по проёмам первого этажа, фронтон — по крыше листа без окон выше карниза
+    # (они на стороны не влияют): та же зона, что у валидатора и листа (`roof.sheet_gables`)
+    first = rect_house.assemble(spec, fp, _laid(raw, [None] * len(raw), c, spec, cfg)[0],
+                                Source.MANUAL)
+    laid, dropped = _laid(raw, roof.sheet_gables(_parted(*first, m, c)[1]), c, spec, cfg)
     spec = spec.model_copy(update={"trim": _trim([xs for _, xs in laid], cfg.trim)})
     plan, sheet = rect_house.assemble(spec, fp, laid, Source.MANUAL)
-    facades = [f.model_copy(update={"zones": _zones(e, m, spec, f.side.length_m, r), "runs": r})
-               for f, e, r in zip(sheet.facades, m.sides, runs, strict=True)]
-    sheet = sheet.model_copy(update={"facades": facades, "wall_gables": _wall_gables(m, cfg)})
-    if rects:  # крылья — в плане (шаг 2) и на листе; силуэт ступенями — только при разных высотах
-        plan = plan.model_copy(update={"wings": rects})
-        sheet = roof.with_covered(unfold(sheet.model_copy(update={
-            "wings": parts.sheet_wings(plan), "roofs": _part_roofs(m, spans, spec, normals)})))
-    elif m.part_roofs:
-        raise BadMarkup(f"{m.id}: крыши частей у дома без частей")
+    facades = [f.model_copy(update={"zones": _zones(e, m, spec, f.side.length_m, r)})
+               for f, e, r in zip(sheet.facades, m.sides, c.runs, strict=True)]
+    plan, sheet = _parted(plan, sheet.model_copy(update={"facades": facades}), m, c)
     sheet, bare = _no_eaves(sheet)
     return (Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet),
             dropped + bare)
 
 
-def _laid(raw: list[list[Element]], gables: list[Polygon | None], lengths: list[float],
-          runs: list[list[WallRun]], spec: HouseSpec,
+def _parted(plan: Plan, sheet: FacadeSheet, m: Markup, c: _Contour) -> tuple[Plan, FacadeSheet]:
+    """План и лист с участками сторон, щипцами над стенами и, у дома из крыльев, крыльями и крышами
+    частей (силуэт ступенями — только при разных высотах)."""
+    facades = [f.model_copy(update={"runs": r}) for f, r in zip(sheet.facades, c.runs, strict=True)]
+    sheet = sheet.model_copy(update={"facades": facades, "wall_gables": c.tents})
+    if not c.rects:
+        if m.part_roofs:
+            raise BadMarkup(f"{m.id}: крыши частей у дома без частей")
+        return plan, sheet
+    plan = plan.model_copy(update={"wings": c.rects})
+    return plan, roof.with_covered(unfold(sheet.model_copy(update={
+        "wings": parts.sheet_wings(plan),
+        "roofs": _part_roofs(m, c.spans, sheet.spec, c.normals)})))
+
+
+def _laid(raw: list[list[Element]], gables: list[Polygon | None], c: _Contour, spec: HouseSpec,
           cfg: Manual) -> tuple[list[tuple[int, list[Element]]], int]:
     """Элементы сторон, которые модуль держит, и сколько срезано целиком: во фронтоне — как есть
     (`_in_gable`), остальное — по стене до карниза (`_clipped`); подоконник или ставня срезанного
     окна (поперечный щипец над карнизной стеной) — с ним."""
     laid, dropped = [], 0
     for k, (elements, above) in enumerate(zip(raw, gables, strict=True)):
-        kept = [x for x in (_in_gable(x, lengths[k], above, spec, cfg)
-                            or _clipped(x, lengths[k], spec, cfg, runs[k]) for x in elements) if x]
+        kept = [x for x in (_in_gable(x, c.lengths[k], above, spec, cfg)
+                            or _clipped(x, c.lengths[k], spec, cfg, c.runs[k]) for x in elements)
+                if x]
         ids = {x.id for x in kept}  # выводимый элемент срезанного окна срезан с ним
         kept = [x for x in kept if x.parent is None or x.parent in ids]
         dropped += len(elements) - len(kept)
@@ -341,8 +371,25 @@ def _no_eaves(sheet: FacadeSheet) -> tuple[FacadeSheet, int]:
     for k, f in enumerate(sheet.facades):
         keep = [x for x in f.elements if not (x.cls is ElementClass.CORNICE and k not in eaves)]
         bare += len(f.elements) - len(keep)
-        facades.append(f.model_copy(update={"elements": keep}))
+        gaps = [(g.x0_m, g.x1_m) for g in sheet.wall_gables if g.side == k]
+        facades.append(f.model_copy(update={"elements": _cornice_gaps(keep, gaps)}))
     return sheet.model_copy(update={"facades": facades}), bare
+
+
+def _cornice_gaps(elements: list[Element], gaps: list[tuple[float, float]]) -> list[Element]:
+    """Карниз прерывается под щипцом над стеной (`facade: Щипец над карнизной стеной`): перед
+    стеной видна кровля щипца, и окно в нём стоит на уровне карниза. Кусок — под тем же классом,
+    с id от id карниза; уже не шире допуска — снимается."""
+    out = []
+    for x in elements:
+        if x.cls is not ElementClass.CORNICE or not gaps:
+            out.append(x)
+            continue
+        edges = [x.x_m, *(v for g in sorted(gaps) for v in g), x.x_m + x.w_m]
+        pieces = [(a, b) for a, b in zip(edges[::2], edges[1::2], strict=True) if b - a > EPS]
+        out += [x.model_copy(update={"id": x.id if i == 0 else f"{x.id}_{i}",
+                                     "x_m": a, "w_m": b - a}) for i, (a, b) in enumerate(pieces)]
+    return out
 
 
 def _bare(m: Markup, cfg: Manual) -> Markup:
@@ -593,29 +640,38 @@ def _part_roofs(m: Markup, spans: list[list[parts.Span]], spec: HouseSpec,
     return [r or spec.roof for r in out] if m.part_roofs else []
 
 
-def _wall_gables(m: Markup, cfg: Manual) -> list[WallGable]:
+def _wall_gables(m: Markup, cfg: Manual, winged: bool) -> list[WallGable]:
     """Щипцы над карнизными стенами по силуэту стены (gf#431): треугольник, что поднимается от
     карниза и возвращается к нему внутри стены. У края стены — фронтон или ступень части, их
-    строит крыша части; вертикальный подъём от карниза — стена более высокой части."""
-    return [g for k, e in enumerate(m.sides) for g in _tents(m, k, e, cfg)]
+    строит крыша части; вертикальный подъём от карниза — стена более высокой части. У дома без
+    крыльев части нет, и треугольник от угла стены — щипец над стеной (georgia)."""
+    return [g for k, e in enumerate(m.sides) for g in _tents(m, k, e, cfg, winged)]
 
 
-def _tents(m: Markup, k: int, e: Elevation, cfg: Manual) -> list[WallGable]:
+def _tents(m: Markup, k: int, e: Elevation, cfg: Manual, winged: bool) -> list[WallGable]:
     """Треугольники над карнизом на силуэте стороны k: уклон — по высоте вершины над карнизом и
     половине основания (масштаб вида один по обеим осям)."""
     scale = m.px_per_m(e)
     tol, edge, ring, out = cfg.eaves_tol_m * scale, cfg.length_tol_m * scale, e.outline, []
+    length = (e.wall[1] - e.wall[0]) / scale
     for i, a in enumerate(ring[:-1]):
         j = next((j for j in range(i + 1, len(ring)) if ring[j][1] >= a[1] - tol), len(ring))
         if j == i + 1 or j == len(ring) or ring[i + 1][0] - a[0] <= edge:
             continue
         b, top = ring[j], min(p[1] for p in ring[i + 1:j])
-        inside = e.wall[0] + edge < a[0] and b[0] < e.wall[1] - edge
-        if inside and abs(b[1] - a[1]) <= tol and abs(a[1] - _eaves_y(m, e, a[0], edge)) <= tol:
-            out.append(WallGable(side=k, x0_m=(a[0] - e.wall[0]) / scale,
-                                 x1_m=(b[0] - e.wall[0]) / scale,
+        if _in_wall(e, a[0], b[0], edge, winged) and abs(b[1] - a[1]) <= tol \
+                and abs(a[1] - _eaves_y(m, e, a[0], edge)) <= tol:
+            out.append(WallGable(side=k, x0_m=max(0.0, (a[0] - e.wall[0]) / scale),
+                                 x1_m=min((b[0] - e.wall[0]) / scale, length),
                                  pitch_deg=math.degrees(math.atan2(a[1] - top, (b[0] - a[0]) / 2))))
     return out
+
+
+def _in_wall(e: Elevation, x0: float, x1: float, edge: float, winged: bool) -> bool:
+    """Основание треугольника [x0, x1] — на стене: оба конца внутри; у дома без крыльев один конец
+    может стоять на углу стены, оба на углах — фронтон крыши дома, его строит она."""
+    inner = (e.wall[0] + edge < x0) + (x1 < e.wall[1] - edge)
+    return inner == 2 or (inner == 1 and not winged)
 
 
 def _eaves_y(m: Markup, e: Elevation, x: float, tol: float) -> float:

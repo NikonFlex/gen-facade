@@ -40,7 +40,7 @@ def storeys(sheet: FacadeSheet) -> FacadeSheet:
     пола этажа. Окно выше карниза на стене без фронтона — брак (`outside`), оно остаётся."""
     eaves = sheet.spec.eaves_m
     facades = []
-    for f, above in zip(sheet.facades, roof.gables(sheet), strict=True):
+    for f, above in zip(sheet.facades, roof.sheet_gables(sheet), strict=True):
         roofed = {e.id for e in f.elements if above is not None and roof.over_eaves(e, eaves)}
         facades.append(f.model_copy(update={"elements": [
             e for e in f.elements if e.id not in roofed and e.parent not in roofed]}))
