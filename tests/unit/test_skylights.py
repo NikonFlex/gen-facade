@@ -1,10 +1,10 @@
 """Мансардные окна (gf#456, `facade: Мансардное окно`, `generation: Мансардные окна по словам
 текста`): ряд окон в плоскости каждого карнизного ската главной части; на листе, в 3D и в IFC."""
 
-import hashlib
 import math
 
 import pytest
+import vocab
 from simple_house import with_side
 from test_part_roofs import GABLE, walls
 from test_roof import CFG, bare
@@ -189,7 +189,4 @@ def test_model_does_not_see_skylights():
     with_lights, without = house(2), house(0)
     assert (tokens.encode(with_lights, Mode.WITH_OPENINGS, CFG)
             == tokens.encode(without, Mode.WITH_OPENINGS, CFG))
-    vocab = tokens.vocabulary(CFG)
-    digest = hashlib.sha256("\n".join(vocab).encode()).hexdigest()
-    assert (len(vocab), digest) == (
-        484, "c59f16114f90164d618d12f34991a4a349d24999cdb3606bdaad3ade8e01dcdc")
+    assert vocab.fingerprint(CFG) == vocab.FROZEN
