@@ -5,7 +5,7 @@ import json
 import numpy
 import pytest
 
-from genfacade import cli
+from genfacade import cli, parts
 from genfacade.datasets import store
 from genfacade.datasets.synthetic import batch
 from genfacade.schema import Mode, Source, Split
@@ -17,7 +17,7 @@ HOUSES = 6
 @pytest.fixture
 def built(at):
     """Настройки и собранные синтетические дома; половина — в val, чтобы были обе части."""
-    cfg = at("data", "[build]\nval_share = 0.5\n")
+    cfg = at("data", "[build]\nval_share = 0.5\n[spec.composite]\npart_p = 0.0\n")
     batch.run(range(HOUSES), cfg)
     return cfg
 
@@ -79,6 +79,7 @@ def test_source_without_houses_is_refused(at):
 
 def test_tokens_command_writes_the_corpus(tmp_path, capsys):
     (tmp_path / "data.toml").write_text(f'[paths]\nsamples_dir = "{tmp_path / "samples"}"\n')
+    (tmp_path / "synthetic.toml").write_text("[spec.composite]\npart_p = 0.0\n")  # без ступеней
     cli.main(["-c", str(tmp_path), "synth", "-n", "3"])
     capsys.readouterr()
     cli.main(["-c", str(tmp_path), "tokens"])
@@ -87,3 +88,17 @@ def test_tokens_command_writes_the_corpus(tmp_path, capsys):
     (tmp_path / "data.toml").write_text(f'[paths]\nsamples_dir = "{tmp_path / "none"}"\n')
     with pytest.raises(SystemExit, match="корпус не собран"):
         cli.main(["-c", str(tmp_path), "tokens"])
+
+
+def test_stepped_synthetic_house_is_skipped_with_reason(at):
+    """Дом синтетики с пристройкой ниже главного (gf#455) в корпус не идёт: целиком его эталон
+    страж модели отвергает; в описи — почему."""
+    cfg = at("data", "[spec.composite]\npart_p = 1.0\n")
+    batch.run(range(4), cfg)
+    root = cfg.data.paths.samples_dir
+    stepped = {n for n in store.ids(root, Source.SYNTHETIC)
+               if parts.stepped(store.read(root, Source.SYNTHETIC, n).sheet)}
+    assert stepped, "среди seed 0–3 должен быть ступенчатый дом"
+    manifest = json.loads(corpus.build(Source.SYNTHETIC, cfg).read_text())
+    assert {n for n, why in manifest["skipped"].items() if why == corpus.STEPPED} == stepped
+    assert not stepped & {r[0] for r in _sequences(cfg)}
