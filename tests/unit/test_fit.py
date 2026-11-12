@@ -35,7 +35,8 @@ batch = 2
 """
 
 
-VAL_HALF = "[build]\nval_share = 0.5\n"
+# без ступенчатых домов (gf#455): они в корпус не идут, счёт домов — как задан
+VAL_HALF = "[build]\nval_share = 0.5\n[spec.composite]\npart_p = 0.0\n"
 
 
 @pytest.fixture

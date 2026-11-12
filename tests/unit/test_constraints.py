@@ -6,7 +6,7 @@ import pytest
 import shapely
 from simple_house import WALL_INTO_WINDOW, before_leaf
 
-from genfacade import roof, schema
+from genfacade import parts, roof, schema
 from genfacade.datasets.synthetic import build
 from genfacade.schema import ElementClass, Mode, ZoneRole
 from genfacade.train import constraints, tokens
@@ -586,12 +586,17 @@ def test_reference_answer_passes_the_guard(cfg, vocab, mode):
     (`tokens.ordered`) и нормы свода у корпуса и стража одни; иначе модель учится на ответах,
     которые страж обрывает (gf#212: обрывал 11 и 15 домов из 20)."""
     number = {w: i for i, w in enumerate(tokens.vocabulary(cfg))}
+    checked = 0
     for seed in range(20):
         sheet = build.sample(seed, cfg).sheet
+        if parts.stepped(sheet):  # в корпус не идёт (gf#455, `corpus.STEPPED`)
+            continue
+        checked += 1
         g = constraints.guard(tokens.bare(sheet), mode, vocab, cfg)
         for word in tokens.answer(sheet, mode, cfg)[1:]:
             assert number[word] not in set(g.banned()), (seed, word)
             g.step(number[word])
+    assert checked >= 10
 
 
 

@@ -16,7 +16,8 @@ from genfacade.train import corpus, evaluate, fit, tokens
 pytestmark = pytest.mark.slow
 
 HOUSES = 4
-VAL_HALF = "[build]\nval_share = 0.5\n"
+# без ступенчатых домов (gf#455): они в корпус не идут, счёт домов — как задан
+VAL_HALF = "[build]\nval_share = 0.5\n[spec.composite]\npart_p = 0.0\n"
 EVAL = "[eval]\ncount = 0\nbatch = 8\nuntrained = 2\n"
 
 

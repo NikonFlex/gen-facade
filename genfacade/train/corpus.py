@@ -15,6 +15,7 @@ from typing import NamedTuple
 
 import numpy
 
+from genfacade import parts
 from genfacade.config import Config
 from genfacade.datasets import store
 from genfacade.pipeline import git_sha
@@ -42,6 +43,12 @@ class Row(NamedTuple):
     ids: list[int]
 
 
+# Ступенчатый дом синтетики (пристройка ниже главного, gf#455): условие модели несёт один карниз
+# и не передаёт ступени, а генерация опрашивает модель по частям (`parts.sub_sheets`); целиком
+# его эталон страж отвергает — в корпус он не идёт, пока корпус не кодирует дом по частям.
+STEPPED = "дом из частей разной высоты: модель отвечает на части, а не на дом целиком"
+
+
 def build(source: Source, cfg: Config) -> Path:
     """Записать все дома источника токенами; вернуть путь к описи."""
     root = cfg.data.paths.samples_dir
@@ -53,6 +60,9 @@ def build(source: Source, cfg: Config) -> Path:
     skipped: dict[str, str] = {}
     for name in store.ids(root, source):
         sample = store.read(root, source, name)
+        if source is Source.SYNTHETIC and parts.stepped(sample.sheet):
+            skipped[name] = STEPPED
+            continue
         try:  # дом, который не записывается хотя бы в одном режиме, не берём ни в одном
             rows += [Row(name, sample.split, mode,
                          [number[t] for t in tokens.encode(sample.sheet, mode, cfg)])
