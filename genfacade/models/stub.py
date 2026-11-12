@@ -67,10 +67,16 @@ def spec_model(text: str, cfg: SpecStub) -> HouseSpec:
     kind = words.first(text, cfg.roof_words, cfg.stem_tail) or house.roof
     roof = cfg.roof_shape.roof(kind, base["roof"]["material"])
     return HouseSpec.model_validate(base | {"roof": roof.model_dump(),
-        "wing_floors": wing_floors, "floors": floors, "floor_heights_m": [height] * floors,
+        "wing_floors": wing_floors, "gable_over_entrance": gable_over_entrance(text, cfg),
+        "floors": floors, "floor_heights_m": [height] * floors,
         "style": style,
         "eaves_m": round(base["plinth_m"] + height * floors, 3),
         "trim": house.trim.model_dump(), "materials": [m.model_dump() for m in house.materials]})
+
+
+def gable_over_entrance(text: str, cfg: SpecStub) -> bool:
+    """Названо ли в тексте щипец над входом (gf#455)."""
+    return words.first(text, {True: cfg.entrance_gable_words}, cfg.stem_tail) is True
 
 
 def layout_model(wall: SideFacade, ctx: LayoutContext) -> SideFacade:

@@ -18,3 +18,8 @@ drop_floors = 1           # на сколько этажей нижнее кры
 # низом от главного; уклон — медиана пристроек настоящих домов (3/12)
 annex_shed = true
 annex_pitch_deg = 14.0
+# Щипец над входом, когда текст его назвал (gf#455): ширина и уклон — середины диапазонов синтетики
+# (config/synthetic.toml, [spec.composite]: доля участка 0,3–0,45, уклон 42–53°), дальше — решение агента
+entrance_gable_share = 0.375
+entrance_gable_pitch_deg = 47.0
+entrance_gable_min_m = 3.0

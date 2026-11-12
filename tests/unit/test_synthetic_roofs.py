@@ -3,11 +3,12 @@
 
 import pytest
 
-from genfacade import roof
+from genfacade import entrance_gable, roof
 from genfacade.config import Config
-from genfacade.datasets.synthetic import build, roofs
+from genfacade.datasets.synthetic import build
+from genfacade.part_roofs import wing_eaves
 from genfacade.parts import main_wing
-from genfacade.schema import FacadeSheet, Mode, OpeningKind, RoofKind
+from genfacade.schema import ElementClass, FacadeSheet, Mode, OpeningKind, RoofKind
 from genfacade.train import tokens
 
 SEEDS = range(300)
@@ -40,20 +41,42 @@ def _entrance_gable(sheet: FacadeSheet, cfg: Config):
     house = roof.roofs(bare)
     if sheet.spec.roof.kind is not RoofKind.GABLE or house is None:
         return None
-    found = roofs._over_entrance(bare, house, rules.wall_gable_share[1],
-                                 rules.wall_gable_pitch_deg[0], rules)
+    found = entrance_gable.over_entrance(bare, house, rules.wall_gable_share[1],
+                                         rules.wall_gable_pitch_deg[0], rules.wall_gable_min_m)
     if found is None:
         return None
     built = roof.roofs(bare.model_copy(update={"wall_gables": [found]}))
     return found if len(built.parts) == len(house.parts) + 1 else None
 
 
+def _own(sheet: FacadeSheet) -> bool:
+    return bool(sheet.roofs) and any(r != sheet.spec.roof for r in sheet.roofs)
+
+
 @pytest.mark.slow
 def test_share_of_own_part_roofs_follows_config(sheets, cfg):
-    suited = [s for s in sheets if _winged(s)]
-    own = [s for s in suited if s.roofs and any(r != s.spec.roof for r in s.roofs)]
-    assert len(suited) > 50
+    """Доля среди домов, где пристройка может встать ниже главного: такие дома — при вероятности 1
+    (тот же seed — тот же жребий уклона)."""
+    always = composite(cfg, part_p=1.0)
+    suited = {seed for seed in SEEDS if _own(build.sample(seed, always).sheet)}
+    own = {seed for seed, s in zip(SEEDS, sheets, strict=True) if _own(s)}
+    assert len(suited) > 30
+    assert own <= suited  # своя крыша — только где пристройка ниже главного
     assert abs(len(own) / len(suited) - cfg.synthetic.spec.composite.part_p) <= SHARE_TOL
+
+
+@pytest.mark.slow
+def test_own_roof_only_on_wings_lower_than_main(sheets):
+    """Решение 108: своя односкатная — у крыла ниже главного по карнизу; крылья одной высоты —
+    под крышей дома, у синтетики и у настоящих домов."""
+    seen = 0
+    for s in (s for s in sheets if _winged(s)):
+        eaves, main = wing_eaves(s), main_wing(s.wings)
+        for i, own in enumerate(s.roofs or [s.spec.roof] * len(s.wings)):
+            lower = eaves[i] < eaves[main] - 1e-6
+            assert (own != s.spec.roof) <= lower
+            seen += own != s.spec.roof
+    assert seen > 20
 
 
 @pytest.mark.slow
@@ -113,17 +136,39 @@ def test_wall_gable_is_over_entrance_inside_its_span(sheets, cfg):
     assert seen > 3
 
 
+@pytest.mark.slow
 def test_corpus_is_unchanged_by_roofs(cfg):
-    """При нулевых долях и при умолчаниях стены и условие модели одинаковы: крыши — после
-    раскладки и со своим потоком случайных чисел."""
+    """При нулевых долях и при умолчаниях стены и условие модели одинаковы у домов без ступеней:
+    крыши — после раскладки и со своим потоком случайных чисел; ступени — только у дома, которому
+    выпала пристройка под своей крышей (`roofs.annexed`)."""
     off = composite(cfg, part_p=0.0, wall_gable_p=0.0)
     changed = 0
     for seed in SAME_SEEDS:
         a, b = build.sample(seed, off).sheet, build.sample(seed, cfg).sheet
         assert not a.roofs and not a.wall_gables
         changed += bool(b.roofs or b.wall_gables)
+        if any(f.runs for f in b.facades):
+            continue
         assert [f.elements for f in a.facades] == [f.elements for f in b.facades]
         assert [f.zones for f in a.facades] == [f.zones for f in b.facades]
         assert a.spec == b.spec
         assert all(tokens.encode(a, m, cfg) == tokens.encode(b, m, cfg) for m in Mode)
     assert changed > 3  # тест не пустой: у умолчаний составные крыши есть
+
+
+@pytest.mark.slow
+def test_annex_house_is_built_in_steps_with_lower_wing(cfg):
+    """Дом с пристройкой под своей крышей — со ступенью: нижнее крыло ниже главного на этаж, у него
+    односкатная крыша, окна верхних этажей — по участкам (ни одно не выше карниза своей части)."""
+    always = composite(cfg, part_p=1.0)
+    stepped = [s for s in (build.sample(seed, always).sheet for seed in range(60))
+               if any(f.runs for f in s.facades)]
+    assert len(stepped) > 5
+    for s in stepped:
+        assert _own(s)
+        for f in s.facades:
+            for run in f.runs:
+                top = max((e.y_m + e.h_m for e in f.elements
+                           if run.x0_m - 1e-6 <= e.x_m and e.x_m + e.w_m <= run.x1_m + 1e-6
+                           and e.cls is ElementClass.WINDOW), default=0.0)
+                assert top <= run.eaves_m + 1e-6

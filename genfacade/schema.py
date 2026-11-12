@@ -612,6 +612,9 @@ class HouseSpec(Model):
     # Этажей у нижних частей дома (gf#322); нет — правило конвейера «меньшее крыло ниже»
     # (config/plan.toml, [parts]). Остальное — у главной части: floors, eaves_m, roof.
     wing_floors: int | None = Field(default=None, ge=1)
+    # Щипец над карнизной стеной со входом назван в тексте (gf#455); шаг 3 ставит его двускатному
+    # дому, у остальных признак игнорируется. Условие модели шага 4 его не читает.
+    gable_over_entrance: bool = False
 
     @model_validator(mode="after")
     def _check(self) -> "HouseSpec":

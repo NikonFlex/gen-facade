@@ -4,8 +4,8 @@ import random
 
 import shapely
 
-from genfacade import derive, pipeline, roof
-from genfacade.config import Config, Synthetic
+from genfacade import derive, parts, pipeline, roof
+from genfacade.config import Config, Parts, Synthetic
 from genfacade.datasets import genplan_writer
 from genfacade.datasets.synthetic import (
     contour,
@@ -20,6 +20,8 @@ from genfacade.datasets.synthetic import (
 from genfacade.datasets.synthetic.house import Look, house
 from genfacade.plan.preprocess import preprocess
 from genfacade.schema import (
+    EPS,
+    Element,
     FacadeSheet,
     GuidelineCheck,
     GuidelineUse,
@@ -62,23 +64,67 @@ def sample(seed: int, cfg: Config) -> Sample:
     # Свой поток случайных чисел: правка правил плана не меняет параметры дома, и наоборот.
     spec, look = house(random.Random(f"house/{seed}"), cfg,  # noqa: S311 — не криптография
                        sizes.pick(seed, syn))
-    sheet = lay_out(pipeline.walls(spec, floor), look, cfg,
-                    random.Random(f"upper/{seed}"),  # noqa: S311 — не криптография
-                    random.Random(f"gable/{seed}"))  # noqa: S311 — не криптография
+    bare = pipeline.walls(spec, floor, _lower_wings(cfg) if roofs.annexed(seed, spec, floor, cfg)
+                          else None)
+    if _straddled(bare):  # проём плана на ступени резать нечем: дом остаётся одной высоты
+        bare = pipeline.walls(spec, floor)
+    if any(f.runs for f in bare.facades):
+        sheet = lay_out_parts(bare, look, cfg, seed)
+    else:
+        sheet = lay_out(bare, look, cfg, random.Random(f"upper/{seed}"),  # noqa: S311
+                        random.Random(f"gable/{seed}"))  # noqa: S311 — не криптография
     # Крыши частей и щипец — после раскладки и со своим потоком: стены от них не зависят.
     sheet = roofs.compose(random.Random(f"roofs/{seed}"), sheet, cfg)  # noqa: S311
     return Sample(id=sample_id(seed), source=Source.SYNTHETIC, split=split(seed, syn),
                   plan=floor, sheet=sheet)
 
 
+def _straddled(sheet: FacadeSheet) -> bool:
+    """Проём плана лежит на границе участков стены: его пришлось бы резать, а окно получило бы
+    свой типоразмер и торчало бы за силуэт."""
+    return any(parts.clamped(o, f.runs).width_m < o.width_m - EPS
+               for f in sheet.facades for o in f.side.openings)
+
+
+def _lower_wings(cfg: Config) -> Parts:
+    """Правило частей для дома с пристройкой: нижнее крыло — по `[parts]`; крышу пристройки ставит
+    `roofs.compose` (свой уклон по жребию), а не правило генерации."""
+    return cfg.plan.parts.model_copy(update={"annex_shed": False})
+
+
+def lay_out_parts(sheet: FacadeSheet, look: Look, cfg: Config, seed: int) -> FacadeSheet:
+    """Раскладка дома из частей разной высоты: части одной этажности — «дом» для раскладки, как у
+    модели в конвейере (`pipeline._layout_parts`); окон во фронтоне у такого дома нет."""
+    subs = parts.sub_sheets(sheet)
+    place = _placer(random.Random(f"upper/{seed}"), sheet, look, cfg)  # noqa: S311
+    done = {n: lay_out(sub, look, cfg, random.Random(f"upper/{seed}/{n}"), place=place)  # noqa: S311
+            for n, (sub, _) in subs.items()}
+    merged = parts.merge(sheet, done, {n: pcs for n, (_, pcs) in subs.items()})
+    return merged.model_copy(update={"facades": [f.model_copy(update={
+        "elements": [_on_mm(e) for e in f.elements]}) for f in merged.facades]})
+
+
+def _on_mm(e: Element) -> Element:
+    """Элемент на миллиметрах: участок стороны режет проём вычитанием, и ширина окна выходит с
+    шумом 1e-16 — один типоразмер окна считался бы двумя (`generation: Типоразмеры окон дома`)."""
+    return e.model_copy(update={"x_m": round(e.x_m, 3), "w_m": round(e.w_m, 3)})
+
+
+def _placer(rng: random.Random, sheet: FacadeSheet, look: Look, cfg: Config) -> openings.Placer:
+    """Расстановка окон по вертикали: типоразмеры — на дом по ширинам окон плана `sheet`."""
+    return (openings.scattered(rng, sheet, look, cfg)
+            if cfg.synthetic.openings.placement is Placement.RANDOM
+            else openings.on_head_line(look, cfg.synthetic.facade.windows))
+
+
 def lay_out(sheet: FacadeSheet, look: Look, cfg: Config, rng: random.Random,
-            roof_rng: random.Random | None = None) -> FacadeSheet:
+            roof_rng: random.Random | None = None,
+            place: openings.Placer | None = None) -> FacadeSheet:
     """Раскладка всех стен дома при одних параметрах и одном характере; rng — окна верхних
-    этажей, которых нет в плане; roof_rng — окна во фронтоне (gf#321), None — без них."""
+    этажей, которых нет в плане; roof_rng — окна во фронтоне (gf#321), None — без них; place —
+    расстановка окон по вертикали, общая у частей дома (типоразмеры окон — на дом)."""
     spec, windows = sheet.spec, cfg.synthetic.facade.windows
-    place = (openings.scattered(rng, sheet, look, cfg)
-             if cfg.synthetic.openings.placement is Placement.RANDOM
-             else openings.on_head_line(look, windows))
+    place = place or _placer(rng, sheet, look, cfg)
     placed = []
     for f in sheet.facades:
         rows = upper.rows(rng, f.side, spec.floors, cfg)

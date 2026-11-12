@@ -637,6 +637,19 @@ def test_real_georgia_has_wall_gables_at_the_corner():
     assert len(house.parts) == 3 and uncovered(house) == pytest.approx(0.0, abs=1e-6)
 
 
+def test_real_western_wings_have_shed_roofs_sloping_outwards():
+    """ffh-western (gf#455): навесные скаты крыльев 2.5/12 — односкатные низом наружу, на запад у
+    западного крыла и на восток у восточного; ядро — двускатная крыша дома, щипцы те же."""
+    sheet = manual.house(real("ffh-western"), CFG.data.manual)[0].sheet
+    core, *wings = sheet.roofs
+    assert core == sheet.spec.roof
+    assert all(math.tan(math.radians(r.pitch_deg)) * 12 == pytest.approx(2.5, abs=0.05)
+               for r in wings)
+    assert {r.kind for r in wings} == {RoofKind.SHED}
+    assert {r.down_to for r in wings} == {Facing.X_MINUS, Facing.X_PLUS}
+    assert [g.side for g in sheet.wall_gables] == [0, 6]
+
+
 def test_real_wall_gables():
     """Фронтоны над карнизной стеной настоящих домов: ffh-julie — передний 14/12 над ядром,
     ffh-western — 16/12 спереди и сзади; все строятся. У ffh-mae вершина фронтона по разметке выше
