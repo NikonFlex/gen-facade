@@ -520,6 +520,17 @@ def own_parts(house: HouseRoof) -> list[int]:
     return order
 
 
+def main_part(house: HouseRoof) -> int:
+    """Главная часть дома — старшая по `_outranks` среди частей с участком на стене: щипцы над
+    карнизной стеной частями не считаются (gf#457: на ней стоят дормеры)."""
+    on_walls = sorted({s.part for side in house.spans for s in side})
+    best = on_walls[0]
+    for k in on_walls[1:]:
+        if _outranks(_line_rank(house.parts[k], k), _line_rank(house.parts[best], best)):
+            best = k
+    return best
+
+
 class Wing(NamedTuple):
     """Крыло дома для скатов: прямоугольник, карниз и крылья главнее него (`_outranks`)."""
 

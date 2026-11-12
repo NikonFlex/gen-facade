@@ -21,7 +21,7 @@ from typing import NamedTuple
 import numpy
 from pydantic import BaseModel
 
-from genfacade import entrance_gable, part_roofs, parts, roof
+from genfacade import dormers, entrance_gable, part_roofs, parts, roof
 from genfacade.config import Config, LayoutModel, Parts
 from genfacade.metrics import realism
 from genfacade.models import stub
@@ -361,6 +361,7 @@ def _prepare(req: PlanRun, svg: str, out: Path, cfg: Config, done: list[int]) ->
     _write(out, 2, plan, plan_svg(plan, cfg))
     done.append(2)
     bare = walls(spec, plan, cfg.plan.parts)
+    bare = dormers.on_eaves(bare)  # дормеры стаба шага 1 — по скатам плана (gf#457)
     _write(out, 3, bare, sheet_svg(bare, cfg, annotations=False))
     done.append(3)
     return bare

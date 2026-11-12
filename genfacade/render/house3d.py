@@ -13,7 +13,7 @@ import math
 
 import shapely
 
-from genfacade import parts, roof, roof_items, skylights, window_shape
+from genfacade import dormers, parts, roof, roof_items, skylights, window_shape
 from genfacade.config import Config, House3d
 from genfacade.derive import DERIVED
 from genfacade.render.svg import (
@@ -147,7 +147,12 @@ def _roof_shape(sheet: FacadeSheet, pen: Pen, corners: list[Point], look: House3
             windows += _gable_windows(f, (left, u), zones[k], sheet.spec.eaves_m, look,
                                       pen.cfg.checks.slope_offset_m)
     above += [wall for joint in roof.joints(house) for wall in joint.walls]
-    return {"faces": roof.house_faces(house), "above": above, "flat": None,
+    built = dormers.build(sheet, pen.cfg)  # слуховые окна (gf#457): вырез в кровле, куски дормера
+    found = dormers.solids(built, look.window_out_m)
+    above += found[dormers.Part.WALL]
+    windows += found[dormers.Part.GLASS]
+    return {"faces": dormers.cut(roof.house_faces(house), built) + found[dormers.Part.ROOF],
+            "above": above, "flat": None,
             "color": pen.colors.get(pen.roof or ""), "wall": pen.colors.get(PaletteRole.MAIN),
             "material": material, "wall_material": wall_material,
             "windows": windows, "glass": pen.cfg.library.fill.glass}

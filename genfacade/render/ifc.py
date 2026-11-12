@@ -18,7 +18,7 @@ from typing import NamedTuple
 import shapely
 import shapely.affinity
 
-from genfacade import parts, roof, roof_items, skylights, unfold
+from genfacade import dormers, parts, roof, roof_items, skylights, unfold
 from genfacade.config import Config
 from genfacade.render.house3d import house_3d
 from genfacade.render.ifc_step import STAR, Enum, Ref, Step, Typed, guid
@@ -242,7 +242,8 @@ class IfcHouse:
         self.w = Writer(name, cfg.ifc.tolerance)
         self.data = house_3d(sheet, cfg)
         house = roof.roofs(sheet)
-        self.faces = roof.house_faces(house) if house is not None else []
+        self.dormers = dormers.build(sheet, cfg)  # слуховые окна (gf#457)
+        self.faces = dormers.cut(roof.house_faces(house), self.dormers) if house else []
         self.levels = sheet.spec.floor_levels()
         self.roof_m = cfg.sheet.roof.thickness_m  # одна толщина кровли с листом и 3D (gf#447)
         self.storeys: list[Ref] = []
@@ -255,6 +256,7 @@ class IfcHouse:
         for k, f in enumerate(self.sheet.facades):
             self._wall(k, f)
         self._joints()
+        self._dormers()
         self._slabs()
         self._roof()
         self._roof_items()
@@ -520,6 +522,40 @@ class IfcHouse:
                 self.walls.append(ref)
                 self.contained[self._storey_at(wall[0][2])].append(ref)
 
+    def _dormers(self) -> None:
+        """Слуховые окна (gf#457): лицо со щипцом и щёчки — IfcWall (стена, как стена дома, а не
+        крыша), окно лица — IfcOpeningElement с IfcWindow, как у стены; крыша дормера — плиты
+        IfcSlab ROOF в составе IfcRoof дома (`_roof_faces`): крыша у дома одна, её части — скаты."""
+        for b in self.dormers:
+            self._dormer_face(b)
+            for i, cheek in enumerate(b.cheeks(), 1):
+                place, profile = self._plate(cheek.points, (*cheek.outward, 0.0), 0.0)
+                self._dormer_wall(b, f"cheek{i}", self.cfg.dormer.names.cheek, (place, profile))
+
+    def _dormer_face(self, b: dormers.Built) -> None:
+        """Лицо дормера: стена в плоскости лица, профиль — (s, z) по стене дома, окно — проём."""
+        w, f = self.w, b.frame
+        out = (-f.inward[0], -f.inward[1], 0.0)
+        place = w.place(self.building_place, f.at(0.0, b.profile.d0, 0.0), out, (*f.u, 0.0))
+        self._dormer_wall(b, "face", self.cfg.dormer.names.face, (place, w.polygon(b.face_ring)))
+        s0, z0, s1, z1 = b.window
+        e = Element(id=f"дормер {b.number}", cls=ElementClass.WINDOW, x_m=s0, y_m=z0,
+                    w_m=s1 - s0, h_m=z1 - z0)
+        self._opening(b.side, self.walls[-1], place, e)
+
+    def _dormer_wall(self, b: dormers.Built, part: str, name: str,
+                     shape: tuple[Ref, Ref]) -> None:
+        """IfcWall дормера: профиль на толщину стены дома внутрь от плоскости куска."""
+        w = self.w
+        color = self.pen.colors.get(PaletteRole.MAIN, self.cfg.library.fill.wall)
+        item = w.solid(shape[1], self.ifc.wall_thickness_m, color)
+        key = f"dormer{b.number}/{part}"
+        ref = w.product("IfcWall", key, name.format(n=b.number), shape[0], w.shape([item]), None,
+                        Enum("STANDARD"))
+        w.props(key, ref, "Pset_WallCommon", {"IsExternal": boolean(True)})
+        self.walls.append(ref)
+        self.contained[self._storey_at(b.profile.zb)].append(ref)
+
     def _under_roof(self, high: roof.Roofline, joint: roof.Joint, wall: list[Vec]) -> list[Vec]:
         """Стена над кровлей нижней части, выдавленная к высокой: верх не выше плиты кровли высокой
         (скат + толщина) на внутренней грани (там скат ниже) — иначе стена торчит над кровлей."""
@@ -606,8 +642,9 @@ class IfcHouse:
         выдавливается вниз по вертикали на толщину: низ — грань, торцы вертикальные (gf#447)."""
         house = roof.roofs(self.sheet)
         if house is not None:
+            faces = self.faces + dormers.solids(self.dormers, 0.0)[dormers.Part.ROOF]
             return [([(x, y, z + self.roof_m) for x, y, z in face], _up(_normal(face)))
-                    for face in roof.house_faces(house)]
+                    for face in faces]
         data = self.data["roof"]
         flat = [(shape["shape"], shape["height_m"]) for shape in data.get("slabs", [])]
         if data.get("flat"):

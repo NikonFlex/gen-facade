@@ -26,7 +26,9 @@ from genfacade.schema import (
     DataRole,
     Device,
     DoorShape,
+    DormerRoof,
     ElementClass,
+    Facing,
     GuidelineCheck,
     GuidelineUse,
     HouseScore,
@@ -478,6 +480,30 @@ class IfcExport(Section):
 
 class Ifc(Section):
     ifc: IfcExport
+
+
+class DormerNames(Section):
+    """Имена объектов дормера в IFC; {n} — номер дормера с единицы."""
+
+    face: str
+    cheek: str
+
+
+class DormerRules(Section):
+    """Слуховые окна (config/dormer.toml, gf#457): размеры лица, крыши и окна — для кода, который
+    их строит (genfacade/dormers.py); слова и вид по умолчанию для стаба — в SpecStub.dormer."""
+
+    face_offset_m: float = Field(gt=0)
+    face_top_m: float = Field(gt=0)
+    min_pitch_deg: float = Field(gt=0, lt=90)
+    below_ridge_m: float = Field(ge=0)
+    gable_pitch_deg: float = Field(gt=0, lt=90)
+    shed_pitch_deg: float = Field(gt=0, lt=90)
+    window_side_m: float = Field(ge=0)
+    window_sill_m: float = Field(ge=0)
+    window_head_m: float = Field(ge=0)
+    window_min_h_m: float = Field(gt=0)
+    names: DormerNames
 
 
 class Review(Section):
@@ -1053,6 +1079,17 @@ class SkylightWords(Section):
     default: int = Field(ge=1)             # окон на скат, если текст их называет
 
 
+class DormerStub(Section):
+    """Дормеры стаба шага 1 (gf#457, `generation: Слуховые окна по словам текста`): слова текста,
+    лицо и вид крыши по умолчанию, скаты, когда плана ещё нет (карнизы вдоль x: двускатный дом по
+    умолчанию — карнизные стены смотрят на ±y). С планом — `dormers.on_eaves`."""
+
+    words: list[str]
+    width_m: float = Field(gt=0)
+    roof: DormerRoof
+    facings: list[Facing]
+
+
 class SpecStub(Section):
     default_finish: str                    # отделка дома без описания
     stem_tail: int                         # букв после основы, при которых слово совпало
@@ -1064,6 +1101,7 @@ class SpecStub(Section):
     material_words: dict[str, list[str]]   # вид стен из библиотеки → слова в тексте
     material_like: dict[str, str] = {}     # вид → общий вид: слова общего называют и этот вид
     trim_words: dict[Trim, list[str]]      # выводимый элемент → слова в тексте
+    dormer: DormerStub                     # слуховые окна: слова, лицо, вид крыши (gf#457)
     kind_words: dict[str, dict[str, list[str]]]  # элемент → вид (derive.toml) → слова в тексте
     roof_words: dict[RoofKind, list[str]]  # вид крыши → слова в тексте (gf#320)
     entrance_gable_words: list[str]        # слова «щипец над входом» (gf#455)
@@ -1337,6 +1375,7 @@ class Config(Section):
     guidelines: Guidelines
     derive: Derive
     ifc: IfcExport
+    dormer: DormerRules
     css: str
 
     @model_validator(mode="after")
@@ -1391,6 +1430,7 @@ def load(*user_dirs: Path) -> Config:
         guidelines=guidelines,
         derive=Derive(**_toml("derive.toml", user_dirs)),
         ifc=Ifc(**_toml("ifc.toml", user_dirs)).ifc,
+        dormer=DormerRules(**_toml("dormer.toml", user_dirs)),
         css=css,
     )
 
