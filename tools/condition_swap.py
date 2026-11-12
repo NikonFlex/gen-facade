@@ -4,7 +4,7 @@
 этот признак (сдвиг условия: у синтетики обучения такого не бывает).
 
 Запуск (на GPU — `gpu.yml job=swap`; на процессоре — больше 5 минут на дом):
-    python3 tools/condition_swap.py <чекпойнт> <выход> [вариант …] [-c ПАПКА] [--mode РЕЖИМ]
+    python3 tools/condition_swap.py <чекпойнт> <выход> [вариант …] [-c ПАПКА] [--mode РЕЖИМ …]
         [--limit N] [--seed N]
 Листы — <выход>/<вариант>/<режим>/<дом>.json, как в `genfacade realtest`.
 
@@ -22,46 +22,58 @@ from collections.abc import Callable
 from pathlib import Path
 
 from genfacade import config
+from genfacade.config import Config
 from genfacade.metrics import calibrate
 from genfacade.metrics.realtest import answers
-from genfacade.schema import FacadeSheet, Material, Mode, Source, Split
+from genfacade.schema import FacadeSheet, Material, Mode, PaletteRole, Source, Split
 from genfacade.train.tokens import given_sides
 
 STYLE = "classic"
-ROLE_KINDS = {"main": "wood", "plinth": "brick", "accent": "siding", "trim": "metal",
-              "roof": "metal_roof"}  # роли палитры синтетики и частые у неё виды
-FLOOR_M = (2.5, 3.0)  # высоты этажей синтетики (config/synthetic.toml)
+ROLE_KINDS = {PaletteRole.MAIN: "wood", PaletteRole.PLINTH: "brick", PaletteRole.ACCENT: "siding",
+              PaletteRole.TRIM: "metal", PaletteRole.ROOF: "metal_roof"}  # частые виды синтетики
+
+Variant = Callable[[FacadeSheet, Config], FacadeSheet]
 
 
 def _spec(s: FacadeSheet, **update: object) -> FacadeSheet:
     return s.model_copy(update={"spec": s.spec.model_copy(update=update)})
 
 
-def style(s: FacadeSheet) -> FacadeSheet:
+def style(s: FacadeSheet, _cfg: Config) -> FacadeSheet:
     return _spec(s, style=STYLE)
 
 
-def roof_material(s: FacadeSheet) -> FacadeSheet:
-    if any(m.id == "roof" for m in s.spec.materials):
+def roof_material(s: FacadeSheet, _cfg: Config) -> FacadeSheet:
+    if any(m.id == PaletteRole.ROOF for m in s.spec.materials):
         return s
-    return _spec(s, materials=[*s.spec.materials, Material(id="roof", kind=ROLE_KINDS["roof"])])
+    roof = Material(id=PaletteRole.ROOF, kind=ROLE_KINDS[PaletteRole.ROOF])
+    return _spec(s, materials=[*s.spec.materials, roof])
 
 
-def materials(s: FacadeSheet) -> FacadeSheet:
+def materials(s: FacadeSheet, _cfg: Config) -> FacadeSheet:
     have = {m.id: m for m in s.spec.materials}
     return _spec(s, materials=[have.get(r) or Material(id=r, kind=k)
                                for r, k in ROLE_KINDS.items()])
 
 
-def floors(s: FacadeSheet) -> FacadeSheet:
-    return _spec(s, floor_heights_m=[min(max(h, FLOOR_M[0]), FLOOR_M[1])
-                                     for h in s.spec.floor_heights_m])
+def floors(s: FacadeSheet, cfg: Config) -> FacadeSheet:
+    """Высоты этажей — в пределы профиля синтетики «как GenPlan» (real_share 0 — он у всех)."""
+    low, high = cfg.synthetic.sizes.genplan.floor_height_m
+    return _spec(s, floor_heights_m=[min(max(h, low), high) for h in s.spec.floor_heights_m])
 
 
-VARIANTS: dict[str, Callable[[FacadeSheet], FacadeSheet]] = {
-    "base": lambda s: s, "style": style, "roof_material": roof_material, "materials": materials,
-    "floors": floors, "style_materials": lambda s: materials(style(s)),
-    "all": lambda s: floors(materials(style(s)))}
+def _chain(*steps: Variant) -> Variant:
+    def run(s: FacadeSheet, cfg: Config) -> FacadeSheet:
+        for step in steps:
+            s = step(s, cfg)
+        return s
+    return run
+
+
+VARIANTS: dict[str, Variant] = {
+    "base": _chain(), "style": style, "roof_material": roof_material, "materials": materials,
+    "floors": floors, "style_materials": _chain(style, materials),
+    "all": _chain(style, materials, floors)}
 
 
 def main() -> int:
@@ -70,7 +82,7 @@ def main() -> int:
     ap.add_argument("out", type=Path)
     ap.add_argument("variants", nargs="*", help=f"из {', '.join(VARIANTS)}; нет — все")
     ap.add_argument("-c", "--config", type=Path, action="append", default=[])
-    ap.add_argument("--mode", type=Mode, default=Mode.BLIND)
+    ap.add_argument("--mode", type=Mode, action="append", help="нет — все режимы")
     ap.add_argument("--limit", type=int, default=0, help="первых домов; 0 — все")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
@@ -84,11 +96,12 @@ def main() -> int:
     names = sorted(real)[: args.limit or None]
     if not names:
         raise SystemExit("нет настоящих домов реального теста: samples_dir без manual/")
-    for v in args.variants or VARIANTS:
-        start = time.time()
-        given = {n: given_sides(VARIANTS[v](real[n]), args.mode) for n in names}
-        answers(given, args.mode, cfg, args.out / v / args.mode.value)
-        print(f"{v}: {len(names)} домов, {time.time() - start:.0f} с", flush=True)
+    for mode in args.mode or Mode:
+        for v in args.variants or VARIANTS:
+            start = time.time()
+            given = {n: given_sides(VARIANTS[v](real[n], cfg), mode) for n in names}
+            answers(given, mode, cfg, args.out / v / mode.value)
+            print(f"{mode.value} {v}: {len(names)} домов, {time.time() - start:.0f} с", flush=True)
     return 0
 
 

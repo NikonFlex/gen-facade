@@ -266,12 +266,9 @@ jobs:
           mkdir -p "$cfg" "$OUT"
           printf '[paths]\nsamples_dir = "%s"\n' "$SAMPLES" > "$cfg/data.toml"
           genfacade -c "$cfg" manual
-          for which in train pretrain; do
-            [ -f "model/$which/model.pt" ] || continue
-            for mode in blind with_openings; do
-              python tools/condition_swap.py "model/$which/model.pt" "$OUT/swap/$which" \
-                -c "$cfg" --mode "$mode"
-            done
+          # модели — те, что скачали шаги выше по model_artifact: model/train, model/pretrain
+          for dir in model/*/; do
+            python tools/condition_swap.py "$dir/model.pt" "$OUT/swap/$(basename "$dir")" -c "$cfg"
           done
 
       - name: Результат подмены
