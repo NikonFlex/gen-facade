@@ -29,6 +29,9 @@ roof_slab = "Скат {n}"
 shutter = "Ставня {id}"
 canopy = "Козырёк {id}"
 porch = "Крыльцо {id}"
+chimney = "Дымовая труба"
+gutter = "Желоб {n}"
+pipe = "Водосточная труба {n}"
 
 [ifc.pset]
 facade = "GenFacade"       # набор свойств объекта: сторона листа, id элемента, материал

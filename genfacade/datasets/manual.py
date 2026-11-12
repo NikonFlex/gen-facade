@@ -41,7 +41,7 @@ import numpy
 import shapely
 from pydantic import Field, ValidationError, model_validator
 
-from genfacade import derive, parts, roof, window_shape
+from genfacade import derive, parts, roof, roof_items, window_shape
 from genfacade.config import Config, Manual
 from genfacade.datasets import rect_house, store
 from genfacade.plan.wings import candidates, edge_runs
@@ -179,6 +179,14 @@ class PartRoofMark(Model):
         return self
 
 
+class ChimneyMark(Model):
+    """Дымовая труба с чертежа (gf#454): центр трубы на виде стороны `side` в x pt — по нему
+    сборщик находит место на коньке главной части (`HouseSpec.chimney`)."""
+
+    side: int = Field(ge=0)
+    x: float
+
+
 def _checked(kind: RoofKind, pitch: float, down: int | None) -> None:
     """Вид, уклон и направление крыши разметки сходятся (`Roof`): ошибка — при чтении файла."""
     Roof(kind=kind, pitch_deg=pitch, down_to=None if down is None else Facing.X_PLUS)
@@ -198,6 +206,8 @@ class Markup(Model):
     # пусто — правило вида: двускатная — карнизы на длинных стенах, односкатная — низ у входа.
     roof_down: int | None = Field(default=None, ge=0)
     part_roofs: list[PartRoofMark] = []  # свои крыши частей; у остальных — крыша дома
+    chimney: ChimneyMark | None = None  # дымовая труба на чертеже (gf#454); нет — трубы нет
+    gutters: bool = False  # водосток на чертеже (gf#454)
     unit: Unit           # единица отметок и масштаба
     pt_per_unit: float = Field(gt=0)
     material: str        # вид основной отделки из library.toml
@@ -321,8 +331,37 @@ def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
                for f, e, r in zip(sheet.facades, m.sides, c.runs, strict=True)]
     plan, sheet = _parted(plan, sheet.model_copy(update={"facades": facades}), m, c)
     sheet, bare = _no_eaves(sheet)
+    sheet = _roof_items(sheet, m, cfg)
     return (Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet),
             dropped + bare)
+
+
+def _roof_items(sheet: FacadeSheet, m: Markup, cfg: Manual) -> FacadeSheet:
+    """Труба и водосток разметки в параметрах дома (gf#454): труба — доля конька главной части,
+    ближайшая к центру трубы на виде (проекция его точки на конёк, в пределах 0–1: центр за краем
+    стены — труба у торца конька). Ошибка разметки: неверная сторона, x дальше края кровли на
+    `chimney_beyond_m`, дом без конька."""
+    spec = sheet.spec.model_copy(update={"gutters": m.gutters})
+    mark = m.chimney
+    if mark is None:
+        return sheet.model_copy(update={"spec": spec})
+    if mark.side >= len(m.sides):
+        raise BadMarkup(f"{m.id}: труба на стороне {mark.side}, а сторон {len(m.sides)}")
+    e, length = m.sides[mark.side], sheet.facades[mark.side].side.length_m
+    x = (mark.x - e.wall[0]) / m.px_per_m(e)
+    reach = sheet.spec.roof.reach + cfg.chimney_beyond_m  # труба снаружи у щипца — у торца конька
+    if not -reach <= x <= length + reach:
+        raise BadMarkup(f"{m.id}: {e.view}: труба на x {mark.x} — вне кровли")
+    house = roof.roofs(sheet)
+    found = None if house is None else roof_items.ridge(house.parts[roof.own_parts(house)[0]])
+    if house is None or found is None:
+        raise BadMarkup(f"{m.id}: труба у дома без конька")
+    (ax, ay), (bx, by), _ = found
+    left, u, _ = roof.axis(house.corners, mark.side)
+    px, py = left[0] + u[0] * x - ax, left[1] + u[1] * x - ay
+    run = (bx - ax) ** 2 + (by - ay) ** 2
+    at = min(1.0, max(0.0, (px * (bx - ax) + py * (by - ay)) / run)) if run > EPS else 0.0
+    return sheet.model_copy(update={"spec": spec.model_copy(update={"chimney": at})})
 
 
 def _parted(plan: Plan, sheet: FacadeSheet, m: Markup, c: _Contour) -> tuple[Plan, FacadeSheet]:

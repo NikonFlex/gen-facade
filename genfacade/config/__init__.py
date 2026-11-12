@@ -199,6 +199,19 @@ class RoofDrawing(Section):
     thickness_m: float = Field(gt=0)  # кровля: одна толщина на листе, в 3D и в IFC (gf#447)
 
 
+class RoofItemsLook(Section):
+    """Труба и водосток на кровле (gf#454): размеры из СНиП 41-01-2003 п. 6.6.12 (труба выше
+    конька на 0,5 м) и каталогов Grand Line (желоб 125 мм, труба 90 мм); цвета листа и 3D."""
+
+    chimney_m: float = Field(gt=0)       # сторона квадратного сечения трубы в плане
+    chimney_over_m: float = Field(gt=0)  # верх трубы выше конька (у односкатной — высокой кромки)
+    gutter_m: float = Field(gt=0)        # желоб: сторона сечения
+    pipe_m: float = Field(gt=0)          # водосточная труба: диаметр
+    pipe_inset_m: float = Field(ge=0)    # труба от угла дома вдоль стены
+    chimney_fill: str
+    gutter_fill: str
+
+
 class Sheet(Section):
     sheet: SheetLayout
     ground: Ground
@@ -207,6 +220,7 @@ class Sheet(Section):
     door: DoorLook
     trim: TrimLook
     roof: RoofDrawing
+    roof_items: RoofItemsLook
     title: Title
     preview: Preview
     plan: PlanLook
@@ -423,6 +437,9 @@ class IfcNames(Section):
     shutter: str
     canopy: str
     porch: str
+    chimney: str
+    gutter: str   # {n} — номер
+    pipe: str     # {n} — номер
 
 
 class IfcPset(Section):
@@ -605,6 +622,7 @@ class Manual(Section):
 
     paths: ManualPaths
     length_tol_m: float
+    chimney_beyond_m: float
     eaves_tol_m: float
     wall_m: float
     inside_share: float
@@ -1031,6 +1049,10 @@ class SpecStub(Section):
     roof_words: dict[RoofKind, list[str]]  # вид крыши → слова в тексте (gf#320)
     entrance_gable_words: list[str]        # слова «щипец над входом» (gf#455)
     roof_shape: RoofShape                  # уклон и свес по виду крыши — и синтетике
+    chimney_words: list[str]               # слова трубы, печи, камина (gf#454); «без» — трубы нет
+    chimney_at: float = Field(ge=0, le=1)  # место трубы по умолчанию — доля длины конька
+    gutter_words: list[str]                # слова водостока; «без» (negations) — водостока нет
+    gutters_default: bool                  # слов нет — водосток есть или нет
     role_words: dict[PaletteRole, list[str]]  # роль палитры → слова, перед которыми цвет её красит
     trim_default: HouseTrim                # вид названного в тексте элемента, если его нет
     colors: dict[str, FinishColor]         # ряд цветов отделки по имени

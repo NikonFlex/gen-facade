@@ -10,6 +10,8 @@ id = "ffh-june"
 pdf = "June - Blueprints - Backyard Farmhouse - Jay Osborne.pdf"
 roof = "двускатная 10/12, коньком вдоль; дормеры 4/12 на юге и севере; мансарда; навес крыльца 3/12"
 roof_kind = "gable"
+# водосток: полукруглый желоб (HALF ROUND GUTTER) на Ф. стр. 7, 8
+gutters = true
 pitch_deg = 39.8
 # свес: карнизный — Ф. запад (фронт) стр. 7, кончики карниза на 7,4 pt за стеной (140,0/284,0 pt), 9 pt/фут = 0,25 м; фронтонный — Ф. юг стр. 8, 6,4 pt = 0,22 м
 overhang_m = 0.25

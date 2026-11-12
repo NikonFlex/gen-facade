@@ -507,6 +507,19 @@ def _outranks(a: Rank, b: Rank) -> bool:
     return a.order > b.order
 
 
+def own_parts(house: HouseRoof) -> list[int]:
+    """Номера частей дома от главной к низшей (`_outranks`); щипцы над стенами (`wall_gables`),
+    что дописаны к частям, — не часть дома и сюда не входят. Прямоугольный дом — одна часть."""
+    count = 1 + max(s.part for side in house.spans for s in side)
+    ranks = {k: _line_rank(house.parts[k], k) for k in range(count)}
+    order = list(range(count))
+    for _ in range(count):  # частичный порядок `_outranks`: пузырёк, частей единицы
+        for i in range(count - 1):
+            if _outranks(ranks[order[i + 1]], ranks[order[i]]):
+                order[i], order[i + 1] = order[i + 1], order[i]
+    return order
+
+
 class Wing(NamedTuple):
     """Крыло дома для скатов: прямоугольник, карниз и крылья главнее него (`_outranks`)."""
 

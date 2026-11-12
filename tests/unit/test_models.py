@@ -45,7 +45,7 @@ def test_spec_stub_floors_from_text(cfg, text, floors):
     assert spec.floor_heights_m == base.floor_heights_m * floors
     assert spec.eaves_m == pytest.approx(spec.plinth_m + floors * base.floor_heights_m[0])
     same = {k: getattr(base, k) for k in ("floors", "floor_heights_m", "eaves_m", "materials",
-                                          "trim", "style", "roof")}
+                                          "trim", "style", "roof", "gutters")}
     assert spec.model_copy(update=same) == base
 
 
