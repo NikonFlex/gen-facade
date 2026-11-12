@@ -620,6 +620,9 @@ class HouseSpec(Model):
     # трубы нет; ставит её код, модель шага 4 не видит.
     chimney: float | None = Field(default=None, ge=0, le=1)
     gutters: bool = False  # водосток: желоб по карнизным сторонам и трубы у концов (gf#454)
+    # Мансардных окон в плоскости каждого карнизного ската главной части (gf#456, `genfacade/
+    # skylights.py`); их ставит код, в условие модели шага 4 поле не входит.
+    skylights: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def _check(self) -> "HouseSpec":

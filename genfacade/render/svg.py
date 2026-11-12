@@ -13,7 +13,7 @@ from xml.etree import ElementTree
 
 import shapely
 
-from genfacade import roof, roof_items, window_shape
+from genfacade import roof, roof_items, skylights, window_shape
 from genfacade.config import Axes, Config, DoorLook, Hatch, Levels, Sheet, SheetLayout
 from genfacade.render import hatch, sheet_format, trim
 from genfacade.render.shapes import add_line, box, points
@@ -60,6 +60,7 @@ class Top(NamedTuple):
     seams: list[list[Point]] = []  # линии примыкания кровли нижней части к стене верхней (gf#322)
     gable: Polygon | None = None  # фронтон — место окон над карнизом (`roof.gables`, gf#321)
     items: list[tuple[roof_items.ItemKind, Polygon]] = []  # труба, желоб, трубы (gf#454)
+    skylights: list[tuple[Polygon, Polygon]] = []  # мансардные окна на кровле: рамка и стекло
 
     def height(self, facade: SideFacade) -> float:
         """Верх рисунка стороны: силуэт стены, стена над карнизом, кровля и труба."""
@@ -84,7 +85,18 @@ def tops(sheet: FacadeSheet, cfg: Config) -> list[Top]:
         out.append(Top(roof.house_above(house, k) + walls,
                        roof.house_view(house, k, cfg.sheet.roof.thickness_m), seams, gables[k],
                        roof_items.view(found, house.corners, k)))
-    return out
+    return _with_skylights(out, sheet, cfg, house)
+
+
+def _with_skylights(out: list[Top], sheet: FacadeSheet, cfg: Config, house: roof.HouseRoof
+                    ) -> list[Top]:
+    """Мансардные окна (gf#456) на видах: поднятые с грани ската на верх кровли, как на ней."""
+    lights = skylights.find(sheet, cfg.sheet.skylight)
+    dz = cfg.sheet.roof.thickness_m + cfg.sheet.skylight.lift_m
+    lights = [skylights.raised(s, dz) for s in lights]
+    return [top._replace(skylights=skylights.on_view(lights, *roof.axis(house.corners, k)[:2],
+                                                     top.roof))
+            for k, top in enumerate(out)]
 
 
 class Marks(NamedTuple):
@@ -283,6 +295,10 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
     for shape in top.roof:  # кровля — поверх: свес закрывает верх стены
         ElementTree.SubElement(g, "polygon", {"class": "roof", "points": points(shape),
                                               "fill": _roof_fill(pen)})
+    for frame, glass in top.skylights:  # мансардные окна — на кровле поверх неё
+        for shape, name in ((frame, "skylight"), (glass, "skylight-glass")):
+            ElementTree.SubElement(g, "polygon", {"class": name, "points": points(shape),
+                                                  "fill": pen.cfg.library.fill.glass})
     for seam in top.seams:  # примыкание кровли нижней части к стене верхней
         ElementTree.SubElement(g, "polyline", {"class": "outline joint", "points": points(seam)})
     _items(g, top, pen, roof_items.ItemKind.GUTTER)  # желоб и трубы — на кромке кровли и стене

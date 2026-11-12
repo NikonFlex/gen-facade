@@ -25,6 +25,7 @@ from genfacade.schema import (
     Mode,
     Refusal,
     Refused,
+    Roof,
     RoofKind,
     Side,
     SideFacade,
@@ -72,7 +73,7 @@ def spec_model(text: str, cfg: SpecStub) -> HouseSpec:
         "chimney": chimney, "gutters": gutters,
         "wing_floors": wing_floors, "gable_over_entrance": gable_over_entrance(text, cfg),
         "floors": floors, "floor_heights_m": [height] * floors,
-        "style": style,
+        "style": style, "skylights": _skylights(text, roof, cfg),
         "eaves_m": round(base["plinth_m"] + height * floors, 3),
         "trim": house.trim.model_dump(), "materials": [m.model_dump() for m in house.materials]})
 
@@ -97,6 +98,13 @@ def _roof_items(text: str, sloped: bool, cfg: SpecStub) -> tuple[float | None, b
                 words.named(before, cfg.gutter_words, cfg.stem_tail)):
             chimney = True
     return (cfg.chimney_at if chimney and sloped else None), gutters and sloped
+def _skylights(text: str, roof: Roof, cfg: SpecStub) -> int:
+    """Мансардные окна на скат: текст называет их, перед словом нет отрицания, крыша скатная."""
+    found = words.tokens(text)
+    named = [i for i in range(len(found))
+             if words.phrase_at(found, i, cfg.skylights.words, cfg.stem_tail)
+             and not (i and found[i - 1] in cfg.negations)]
+    return cfg.skylights.default if named and roof.kind is not RoofKind.FLAT else 0
 
 
 def layout_model(wall: SideFacade, ctx: LayoutContext) -> SideFacade:

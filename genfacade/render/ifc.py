@@ -18,7 +18,7 @@ from typing import NamedTuple
 import shapely
 import shapely.affinity
 
-from genfacade import parts, roof, roof_items, unfold
+from genfacade import parts, roof, roof_items, skylights, unfold
 from genfacade.config import Config
 from genfacade.render.house3d import house_3d
 from genfacade.render.ifc_step import STAR, Enum, Ref, Step, Typed, guid
@@ -258,6 +258,7 @@ class IfcHouse:
         self._slabs()
         self._roof()
         self._roof_items()
+        self._skylights()
         self._finish()
         return self.w.s.render()
 
@@ -573,6 +574,28 @@ class IfcHouse:
                                        None, None, Enum("NOTDEFINED"))
         self.w.relate("IfcRelAggregates", "roof", self.roof_ref, slabs)
         self.contained[top].append(self.roof_ref)
+
+    def _skylights(self) -> None:
+        """Мансардные окна (gf#456): IfcWindow вида SKYLIGHT в плоскости ската — тело окна лежит в
+        толще плиты кровли, на верху кровли с зазором `lift_m`. Выреза в плите нет: плита — грань
+        без отверстий, а вырез по наклонной плоскости с вертикальными торцами вышел бы сложнее
+        самого окна; плита под стеклом остаётся."""
+        w, look, ifc = self.w, self.cfg.sheet.skylight, self.ifc
+        top = self.sheet.spec.floors - 1
+        for n, item in enumerate(skylights.find(self.sheet, look), 1):
+            ring = skylights.raised(item, self.roof_m + look.lift_m).outer
+            normal = _up(_normal(ring))
+            place, profile = self._plate(ring, normal, 0.0)
+            _, x, y, z = _frame(ring, normal)
+            body = w.solid_along(profile, (_dot(DOWN, x), _dot(DOWN, y), _dot(DOWN, z)),
+                                 self.roof_m, self.cfg.library.fill.glass, ifc.glass_transparency)
+            window = w.product("IfcWindow", f"skylight/{n}", ifc.names.skylight.format(n=n), place,
+                               w.shape([body]), None, look.length_m, look.width_m,
+                               Enum("SKYLIGHT"), Enum("NOTDEFINED"), None)
+            w.props(f"skylight/{n}", window, ifc.pset.facade, {"Id": label(f"skylight{n}")})
+            w.props(f"skylight/{n}", window, COMMON[ElementClass.WINDOW],
+                    {"IsExternal": boolean(True)})
+            self.contained[top].append(window)
 
     def _roof_color(self) -> str:
         return self.pen.colors.get(self.pen.roof or "", self.cfg.viewer.house3d.roof)
