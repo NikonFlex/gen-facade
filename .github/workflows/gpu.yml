@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       job:
-        description: "probe — проверить GPU; train — обучить модель шага 4; finetune — дообучить её на коттеджах BuildingNet; eval — оценить на val; visual — таблица метрик с FID и KID; realtest — таблица против реального теста с FID и KID; retrain — всё сразу: корпус, обучение, дообучение по флагу, реальный тест новой и прежней модели одной таблицей; stability — реальный тест модели по вариантам сэмплинга (variants) и сводка с разбросом по seed; plans — genfacade run на непрямоугольных планах в обоих режимах моделью model_run (gf#306); owl — OWLv2 ищет окна и двери на листах фасадов строим.дом.рф (gf#342)"
+        description: "probe — проверить GPU; train — обучить модель шага 4; finetune — дообучить её на коттеджах BuildingNet; eval — оценить на val; visual — таблица метрик с FID и KID; realtest — таблица против реального теста с FID и KID; retrain — всё сразу: корпус, обучение, дообучение по флагу, реальный тест новой и прежней модели одной таблицей; stability — реальный тест модели по вариантам сэмплинга (variants) и сводка с разбросом по seed; plans — genfacade run на непрямоугольных планах в обоих режимах моделью model_run (gf#306); owl — OWLv2 ищет окна и двери на листах фасадов строим.дом.рф (gf#342); swap — модель model_run на настоящих домах с признаком условия, подменённым на синтетический (gf#373, tools/condition_swap.py)"
         type: choice
-        options: [probe, train, finetune, eval, visual, realtest, retrain, stability, plans, owl, diag]
+        options: [probe, train, finetune, eval, visual, realtest, retrain, stability, plans, owl, diag, swap]
         default: probe
       houses:
         description: "train, retrain: сколько синтетических домов в корпусе (собранные раньше не пересобираются)"
@@ -72,11 +72,11 @@ on:
         type: string
         default: "seed=0;seed=1;seed=2;seed=3;seed=4"
       model_run:
-        description: "eval, realtest, stability: номер запуска train, чью модель оценивать (артефакт train-<номер>); 39586817099 — gf#155"
+        description: "eval, realtest, stability, swap: номер запуска train, чью модель оценивать (артефакт train-<номер>); 39586817099 — gf#155"
         type: string
         default: "39586817099"
       model_artifact:
-        description: "realtest, stability: какую модель запуска model_run брать. train — артефакт train-<номер> (после дообучения, если запуск дообучал); pretrain — pretrain-<номер> (без дообучения, есть только у retrain с дообучением); both — обе, двумя строками таблицы (run<номер> и run<номер>-pretrain)"
+        description: "realtest, stability, swap: какую модель запуска model_run брать. train — артефакт train-<номер> (после дообучения, если запуск дообучал); pretrain — pretrain-<номер> (без дообучения, есть только у retrain с дообучением); both — обе, двумя строками таблицы (run<номер> и run<номер>-pretrain)"
         type: choice
         options: [train, pretrain, both]
         default: train
@@ -185,7 +185,7 @@ jobs:
           path: base-code
 
       - name: Модель для реального теста
-        if: (inputs.job == 'realtest' || inputs.job == 'stability' || inputs.job == 'plans') && inputs.model_artifact != 'pretrain'
+        if: (inputs.job == 'realtest' || inputs.job == 'stability' || inputs.job == 'plans' || inputs.job == 'swap') && inputs.model_artifact != 'pretrain'
         uses: actions/download-artifact@v8
         with:
           name: train-${{ inputs.model_run }}
@@ -194,7 +194,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Модель для реального теста без дообучения
-        if: (inputs.job == 'realtest' || inputs.job == 'stability' || inputs.job == 'plans') && inputs.model_artifact != 'train'
+        if: (inputs.job == 'realtest' || inputs.job == 'stability' || inputs.job == 'plans' || inputs.job == 'swap') && inputs.model_artifact != 'train'
         uses: actions/download-artifact@v8
         with:
           name: pretrain-${{ inputs.model_run }}
@@ -255,6 +255,32 @@ jobs:
               fi ;;
           esac
           sh tools/retrain.sh $stages
+
+      - name: Подмена признаков условия
+        # gf#373: настоящие дома реального теста (собираются из разметки в $SAMPLES/manual, как в
+        # этапе realtest) с признаком условия, подменённым на синтетический, — оба режима, каждая
+        # модель из model_artifact. Варианты — tools/condition_swap.py.
+        if: inputs.job == 'swap'
+        run: |
+          cfg="$RUNNER_TEMP/swap-config"
+          mkdir -p "$cfg" "$OUT"
+          printf '[paths]\nsamples_dir = "%s"\n' "$SAMPLES" > "$cfg/data.toml"
+          genfacade -c "$cfg" manual
+          for which in train pretrain; do
+            [ -f "model/$which/model.pt" ] || continue
+            for mode in blind with_openings; do
+              python tools/condition_swap.py "model/$which/model.pt" "$OUT/swap/$which" \
+                -c "$cfg" --mode "$mode"
+            done
+          done
+
+      - name: Результат подмены
+        if: always() && inputs.job == 'swap'
+        uses: actions/upload-artifact@v7
+        with:
+          name: swap-${{ github.run_id }}
+          path: ${{ env.OUT }}/swap
+          if-no-files-found: ignore
 
       - name: Окна и двери OWLv2
         # gf#342: картинки домов — на машине, вне git и вне артефактов (условия ДОМ.РФ, п. 5.3):
