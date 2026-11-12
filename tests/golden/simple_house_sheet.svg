@@ -13,6 +13,8 @@ svg { font-family: "Golos Text", "DejaVu Sans", sans-serif; font-size: 0.3px; }
 .mullion { stroke-width: 0.04px; }
 /* окно не прямоугольником (gf#319): контур по виду, рамка — только для разбора */
 .window-shape { stroke-width: 0.06px; }
+/* слуховое окно (gf#457): стекло — как окно стены */
+.dormer-glass { stroke-width: 0.06px; }
 /* Выводимые элементы (gf#212): рисунок вида поверх прямоугольника; у двускатного козырька и
    козырька на кронштейнах прямоугольник — только рамка разбора, его не видно */
 .trim-line { stroke-width: 0.015px; }

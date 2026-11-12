@@ -18,6 +18,7 @@ from genfacade.config import SpecStub
 from genfacade.models import finish, words
 from genfacade.schema import (
     EPS,
+    Dormer,
     Element,
     FacadeSheet,
     HouseSpec,
@@ -74,6 +75,7 @@ def spec_model(text: str, cfg: SpecStub) -> HouseSpec:
         "wing_floors": wing_floors, "gable_over_entrance": gable_over_entrance(text, cfg),
         "floors": floors, "floor_heights_m": [height] * floors,
         "style": style, "skylights": _skylights(text, roof, cfg),
+        "dormers": _dormers(text, cfg, kind),
         "eaves_m": round(base["plinth_m"] + height * floors, 3),
         "trim": house.trim.model_dump(), "materials": [m.model_dump() for m in house.materials]})
 
@@ -98,6 +100,8 @@ def _roof_items(text: str, sloped: bool, cfg: SpecStub) -> tuple[float | None, b
                 words.named(before, cfg.gutter_words, cfg.stem_tail)):
             chimney = True
     return (cfg.chimney_at if chimney and sloped else None), gutters and sloped
+
+
 def _skylights(text: str, roof: Roof, cfg: SpecStub) -> int:
     """Мансардные окна на скат: текст называет их, перед словом нет отрицания, крыша скатная."""
     found = words.tokens(text)
@@ -105,6 +109,19 @@ def _skylights(text: str, roof: Roof, cfg: SpecStub) -> int:
              if words.phrase_at(found, i, cfg.skylights.words, cfg.stem_tail)
              and not (i and found[i - 1] in cfg.negations)]
     return cfg.skylights.default if named and roof.kind is not RoofKind.FLAT else 0
+
+
+def _dormers(text: str, cfg: SpecStub, kind: RoofKind) -> list[Dormer]:
+    """Слуховые окна по слову текста (gf#457): скатному дому — по дормеру на середине каждого
+    карнизного ската; плана у шага 1 нет, скаты — по умолчанию из настроек (`dormers.on_eaves`
+    ставит их по плану). «Без дормеров» — дормеров нет."""
+    found, tail = words.tokens(text), cfg.stem_tail
+    asked = any(words.phrase_at(found, i, cfg.dormer.words, tail)
+                and not (i and found[i - 1] in cfg.negations) for i in range(len(found)))
+    if not asked or kind is RoofKind.FLAT:
+        return []
+    return [Dormer(facing=f, at=0.5, width_m=cfg.dormer.width_m, roof=cfg.dormer.roof)
+            for f in cfg.dormer.facings]
 
 
 def layout_model(wall: SideFacade, ctx: LayoutContext) -> SideFacade:

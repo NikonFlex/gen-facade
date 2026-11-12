@@ -13,7 +13,7 @@ from xml.etree import ElementTree
 
 import shapely
 
-from genfacade import roof, roof_items, skylights, window_shape
+from genfacade import dormers, roof, roof_items, skylights, window_shape
 from genfacade.config import Axes, Config, DoorLook, Hatch, Levels, Sheet, SheetLayout
 from genfacade.render import hatch, sheet_format, trim
 from genfacade.render.shapes import add_line, box, points
@@ -61,6 +61,7 @@ class Top(NamedTuple):
     gable: Polygon | None = None  # фронтон — место окон над карнизом (`roof.gables`, gf#321)
     items: list[tuple[roof_items.ItemKind, Polygon]] = []  # труба, желоб, трубы (gf#454)
     skylights: list[tuple[Polygon, Polygon]] = []  # мансардные окна на кровле: рамка и стекло
+    dormer: list[tuple[dormers.Part, Polygon]] = []  # слуховые окна над кровлей (gf#457)
 
     def height(self, facade: SideFacade) -> float:
         """Верх рисунка стороны: силуэт стены, стена над карнизом, кровля и труба."""
@@ -79,12 +80,15 @@ def tops(sheet: FacadeSheet, cfg: Config) -> list[Top]:
         return [NOTHING_ABOVE for _ in sheet.facades]
     gables = roof.sheet_gables(sheet)
     found = roof_items.roof_items(sheet, cfg.sheet.roof_items)
-    out = []
+    built, out = dormers.build(sheet, cfg), []
     for k in range(len(sheet.facades)):
         walls, seams = roof.joint_view(house, k)
-        out.append(Top(roof.house_above(house, k) + walls,
-                       roof.house_view(house, k, cfg.sheet.roof.thickness_m), seams, gables[k],
-                       roof_items.view(found, house.corners, k)))
+        left, u, _ = roof.axis(house.corners, k)
+        above = roof.house_above(house, k) + walls
+        cover = roof.house_view(house, k, cfg.sheet.roof.thickness_m)
+        out.append(Top(above, cover, seams, gables[k], roof_items.view(found, house.corners, k),
+                       dormer=dormers.view(built, (left, u), cfg.sheet.roof.thickness_m,
+                                           above + cover)))
     return _with_skylights(out, sheet, cfg, house)
 
 
@@ -299,6 +303,9 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
         for shape, name in ((frame, "skylight"), (glass, "skylight-glass")):
             ElementTree.SubElement(g, "polygon", {"class": name, "points": points(shape),
                                                   "fill": pen.cfg.library.fill.glass})
+    for part, shape in top.dormer:  # слуховые окна — на кровле дома (gf#457)
+        ElementTree.SubElement(g, "polygon", {"class": f"dormer-{part}", "points": points(shape),
+                                              "fill": _dormer_fill(part, pen)})
     for seam in top.seams:  # примыкание кровли нижней части к стене верхней
         ElementTree.SubElement(g, "polyline", {"class": "outline joint", "points": points(seam)})
     _items(g, top, pen, roof_items.ItemKind.GUTTER)  # желоб и трубы — на кромке кровли и стене
@@ -319,6 +326,13 @@ def _items(g: ElementTree.Element, top: Top, pen: Pen, kind: roof_items.ItemKind
 def _main(pen: Pen) -> str:
     main = PaletteRole.MAIN
     return paint(main, pen) if main in pen.colors else pen.cfg.library.fill.wall
+
+
+def _dormer_fill(part: dormers.Part, pen: Pen) -> str:
+    """Заливка куска дормера: стена — цвет стен, крыша — кровли, окно — стекла."""
+    if part is dormers.Part.GLASS:
+        return pen.cfg.library.fill.glass
+    return _main(pen) if part is dormers.Part.WALL else _roof_fill(pen)
 
 
 def _roof_fill(pen: Pen) -> str:

@@ -41,13 +41,15 @@ import numpy
 import shapely
 from pydantic import Field, ValidationError, model_validator
 
-from genfacade import derive, parts, roof, roof_items, window_shape
+from genfacade import derive, dormers, parts, roof, roof_items, window_shape
 from genfacade.config import Config, Manual
 from genfacade.datasets import rect_house, store
 from genfacade.plan.wings import candidates, edge_runs
 from genfacade.schema import (
     EPS,
     BuildingType,
+    Dormer,
+    DormerRoof,
     Element,
     ElementClass,
     FacadeSheet,
@@ -162,6 +164,15 @@ class Elevation(Model):
     roof: list[list[Point]] = []   # крыша на виде — многоугольники в pt
 
 
+class DormerMark(Model):
+    """Слуховое окно на виде карнизной стены (gf#457): лицо дормера — края x в pt вида (система
+    `wall` стороны), вид его крыши. Высота лица, окно и щёчки — по правилам модуля, не с листа."""
+
+    side: int = Field(ge=0)
+    x: tuple[float, float]
+    roof: DormerRoof
+
+
 class PartRoofMark(Model):
     """Своя крыша части дома (gf#431), как её видно на фасаде: часть — та, чей участок стороны
     `side` лежит под серединой отрезка x (pt вида); `down` — номер стороны, к которой спускается
@@ -208,6 +219,7 @@ class Markup(Model):
     part_roofs: list[PartRoofMark] = []  # свои крыши частей; у остальных — крыша дома
     chimney: ChimneyMark | None = None  # дымовая труба на чертеже (gf#454); нет — трубы нет
     gutters: bool = False  # водосток на чертеже (gf#454)
+    dormers: list[DormerMark] = []       # слуховые окна главной части (gf#457)
     unit: Unit           # единица отметок и масштаба
     pt_per_unit: float = Field(gt=0)
     material: str        # вид основной отделки из library.toml
@@ -332,6 +344,7 @@ def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
     plan, sheet = _parted(plan, sheet.model_copy(update={"facades": facades}), m, c)
     sheet, bare = _no_eaves(sheet)
     sheet = _roof_items(sheet, m, cfg)
+    sheet = _with_dormers(m, sheet)
     return (Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet),
             dropped + bare)
 
@@ -362,6 +375,24 @@ def _roof_items(sheet: FacadeSheet, m: Markup, cfg: Manual) -> FacadeSheet:
     run = (bx - ax) ** 2 + (by - ay) ** 2
     at = min(1.0, max(0.0, (px * (bx - ax) + py * (by - ay)) / run)) if run > EPS else 0.0
     return sheet.model_copy(update={"spec": spec.model_copy(update={"chimney": at})})
+
+
+def _with_dormers(m: Markup, sheet: FacadeSheet) -> FacadeSheet:
+    """Лист с дормерами разметки в параметрах дома (gf#457): лицо с вида — скат, место и ширина
+    (`dormers.from_view`); окно дормера строит модуль, а не элементы стены."""
+    found = [_dormer(m, mark, sheet) for mark in m.dormers]
+    return sheet.model_copy(update={"spec": sheet.spec.model_copy(update={"dormers": found})})
+
+
+def _dormer(m: Markup, mark: DormerMark, sheet: FacadeSheet) -> Dormer:
+    if mark.side >= len(m.sides):
+        raise BadMarkup(f"{m.id}: дормер на стороне {mark.side}, а сторон {len(m.sides)}")
+    e = m.sides[mark.side]
+    x0, x1 = ((v - e.wall[0]) / m.px_per_m(e) for v in mark.x)
+    found = dormers.from_view(sheet, mark.side, (x0, x1), mark.roof)
+    if found is None:
+        raise BadMarkup(f"{m.id}: {e.view}: лицо дормера на x {mark.x} не на скате главной части")
+    return found
 
 
 def _parted(plan: Plan, sheet: FacadeSheet, m: Markup, c: _Contour) -> tuple[Plan, FacadeSheet]:
