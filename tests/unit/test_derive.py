@@ -144,7 +144,10 @@ def test_frieze_counts_from_cornice_and_casing(cfg):
     """`window_head_to_eaves`: зазор — от верха окна с наличником до низа карниза. Окно с верхом
     на 0,4 м ниже отметки карниза под карнизом 0,25 м — прижато (0,15 < 0,2)."""
     rule = next(g for g in cfg.guidelines.guideline if g.check is GuidelineCheck.HEAD_TO_EAVES)
-    sheet = build.sample(0, cfg).sheet
+    # простой дом без частей: seed 0 стал домом со ступенью (gf#455), а у него лист из одной
+    # стены не собирается
+    sheet = next(s for s in (build.sample(seed, cfg).sheet for seed in SEEDS)
+                 if not any(f.runs for f in s.facades))
     f = sheet.facades[0]
     top = sheet.spec.eaves_m - 0.4
     window = Element(id="w", cls=ElementClass.WINDOW, x_m=1.0, y_m=top - 1.3, w_m=1.0, h_m=1.3,

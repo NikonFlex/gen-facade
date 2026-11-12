@@ -21,7 +21,7 @@ from typing import NamedTuple
 import numpy
 from pydantic import BaseModel
 
-from genfacade import part_roofs, parts, roof
+from genfacade import entrance_gable, part_roofs, parts, roof
 from genfacade.config import Config, LayoutModel, Parts
 from genfacade.metrics import realism
 from genfacade.models import stub
@@ -333,7 +333,7 @@ def walls(spec: HouseSpec, plan: Plan, rule: Parts | None = None) -> FacadeSheet
     разной высоты — ступенями (`parts.py`). rule — правило генерации: какие крылья ниже главного,
     если текст молчит, и крыши пристроек (`part_roofs.py`); без него — только по
     `spec.wing_floors` и с крышей дома на всех частях (синтетика и разметка делят дом и ставят
-    крыши частей сами)."""
+    крыши частей сами); щипец над входом — по слову текста (`entrance_gable.py`)."""
     wall_runs = parts.runs(spec, plan, rule)
     # крылья лист хранит у любого непрямоугольного контура: крыша у крыла своя, даже когда высоты
     # одни и участков у сторон нет (gf#431)
@@ -341,7 +341,7 @@ def walls(spec: HouseSpec, plan: Plan, rule: Parts | None = None) -> FacadeSheet
         spec=spec, wings=parts.sheet_wings(plan) if plan.wings else [],
         facades=[SideFacade(side=s, runs=r) for s, r in zip(plan.sides, wall_runs, strict=True)]))
     if rule is not None:
-        sheet = part_roofs.chosen(sheet, rule)
+        sheet = entrance_gable.chosen(part_roofs.chosen(sheet, rule), rule)
     return roof.with_covered(sheet)  # у дома из частей — зоны под кровлей нижней части (gf#412)
 
 

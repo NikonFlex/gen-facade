@@ -231,6 +231,9 @@ class Parts(Section):
     drop_floors: int   # на сколько этажей нижнее крыло ниже главной части, если текст молчит
     annex_shed: bool   # при генерации у пристройки односкатная крыша (gf#431); нет — крыша дома
     annex_pitch_deg: float  # её уклон
+    entrance_gable_share: float    # щипец над входом по слову текста: доля участка стены (gf#455)
+    entrance_gable_pitch_deg: float  # его уклон
+    entrance_gable_min_m: float    # уже этого щипец не строится
 
 
 class PlanConfig(Section):
@@ -1026,6 +1029,7 @@ class SpecStub(Section):
     trim_words: dict[Trim, list[str]]      # выводимый элемент → слова в тексте
     kind_words: dict[str, dict[str, list[str]]]  # элемент → вид (derive.toml) → слова в тексте
     roof_words: dict[RoofKind, list[str]]  # вид крыши → слова в тексте (gf#320)
+    entrance_gable_words: list[str]        # слова «щипец над входом» (gf#455)
     roof_shape: RoofShape                  # уклон и свес по виду крыши — и синтетике
     role_words: dict[PaletteRole, list[str]]  # роль палитры → слова, перед которыми цвет её красит
     trim_default: HouseTrim                # вид названного в тексте элемента, если его нет

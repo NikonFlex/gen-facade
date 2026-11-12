@@ -13,6 +13,8 @@
 - порог — одна граница по одному признаку крыла (доля площади главного, на сколько карниз ниже,
   глубина к длине общей стены, общая стена к длине главного), выученная по остальным домам
   (исключение по дому), среди крыльев на общей стене с главным.
+С `--synthetic N` — то же по синтетике, сборка seed 0…N-1: сколько крыльев со своей односкатной
+крышей и сколько из них ниже главного по карнизу (у настоящих домов — все, решение 108).
 Направление — у скольких односкатных пристроек разметки низ ската от главного, как ставит правило.
 """
 
@@ -121,12 +123,36 @@ def read(folder: Path) -> list[tuple[str, FacadeSheet]]:
     return out
 
 
+def synthetic_wings(count: int) -> list[Wing]:
+    """Крылья скатных домов синтетики seed 0…count-1: настоящая сборка `build.sample`."""
+    from genfacade.config import load
+    from genfacade.datasets.synthetic import build
+
+    cfg = load()
+    pitch = cfg.plan.parts.annex_pitch_deg
+    return [w for seed in range(count)
+            for w in wings(str(seed), build.sample(seed, cfg).sheet, pitch)]
+
+
+def own_roof_share(found: list[Wing]) -> str:
+    """Строка о крыльях со своей односкатной крышей: сколько и какая доля ниже главного."""
+    sheds = [w for w in found if w.shed]
+    lower = [w for w in sheds if w.drop > EPS]
+    share = len(lower) / len(sheds) if sheds else 0.0
+    return (f"своя односкатная у {len(sheds)} из {len(found)} крыльев, из них ниже главного "
+            f"по карнизу — {len(lower)} ({share:.2f}); крыльев ниже главного всего — "
+            f"{sum(w.drop > EPS for w in found)}")
+
+
 def main() -> int:
     from genfacade.config import load
 
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--manual", type=Path, default=ROOT / "data/samples/manual")
+    ap.add_argument("--synthetic", type=int, default=0, metavar="N")
     args = ap.parse_args()
+    if args.synthetic:
+        print("синтетика:", own_roof_share(synthetic_wings(args.synthetic)))
     pitch = load().plan.parts.annex_pitch_deg
     found = [w for name, s in read(args.manual) for w in wings(name, s, pitch)]
     sheds = [w for w in found if w.shed]

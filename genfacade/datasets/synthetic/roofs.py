@@ -1,26 +1,40 @@
 """Составные крыши синтетики (gf#431, `facade: Крыша над частями дома`, `facade: Щипец над
 карнизной стеной`): односкатная крыша пристройки и щипец над входом.
 
-Решения принимаются ПОСЛЕ раскладки стен и со своим потоком случайных чисел: окна, зоны и условие
-модели шага 4 от них не зависят (модель стену раскладывает до карниза, крыши частей не видит), а
-остальные решения дома по seed не меняются. Жребий каждого решения тянется всегда, чтобы одно не
-сдвигало другое.
+Свою односкатную крышу получает только крыло НИЖЕ главного по карнизу — как у настоящих домов
+(решение 108). Синтетика делит дом на части одной высоты, поэтому дом, которому по жребию нужна
+пристройка под своей крышей, строится ступенями (`annexed`): нижнее крыло — по правилу частей
+(`config/plan.toml [parts]`), стены каждой части раскладываются как отдельный дом
+(`build.lay_out_parts`).
+Остальные дома и их жребии по seed не меняются.
+
+Крыши и щипец ставятся ПОСЛЕ раскладки стен и со своим потоком случайных чисел: окна, зоны и условие
+модели шага 4 от них не зависят (модель стену раскладывает до карниза, крыши частей не видит).
+Жребий каждого решения тянется всегда, чтобы одно не сдвигало другое.
 """
 
 import random
 
-from genfacade import roof
+from genfacade import entrance_gable
 from genfacade.config import Composite, Config
-from genfacade.part_roofs import away
+from genfacade.part_roofs import away, wing_eaves
 from genfacade.parts import main_wing
 from genfacade.schema import (
     EPS,
     FacadeSheet,
-    OpeningKind,
+    HouseSpec,
+    Plan,
     Roof,
     RoofKind,
-    WallGable,
 )
+
+
+def annexed(seed: int, spec: HouseSpec, plan: Plan, cfg: Config) -> bool:
+    """Дому по жребию нужна пристройка под своей крышей: у скатного дома с крыльями выпал первый
+    жребий потока крыш (тот же, что в `compose`) — и дом строится ступенями."""
+    rules = cfg.synthetic.spec.composite
+    draw = random.Random(f"roofs/{seed}").random()  # noqa: S311 — не криптография
+    return spec.roof.kind is not RoofKind.FLAT and len(plan.wings) >= 2 and draw < rules.part_p
 
 
 def compose(rng: random.Random, sheet: FacadeSheet, cfg: Config) -> FacadeSheet:
@@ -30,56 +44,31 @@ def compose(rng: random.Random, sheet: FacadeSheet, cfg: Config) -> FacadeSheet:
     if sheet.spec.roof.kind is RoofKind.FLAT:
         return sheet
     if len(sheet.wings) >= 2 and wing_draw < rules.part_p:
-        sheet = sheet.model_copy(update={"roofs": part_roofs(rng, sheet, rules)})
+        own = part_roofs(rng, sheet, rules)
+        sheet = sheet if all(r is sheet.spec.roof for r in own) else sheet.model_copy(
+            update={"roofs": own})
     if sheet.spec.roof.kind is RoofKind.GABLE and gable_draw < rules.wall_gable_p:
         sheet = _with_gable(rng, sheet, rules)
     return sheet
 
 
 def part_roofs(rng: random.Random, sheet: FacadeSheet, rules: Composite) -> list[Roof]:
-    """Крыша каждого крыла: у пристройки, что стоит на главном крыле, — односкатная, низ ската
-    от главного; у главного и у крыла без общей стороны с ним — крыша дома."""
-    house, wings = sheet.spec.roof, sheet.wings
-    main = wings[main_wing(wings)]
+    """Крыша каждого крыла: у пристройки, что стоит на главном крыле и ниже него по карнизу, —
+    односкатная, низ ската от главного; у остальных — крыша дома."""
+    house, wings, eaves = sheet.spec.roof, sheet.wings, wing_eaves(sheet)
+    main = main_wing(wings)
     own = []
-    for w in wings:
-        down = away(main, w)
+    for i, w in enumerate(wings):
+        down = away(wings[main], w)
         pitch = rng.choice(rules.part_pitch_deg)  # жребий — на каждое крыло, как бы ни вышло
-        own.append(house if down is None else house.model_copy(update={
-            "kind": RoofKind.SHED, "pitch_deg": pitch, "down_to": down}))
+        lower = eaves[i] < eaves[main] - EPS
+        own.append(house.model_copy(update={
+            "kind": RoofKind.SHED, "pitch_deg": pitch, "down_to": down})
+            if down is not None and lower else house)
     return own
 
 
 def _with_gable(rng: random.Random, sheet: FacadeSheet, rules: Composite) -> FacadeSheet:
     """Лист со щипцом над входом, если он встал: крыша строится на одну часть больше."""
     share, pitch = rng.uniform(*rules.wall_gable_share), rng.choice(rules.wall_gable_pitch_deg)
-    house = roof.roofs(sheet)
-    found = None if house is None else _over_entrance(sheet, house, share, pitch, rules)
-    if found is None:
-        return sheet
-    out = sheet.model_copy(update={"wall_gables": [found]})
-    built = roof.roofs(out)
-    return out if built is not None and len(built.parts) == len(house.parts) + 1 else sheet
-
-
-def _over_entrance(sheet: FacadeSheet, house: roof.HouseRoof, share: float, pitch: float,
-                   rules: Composite) -> WallGable | None:
-    """Щипец над карнизной стеной со входом: середина — над серединой входа, но целиком внутри
-    участка стены своей части с отступом свеса от его краёв; уже `wall_gable_min_m` — None."""
-    for k in sorted(roof.eave_walls(sheet)):
-        door = next((o for o in sheet.facades[k].side.openings
-                     if o.kind is OpeningKind.ENTRANCE), None)
-        if door is None:
-            continue
-        mid = door.x_m + door.width_m / 2
-        span = next(s for s in house.spans[k] if s.x0 - EPS <= mid <= s.x1 + EPS)
-        if sheet.roofs and sheet.roofs[span.part].kind is not RoofKind.GABLE:
-            continue
-        gap = house.parts[span.part].reach
-        room = span.x1 - span.x0 - 2 * gap
-        width = min(share * (span.x1 - span.x0), room)
-        if width < rules.wall_gable_min_m:
-            continue
-        x0 = min(max(mid - width / 2, span.x0 + gap), span.x1 - gap - width)
-        return WallGable(side=k, x0_m=round(x0, 3), x1_m=round(x0 + width, 3), pitch_deg=pitch)
-    return None
+    return entrance_gable.placed(sheet, share, pitch, rules.wall_gable_min_m)
