@@ -13,7 +13,7 @@ import math
 
 import shapely
 
-from genfacade import parts, roof, roof_items, window_shape
+from genfacade import parts, roof, roof_items, skylights, window_shape
 from genfacade.config import Config, House3d
 from genfacade.derive import DERIVED
 from genfacade.render.svg import (
@@ -108,7 +108,17 @@ def _roof(sheet: FacadeSheet, pen: Pen, corners: list[Point], look: House3d) -> 
     уровень карниза, верх — выше на неё по вертикали (gf#447)."""
     data = _roof_shape(sheet, pen, corners, look)
     data["thickness_m"] = pen.cfg.sheet.roof.thickness_m  # одна на лист, 3D и IFC (gf#447)
-    return data
+    return data | _skylights(sheet, pen.cfg)
+
+
+def _skylights(sheet: FacadeSheet, cfg: Config) -> dict:
+    """Мансардные окна (gf#456) в плоскости ската, на верху кровли: рамки и стёкла —
+    четырёхугольники (x, y плана, высота), как грани ската; высоты уже подняты на толщину кровли,
+    стекло — ещё на `lift_m` выше рамы, иначе они сливаются."""
+    look, thick = cfg.sheet.skylight, cfg.sheet.roof.thickness_m
+    found = skylights.find(sheet, look)
+    return {"skylight_frames": [skylights.raised(s, thick + look.lift_m).outer for s in found],
+            "skylights": [skylights.raised(s, thick + 2 * look.lift_m).inner for s in found]}
 
 
 def _roof_shape(sheet: FacadeSheet, pen: Pen, corners: list[Point], look: House3d) -> dict:

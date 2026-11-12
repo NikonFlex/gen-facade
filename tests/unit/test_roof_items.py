@@ -1,11 +1,11 @@
 """Дымовая труба и водосток (gf#454, `facade: Дымовая труба`, `facade: Водосток`,
 `generation: Труба и водосток по словам текста`): кодом на листе, в 3D и IFC; модель их не видит."""
 
-import hashlib
 import math
 
 import pytest
 import shapely
+import vocab
 from simple_house import L_SHAPE
 from test_manual import PT, finished
 
@@ -218,10 +218,7 @@ def test_old_json_without_fields_is_valid(raw_house):
 
 def test_model_vocabulary_unchanged_and_condition_ignores_items(house):
     """Модель шага 4 трубу и водосток не видит: словарь тот же, условие не зависит от полей."""
-    vocab = tokens.vocabulary(CFG)
-    digest = hashlib.sha256("\n".join(vocab).encode()).hexdigest()
-    assert (len(vocab), digest) == (
-        484, "c59f16114f90164d618d12f34991a4a349d24999cdb3606bdaad3ade8e01dcdc")
+    assert vocab.fingerprint(CFG) == vocab.FROZEN
     with_items = house.model_copy(update={"spec": house.spec.model_copy(
         update={"chimney": 0.25, "gutters": True})})
     assert tokens.condition(with_items, Mode.WITH_OPENINGS, CFG) == tokens.condition(

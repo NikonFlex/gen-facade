@@ -834,6 +834,21 @@ def house_faces(house: HouseRoof) -> list[list[Point3]]:
     return [face for k in range(len(house.parts)) for face in _faces_of(house, k)]
 
 
+def main_faces(sheet: FacadeSheet) -> tuple[Roofline, list[tuple[Slope, list[Point3]]]] | None:
+    """Скаты главной части дома — той, что старше остальных по `_outranks` (щипцы над карнизными
+    стенами в счёт не идут: это не части контура); крыши нет — None. Для мансардных окон."""
+    house = roofs(sheet)
+    if house is None:
+        return None
+    best = 0
+    for j in range(1, len(_parts_roof(sheet).parts)):
+        if _outranks(_line_rank(house.parts[j], j), _line_rank(house.parts[best], best)):
+            best = j
+    if len(house.parts) == 1:
+        return house.parts[0], faces(house.parts[0])
+    return house.parts[best], _part_faces(house, best)
+
+
 def _ledge(corners: list[Point], overhang: float) -> bool:
     """Крыло уже собственного свеса — уступ контура (у разметки — шум в сантиметры): крыши у него
     нет, он под соседними."""

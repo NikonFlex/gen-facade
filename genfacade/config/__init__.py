@@ -210,6 +210,18 @@ class RoofItemsLook(Section):
     pipe_inset_m: float = Field(ge=0)    # труба от угла дома вдоль стены
     chimney_fill: str
     gutter_fill: str
+class SkylightLook(Section):
+    """Мансардное окно в плоскости ската (gf#456): размер, где ставится и как рисуется."""
+
+    width_m: float = Field(gt=0)        # поперёк ската — вдоль карниза
+    length_m: float = Field(gt=0)       # по скату
+    min_pitch_deg: float = Field(gt=0)  # положе — окон нет
+    sill_m: float = Field(ge=0)         # низ окна над карнизом по вертикали
+    gap_m: float = Field(ge=0)          # между окнами ряда
+    end_margin_m: float = Field(ge=0)   # от торца кровли
+    ridge_margin_m: float = Field(ge=0)  # от конька по скату
+    frame_m: float = Field(gt=0)        # ширина рамы: стекло — внутри неё
+    lift_m: float = Field(ge=0)         # стекло выше верха кровли, чтобы не сливалось с ней
 
 
 class Sheet(Section):
@@ -221,6 +233,7 @@ class Sheet(Section):
     trim: TrimLook
     roof: RoofDrawing
     roof_items: RoofItemsLook
+    skylight: SkylightLook
     title: Title
     preview: Preview
     plan: PlanLook
@@ -434,6 +447,7 @@ class IfcNames(Section):
     slab: str
     roof: str
     roof_slab: str
+    skylight: str
     shutter: str
     canopy: str
     porch: str
@@ -1034,6 +1048,11 @@ class Finish(Section):
     schemes: list[str] = []  # сочетания цветов, которые отделка берёт от текста (gf#317)
 
 
+class SkylightWords(Section):
+    words: list[str]                       # слова текста: мансардные окна
+    default: int = Field(ge=1)             # окон на скат, если текст их называет
+
+
 class SpecStub(Section):
     default_finish: str                    # отделка дома без описания
     stem_tail: int                         # букв после основы, при которых слово совпало
@@ -1048,6 +1067,7 @@ class SpecStub(Section):
     kind_words: dict[str, dict[str, list[str]]]  # элемент → вид (derive.toml) → слова в тексте
     roof_words: dict[RoofKind, list[str]]  # вид крыши → слова в тексте (gf#320)
     entrance_gable_words: list[str]        # слова «щипец над входом» (gf#455)
+    skylights: SkylightWords               # мансардные окна по словам текста (gf#456)
     roof_shape: RoofShape                  # уклон и свес по виду крыши — и синтетике
     chimney_words: list[str]               # слова трубы, печи, камина (gf#454); «без» — трубы нет
     chimney_at: float = Field(ge=0, le=1)  # место трубы по умолчанию — доля длины конька

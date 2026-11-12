@@ -172,7 +172,9 @@ export class HouseStage {
     const parts = [[roof.faces, roof.material, roof.color || this.look.roof],
       [roof.above, roof.wall_material, roof.wall || this.look.roof],
       // окна во фронтоне (gf#321): стекло чуть перед гладким многоугольником фронтона
-      [roof.windows || [], null, roof.glass]];
+      [roof.windows || [], null, roof.glass],
+      // мансардные окна (gf#456): рама и стекло на верху кровли, высоты уже с толщиной кровли
+      [roof.skylight_frames || [], null, this.look.edges], [roof.skylights || [], null, roof.glass]];
     for (const [shapes, id, color] of parts) {
       const material = this._material(THREE, id, color, THREE.DoubleSide);
       for (const shape of shapes) {

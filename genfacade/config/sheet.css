@@ -8,6 +8,7 @@ svg { font-family: "Golos Text", "DejaVu Sans", sans-serif; font-size: 0.3px; }
 .facade [data-role] { stroke: none; }
 .outline { fill: none; stroke-width: 0.04px; }
 .facade [data-cls="window"] { stroke-width: 0.06px; }
+.skylight { stroke-width: 0.06px; }
 .mullion { stroke-width: 0.04px; }
 /* окно не прямоугольником (gf#319): контур по виду, рамка — только для разбора */
 .window-shape { stroke-width: 0.06px; }
