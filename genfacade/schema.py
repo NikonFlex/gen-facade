@@ -550,10 +550,22 @@ class Roof(Model):
     kind: RoofKind
     material: str | None = None  # покрытие из палитры
     pitch_deg: float = Field(default=0.0, ge=0, lt=90)  # уклон ската; у плоской — 0
-    overhang_m: float = Field(default=0.0, ge=0)        # свес за стену по горизонтали
+    overhang_m: float = Field(default=0.0, ge=0)        # свес карнизный: за стену со скатом
+    # Свес фронтонный: за стену без ската (щипец, торец). Нет — равен карнизному (gf#451).
+    gable_overhang_m: float | None = Field(default=None, ge=0)
     # Куда спускается скат: у односкатной — низ, у двускатной — одна из карнизных стен (gf#431).
     # Пусто — правило вида (`roof._eave_sides`): двускатная — карнизы на длинных стенах.
     down_to: Facing | None = None
+
+    @property
+    def gable_overhang(self) -> float:
+        """Фронтонный свес с учётом «нет — как карнизный»."""
+        return self.overhang_m if self.gable_overhang_m is None else self.gable_overhang_m
+
+    @property
+    def reach(self) -> float:
+        """Наибольший свес."""
+        return max(self.overhang_m, self.gable_overhang)
 
     @model_validator(mode="after")
     def _check_pitch(self) -> "Roof":

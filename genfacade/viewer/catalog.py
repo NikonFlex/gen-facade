@@ -292,12 +292,15 @@ def _roofs(cfg: Config, found: Source) -> Built:
 
 
 def _roof_facts(cfg: Config, kind: RoofKind) -> tuple[tuple[str, str], ...]:
-    """Уклон и свес вида крыши (у плоской их нет)."""
+    """Уклон и свесы вида крыши (у плоской их нет, у вальмовой нет фронтонного)."""
     shape, label = cfg.models.spec.roof_shape, cfg.viewer.catalog.labels
     if kind is RoofKind.FLAT:
         return ()
-    return ((label["pitch"], f"{shape.pitch_deg[kind]:g}°"),
-            (label["overhang"], f"{shape.overhang_m:g}"))
+    facts = [(label["pitch"], f"{shape.pitch_deg[kind]:g}°"),
+             (label["overhang"], f"{shape.overhang_m[kind]:g}")]
+    if kind in shape.gable_overhang_m:
+        facts.append((label["gable_overhang"], f"{shape.gable_overhang_m[kind]:g}"))
+    return tuple(facts)
 
 
 def _windows(cfg: Config, found: Source) -> Built:

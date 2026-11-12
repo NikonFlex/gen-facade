@@ -3,13 +3,16 @@
 # Контур 16'x24' без выступов: внизу гараж на 1 машину, наверху жильё — фасады целиком, 2 этажа.
 # Вход в жильё — с левого бока (LEFT ELEVATION (FRONT OF RESIDENCE)), ворота — на торце.
 # Подпись SCALE у торцов — 1/8", но торцы начерчены в 1/4": стена 16' = 288 pt, как на плане.
-# Крыша (gf#336): свес — по умолчанию ([spec.roof_shape], на листе не подписан).
+# Крыша (gf#336); свесы — с чертежа (gf#451), строка у `overhang_m`.
 id = "ffh-carriage-1"
 pdf = "Carriage House 1 - Blueprints - Jay Osborne.pdf"
 roof = "двускатная 7.5/12, фальцевая кровля"
 roof_kind = "gable"
 pitch_deg = 32.0
-overhang_m = 0.4
+# свес: карнизный — Ф. задний стр. 5, кончики карниза на 13,4 pt за стеной (1107,4/1395,4 pt), 18 pt/фут = 0,23 м (на границе 0,20/0,25); фронтонный — Ф. левый (фронт дома) стр. 4, 9 pt = 0,15 м
+overhang_m = 0.25
+gable_overhang_m = 0.15
+overhang_by = "drawing"
 unit = "ft"
 pt_per_unit = 18.0          # SCALE: 1/4" = 1'-0"; дверь 36x80" = 54x120 pt, стена 24' = 432 pt
 material = "siding"       # FIBER CEMENT CLAPBOARD

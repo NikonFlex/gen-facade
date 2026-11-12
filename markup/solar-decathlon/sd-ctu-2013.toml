@@ -19,7 +19,9 @@ pdf = "2013/ctu_cd.pdf"
 roof = "плоская, общая для основного объёма и пристройки (HOUSE ROOF 13'-4\"); над ней навес с PV (CANOPY 16'-1 1/2\")"
 roof_kind = "flat"
 pitch_deg = 0.0
+# свес: плоская; Ф. W стр. 47 — плита кровли шире стены на 5–6 pt (~0,1 м), вынос не строим
 overhang_m = 0.0
+overhang_by = "drawing"
 unit = "ft"
 pt_per_unit = 18.0          # SCALE 1/4" = 1'-0"; HOUSE ROOF − FLOOR LEVEL 11'-0 1/2" = 199 pt = 196 pt до верха панели
 material = "wood"         # SIDING 07 46 00 / ENGINEERED WOOD PRODUCTS 06 11 15: крупные панели с швами
