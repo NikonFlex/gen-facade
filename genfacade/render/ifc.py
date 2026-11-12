@@ -13,11 +13,12 @@
 
 import math
 from collections import defaultdict
+from typing import NamedTuple
 
 import shapely
 import shapely.affinity
 
-from genfacade import parts, roof, unfold
+from genfacade import parts, roof, roof_items, unfold
 from genfacade.config import Config
 from genfacade.render.house3d import house_3d
 from genfacade.render.ifc_step import STAR, Enum, Ref, Step, Typed, guid
@@ -151,6 +152,11 @@ class Writer:
         line = self.s.add("IfcPolyline", [*pts, pts[0]])
         return self.s.add("IfcArbitraryClosedProfileDef", Enum("AREA"), None, line)
 
+    def circle(self, radius: float) -> Ref:
+        centre = self.s.add("IfcAxis2Placement2D",
+                            self.s.add("IfcCartesianPoint", [0.0, 0.0]), None)
+        return self.s.add("IfcCircleProfileDef", Enum("AREA"), None, centre, radius)
+
     def rect(self, w: float, h: float) -> Ref:
         centre = self.s.add("IfcAxis2Placement2D", self.s.add(
             "IfcCartesianPoint", [w / 2, h / 2]), None)
@@ -200,6 +206,17 @@ class Writer:
         self.relate("IfcRelDefinesByProperties", f"{key}/{name}", [owner], pset)
 
 
+class Bar(NamedTuple):
+    """Горизонтальная труба или желоб в IFC: вид, концы оси в плане, высота оси, сечение (сторона
+    квадрата или диаметр круга) и круглое ли оно."""
+
+    kind: str
+    ends: tuple[Point, Point]
+    z: float
+    size: float
+    round: bool
+
+
 def label(text: str) -> Typed:
     return Typed("IfcLabel", text)
 
@@ -240,6 +257,7 @@ class IfcHouse:
         self._joints()
         self._slabs()
         self._roof()
+        self._roof_items()
         self._finish()
         return self.w.s.render()
 
@@ -572,6 +590,48 @@ class IfcHouse:
         if data.get("flat"):
             flat.append((data["flat"], self.sheet.spec.eaves_m))
         return [([(x, y, h + self.roof_m) for x, y in shape], UP) for shape, h in flat]
+
+    # ——— труба и водосток (gf#454): объекты крыши, которых нет у модели шага 4 ———
+
+    def _roof_items(self) -> None:
+        """Дымовая труба — IfcChimney (призма от низа в кровле до верха); желоб — IfcPipeSegment
+        GUTTER, водосточная труба и её отвод — IfcPipeSegment RIGIDSEGMENT: брусок и цилиндры."""
+        w, look = self.w, self.cfg.sheet.roof_items
+        found = roof_items.roof_items(self.sheet, look)
+        top = self.sheet.spec.floors - 1
+        if (c := found.chimney) is not None:
+            item = w.solid(w.polygon(c.footprint), c.z1 - c.z0, look.chimney_fill)
+            ref = w.product("IfcChimney", "chimney", self.ifc.names.chimney,
+                            w.place(self.building_place, (0.0, 0.0, c.z1)), w.shape([item]),
+                            None, Enum("NOTDEFINED"))
+            self.contained[top].append(ref)
+        for n, g in enumerate(found.gutters, 1):
+            self._segment(f"gutter{n}", self.ifc.names.gutter.format(n=n),
+                          Bar("GUTTER", (g.a, g.b), g.z - g.size / 2, g.size, False))
+        for n, p in enumerate(found.pipes, 1):
+            name = self.ifc.names.pipe.format(n=n)
+            item = w.solid(w.circle(p.diameter / 2), p.z_top, look.gutter_fill)
+            ref = w.product("IfcPipeSegment", f"pipe{n}", name, w.place(
+                self.building_place, (*p.center, p.z_top)), w.shape([item]), None,
+                Enum("RIGIDSEGMENT"))
+            self.contained[0].append(ref)
+            if math.dist(p.elbow, p.center) > EPS:
+                self._segment(f"elbow{n}", name, Bar("RIGIDSEGMENT", (p.center, p.elbow), p.z_top,
+                                                    p.diameter, True))
+
+    def _segment(self, key: str, name: str, bar: Bar) -> None:
+        """Труба или желоб по горизонтальной оси bar.ends на высоте оси bar.z."""
+        w, (a, b), size = self.w, bar.ends, bar.size
+        d = _unit((b[0] - a[0], b[1] - a[1], 0.0))
+        x = (-d[1], d[0], 0.0)
+        # размещение: ось z — вдоль a→b, выдавливание идёт назад по ней, от b к a
+        at = (b[0], b[1], bar.z) if bar.round else (b[0] - x[0] * size / 2, b[1] - x[1] * size / 2,
+                                                    bar.z - size / 2)
+        profile = w.circle(size / 2) if bar.round else w.rect(size, size)
+        item = w.solid(profile, math.dist(a, b), self.cfg.sheet.roof_items.gutter_fill)
+        ref = w.product("IfcPipeSegment", key, name, w.place(self.building_place, at, d, x),
+                        w.shape([item]), None, Enum(bar.kind))
+        self.contained[0 if bar.round else self._storey_at(bar.z)].append(ref)
 
     # ——— материалы и этажи ———
 

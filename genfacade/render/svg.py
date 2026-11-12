@@ -13,7 +13,7 @@ from xml.etree import ElementTree
 
 import shapely
 
-from genfacade import roof, window_shape
+from genfacade import roof, roof_items, window_shape
 from genfacade.config import Axes, Config, DoorLook, Hatch, Levels, Sheet, SheetLayout
 from genfacade.render import hatch, sheet_format, trim
 from genfacade.render.shapes import add_line, box, points
@@ -59,10 +59,11 @@ class Top(NamedTuple):
     roof: list[Polygon] = []
     seams: list[list[Point]] = []  # линии примыкания кровли нижней части к стене верхней (gf#322)
     gable: Polygon | None = None  # фронтон — место окон над карнизом (`roof.gables`, gf#321)
+    items: list[tuple[roof_items.ItemKind, Polygon]] = []  # труба, желоб, трубы (gf#454)
 
     def height(self, facade: SideFacade) -> float:
-        """Верх рисунка стороны: силуэт стены, стена над карнизом и кровля."""
-        shapes = [facade.silhouette or [], *self.above, *self.roof]
+        """Верх рисунка стороны: силуэт стены, стена над карнизом, кровля и труба."""
+        shapes = [facade.silhouette or [], *self.above, *self.roof, *(p for _, p in self.items)]
         return max(y for shape in shapes for _, y in shape)
 
 
@@ -76,11 +77,13 @@ def tops(sheet: FacadeSheet, cfg: Config) -> list[Top]:
     if house is None:
         return [NOTHING_ABOVE for _ in sheet.facades]
     gables = roof.sheet_gables(sheet)
+    found = roof_items.roof_items(sheet, cfg.sheet.roof_items)
     out = []
     for k in range(len(sheet.facades)):
         walls, seams = roof.joint_view(house, k)
         out.append(Top(roof.house_above(house, k) + walls,
-                       roof.house_view(house, k, cfg.sheet.roof.thickness_m), seams, gables[k]))
+                       roof.house_view(house, k, cfg.sheet.roof.thickness_m), seams, gables[k],
+                       roof_items.view(found, house.corners, k)))
     return out
 
 
@@ -267,6 +270,7 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
         _zone(g, z, pen)
     # Контур — до элементов: карниз у края стены ложится поверх линии, а не под неё.
     ElementTree.SubElement(g, "polygon", {"class": "outline", "points": silhouette})
+    _items(g, top, pen, roof_items.ItemKind.CHIMNEY)  # труба — за стеной над карнизом и кровлей
     for shape in top.above:  # стена над карнизом — основной отделкой, как стена под ним
         ElementTree.SubElement(g, "polygon", {"class": "above-eaves", "points": points(shape),
                                               "fill": _main(pen)})
@@ -281,7 +285,19 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
                                               "fill": _roof_fill(pen)})
     for seam in top.seams:  # примыкание кровли нижней части к стене верхней
         ElementTree.SubElement(g, "polyline", {"class": "outline joint", "points": points(seam)})
+    _items(g, top, pen, roof_items.ItemKind.GUTTER)  # желоб и трубы — на кромке кровли и стене
+    _items(g, top, pen, roof_items.ItemKind.PIPE)
     return g
+
+
+def _items(g: ElementTree.Element, top: Top, pen: Pen, kind: roof_items.ItemKind) -> None:
+    """Труба, желоба или водосточные трубы вида (gf#454): цвет — из `[roof_items]` листа."""
+    look = pen.cfg.sheet.roof_items
+    fill = look.chimney_fill if kind is roof_items.ItemKind.CHIMNEY else look.gutter_fill
+    for found, shape in top.items:
+        if found is kind:
+            ElementTree.SubElement(g, "polygon", {"class": f"roof-item {kind}",
+                                                  "points": points(shape), "fill": fill})
 
 
 def _main(pen: Pen) -> str:

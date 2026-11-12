@@ -30,6 +30,7 @@ export class HouseStage {
     this._scene(threeModule, data);
     await this._tiles(threeModule, data.swatches);
     this._roof(threeModule, data);
+    this._items(threeModule, data.items);
     this._ground(threeModule);
     this.pxPerM = this._wallScale(data.walls);
     await Promise.all(data.walls.map((w) => this._wall(threeModule, w)));
@@ -120,6 +121,40 @@ export class HouseStage {
     // Дом из частей разной высоты (gf#322): плита над каждой частью на её карнизе.
     const slabs = data.roof.slabs || [{ shape: data.roof.flat, height_m: data.eaves_m }];
     for (const { shape, height_m } of slabs) this._slab(THREE, shape, height_m, data.roof);
+  }
+
+  // Дымовая труба, желоб и водосточные трубы (gf#454): план (x, y) и высота → сцена (x, высота, −y).
+  _items(THREE, items) {
+    const at = ([x, y], h) => new THREE.Vector3(x, h, -y);
+    const add = (geo, color, position) => {
+      const mesh = new THREE.Mesh(geo, this._material(THREE, null, color));
+      mesh.position.copy(position);
+      mesh.add(this._edges(THREE, geo));  // рёбра — дочерние: повторяют поворот
+      this.scene.add(mesh);
+      return mesh;
+    };
+    if (items.chimney) {
+      const c = items.chimney;
+      const shape = new THREE.Shape(c.footprint.map(([x, y]) => new THREE.Vector2(x, y)));
+      const geo = new THREE.ExtrudeGeometry(shape, { depth: c.z1 - c.z0, bevelEnabled: false });
+      geo.rotateX(-Math.PI / 2);
+      add(geo, c.color, new THREE.Vector3(0, c.z0, 0));
+    }
+    for (const g of items.gutters) {
+      const [a, b] = [at(g.a, g.z - g.size / 2), at(g.b, g.z - g.size / 2)];
+      const geo = new THREE.BoxGeometry(a.distanceTo(b), g.size, g.size);
+      const mesh = add(geo, g.color, a.clone().add(b).multiplyScalar(0.5));
+      mesh.rotation.y = Math.atan2(g.b[1] - g.a[1], g.b[0] - g.a[0]);
+    }
+    for (const p of items.pipes) {
+      const r = p.diameter / 2;
+      add(new THREE.CylinderGeometry(r, r, p.z_top, 12), p.color, at(p.center, p.z_top / 2));
+      const [from, to] = [at(p.center, p.z_top), at(p.elbow, p.z_top)];
+      if (from.distanceTo(to) < 1e-6) continue;
+      const elbow = add(new THREE.CylinderGeometry(r, r, from.distanceTo(to), 12), p.color,
+        from.clone().add(to).multiplyScalar(0.5));
+      elbow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
+    }
   }
 
   _slab(THREE, outline, height, roof) {

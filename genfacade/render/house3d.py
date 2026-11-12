@@ -13,7 +13,7 @@ import math
 
 import shapely
 
-from genfacade import parts, roof, window_shape
+from genfacade import parts, roof, roof_items, window_shape
 from genfacade.config import Config, House3d
 from genfacade.derive import DERIVED
 from genfacade.render.svg import (
@@ -68,7 +68,23 @@ def house_3d(sheet: FacadeSheet, cfg: Config) -> dict:
     swatches = {m: s for m in used - {None} if (s := swatch(m, pen)) is not None}
     return {"corners": corners, "eaves_m": sheet.spec.eaves_m,
             "trim": cfg.sheet.trim.model_dump(), "walls": walls, "roof": roof_part,
-            "swatches": swatches}
+            "items": _items(sheet, cfg), "swatches": swatches}
+
+
+def _items(sheet: FacadeSheet, cfg: Config) -> dict:
+    """Труба и водосток в объёме (gf#454): метры плана и высота; труба — призма по четырём углам,
+    желоб — брусок по оси, водосточная труба — цилиндр и отвод к желобу."""
+    look = cfg.sheet.roof_items
+    found = roof_items.roof_items(sheet, look)
+    chimney = found.chimney
+    return {
+        "chimney": None if chimney is None else {
+            "footprint": chimney.footprint, "z0": chimney.z0, "z1": chimney.z1,
+            "color": look.chimney_fill},
+        "gutters": [{"a": g.a, "b": g.b, "z": g.z, "size": g.size, "color": look.gutter_fill}
+                    for g in found.gutters],
+        "pipes": [{"center": p.center, "elbow": p.elbow, "z_top": p.z_top,
+                   "diameter": p.diameter, "color": look.gutter_fill} for p in found.pipes]}
 
 
 def _look(sheet: FacadeSheet, look: House3d) -> House3d:
