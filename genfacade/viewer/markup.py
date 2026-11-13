@@ -110,7 +110,7 @@ def _edited(cfg: Config, m: manual.Markup, edit: markup_edit.Edit) -> manual.Mar
         new = markup_edit.apply(m, edit)
         manual.check_kinds(new, cfg)
         markup_edit.check_materials(new, cfg.library.kinds)
-        markup_edit.check_colors(new)
+        manual.check_colors(new)
         return new
     except (ValueError, ValidationError, manual.BadMarkup) as e:
         raise Refused(Refusal.BAD_MARKUP_EDIT, str(e)) from e

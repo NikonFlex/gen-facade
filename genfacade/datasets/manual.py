@@ -862,11 +862,16 @@ def palette_roles(m: Markup) -> dict[PaletteRole, str]:
     return {role: kind for role, kind in kinds.items() if kind is not None}
 
 
+def check_colors(m: Markup) -> None:
+    """Цвет есть только у ролей, что есть в палитре дома: роли без вида материала цвета не дают."""
+    if lost := sorted(set(m.colors) - set(palette_roles(m))):
+        raise BadMarkup(f"{m.id}: цвет у ролей без материала в палитре: {', '.join(lost)}")
+
+
 def _palette(m: Markup) -> list[Material]:
     """Палитра дома по разметке; цвет роли — с листа, если разметка его держит (gf#470)."""
+    check_colors(m)
     roles = palette_roles(m)
-    if lost := sorted(set(m.colors) - set(roles)):
-        raise BadMarkup(f"{m.id}: цвет у ролей без материала в палитре: {', '.join(lost)}")
     return [Material(id=role, kind=kind, color=m.colors.get(role)) for role, kind in roles.items()]
 
 

@@ -27,7 +27,6 @@ from genfacade.datasets.manual import (
     SkylightMark,
     TrimMark,
     ZoneMark,
-    palette_roles,
 )
 from genfacade.schema import EPS, LevelKind, MarkKind, Model, PaletteRole, RoofKind
 
@@ -182,12 +181,6 @@ def check_materials(m: Markup, kinds: Collection[str]) -> None:
 
 def zones(m: Markup) -> list[ZoneMark]:
     return [z for e in m.sides for z in e.zones]
-
-
-def check_colors(m: Markup) -> None:
-    """Цвет есть только у ролей, что есть в палитре дома: роли без вида материала цвета не дают."""
-    if lost := sorted(set(m.colors) - set(palette_roles(m))):
-        raise ValueError(f"{m.id}: цвет у ролей без материала: {', '.join(lost)}")
 
 
 def uncolored(edit: Edit) -> Edit:
