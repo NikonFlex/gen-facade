@@ -542,6 +542,9 @@ class MarkupLabels(Section):
     mark_kind: str                 # подпись списка видов у выбранной отметки
     empty_kind: str                # «вид не записан» в списках видов
     delete_mark: str
+    delete_zone: str
+    no_color: str                  # у роли палитры цвет не задан (gf#470)
+    role: dict[PaletteRole, str]   # подпись цвета роли палитры
 
 
 class MarkStyle(Section):
@@ -552,6 +555,13 @@ class MarkStyle(Section):
     color: str
     size_m: Size | None = None     # от касания: ширина × высота, м; у касания-точки нет
     defaults: dict[str, str | int | float] = {}   # поля новой отметки, кроме места на виде
+
+
+class ZoneStyle(Section):
+    """Зона второй отделки на виде (gf#470): подпись кнопки и размер от касания, м."""
+
+    label: str
+    size_m: Size
 
 
 class MarkupEditor(Section):
@@ -569,6 +579,7 @@ class MarkupEditor(Section):
     min_box_m: float               # рамка меньше этого при отпускании — касание, не рамка
     house_step: dict[str, float]   # шаг числовых полей дома на панели правки (gf#470)
     marks: dict[MarkKind, MarkStyle]
+    zone: ZoneStyle
     colors: MarkupColors
     labels: MarkupLabels
 
@@ -580,6 +591,7 @@ class MarkupEditor(Section):
             "подпись состояния": (set(self.labels.state), set(CheckState)),
             "подпись причины": (set(self.labels.reason), set(RejectReason)),
             "подпись линии": (set(self.labels.level), set(LevelKind)),
+            "подпись роли": (set(self.labels.role), set(PaletteRole)),
             "размер рамки": (set(self.default_size_m), set(self.add_classes)),
             "отметка": (set(self.marks), set(MarkKind)),
         }
@@ -691,6 +703,7 @@ class MarkupColors(Section):
 
     min_pixels: int   # у роли пикселей меньше — цвет не пишется: мест роли нет или они узкие
     line_dark: int    # пиксели темнее (средняя яркость 0–255) — линии чертежа, в медиану не идут
+    paper_min: int    # медиана, у которой все каналы не ниже, — бумага чертежа, а не цвет отделки
 
 
 class Manual(Section):

@@ -95,11 +95,13 @@ def collect(m: manual.Markup, pdf: Path, pages: Pages) -> dict[PaletteRole, nump
 
 
 def median_color(px: numpy.ndarray, cfg: manual.Manual) -> str | None:
-    """`#rrggbb` медианы без линий чертежа; пикселей меньше порога — нет цвета."""
+    """`#rrggbb` медианы без линий чертежа; пикселей мало или медиана — бумага — цвета нет."""
     px = px[px.mean(axis=1) >= cfg.colors.line_dark]
     if len(px) < cfg.colors.min_pixels:
         return None
     r, g, b = (int(v) for v in numpy.median(px, axis=0))
+    if min(r, g, b) >= cfg.colors.paper_min:
+        return None  # бумага: на линейном чертеже заливки нет
     return f"#{r:02x}{g:02x}{b:02x}"
 
 

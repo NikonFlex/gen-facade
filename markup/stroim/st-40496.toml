@@ -20,7 +20,7 @@ overhang_by = "drawing"
 unit = "m"
 pt_per_unit = 116.0
 material = "brick"  # светлый кирпич кладкой
-colors = { main = "#ededee", plinth = "#ffffff" }
+colors = { main = "#ededee" }
 plinth = 0.4
 floor_heights = [2.85, 2.8]
 plinth_material = "plaster"  # белый цоколь −0,400…±0,000

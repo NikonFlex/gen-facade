@@ -28,7 +28,7 @@ overhang_by = "drawing"
 unit = "m"
 pt_per_unit = 199.5
 material = "plaster"            # светлые стены без рисунка — белая штукатурка (по цвету, не уверен)
-colors = { main = "#ffffff", plinth = "#727272", accent = "#727272", roof = "#7c7c7c" }
+colors = { plinth = "#727272", accent = "#727272", roof = "#7c7c7c" }
 plinth = 0.3
 plinth_material = "concrete"    # тёмная полоса цоколя (по цвету, не уверен)
 floor_heights = [3.0, 1.35]     # 2-й этаж +3,000 (высота этажа по карточке), стена под свесом +4,35

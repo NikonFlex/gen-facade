@@ -581,20 +581,30 @@ def test_real_roof_marks_are_not_eaves():
 
 @pytest.mark.slow
 def test_all_real_houses_are_built_and_old_ones_without_fallbacks():
-    """59 разметок — 59 листов (gf#422); 49 прежних собираются по отметкам как есть (без `_bare` и
-    разрезов), поэтому их карниз, участки и крылья прежние."""
+    """Сколько разметок — столько листов (gf#422), ни одна не отклонена и не ждёт; прежние
+    (кроме `fallback`) собираются по отметкам как есть (без `_bare` и разрезов), поэтому их карниз,
+    участки и крылья прежние."""
     root = Path(__file__).parents[2] / "markup"
     fallback = {"ffh-julie", "ffh-virginia-ext", "ffh-marilyn", "ffh-penny-sylvia", "sd-va-2011",
                 "sd-maryland-2017", "sd-nyalfred-2015", "sd-northwestern-2017", "sd-sit-2013",
                 "sd-wvu-2013"}
-    built = 0
-    for path in sorted(root.glob("*/*.toml")):
+    built, rejected, waiting = 0, {}, {}
+    paths = sorted(root.glob("*/*.toml"))
+    for path in paths:
         m = manual.read(path)
-        manual.house(m, CFG.data.manual)
+        try:
+            manual.house(m, CFG.data.manual)
+        except manual.BadMarkup as e:
+            rejected[m.id] = str(e)
+            continue
+        except manual.Unsupported as e:
+            waiting[m.id] = str(e)
+            continue
         built += 1
-        if m.id not in fallback:
+        if m.id not in fallback and path.parent.name != "stroim":  # строим.дом.рф — не прежние
             manual._house(m, CFG.data.manual, False)
-    assert built == 59
+    assert not rejected and not waiting
+    assert built == len(paths)
 
 
 def tented(*rise: tuple[float, float]) -> Markup:

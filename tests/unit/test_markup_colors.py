@@ -45,13 +45,13 @@ roof = [[[100.0, 79.0], [300.0, 79.0], [200.0, 20.0]]]
 """
 
 
-def sheet(tmp_path: Path) -> Path:
-    """Лист 400 × 400: каждая роль залита своим цветом, поверх — чёрные линии и окно."""
+def sheet(tmp_path: Path, plinth: str = PLINTH) -> Path:
+    """Лист 400 × 400: каждая роль залита своим цветом (цоколь — plinth), поверх — линии и окно."""
     img = Image.new("RGB", (400, 400), "white")
     d = ImageDraw.Draw(img)
     d.rectangle([100, 100, 300, 300], fill=WALL)
     d.rectangle([200, 100, 300, 300], fill=ACCENT)
-    d.rectangle([100, 300, 300, 340], fill=PLINTH)
+    d.rectangle([100, 300, 300, 340], fill=plinth)
     d.polygon([(100, 79), (300, 79), (200, 20)], fill=ROOF)
     d.rectangle([100, 80, 300, 100], fill=TRIM)
     d.rectangle([110, 110, 190, 260], fill="#3355ff")           # окно: в основную не идёт
@@ -124,3 +124,13 @@ def test_role_without_material_in_the_palette_is_not_written(tmp_path):
     assert PaletteRole.ROOF in colors
     markup.write_text(markup.read_text().replace('roof_material = "metal_roof"\n', ""))
     assert PaletteRole.ROOF not in mc.house_colors(markup, cfg_over(tmp_path), {})
+
+
+def test_role_painted_with_paper_is_not_written(tmp_path):
+    """Линейный чертёж: место роли залито цветом бумаги — цвета на листе нет, роль не пишется."""
+    markup = tmp_path / "stroim" / "st-1.toml"
+    markup.parent.mkdir()
+    markup.write_text(HOUSE.format())
+    sheet(tmp_path, plinth="#ffffff")
+    colors = mc.house_colors(markup, cfg_over(tmp_path), {})
+    assert PaletteRole.PLINTH not in colors and PaletteRole.MAIN in colors

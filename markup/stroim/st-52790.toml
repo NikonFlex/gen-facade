@@ -36,7 +36,7 @@ pt_per_unit = 95.0
 # отделка: на листе подписей и экспликации нет, серая заливка на видах — тени; материал — штукатурка по умолчанию
 # [не проверено: в API facade_material = 8, расшифровки нет; рисунок — гладкая стена]
 material = "plaster"
-colors = { main = "#bbbbbb", plinth = "#ffffff" }
+colors = { main = "#bbbbbb" }
 plinth = 0.7
 plinth_material = "plaster"  # цоколь — гладкий, без рисунка [не проверено]
 floor_heights = [3.0]
