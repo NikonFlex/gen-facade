@@ -1,5 +1,69 @@
 {
   "houses": {
+    "st-12769": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": 1794585526.043783,
+      "decided_at": null,
+      "seconds": null
+    },
+    "st-18457": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": 1794585552.1606755,
+      "decided_at": null,
+      "seconds": null
+    },
+    "st-22175": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": 1794585614.1042562,
+      "decided_at": null,
+      "seconds": null
+    },
+    "st-25739": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": 1794585629.744638,
+      "decided_at": null,
+      "seconds": null
+    },
+    "st-31324": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": 1794585640.0271273,
+      "decided_at": null,
+      "seconds": null
+    },
+    "st-34833": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": 1794585653.721425,
+      "decided_at": null,
+      "seconds": null
+    },
+    "st-38396": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": 1794585664.6204536,
+      "decided_at": null,
+      "seconds": null
+    },
+    "st-39988": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": null,
+      "decided_at": null,
+      "seconds": null
+    },
     "st-40496": {
       "state": "edited",
       "reason": null,
@@ -7,6 +71,46 @@
       "opened_at": 1794222277.4448395,
       "decided_at": "2026-11-09T11:05:31+00:00",
       "seconds": 53.8
+    },
+    "st-42623": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": null,
+      "decided_at": null,
+      "seconds": null
+    },
+    "st-43341": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": null,
+      "decided_at": null,
+      "seconds": null
+    },
+    "st-43877": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": null,
+      "decided_at": null,
+      "seconds": null
+    },
+    "st-44337": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": null,
+      "decided_at": null,
+      "seconds": null
+    },
+    "st-48320": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": null,
+      "decided_at": null,
+      "seconds": null
     },
     "st-52299": {
       "state": "edited",
@@ -16,6 +120,30 @@
       "decided_at": "2026-11-09T11:09:02+00:00",
       "seconds": 16.9
     },
+    "st-52780": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": null,
+      "decided_at": null,
+      "seconds": null
+    },
+    "st-52790": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": null,
+      "decided_at": null,
+      "seconds": null
+    },
+    "st-52873": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": null,
+      "decided_at": null,
+      "seconds": null
+    },
     "st-53112": {
       "state": "good",
       "reason": null,
@@ -23,6 +151,14 @@
       "opened_at": 1794222542.5808315,
       "decided_at": "2026-11-09T11:09:08+00:00",
       "seconds": 5.6
+    },
+    "st-53372": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": null,
+      "decided_at": null,
+      "seconds": null
     },
     "st-53422": {
       "state": "good",
@@ -48,6 +184,14 @@
       "decided_at": "2026-11-09T11:09:21+00:00",
       "seconds": 2.7
     },
+    "st-54392": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": null,
+      "decided_at": null,
+      "seconds": null
+    },
     "st-55322": {
       "state": "edited",
       "reason": null,
@@ -71,6 +215,14 @@
       "opened_at": 1794222454.2992783,
       "decided_at": "2026-11-09T11:08:00+00:00",
       "seconds": 25.9
+    },
+    "st-55603": {
+      "state": "unchecked",
+      "reason": null,
+      "note": "",
+      "opened_at": null,
+      "decided_at": null,
+      "seconds": null
     },
     "st-55707": {
       "state": "good",
