@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  SHAPE, boxAt, flattenMarks, isTap, markFrom, moveBox, pick, removeElement, removeMark, resizeBox,
+  SHAPE, boxAt, boxFrom, flattenMarks, isTap, markFrom, moveBox, pick, removeElement, removeAt, resizeBox,
   setClass,
 } from "../../genfacade/viewer/static/markup_geom.js";
 
@@ -79,5 +79,10 @@ test("отметки сторон — одним списком с номеро�
   const sides = [{ marks: { chimney: [{ x: 1 }] } }, { marks: { chimney: [{ x: 2 }, { x: 3 }] } }];
   assert.deepEqual(flattenMarks(sides, "chimney"),
     [{ x: 1, side: 0 }, { x: 2, side: 1 }, { x: 3, side: 1 }]);
-  assert.deepEqual(removeMark([{ x: 1 }, { x: 2 }], 0), [{ x: 2 }]);
+  assert.deepEqual(removeAt([{ x: 1 }, { x: 2 }], 0), [{ x: 2 }]);
+});
+
+test("рамка зоны от жеста: протянули — края, коснулись — размер по умолчанию", () => {
+  assert.deepEqual(boxFrom([300.04, 200], [100, 50], [2, 1.5], 100, 15), [100, 50, 300, 200]);
+  assert.deepEqual(boxFrom([300, 200], [302, 201], [2, 1.5], 100, 15), [200, 125, 400, 275]);
 });

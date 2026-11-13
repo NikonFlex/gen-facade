@@ -5,8 +5,8 @@
 // Открытый дом — в адресе (#h=<id>); без адреса — первый непроверенный.
 
 import {
-  SHAPE, boxAt, flattenMarks, handlePoints, isTap, markFrom, moveBox, normalize, pick,
-  removeElement, removeMark, resizeBox, round1, setClass,
+  SHAPE, boxFrom, flattenMarks, handlePoints, markFrom, moveBox, normalize, pick,
+  removeAt, removeElement, resizeBox, round1, setClass,
 } from "/static/markup_geom.js";
 import { topbar } from "/static/shell.js";
 import { $, el, toast } from "/static/dom.js";
@@ -20,7 +20,8 @@ const LEVEL_PAD_M = 1.0; // поле вокруг стены на кадре, к
 const MARK_PX = 12; // толщина отметки-полоски (трубы, слухового окна) на экране, px
 const state = {
   options: null, queue: null, house: null, initial: "", selected: null, adding: null,
-  addingMark: null, mark: null, drag: null, levels: [], busy: false, openedAt: 0,
+  addingMark: null, addingZone: false, zone: null, mark: null, drag: null, levels: [], busy: false,
+  openedAt: 0,
 };
 const ordered = serial(); // предпросмотр линий — по очереди: последний ответ принадлежит последней правке
 
@@ -53,6 +54,7 @@ function editBody() {
       elements: s.elements.map((e) => ({
         cls: e.cls, box: e.box.map(round1), parent: e.parent ?? null, variant: e.variant ?? null,
       })),
+      zones: s.zones.map((z) => ({ role: z.role, material: z.material, box: z.box.map(round1) })),
     })),
     levels: state.levels,
     house: state.house.fields,
@@ -68,6 +70,7 @@ function refreshButtons() {
   for (const id of ["good", "reject", "prev", "next", "list-open"]) $(id).disabled = state.busy;
   const chosen = selectedElement();
   $("pick-tools").hidden = !chosen;
+  $("zone-tools").hidden = !state.zone;
   refreshMarkTools();
   if (chosen) {
     $("cls").value = chosen.cls;
@@ -79,6 +82,7 @@ function refreshButtons() {
     b.classList.toggle("on", b.dataset.add === state.adding));
   document.querySelectorAll("[data-mark]").forEach((b) =>
     b.classList.toggle("on", b.dataset.mark === state.addingMark));
+  document.querySelectorAll("[data-zone]").forEach((b) => b.classList.toggle("on", state.addingZone));
 }
 
 // ——— отметки на виде ———
@@ -104,6 +108,7 @@ function refreshMarkTools() {
 function selectMark(ref) {
   state.mark = ref;
   state.selected = null;
+  state.zone = null;
   drawAll();
   refreshButtons();
 }
@@ -128,6 +133,18 @@ function drawMarks(side, k, scale) {
 
 const selectedElement = () =>
   state.selected ? sides()[state.selected.k].elements[state.selected.i] : null;
+const selectedZone = () => (state.zone ? sides()[state.zone.k].zones[state.zone.i] : null);
+// Рамка, которую двигают и тянут: выбранная зона или выбранный элемент.
+const target = () => selectedZone() ?? selectedElement();
+const targetSide = () => (state.zone ?? state.selected)?.k;
+
+function selectZone(ref) {
+  state.zone = ref;
+  state.selected = null;
+  state.mark = null;
+  drawAll();
+  refreshButtons();
+}
 
 // ——— рисование ———
 
@@ -171,10 +188,15 @@ function drawShapes(side) {
   side.roof.forEach((r) => poly(r, c.roof));
   side.eaves.forEach((e) => sv("line", { x1: e.x[0], y1: e.y, x2: e.x[1], y2: e.y,
     stroke: c.levels, "stroke-width": 4, class: "shape" }, side.svg));
-  for (const z of side.zones) {
-    const [x0, y0, x1, y1] = z.box;
-    sv("rect", { x: x0, y: y0, width: x1 - x0, height: y1 - y0, stroke: c.zone, class: "zone" }, side.svg);
-  }
+}
+
+function drawZones(side, k) {
+  const c = state.options.colors;
+  side.zones.forEach((z, i) => {
+    const [x0, y0, x1, y1] = normalize(z.box), chosen = state.zone?.k === k && state.zone.i === i;
+    sv("rect", { x: x0, y: y0, width: x1 - x0, height: y1 - y0, class: "zone",
+      stroke: chosen ? c.selected : c.zone, fill: c.zone, "fill-opacity": chosen ? 0.3 : 0.12 }, side.svg);
+  });
 }
 
 function drawElements(side, k, scale) {
@@ -188,9 +210,8 @@ function drawElements(side, k, scale) {
 }
 
 function drawHandles(side, k, scale) {
-  if (state.selected?.k !== k) return;
-  const box = side.elements[state.selected.i].box;
-  const [x0, y0, x1, y1] = normalize(box), r = handlePx() / scale;
+  if (targetSide() !== k) return;
+  const [x0, y0, x1, y1] = normalize(target().box), r = handlePx() / scale;
   const small = Math.min(x1 - x0, y1 - y0) * scale < handlePx() * 4; // на мелкой рамке — только углы
   for (const [name, [x, y]] of Object.entries(handlePoints([x0, y0, x1, y1]))) {
     if (small && name.length === 1) continue;
@@ -206,6 +227,7 @@ function draw(k) {
   sv("image", { href: side.image, x: 0, y: 0, width: side.size[0], height: side.size[1] }, side.svg)
     .style.pointerEvents = "none";
   drawShapes(side);
+  drawZones(side, k);
   drawLevels(side, side.geometry, scale);
   drawElements(side, k, scale);
   drawMarks(side, k, scale);
@@ -246,6 +268,7 @@ function toPt(side, ev) {
 
 function select(k, i) {
   state.mark = null;
+  state.zone = null;
   state.selected = i < 0 ? null : { k, i };
   drawAll();
   refreshButtons();
@@ -258,9 +281,10 @@ function onDown(k, ev) {
   side.svg.setPointerCapture(ev.pointerId);
   if (state.adding) return void (state.drag = { kind: "create", k, start, box: [...start, ...start] });
   if (state.addingMark) return void (state.drag = { kind: "mark", k, start, box: [...start, ...start] });
+  if (state.addingZone) return void (state.drag = { kind: "zone", k, start, box: [...start, ...start] });
   if (t.role === "mark") return selectMark({ k, kind: t.kind, i: Number(t.i) });
   if (t.role === "handle") {
-    const orig = [...side.elements[state.selected.i].box];
+    const orig = [...target().box];
     return void (state.drag = { kind: "resize", k, h: t.h, start, orig });
   }
   if (t.role === "level") {
@@ -272,25 +296,38 @@ function onDown(k, ev) {
     return void (state.drag = { kind: "wall", k, w: Number(t.w), start, orig: side.wall[Number(t.w)] });
   }
   const i = pick(side.elements, start);
+  if (i < 0 && pickZone(side, k, start)) return;
   select(k, i);
   if (i >= 0) state.drag = { kind: "move", k, start, orig: [...side.elements[i].box] };
+}
+
+// Под точкой нет элемента — берём зону отделки: она лежит под элементами.
+function pickZone(side, k, start) {
+  const i = pick(side.zones, start);
+  if (i < 0) return false;
+  selectZone({ k, i });
+  state.drag = { kind: "move", k, start, orig: [...side.zones[i].box] };
+  return true;
 }
 
 function onMove(k, ev) {
   const d = state.drag;
   if (!d || d.k !== k) return;
   const side = sides()[k], p = toPt(side, ev), dx = p[0] - d.start[0], dy = p[1] - d.start[1];
-  if (d.kind === "move") side.elements[state.selected.i].box = moveBox(d.orig, dx, dy);
-  if (d.kind === "resize") side.elements[state.selected.i].box = resizeBox(d.orig, d.h, dx, dy);
-  if (d.kind === "create" || d.kind === "mark") d.box = [...d.start, ...p];
+  if (d.kind === "move") target().box = moveBox(d.orig, dx, dy);
+  if (d.kind === "resize") target().box = resizeBox(d.orig, d.h, dx, dy);
+  if (CREATING.has(d.kind)) d.box = [...d.start, ...p];
   if (d.kind === "wall") side.wall[d.w] = d.orig + dx;
   if (d.kind === "level") setLine(side.geometry, d, d.orig + dy);
   draw(k);
   if (d.kind === "create") drawGhost(side, d.box, colorOf(state.adding));
+  if (d.kind === "zone") drawGhost(side, d.box, state.options.colors.zone);
   if (d.kind === "mark" && state.options.marks[state.addingMark].shape !== SHAPE.POINT) {
     drawGhost(side, d.box, state.options.marks[state.addingMark].color);
   }
 }
+
+const CREATING = new Set(["create", "mark", "zone"]); // жесты, что тянут новую рамку
 
 function setLine(g, d, y) {
   if (d.level === "top") g.tops[d.index] = y;
@@ -310,8 +347,9 @@ function onUp(k, ev) {
   const side = sides()[k];
   if (d.kind === "create") addElement(side, k, d, toPt(side, ev));
   if (d.kind === "mark") addMark(side, k, d, toPt(side, ev));
+  if (d.kind === "zone") addZone(side, k, d, toPt(side, ev));
   if (d.kind === "move" || d.kind === "resize") {
-    const e = side.elements[state.selected.i];
+    const e = target();
     e.box = normalize(e.box).map(round1);
   }
   if (d.kind === "level") {
@@ -324,12 +362,22 @@ function onUp(k, ev) {
 
 function addElement(side, k, d, end) {
   const o = state.options, g = side.geometry, cls = state.adding;
-  const minPt = o.min_box_m * g.px_per_m;
-  const box = isTap([...d.start, ...end], minPt)
-    ? boxAt(d.start, o.default_size_m[cls], g.px_per_m) : normalize([...d.start, ...end]);
-  side.elements.push({ cls, box: box.map(round1), parent: null, variant: null });
+  const box = boxFrom(d.start, end, o.default_size_m[cls], g.px_per_m, o.min_box_m * g.px_per_m);
+  side.elements.push({ cls, box, parent: null, variant: null });
   state.adding = null;
   select(k, side.elements.length - 1);
+}
+
+// Вид второй отделки один на дом: у дома без неё берём первый из списка — поле дома его покажет.
+function addZone(side, k, d, end) {
+  const o = state.options, g = side.geometry, fields = state.house.fields;
+  fields.second_material ??= o.house_form.find((r) => r.name === "second_material").choices[0];
+  const box = boxFrom(d.start, end, o.zone.size_m, g.px_per_m, o.min_box_m * g.px_per_m);
+  side.zones.push({ role: "accent", material: fields.second_material, box });
+  state.addingZone = false;
+  buildHouseForm();
+  selectZone({ k, i: side.zones.length - 1 });
+  return preview();
 }
 
 function addMark(side, k, d, end) {
@@ -363,6 +411,7 @@ function preview() {
     try {
       const got = await call(`/api/markup/${state.house.id}/preview`, editBody());
       got.geometry.forEach((g, k) => { sides()[k].geometry = g; });
+      setRoles(got.roles);
       drawAll();
     } catch (err) {
       toast(`Линии не пересчитаны: ${err.message}`, "error");
@@ -375,12 +424,20 @@ function preview() {
 
 function removeMarked() {
   const { k, kind, i } = state.mark, side = sides()[k];
-  side.marks[kind] = removeMark(side.marks[kind], i);
+  side.marks[kind] = removeAt(side.marks[kind], i);
   selectMark(null);
+}
+
+function removeZone() {
+  const { k, i } = state.zone, side = sides()[k];
+  side.zones = removeAt(side.zones, i);
+  selectZone(null);
+  return preview();
 }
 
 function removeSelected() {
   if (state.mark) return removeMarked();
+  if (state.zone) return removeZone();
   if (!state.selected) return;
   const { k, i } = state.selected, side = sides()[k];
   side.elements = removeElement(side.elements, i);
@@ -397,10 +454,10 @@ function duplicateSelected() {
 }
 
 function nudge(dx, dy) {
-  const chosen = selectedElement();
+  const chosen = target();
   if (!chosen) return;
   chosen.box = moveBox(chosen.box, dx, dy);
-  draw(state.selected.k);
+  draw(targetSide());
   refreshButtons();
 }
 
@@ -408,9 +465,12 @@ function onKey(ev) {
   if (ev.target.matches("input, select, textarea") || document.querySelector("dialog[open]")) return;
   const step = ev.shiftKey ? 10 : 1;
   const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
-  if (moves[ev.key] && state.selected) { ev.preventDefault(); nudge(...moves[ev.key]); }
+  if (moves[ev.key] && target()) { ev.preventDefault(); nudge(...moves[ev.key]); }
   if (ev.key === "Delete" || ev.key === "Backspace") removeSelected();
-  if (ev.key === "Escape") { state.adding = null; state.addingMark = null; select(0, -1); }
+  if (ev.key === "Escape") {
+    Object.assign(state, { adding: null, addingMark: null, addingZone: false });
+    select(0, -1);
+  }
   if (ev.key === "Enter" && !state.busy) $("good").click();
 }
 
@@ -482,16 +542,18 @@ async function openHouse(id) {
   for (const s of house.sides) {
     s.scale = s.geometry.pt_per_unit;
     s.elements = s.elements.map((e) => ({ ...e, box: [...e.box] }));
+    s.zones = s.zones.map((z) => ({ ...z, box: [...z.box] }));
   }
   house.fields = structuredClone(house.house);
-  Object.assign(state, { house, selected: null, adding: null, addingMark: null, mark: null,
-    drag: null, levels: [] });
+  Object.assign(state, { house, selected: null, adding: null, addingMark: null, addingZone: false,
+    zone: null, mark: null, drag: null, levels: [] });
   state.openedAt = performance.now();
   $("house").textContent = house.id;
   const chip = $("chip");
   chip.textContent = state.options.labels.state[house.state];
   chip.className = `mk-chip ${house.state}`;
   buildHouseForm();
+  buildColors();
   $("sides").replaceChildren(...house.sides.map(buildSide));
   drawAll();
   state.initial = JSON.stringify(editBody());
@@ -540,12 +602,46 @@ function fieldInput(row) {
   return select;
 }
 
+// Поля дома, от которых зависит, какие роли есть в палитре: после правки сервер пересчитывает роли.
+const ROLE_FIELDS = new Set(["material", "plinth_material", "trim_material", "roof_material",
+  "second_material"]);
+
+// ——— цвета ролей палитры: поле на каждую роль, что есть у дома ———
+
+function setRoles(roles) {
+  const colors = state.house.fields.colors;
+  for (const role of Object.keys(colors)) if (!roles.includes(role)) delete colors[role];
+  state.house.roles = roles;
+  buildColors();
+}
+
+function colorRow(role) {
+  const names = state.options.labels, colors = state.house.fields.colors;
+  const input = el("input", { type: "color", value: colors[role] ?? "#808080" });
+  const clear = el("button", { type: "button", className: "btn" }, names.no_color);
+  const sync = () => {
+    clear.disabled = !(role in colors);
+    input.classList.toggle("unset", !(role in colors));
+  };
+  input.addEventListener("input", () => { colors[role] = input.value; sync(); refreshButtons(); });
+  clear.addEventListener("click", () => { delete colors[role]; sync(); refreshButtons(); });
+  sync();
+  const label = el("label", { className: "mk-field" }, names.role[role]);
+  label.append(input, clear);
+  return label;
+}
+
+function buildColors() {
+  $("color-fields").replaceChildren(...state.house.roles.map(colorRow));
+}
+
 function buildHouseForm() {
   $("house-fields").replaceChildren(...state.options.house_form.map((row) => {
     const input = fieldInput(row);
     input.addEventListener("change", () => {
       fieldSet(row.name, fieldValue(row, input));
       refreshButtons();
+      if (ROLE_FIELDS.has(row.name)) preview();
     });
     const label = el("label", { className: "mk-field" }, row.label);
     label.append(input);
@@ -561,6 +657,7 @@ function buildTools() {
     b.addEventListener("click", () => {
       state.adding = state.adding === cls ? null : cls;
       state.addingMark = null;
+      state.addingZone = false;
       refreshButtons();
     });
     return b;
@@ -571,11 +668,22 @@ function buildTools() {
     b.addEventListener("click", () => {
       state.addingMark = state.addingMark === kind ? null : kind;
       state.adding = null;
+      state.addingZone = false;
       refreshButtons();
     });
     return b;
   }));
+  const zone = el("button", { type: "button", className: "btn" }, `+ ${o.zone.label}`);
+  zone.dataset.zone = "";
+  zone.addEventListener("click", () => {
+    state.addingZone = !state.addingZone;
+    state.adding = null;
+    state.addingMark = null;
+    refreshButtons();
+  });
+  add.append(zone);
   $("mark-del").textContent = o.labels.delete_mark;
+  $("zone-del").textContent = o.labels.delete_zone;
   $("mark-kind").addEventListener("change", () => {
     const m = markAt(state.mark);
     m["roof" in m ? "roof" : "kind"] = $("mark-kind").value;
@@ -604,6 +712,7 @@ async function boot() {
   $("del").addEventListener("click", removeSelected);
   $("dup").addEventListener("click", duplicateSelected);
   $("mark-del").addEventListener("click", removeSelected);
+  $("zone-del").addEventListener("click", removeSelected);
   document.addEventListener("keydown", onKey);
   window.addEventListener("hashchange", route);
   window.addEventListener("resize", () => state.house && drawAll());

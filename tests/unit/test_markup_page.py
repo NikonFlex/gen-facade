@@ -22,6 +22,7 @@ from genfacade.schema import (
     ElementClass,
     LevelKind,
     MarkKind,
+    PaletteRole,
     Refusal,
     Refused,
     RejectReason,
@@ -247,6 +248,16 @@ def test_edit_keeps_marks_it_does_not_send_and_erases_an_empty_list(client, cfg)
     assert saved.chimneys == [] and kept == [skylight]
 
 
+def refused(client: TestClient, cfg, body: dict) -> None:
+    """Правка отвергнута кодом BAD_MARKUP_EDIT, файл не менялся, дом не «поправлен»."""
+    path = cfg.viewer.markup.folder / f"{HOUSE}.toml"
+    before = path.read_text()
+    bad = client.post(f"/api/markup/{HOUSE}/decision", json={"good": True, "edit": body})
+    assert bad.status_code == 422 and bad.json()["detail"]["code"] == Refusal.BAD_MARKUP_EDIT
+    assert path.read_text() == before
+    assert client.get("/api/markup").json()["items"][0]["state"] == CheckState.UNCHECKED
+
+
 @pytest.mark.parametrize("house, marks", [
     ({"pitch_deg": 95.0}, {}),                                    # уклон вне диапазона
     ({"roof_kind": RoofKind.FLAT, "pitch_deg": 30.0}, {}),        # плоская с уклоном
@@ -256,13 +267,75 @@ def test_edit_keeps_marks_it_does_not_send_and_erases_an_empty_list(client, cfg)
     ({}, {"chimneys": [{"side": 9, "x": 1.0}]}),                  # такой стороны нет
 ])
 def test_impossible_roof_edit_is_refused_by_code_and_file_stays(client, cfg, house, marks):
+    refused(client, cfg, roof_edit(client, house, **marks))
+
+
+ZONE = {"role": "accent", "material": "brick", "box": [320.0, 420.0, 520.0, 560.0]}  # юг
+
+
+def zone_edit(client: TestClient, zones: list[dict], house: dict | None = None) -> dict:
+    """Правка как со страницы: у южной стороны зоны второй отделки, остальное — как открыто."""
+    body = roof_edit(client, house)
+    body["sides"][0]["zones"] = zones
+    return body
+
+
+def test_zone_drawn_on_south_view_is_saved_as_the_only_second_finish(client, cfg):
     path = cfg.viewer.markup.folder / f"{HOUSE}.toml"
-    before = path.read_text()
-    body = roof_edit(client, house, **marks)
-    bad = client.post(f"/api/markup/{HOUSE}/decision", json={"good": True, "edit": body})
-    assert bad.status_code == 422 and bad.json()["detail"]["code"] == Refusal.BAD_MARKUP_EDIT
-    assert path.read_text() == before
-    assert client.get("/api/markup").json()["items"][0]["state"] == CheckState.UNCHECKED
+    assert all(not e.zones for e in manual.read(path).sides)
+    save_edit(client, zone_edit(client, [ZONE]))
+    saved = manual.read(path)
+    zones = [[z.model_dump(mode="json") for z in e.zones] for e in saved.sides]
+    assert zones == [[ZONE], [], [], []]
+    reopened = client.post(f"/api/markup/{HOUSE}/open").json()
+    assert reopened["house"]["second_material"] == "brick"
+    assert PaletteRole.ACCENT in reopened["roles"]
+    assert client.get("/api/markup").json()["items"][0]["state"] == CheckState.EDITED
+
+
+def test_second_material_field_gives_its_kind_to_every_zone(client, cfg):
+    save_edit(client, zone_edit(client, [ZONE], {"second_material": "stone"}))
+    assert {z.material for e in manual.read(
+        cfg.viewer.markup.folder / f"{HOUSE}.toml").sides for z in e.zones} == {"stone"}
+
+
+def test_zones_not_sent_stay_and_an_empty_list_erases_them(client, cfg):
+    path = cfg.viewer.markup.folder / f"{HOUSE}.toml"
+    save_edit(client, zone_edit(client, [ZONE]))
+    save_edit(client, roof_edit(client, {"pitch_deg": 30.0}))   # зон в запросе нет
+    assert len(manual.read(path).sides[0].zones) == 1
+    save_edit(client, zone_edit(client, []))
+    assert all(not e.zones for e in manual.read(path).sides)
+
+
+def test_accent_color_is_saved_and_unset_color_is_removed(client, cfg):
+    path = cfg.viewer.markup.folder / f"{HOUSE}.toml"
+    save_edit(client, zone_edit(client, [ZONE], {"colors": {"accent": "#a04030"}}))
+    assert manual.read(path).colors == {PaletteRole.ACCENT: "#a04030"}
+    assert 'accent = "#a04030"' in path.read_text()
+    save_edit(client, roof_edit(client, {"colors": {}}))
+    assert manual.read(path).colors == {}
+
+
+def test_preview_gives_palette_roles_of_the_edited_house(client):
+    got = client.post(f"/api/markup/{HOUSE}/preview", json=zone_edit(client, [ZONE])).json()
+    assert PaletteRole.ACCENT in got["roles"] and PaletteRole.MAIN in got["roles"]
+    plain = client.post(f"/api/markup/{HOUSE}/preview", json=roof_edit(client)).json()
+    assert PaletteRole.ACCENT not in plain["roles"]
+
+
+def test_two_second_finishes_are_refused(client, cfg):
+    second = {**ZONE, "material": "stone"}
+    refused(client, cfg, zone_edit(client, [ZONE, second]))
+
+
+def test_second_finish_not_from_the_library_is_refused(client, cfg):
+    refused(client, cfg, zone_edit(client, [{**ZONE, "material": "no-such-wall"}]))
+
+
+@pytest.mark.parametrize("colors", [{"accent": "#a04030"}, {"main": "#zzz"}, {"main": "red"}])
+def test_color_of_a_role_without_material_or_not_hex_is_refused(client, cfg, colors):
+    refused(client, cfg, roof_edit(client, {"colors": colors}))
 
 
 def test_page_options_give_every_choice_the_fields_need(client, cfg):

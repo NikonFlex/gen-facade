@@ -5,9 +5,10 @@
 (тот же, что в `tools/markup.py overlay`). Линии земли и этажей приходят pt-отметкой на виде и
 пересчитываются в цоколь и высоты этажей дома: значение общее для всех сторон.
 
-Поля дома (`HouseEdit`: крыша, кровля, водосток, обрамление, материалы) и отметки на видах (трубы,
-мансардные и слуховые окна, крыльцо под кровлей — `Edit.chimneys` и так далее, gf#470) приходят тем
-же запросом и ложатся в `Markup` здесь же; допустимость вида, уклона и ската проверяет сама
+Поля дома (`HouseEdit`: крыша, кровля, водосток, обрамление, материалы, цвета ролей палитры, вид
+второй отделки) и отметки на видах (трубы, мансардные и слуховые окна, крыльцо под кровлей —
+`Edit.chimneys` и так далее; зоны второй отделки — `SideEdit.zones`, gf#470) приходят тем же
+запросом и ложатся в `Markup` здесь же; допустимость вида, уклона и ската проверяет сама
 `Markup` (`Roof`), виды по каталогам — `check_kinds` и `check_materials`.
 """
 
@@ -25,8 +26,10 @@ from genfacade.datasets.manual import (
     PorchRoofMark,
     SkylightMark,
     TrimMark,
+    ZoneMark,
+    palette_roles,
 )
-from genfacade.schema import EPS, LevelKind, MarkKind, Model, RoofKind
+from genfacade.schema import EPS, LevelKind, MarkKind, Model, PaletteRole, RoofKind
 
 MARK_ROUND = 1   # знаков после запятой у координат в pt: 0,1 pt листа — меньше пикселя
 UNIT_ROUND = 3   # у цоколя и высот этажей в единицах вида: миллиметры при метрах
@@ -36,6 +39,8 @@ class SideEdit(Model):
     wall: tuple[float, float]
     pt_per_unit: float = Field(gt=0)   # масштаб вида, pt на единицу отметок
     elements: list[Mark]
+    zones: list[ZoneMark] | None = None   # вторая отделка стороны: нет в запросе — не меняется
+
 
 
 class LevelEdit(Model):
@@ -60,6 +65,10 @@ class HouseEdit(Model):
     plinth_material: str | None
     trim_material: str | None
     trim: TrimMark
+    # Цвет `#rrggbb` по роли палитры (пустой словарь — цветов нет) и вид второй отделки: он один,
+    # его получают все зоны (gf#470). Нет в запросе — не меняются.
+    colors: dict[PaletteRole, str] | None = None
+    second_material: str | None = None
 
 
 class Edit(Model):
@@ -95,10 +104,12 @@ def _side(m: Markup, k: int, edit: SideEdit) -> Elevation:
     """Сторона после правки; масштаб записывается стороне, только если он не как у дома."""
     own = None if abs(edit.pt_per_unit - m.pt_per_unit) < EPS else edit.pt_per_unit
     count = len(edit.elements)
+    zones = {} if edit.zones is None else {"zones": [
+        z.model_copy(update={"box": _box(z.box)}) for z in edit.zones]}
     return m.sides[k].model_copy(update={
         "wall": tuple(round(v, MARK_ROUND) for v in sorted(edit.wall)),
         "pt_per_unit": own,
-        "elements": [_mark(x, count) for x in edit.elements]})
+        "elements": [_mark(x, count) for x in edit.elements], **zones})
 
 
 def _level(m: Markup, edit: LevelEdit) -> Markup:
@@ -125,7 +136,7 @@ def apply(m: Markup, edit: Edit) -> Markup:
     масштаб) — ValueError с причиной."""
     if len(edit.sides) != len(m.sides):
         raise ValueError(f"сторон {len(edit.sides)}, в разметке {len(m.sides)}")
-    sides = [_side(m, k, s) for k, s in enumerate(edit.sides)]
+    sides = _second(edit, [_side(m, k, s) for k, s in enumerate(edit.sides)])
     out = m.model_copy(update={"sides": sides, **_house(edit), **_marks(edit, len(sides))})
     ordered = sorted(edit.levels, key=lambda v: (LEVEL_ORDER.index(v.kind), v.index))
     for level in ordered:   # масштабы сторон уже новые: линия ставится туда, куда её отпустили
@@ -133,8 +144,21 @@ def apply(m: Markup, edit: Edit) -> Markup:
     return round_units(Markup.model_validate(out.model_dump()))
 
 
+def _second(edit: Edit, sides: list[Elevation]) -> list[Elevation]:
+    """Вид второй отделки дома — всем зонам всех сторон: на странице он поле дома, а не зоны."""
+    kind = None if edit.house is None else edit.house.second_material
+    if kind is None:
+        return sides
+    return [e.model_copy(update={"zones": [z.model_copy(update={"material": kind})
+                                            for z in e.zones]}) for e in sides]
+
+
 def _house(edit: Edit) -> dict:
-    return {} if edit.house is None else dict(edit.house)
+    """Поля дома из правки; то, чего в запросе нет (`None` у цветов), в разметке не меняется."""
+    if edit.house is None:
+        return {}
+    fields = {k: v for k, v in edit.house if k != "second_material"}
+    return {k: v for k, v in fields.items() if k != "colors" or v is not None}
 
 
 def _marks(edit: Edit, count: int) -> dict[str, list]:
@@ -150,14 +174,35 @@ def _marks(edit: Edit, count: int) -> dict[str, list]:
 def check_materials(m: Markup, kinds: Collection[str]) -> None:
     """Виды отделки дома есть в `library.toml`: страница дала список, но запрос пишут и руками."""
     named = {"material": m.material, "plinth_material": m.plinth_material,
-             "trim_material": m.trim_material}
+             "trim_material": m.trim_material,
+             **{f"zone[{i}]": z.material for i, z in enumerate(zones(m))}}
     if bad := [f"{f}={k}" for f, k in named.items() if k is not None and k not in kinds]:
         raise ValueError(f"{m.id}: виды не из library.toml: {', '.join(bad)}")
 
 
+def zones(m: Markup) -> list[ZoneMark]:
+    return [z for e in m.sides for z in e.zones]
+
+
+def check_colors(m: Markup) -> None:
+    """Цвет есть только у ролей, что есть в палитре дома: роли без вида материала цвета не дают."""
+    if lost := sorted(set(m.colors) - set(palette_roles(m))):
+        raise ValueError(f"{m.id}: цвет у ролей без материала: {', '.join(lost)}")
+
+
+def uncolored(edit: Edit) -> Edit:
+    """Правка без проверки цветов — для предпросмотра: роли дома меняются на ходу, цвета сверяются
+    при сохранении."""
+    if edit.house is None:
+        return edit
+    return edit.model_copy(update={"house": edit.house.model_copy(update={"colors": {}})})
+
+
 def house_fields(m: Markup) -> dict:
-    """Поля дома для панели правки: те же, что `HouseEdit`, как записаны в разметке."""
-    return m.model_dump(mode="json", include=set(HouseEdit.model_fields))
+    """Поля дома для панели правки: те же, что `HouseEdit`, как записаны в разметке; вид второй
+    отделки — первой зоны дома (вид один, `manual.palette_roles`)."""
+    fields = m.model_dump(mode="json", include=set(HouseEdit.model_fields) - {"second_material"})
+    return {**fields, "second_material": next((z.material for z in zones(m)), None)}
 
 
 def side_marks(m: Markup, k: int) -> dict[MarkKind, list[dict]]:

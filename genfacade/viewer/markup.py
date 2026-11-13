@@ -18,7 +18,16 @@ from pydantic import ValidationError, model_validator
 
 from genfacade.config import Config
 from genfacade.datasets import manual, markup_edit, markup_toml
-from genfacade.schema import CheckState, DormerRoof, Model, Refusal, Refused, RejectReason, RoofKind
+from genfacade.schema import (
+    CheckState,
+    DormerRoof,
+    Model,
+    PaletteRole,
+    Refusal,
+    Refused,
+    RejectReason,
+    RoofKind,
+)
 from genfacade.viewer import markup_queue, markup_sheet, review
 
 EDIT_LOCK = "markup.lock"  # правка файла разметки и решение о доме — одним замком, по одной
@@ -65,8 +74,10 @@ def api(app: FastAPI, cfg: Config, folder: Path) -> None:
     @app.post("/api/markup/{house}/preview")
     def preview(house: str, edit: markup_edit.Edit) -> dict:
         """Линии сторон после правки, без записи: потянули линию — стороны пересчитаны."""
-        m = _guard(lambda: _edited(cfg, manual.read(_file(folder, house)), edit))
-        return {"geometry": [markup_edit.geometry(m, k) for k in range(len(m.sides))]}
+        old = manual.read(_guard(lambda: _file(folder, house)))
+        m = _guard(lambda: _edited(cfg, old, markup_edit.uncolored(edit)))
+        return {"geometry": [markup_edit.geometry(m, k) for k in range(len(m.sides))],
+                "roles": _guard(lambda: _roles(m))}
 
     @app.post("/api/markup/{house}/decision")
     def decision(house: str, decision: Decision) -> dict:
@@ -93,13 +104,23 @@ def _file(folder: Path, house: str) -> Path:
 
 
 def _edited(cfg: Config, m: manual.Markup, edit: markup_edit.Edit) -> manual.Markup:
-    """Правка применена и проверена: вид крыши, уклон, скат — `Markup`, виды — по каталогам."""
+    """Правка применена и проверена: вид крыши, уклон, скат — `Markup`, виды — по каталогам, цвета —
+    у ролей, что есть в палитре."""
     try:
         new = markup_edit.apply(m, edit)
         manual.check_kinds(new, cfg)
         markup_edit.check_materials(new, cfg.library.kinds)
+        markup_edit.check_colors(new)
         return new
     except (ValueError, ValidationError, manual.BadMarkup) as e:
+        raise Refused(Refusal.BAD_MARKUP_EDIT, str(e)) from e
+
+
+def _roles(m: manual.Markup) -> list[PaletteRole]:
+    """Роли палитры дома — у них есть цвет на панели; два вида второй отделки — отказ."""
+    try:
+        return list(manual.palette_roles(m))
+    except manual.BadMarkup as e:
         raise Refused(Refusal.BAD_MARKUP_EDIT, str(e)) from e
 
 
@@ -118,10 +139,12 @@ def _options(cfg: Config) -> dict:
             "labels": {"state": editor.labels.state, "reason": editor.labels.reason,
                        "level": editor.labels.level, "mark_kind": editor.labels.mark_kind,
                        "delete_mark": editor.labels.delete_mark,
-                       "empty_kind": editor.labels.empty_kind, "cls": cfg.viewer.labels.cls},
+                       "empty_kind": editor.labels.empty_kind, "no_color": editor.labels.no_color,
+                       "delete_zone": editor.labels.delete_zone, "role": editor.labels.role,
+                       "cls": cfg.viewer.labels.cls},
             "add_classes": editor.add_classes,
             "default_size_m": {k: list(v) for k, v in editor.default_size_m.items()},
-            "min_box_m": editor.min_box_m,
+            "min_box_m": editor.min_box_m, "zone": editor.zone.model_dump(mode="json"),
             "marks": {k: {**v.model_dump(mode="json"), "field": markup_edit.MARK_FIELDS[k]}
                       for k, v in editor.marks.items()},
             "choices": {"roof_kind": list(RoofKind), "dormer_roof": list(DormerRoof)},
@@ -136,7 +159,8 @@ def _house_form(cfg: Config) -> list[dict]:
     trims = [(f"{TRIM_PREFIX}{n}", cfg.derive.kinds(n)) for n in manual.TrimMark.model_fields]
     selects = [("roof_kind", list(RoofKind)), ("overhang_by", list(manual.OverhangBy)),
                ("roof_material", library), ("material", library),
-               ("plinth_material", library), ("trim_material", library), *trims]
+               ("plinth_material", library), ("trim_material", library),
+               ("second_material", library), *trims]
     rows = [{"name": n, "type": Control.SELECT, "choices": c, "empty": _nullable(n)}
             for n, c in selects]
     rows += [{"name": n, "type": Control.NUMBER, "step": editor.house_step[n],
@@ -160,7 +184,7 @@ def _open(cfg: Config, folder: Path, house: str) -> dict:
     sides = [_side(cfg, m, k, house) for k in range(len(m.sides))]
     return {"id": house, "text": m.roof, "unit": m.unit, "state": record.state,
             "reason": record.reason, "note": record.note, "sides": sides,
-            "house": markup_edit.house_fields(m)}
+            "house": markup_edit.house_fields(m), "roles": _roles(m)}
 
 
 def _side(cfg: Config, m: manual.Markup, k: int, house: str) -> dict:

@@ -157,6 +157,10 @@ color = "darkgoldenrod"
 size_m = [2.5, 2.5]
 defaults = { kind = "shed", posts = 2, depth_m = 1.5 }
 
+[markup.zone]                        # зона второй отделки на виде (gf#470)
+label = "зона отделки"
+size_m = [2.0, 1.5]                  # от касания: ширина × высота, м
+
 [markup.default_size_m]              # ширина × высота рамки, поставленной касанием
 window = [1.2, 1.4]
 door = [1.0, 2.1]
@@ -192,6 +196,15 @@ canopy = "orange"
 mark_kind = "вид кровли отметки"
 empty_kind = "— не записан —"
 delete_mark = "Удалить отметку"
+delete_zone = "Удалить зону"
+no_color = "не задан"
+
+[markup.labels.role]                 # цвет роли палитры дома на панели правки (gf#470)
+main = "стены"
+plinth = "цоколь"
+accent = "вторая отделка"
+trim = "карниз"
+roof = "кровля"
 
 [markup.labels.state]
 unchecked = "не проверен"
@@ -211,6 +224,7 @@ gutters = "водосток"
 material = "отделка стен"
 plinth_material = "цоколь"
 trim_material = "карниз"
+second_material = "вторая отделка"
 "trim.sill" = "подоконник"
 "trim.casing" = "наличник"
 "trim.shutters" = "ставни"
