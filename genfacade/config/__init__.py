@@ -717,6 +717,7 @@ class Manual(Section):
     paths: ManualPaths
     length_tol_m: float
     chimney_beyond_m: float
+    chimney_across_digits: int  # отступ трубы от конька округляется до стольких знаков, м (gf#471)
     eaves_tol_m: float
     wall_m: float
     inside_share: float

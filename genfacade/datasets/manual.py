@@ -456,10 +456,10 @@ def _chimney(m: Markup, mark: ChimneyMark, sheet: FacadeSheet, cfg: Manual) -> C
     found = roof_items.site(sheet)
     if found is None:
         raise BadMarkup(f"{m.id}: труба у дома без конька")
-    return _spot(found, point, on_ridge=mark.depth_m is None)
+    return _spot(found, point, mark.depth_m is None, cfg)
 
 
-def _spot(found: roof_items.Site, point: Point, on_ridge: bool) -> ChimneySpot:
+def _spot(found: roof_items.Site, point: Point, on_ridge: bool, cfg: Manual) -> ChimneySpot:
     """Место трубы по точке плана: доля вдоль конька (за торцом — вне 0–1; у шатра — метры вдоль
     оси) и отступ от него со знаком. Без выноса точка лежит на стене вида, а не на кровле:
     труба на коньке (отступ 0, доля в пределах 0–1, у шатра 0)."""
@@ -469,7 +469,7 @@ def _spot(found: roof_items.Site, point: Point, on_ridge: bool) -> ChimneySpot:
     along, across = (px * ux + py * uy) / run, -px * uy + py * ux
     if on_ridge:
         return ChimneySpot(along=min(1.0, max(0.0, along)) if found.span else 0.0)
-    return ChimneySpot(along=along, across_m=round(across, 3))
+    return ChimneySpot(along=along, across_m=round(across, cfg.chimney_across_digits))
 
 
 def _known_side(m: Markup, side: int, what: str) -> None:
