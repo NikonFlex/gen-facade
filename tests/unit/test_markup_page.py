@@ -18,11 +18,14 @@ from genfacade import config
 from genfacade.datasets import manual, markup_edit, markup_toml, store
 from genfacade.schema import (
     CheckState,
+    DormerRoof,
     ElementClass,
     LevelKind,
+    MarkKind,
     Refusal,
     Refused,
     RejectReason,
+    RoofKind,
     Source,
 )
 from genfacade.viewer import markup_queue
@@ -42,8 +45,9 @@ def side(view: str, page: int, length_m: float, *elements: dict) -> dict:
 
 
 RAW = {
-    "id": HOUSE, "pdf": "test/sheet.pdf", "roof": "плоская", "roof_kind": "flat", "pitch_deg": 0.0,
-    "overhang_m": 0.0, "unit": "m", "pt_per_unit": PT_PER_M, "material": "siding", "plinth": 0.4,
+    "id": HOUSE, "pdf": "test/sheet.pdf", "roof": "вальмовая 22°", "roof_kind": "hip",
+    "pitch_deg": 22.0, "overhang_m": 0.5, "unit": "m", "pt_per_unit": PT_PER_M,
+    "material": "siding", "plinth": 0.4,
     "floor_heights": [2.8], "cut": ["south: крыльцо не размечено"],
     "sides": [side("Фасад юг", 1, 10, {"cls": "window", "box": WINDOW},
                    {"cls": "door", "box": [700.0, 520.0, 800.0, 800.0]}),
@@ -103,6 +107,19 @@ def edit_body(client: TestClient, box: list[float]) -> dict:
     return {"sides": sides, "levels": []}
 
 
+def roof_edit(client: TestClient, house: dict | None = None, **marks: list) -> dict:
+    """Правка как со страницы: рамки на месте, поля дома — как открыты, поверх — house и отметки."""
+    body = edit_body(client, WINDOW)
+    opened = client.post(f"/api/markup/{HOUSE}/open").json()["house"]
+    return {**body, "house": {**opened, **(house or {})}, **marks}
+
+
+def save_edit(client: TestClient, body: dict) -> None:
+    """«Сохранить правку»: дом поправлен и собирается в пример, как в `genfacade manual`."""
+    got = client.post(f"/api/markup/{HOUSE}/decision", json={"good": True, "edit": body}).json()
+    assert got["state"] == CheckState.EDITED and got["assembly"] == {"ok": True, "detail": ""}
+
+
 def test_markup_toml_roundtrips_every_real_markup():
     for path in sorted(Path("markup").glob("*/*.toml")):
         m = manual.read(path)
@@ -149,9 +166,7 @@ def test_moved_box_is_saved_to_toml_and_assembled_by_manual(client, cfg):
     path = cfg.viewer.markup.folder / f"{HOUSE}.toml"
     before, original = window_x(cfg), path.read_text()
     moved = [WINDOW[0] + 150.0, WINDOW[1], WINDOW[2] + 150.0, WINDOW[3]]   # на 1,5 м вправо
-    got = client.post(f"/api/markup/{HOUSE}/decision",
-                      json={"good": True, "edit": edit_body(client, moved)}).json()
-    assert got["state"] == CheckState.EDITED and got["assembly"] == {"ok": True, "detail": ""}
+    save_edit(client, edit_body(client, moved))
     saved = manual.read(path)
     assert list(saved.sides[0].elements[0].box) == moved
     assert path.read_text().startswith("# Тестовый дом")   # шапка с происхождением сохранена
@@ -203,6 +218,62 @@ def test_dragged_levels_are_recomputed_for_every_side_by_the_server(client):
     assert {g["ground"] for g in got} == {FLOOR + 0.5 * PT_PER_M}
     saved = client.post(f"/api/markup/{HOUSE}/decision", json={"good": True, "edit": body}).json()
     assert saved["state"] == CheckState.EDITED
+
+
+def test_roof_pitch_and_chimney_are_saved_to_toml_and_open_again(client, cfg):
+    path = cfg.viewer.markup.folder / f"{HOUSE}.toml"
+    assert manual.read(path).chimneys == []
+    chimney = {"side": 0, "x": 450.0}   # на виде южной стены: сторона 0
+    body = roof_edit(client, {"pitch_deg": 30.0}, chimneys=[chimney])
+    save_edit(client, body)
+    saved = manual.read(path)
+    assert saved.pitch_deg == 30.0 and saved.roof_kind is RoofKind.HIP
+    assert [c.model_dump(mode="json") for c in saved.chimneys] == [chimney]
+    assert "pitch_deg = 30.0" in path.read_text()
+    reopened = client.post(f"/api/markup/{HOUSE}/open").json()
+    assert reopened["house"]["pitch_deg"] == 30.0
+    assert [s["marks"][MarkKind.CHIMNEY] for s in reopened["sides"]] == [[chimney], [], [], []]
+
+
+def test_edit_keeps_marks_it_does_not_send_and_erases_an_empty_list(client, cfg):
+    path = cfg.viewer.markup.folder / f"{HOUSE}.toml"
+    skylight = {"side": 1, "x": [250.0, 330.0], "y": [450.0, 570.0]}
+    client.post(f"/api/markup/{HOUSE}/decision", json={"good": True, "edit": roof_edit(
+        client, chimneys=[{"side": 0, "x": 450.0}], skylights=[skylight])})
+    client.post(f"/api/markup/{HOUSE}/decision", json={"good": True, "edit": roof_edit(
+        client, chimneys=[])})
+    saved = manual.read(path)
+    kept = [s.model_dump(mode="json") for s in saved.skylights]
+    assert saved.chimneys == [] and kept == [skylight]
+
+
+@pytest.mark.parametrize("house, marks", [
+    ({"pitch_deg": 95.0}, {}),                                    # уклон вне диапазона
+    ({"roof_kind": RoofKind.FLAT, "pitch_deg": 30.0}, {}),        # плоская с уклоном
+    ({"roof_material": "no-such-roof"}, {}),                      # вид не из library.toml
+    ({"material": "no-such-wall"}, {}),
+    ({"trim": {"casing": "no-such-casing"}}, {}),                 # вид не из derive.toml
+    ({}, {"chimneys": [{"side": 9, "x": 1.0}]}),                  # такой стороны нет
+])
+def test_impossible_roof_edit_is_refused_by_code_and_file_stays(client, cfg, house, marks):
+    path = cfg.viewer.markup.folder / f"{HOUSE}.toml"
+    before = path.read_text()
+    body = roof_edit(client, house, **marks)
+    bad = client.post(f"/api/markup/{HOUSE}/decision", json={"good": True, "edit": body})
+    assert bad.status_code == 422 and bad.json()["detail"]["code"] == Refusal.BAD_MARKUP_EDIT
+    assert path.read_text() == before
+    assert client.get("/api/markup").json()["items"][0]["state"] == CheckState.UNCHECKED
+
+
+def test_page_options_give_every_choice_the_fields_need(client, cfg):
+    got = client.get("/api/markup").json()["options"]
+    assert got["choices"] == {"roof_kind": list(RoofKind), "dormer_roof": list(DormerRoof)}
+    form = {r["name"]: r for r in got["house_form"]}
+    assert form["roof_material"]["choices"] == sorted(cfg.library.kinds)
+    assert form["trim.casing"]["choices"] == cfg.derive.kinds("casing")
+    assert form["trim.door"]["empty"] and not form["roof_kind"]["empty"]
+    assert set(form) == set(cfg.viewer.markup.labels.house)
+    assert {k: v["field"] for k, v in got["marks"].items()} == markup_edit.MARK_FIELDS
 
 
 def test_every_pair_of_states_follows_the_transition_table():

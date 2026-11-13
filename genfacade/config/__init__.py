@@ -35,6 +35,8 @@ from genfacade.schema import (
     HouseTrim,
     LevelKind,
     LlmProvider,
+    MarkKind,
+    MarkShape,
     Mode,
     PaletteRole,
     Placement,
@@ -536,6 +538,20 @@ class MarkupLabels(Section):
     state: dict[CheckState, str]
     reason: dict[RejectReason, str]
     level: dict[LevelKind, str]
+    house: dict[str, str]          # поле дома на панели правки (gf#470): поле или trim.<элемент>
+    mark_kind: str                 # подпись списка видов у выбранной отметки
+    empty_kind: str                # «вид не записан» в списках видов
+    delete_mark: str
+
+
+class MarkStyle(Section):
+    """Отметка на виде (gf#470): подпись кнопки, как ставится, цвет и поля новой отметки."""
+
+    label: str
+    shape: MarkShape
+    color: str
+    size_m: Size | None = None     # от касания: ширина × высота, м; у касания-точки нет
+    defaults: dict[str, str | int | float] = {}   # поля новой отметки, кроме места на виде
 
 
 class MarkupEditor(Section):
@@ -551,6 +567,8 @@ class MarkupEditor(Section):
     add_classes: list[ElementClass]  # что можно добавить кнопкой; размер — в default_size_m
     default_size_m: dict[ElementClass, Size]  # рамка от касания: ширина и высота, м
     min_box_m: float               # рамка меньше этого при отпускании — касание, не рамка
+    house_step: dict[str, float]   # шаг числовых полей дома на панели правки (gf#470)
+    marks: dict[MarkKind, MarkStyle]
     colors: MarkupColors
     labels: MarkupLabels
 
@@ -563,6 +581,7 @@ class MarkupEditor(Section):
             "подпись причины": (set(self.labels.reason), set(RejectReason)),
             "подпись линии": (set(self.labels.level), set(LevelKind)),
             "размер рамки": (set(self.default_size_m), set(self.add_classes)),
+            "отметка": (set(self.marks), set(MarkKind)),
         }
         for what, (have, want) in need.items():
             if have != want:
@@ -657,6 +676,16 @@ class ManualPaths(Section):
     pdf_dirs: dict[str, Path]      # источник (папка разметки) → где его листы PDF
 
 
+class MarkupCompare(Section):
+    """Допуски сверки разметки с эталоном (`tools/markup_compare.py`, gf#470)."""
+
+    tol_pitch_deg: float
+    tol_overhang_m: float  # и карнизный, и фронтонный свес
+    tol_plinth_m: float
+    tol_floor_m: float     # высота каждого этажа
+    iou_min: float         # рамка окна или двери найдена, если пересечение с эталонной не меньше
+
+
 class Manual(Section):
     """Ручная разметка реальных коттеджей (config/data.toml, `data: Реальные коттеджи — тест`)."""
 
@@ -669,6 +698,7 @@ class Manual(Section):
     link_tol_m: float
     gable_tol_m: float  # окно во фронтоне за стеной с фронтоном модуля не дальше этого (gf#321)
     trim: HouseTrim
+    compare: MarkupCompare
 
 
 class Data(Section):

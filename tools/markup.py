@@ -27,10 +27,12 @@ from markup_raster import grid, snap  # noqa: E402
 
 from genfacade.config import load  # noqa: E402
 from genfacade.datasets import manual  # noqa: E402
+from genfacade.schema import MarkKind  # noqa: E402
 
 PT = 72.0          # pt на дюйм — определение единицы
 MARGIN_M = 0.9     # поле вокруг стены на кадре, метры
 COLORS = load().viewer.markup.colors
+MARKS = load().viewer.markup.marks  # те же цвета, что у отметок на странице /markup (gf#470)
 
 
 def font(size: int) -> ImageFont.ImageFont:
@@ -45,8 +47,10 @@ def frame(pdf: Path, e: manual.Elevation, m: manual.Markup, dpi: int) -> tuple[I
     """Кадр стороны: от карниза до земли и от края до края стены с полем."""
     pad = MARGIN_M / m.m_per_unit * m.scale(e)
     eaves = m.tops_y(e)[-1]
+    side = next(k for k, s in enumerate(m.sides) if s is e)
     tops = [b.box[1] for b in e.elements] + [eaves] + [y for _, y in e.outline] + [
-        y for shape in e.roof for _, y in shape]
+        y for shape in e.roof for _, y in shape] + [
+        r.y[0] for r in (*m.skylights, *m.porch_roofs) if r.side == side]
     box = (e.wall[0] - pad, min(tops) - pad, e.wall[1] + pad, m.ground_y(e) + pad)
     with pdfplumber.open(pdf) as doc:
         page = doc.pages[e.page - 1]
@@ -75,6 +79,7 @@ def draw(img: Image.Image, box: tuple, e: manual.Elevation, m: manual.Markup, dp
         d.text(px(z.box[0] + 2, z.box[3] - 14), f"{z.role} {z.material}", fill=COLORS.zone,
                font=font(12))
     above(d, px, e)
+    roof_marks(d, px, e, m)
     d.text((4, 4), f"{e.view} (стр. {e.page})", fill="black", font=font(14))
 
 
@@ -86,6 +91,23 @@ def above(d: ImageDraw.ImageDraw, px, e: manual.Elevation) -> None:
     for s in e.eaves:
         d.line([px(s.x[0], s.y), px(s.x[1], s.y)], fill=COLORS.levels, width=4)
         d.text(px(s.x[0] + 2, s.y - 14), f"{s.floors} эт.", fill=COLORS.levels, font=font(12))
+
+
+def roof_marks(d: ImageDraw.ImageDraw, px, e: manual.Elevation, m: manual.Markup) -> None:
+    """Отметки дома на виде этой стороны (gf#470): трубы — линией по центру x от карниза вверх,
+    слуховые окна — отрезком по карнизу, мансардные окна и крыльцо под кровлей — рамкой."""
+    side, eaves = next(k for k, s in enumerate(m.sides) if s is e), m.tops_y(e)[-1]
+    for c in (c for c in m.chimneys if c.side == side):
+        d.line([px(c.x, eaves), px(c.x, eaves - MARGIN_M * m.scale(e))],
+               fill=MARKS[MarkKind.CHIMNEY].color, width=4)
+    for w in (w for w in m.dormers if w.side == side):
+        d.line([px(w.x[0], eaves), px(w.x[1], eaves)], fill=MARKS[MarkKind.DORMER].color, width=4)
+    boxes = [(MarkKind.SKYLIGHT, r) for r in m.skylights] + [
+        (MarkKind.PORCH_ROOF, r) for r in m.porch_roofs]
+    for kind, r in (b for b in boxes if b[1].side == side):
+        style = MARKS[kind]
+        d.rectangle([px(r.x[0], r.y[0]), px(r.x[1], r.y[1])], outline=style.color, width=2)
+        d.text(px(r.x[0] + 2, r.y[0] + 1), style.label, fill=style.color, font=font(12))
 
 
 def sheet(path: Path, pdf_dirs: dict[str, Path], dpi: int) -> Image.Image:

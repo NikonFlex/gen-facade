@@ -8,7 +8,9 @@ TOML того же формата (`datasets/markup_toml.py`), состояни�
 
 import shutil
 import tomllib
+from enum import StrEnum
 from pathlib import Path
+from typing import get_args
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -16,12 +18,24 @@ from pydantic import ValidationError, model_validator
 
 from genfacade.config import Config
 from genfacade.datasets import manual, markup_edit, markup_toml
-from genfacade.schema import CheckState, Model, Refusal, Refused, RejectReason
+from genfacade.schema import CheckState, DormerRoof, Model, Refusal, Refused, RejectReason, RoofKind
 from genfacade.viewer import markup_queue, markup_sheet, review
 
 EDIT_LOCK = "markup.lock"  # правка файла разметки и решение о доме — одним замком, по одной
 STATUS = {Refusal.NO_MARKUP_HOUSE: 404, Refusal.NO_MARKUP_SHEET: 404, Refusal.BAD_MARKUP_EDIT: 422,
           Refusal.BAD_CHECK_STEP: 409, Refusal.BAD_CHECK_STATE: 500}
+
+
+class Control(StrEnum):
+    """Поле панели дома: список видов, число или флажок (в ответе страницы — `type`)."""
+
+    SELECT = "select"
+    NUMBER = "number"
+    FLAG = "flag"
+
+
+TRIM_PREFIX = "trim."   # поле обрамления на панели: trim.<элемент>, как в `TrimMark`
+NUMBERS = ("pitch_deg", "overhang_m", "gable_overhang_m", "roof_down")  # порядок панели
 
 
 class Decision(Model):
@@ -51,7 +65,7 @@ def api(app: FastAPI, cfg: Config, folder: Path) -> None:
     @app.post("/api/markup/{house}/preview")
     def preview(house: str, edit: markup_edit.Edit) -> dict:
         """Линии сторон после правки, без записи: потянули линию — стороны пересчитаны."""
-        m = _guard(lambda: _edited(manual.read(_file(folder, house)), edit))
+        m = _guard(lambda: _edited(cfg, manual.read(_file(folder, house)), edit))
         return {"geometry": [markup_edit.geometry(m, k) for k in range(len(m.sides))]}
 
     @app.post("/api/markup/{house}/decision")
@@ -78,10 +92,14 @@ def _file(folder: Path, house: str) -> Path:
     return folder / f"{house}.toml"
 
 
-def _edited(m: manual.Markup, edit: markup_edit.Edit) -> manual.Markup:
+def _edited(cfg: Config, m: manual.Markup, edit: markup_edit.Edit) -> manual.Markup:
+    """Правка применена и проверена: вид крыши, уклон, скат — `Markup`, виды — по каталогам."""
     try:
-        return markup_edit.apply(m, edit)
-    except (ValueError, ValidationError) as e:
+        new = markup_edit.apply(m, edit)
+        manual.check_kinds(new, cfg)
+        markup_edit.check_materials(new, cfg.library.kinds)
+        return new
+    except (ValueError, ValidationError, manual.BadMarkup) as e:
         raise Refused(Refusal.BAD_MARKUP_EDIT, str(e)) from e
 
 
@@ -98,10 +116,39 @@ def _options(cfg: Config) -> dict:
     editor = cfg.viewer.markup
     return {"colors": editor.colors.model_dump(mode="json"),
             "labels": {"state": editor.labels.state, "reason": editor.labels.reason,
-                       "level": editor.labels.level, "cls": cfg.viewer.labels.cls},
+                       "level": editor.labels.level, "mark_kind": editor.labels.mark_kind,
+                       "delete_mark": editor.labels.delete_mark,
+                       "empty_kind": editor.labels.empty_kind, "cls": cfg.viewer.labels.cls},
             "add_classes": editor.add_classes,
             "default_size_m": {k: list(v) for k, v in editor.default_size_m.items()},
-            "min_box_m": editor.min_box_m}
+            "min_box_m": editor.min_box_m,
+            "marks": {k: {**v.model_dump(mode="json"), "field": markup_edit.MARK_FIELDS[k]}
+                      for k, v in editor.marks.items()},
+            "choices": {"roof_kind": list(RoofKind), "dormer_roof": list(DormerRoof)},
+            "house_form": _house_form(cfg)}
+
+
+def _house_form(cfg: Config) -> list[dict]:
+    """Панель полей дома: порядок, тип поля, варианты — всё из кода и конфига, JS списков не держит.
+    Виды — из `library.toml` (отделка, кровля) и `derive.toml` (обрамление, дверь)."""
+    editor, library = cfg.viewer.markup, sorted(cfg.library.kinds)
+    # не записан — вид по умолчанию: пустое значение у всего, что в `HouseEdit` может быть None
+    trims = [(f"{TRIM_PREFIX}{n}", cfg.derive.kinds(n)) for n in manual.TrimMark.model_fields]
+    selects = [("roof_kind", list(RoofKind)), ("overhang_by", list(manual.OverhangBy)),
+               ("roof_material", library), ("material", library),
+               ("plinth_material", library), ("trim_material", library), *trims]
+    rows = [{"name": n, "type": Control.SELECT, "choices": c, "empty": _nullable(n)}
+            for n, c in selects]
+    rows += [{"name": n, "type": Control.NUMBER, "step": editor.house_step[n],
+              "empty": _nullable(n)} for n in NUMBERS]
+    rows.append({"name": "gutters", "type": Control.FLAG})
+    return [{**r, "label": editor.labels.house[r["name"]]} for r in rows]
+
+
+def _nullable(name: str) -> bool:
+    """Поле дома может быть пустым: у него в `HouseEdit` есть None; обрамление — всегда."""
+    return name.startswith(TRIM_PREFIX) or type(None) in get_args(
+        markup_edit.HouseEdit.model_fields[name].annotation)
 
 
 def _open(cfg: Config, folder: Path, house: str) -> dict:
@@ -112,7 +159,8 @@ def _open(cfg: Config, folder: Path, house: str) -> dict:
     record = markup_queue.open_house(editor, folder, house)
     sides = [_side(cfg, m, k, house) for k in range(len(m.sides))]
     return {"id": house, "text": m.roof, "unit": m.unit, "state": record.state,
-            "reason": record.reason, "note": record.note, "sides": sides}
+            "reason": record.reason, "note": record.note, "sides": sides,
+            "house": markup_edit.house_fields(m)}
 
 
 def _side(cfg: Config, m: manual.Markup, k: int, house: str) -> dict:
@@ -123,7 +171,8 @@ def _side(cfg: Config, m: manual.Markup, k: int, house: str) -> dict:
             "elements": [x.model_dump(mode="json") for x in e.elements],
             "zones": [z.model_dump(mode="json") for z in e.zones],
             "outline": e.outline, "roof": e.roof,
-            "eaves": [s.model_dump(mode="json") for s in e.eaves]}
+            "eaves": [s.model_dump(mode="json") for s in e.eaves],
+            "marks": markup_edit.side_marks(m, k)}
 
 
 def _decide(cfg: Config, folder: Path, house: str, d: Decision) -> dict:
@@ -131,7 +180,7 @@ def _decide(cfg: Config, folder: Path, house: str, d: Decision) -> dict:
     editor, file = cfg.viewer.markup, _file(folder, house)
     with review.locked(folder, EDIT_LOCK):
         before = markup_queue.sync(editor, folder)[house].state
-        edited = _changed(file, d.edit) if d.good and d.edit is not None else None
+        edited = _changed(cfg, file, d.edit) if d.good and d.edit is not None else None
         state = _state(d.good, before, edited is not None)
         if edited is not None:
             _save(editor, folder, file, edited)
@@ -149,10 +198,10 @@ def _state(good: bool, before: CheckState, changed: bool) -> CheckState:
     return CheckState.EDITED if changed or before is CheckState.EDITED else CheckState.GOOD
 
 
-def _changed(file: Path, edit: markup_edit.Edit) -> manual.Markup | None:
+def _changed(cfg: Config, file: Path, edit: markup_edit.Edit) -> manual.Markup | None:
     """Разметка после правки, если она отличается от записанной; такая же — None."""
     old = manual.read(file)
-    new = _edited(old, edit)
+    new = _edited(cfg, old, edit)
     return None if new == old else new
 
 

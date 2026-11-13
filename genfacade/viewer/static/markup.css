@@ -70,3 +70,11 @@ html:has(.markup-page), .markup-page { overscroll-behavior-y: none; }
   .mk-tools .btn { white-space: nowrap; }
   .mk-card { padding: 6px; }
 }
+
+/* Панель полей дома и панель выбранной отметки (gf#470) */
+.mk-house { max-width: 1500px; margin: 0 auto; padding: 6px 14px; }
+.mk-house summary { cursor: pointer; min-height: 38px; display: flex; align-items: center; font-weight: 600; }
+.mk-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px 14px; padding: 6px 0 10px; }
+.mk-field { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+.mk-field select, .mk-field input[type="number"] { min-height: 38px; font: inherit; font-size: 14px; color: var(--text, inherit); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 8px; background: var(--panel); }
+.mk-field input[type="checkbox"] { width: 24px; height: 24px; margin: 7px 0; }

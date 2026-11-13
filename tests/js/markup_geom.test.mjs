@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  boxAt, isTap, moveBox, pick, removeElement, resizeBox, setClass,
+  SHAPE, boxAt, flattenMarks, isTap, markFrom, moveBox, pick, removeElement, removeMark, resizeBox,
+  setClass,
 } from "../../genfacade/viewer/static/markup_geom.js";
 
 test("сдвиг переносит рамку целиком", () => {
@@ -53,4 +54,30 @@ test("под точкой выбирается меньшая из рамок", 
   assert.equal(pick(list, [50, 50]), 1);
   assert.equal(pick(list, [10, 10]), 0);
   assert.equal(pick(list, [200, 200]), -1);
+});
+
+const GESTURE = { sizeM: [1, 2], pxPerM: 100, minPt: 15, defaults: {} };
+
+test("труба — точка: ложится x касания", () => {
+  assert.deepEqual(markFrom(SHAPE.POINT, [250.04, 10], [250.04, 10], GESTURE), { x: 250 });
+});
+
+test("отрезок и рамка: протянули — края жеста, коснулись — размер по умолчанию", () => {
+  assert.deepEqual(markFrom(SHAPE.SPAN, [100, 50], [300, 55], GESTURE), { x: [100, 300] });
+  assert.deepEqual(markFrom(SHAPE.BOX, [300, 200], [100, 50], GESTURE),
+    { x: [100, 300], y: [50, 200] });
+  assert.deepEqual(markFrom(SHAPE.BOX, [300, 200], [302, 201], GESTURE),
+    { x: [250, 350], y: [100, 300] });
+});
+
+test("поля по умолчанию дописываются к месту", () => {
+  const got = markFrom(SHAPE.SPAN, [0, 0], [200, 0], { ...GESTURE, defaults: { roof: "gable" } });
+  assert.deepEqual(got, { x: [0, 200], roof: "gable" });
+});
+
+test("отметки сторон — одним списком с номером стороны; удаление по номеру", () => {
+  const sides = [{ marks: { chimney: [{ x: 1 }] } }, { marks: { chimney: [{ x: 2 }, { x: 3 }] } }];
+  assert.deepEqual(flattenMarks(sides, "chimney"),
+    [{ x: 1, side: 0 }, { x: 2, side: 1 }, { x: 3, side: 1 }]);
+  assert.deepEqual(removeMark([{ x: 1 }, { x: 2 }], 0), [{ x: 2 }]);
 });

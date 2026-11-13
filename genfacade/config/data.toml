@@ -71,3 +71,12 @@ gable_tol_m = 0.05
 # что у дома есть (у остальных — none); у ставен FreeFarmhouse на листах — филёнки или планки, не
 # различались [не проверено].
 trim = { sill = "flat", casing = "flat", shutters = "panel", canopy = "flat", door = "plain" }
+
+# Сверка разметки с эталоном (tools/markup_compare.py, gf#470): числа совпадают в допуске, рамка
+# окна или двери найдена, если её пересечение с эталонной (IoU, метры стены) не меньше iou_min.
+[manual.compare]
+tol_pitch_deg = 3.0
+tol_overhang_m = 0.15
+tol_plinth_m = 0.15
+tol_floor_m = 0.15
+iou_min = 0.5

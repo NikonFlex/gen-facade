@@ -65,3 +65,24 @@ export function pick(elements, [x, y]) {
 }
 
 export const round1 = (v) => Math.round(v * 10) / 10;
+
+// ——— отметки на виде (gf#470): труба, мансардное и слуховое окна, крыльцо под кровлей ———
+// Форму отметки задаёт сервер (`options.marks[вид].shape`): касание, отрезок по x или рамка.
+export const SHAPE = { POINT: "point", SPAN: "span", BOX: "box" };
+
+// Отметка от жеста: касание-точка кладёт x, отрезок — края по x, рамка — ещё и y. Касание
+// (жест короче minPt) для отрезка и рамки — размер по умолчанию sizeM с центром в точке. Поля,
+// которые жестом не задать (вид кровли, столбы), — из defaults.
+export function markFrom(shape, start, end, { sizeM, pxPerM, minPt, defaults }) {
+  if (shape === SHAPE.POINT) return { x: round1(start[0]), ...defaults };
+  const box = isTap([...start, ...end], minPt)
+    ? boxAt(start, sizeM, pxPerM) : normalize([...start, ...end]);
+  const [x0, y0, x1, y1] = box.map(round1);
+  return shape === SHAPE.SPAN ? { x: [x0, x1], ...defaults } : { x: [x0, x1], y: [y0, y1], ...defaults };
+}
+
+// Отметки всех сторон одним списком вида: у каждой — номер её стороны (`side`), как в разметке.
+export const flattenMarks = (sides, kind) =>
+  sides.flatMap((s, k) => s.marks[kind].map((m) => ({ ...m, side: k })));
+
+export const removeMark = (marks, i) => marks.filter((_, k) => k !== i);

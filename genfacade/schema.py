@@ -179,6 +179,24 @@ class LevelKind(StrEnum):
     TOP = "top"         # верх этажа (последний — карниз): задаёт высоту этажа дома
 
 
+class MarkKind(StrEnum):
+    """Отметка на виде стены, которую ставят на странице правки (gf#470): поле `Markup` с тем же
+    именем во множественном числе — `chimneys`, `skylights`, `dormers`, `porch_roofs`."""
+
+    CHIMNEY = "chimney"        # труба: центр x
+    SKYLIGHT = "skylight"      # мансардное окно: рамка
+    DORMER = "dormer"          # слуховое окно: отрезок по x
+    PORCH_ROOF = "porch_roof"  # крыльцо под кровлей: рамка
+
+
+class MarkShape(StrEnum):
+    """Как отметку ставят пальцем: касание, отрезок по x или рамка."""
+
+    POINT = "point"
+    SPAN = "span"
+    BOX = "box"
+
+
 class RejectReason(StrEnum):
     """Почему дом негоден (закрытый список; текст — config/viewer.toml, [markup.labels.reason])."""
 

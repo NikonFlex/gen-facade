@@ -126,6 +126,37 @@ image_max_side = 2400                # сжатие листа для телеф
 add_classes = ["window", "door", "garage_door", "porch", "canopy"]
 min_box_m = 0.15                     # рамка уже этого — касание: ставится рамка по умолчанию
 
+[markup.house_step]                  # шаг числовых полей дома на панели правки (gf#470)
+pitch_deg = 1.0
+overhang_m = 0.05
+gable_overhang_m = 0.05
+roof_down = 1.0
+
+[markup.marks.chimney]               # отметки на виде: как ставятся и какого цвета (gf#470)
+label = "труба"
+shape = "point"
+color = "firebrick"
+
+[markup.marks.skylight]
+label = "мансардное окно"
+shape = "box"
+color = "teal"
+size_m = [0.8, 1.2]
+
+[markup.marks.dormer]
+label = "слуховое окно"
+shape = "span"
+color = "darkorchid"
+size_m = [1.5, 0.0]
+defaults = { roof = "gable" }
+
+[markup.marks.porch_roof]
+label = "крыльцо под кровлей"
+shape = "box"
+color = "darkgoldenrod"
+size_m = [2.5, 2.5]
+defaults = { kind = "shed", posts = 2, depth_m = 1.5 }
+
 [markup.default_size_m]              # ширина × высота рамки, поставленной касанием
 window = [1.2, 1.4]
 door = [1.0, 2.1]
@@ -157,11 +188,34 @@ porch = "orange"
 chimney = "orange"
 canopy = "orange"
 
+[markup.labels]
+mark_kind = "вид кровли отметки"
+empty_kind = "— не записан —"
+delete_mark = "Удалить отметку"
+
 [markup.labels.state]
 unchecked = "не проверен"
 good = "хорошо"
 edited = "поправлен"
 rejected = "негоден"
+
+[markup.labels.house]                # поля дома на панели правки (gf#470)
+roof_kind = "вид крыши"
+pitch_deg = "уклон, °"
+overhang_m = "свес карнизный, м"
+gable_overhang_m = "свес фронтонный, м"
+overhang_by = "откуда свесы"
+roof_down = "скат к стороне №"
+roof_material = "кровля"
+gutters = "водосток"
+material = "отделка стен"
+plinth_material = "цоколь"
+trim_material = "карниз"
+"trim.sill" = "подоконник"
+"trim.casing" = "наличник"
+"trim.shutters" = "ставни"
+"trim.canopy" = "козырёк"
+"trim.door" = "дверь"
 
 [markup.labels.level]
 ground = "земля"
