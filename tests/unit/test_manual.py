@@ -817,3 +817,25 @@ def test_new_markup_fields_survive_the_toml_writer():
     assert manual.Markup.model_validate(tomllib.loads(text)) == m
     bare = markup_toml.dumps(markup())
     assert "trim" not in bare and "chimneys" not in bare
+
+
+def test_drawn_colors_paint_the_palette_roles():
+    """Сценарий «Акцент кирпичом» (спека data, цвета с чертежа): цвета разметки — в палитре."""
+    spec = manual.house(finished(colors={"accent": "#8a5a3c", "main": "#d9d4c8"}),
+                        CFG.data.manual)[0].sheet.spec
+    assert {m.id: m.color for m in spec.materials} == {
+        "main": "#d9d4c8", "plinth": None, "accent": "#8a5a3c", "trim": None}
+    assert sheet_colors(spec)["accent"] == "#8a5a3c"
+    assert len(tokens.vocabulary(CFG)) == 484    # цвет в условие и словарь модели не входит
+
+
+def sheet_colors(spec) -> dict[str, str]:
+    from genfacade.render import svg
+    return svg.palette_colors(spec, CFG)
+
+
+def test_bad_color_marks_are_refused():
+    with pytest.raises(ValueError, match="#rrggbb"):
+        finished(colors={"main": "d9d4c8"})
+    with pytest.raises(manual.BadMarkup, match="trim"):   # у дома без карниза роли trim нет
+        manual.house(markup(colors={"trim": "#aabbcc"}), CFG.data.manual)

@@ -37,6 +37,7 @@ gf#199).
 """
 
 import math
+import re
 import tomllib
 from collections import Counter
 from enum import StrEnum
@@ -45,7 +46,7 @@ from typing import NamedTuple
 
 import numpy
 import shapely
-from pydantic import Field, ValidationError, model_validator
+from pydantic import Field, ValidationError, field_validator, model_validator
 
 from genfacade import derive, dormers, parts, roof, roof_items, window_shape
 from genfacade.config import Config, Manual
@@ -109,6 +110,9 @@ GABLE_CLASSES = frozenset({ElementClass.WINDOW, *(derive.DERIVED[t] for t in der
 LOW_EDGE_ROOFS = frozenset({RoofKind.SHED, RoofKind.FLAT})
 
 FIRST_NORMAL = (0.0, 1.0)  # сторона входа смотрит в +y плана (rect_house.NORMALS[0])
+
+
+HEX_COLOR = re.compile(r"#[0-9a-fA-F]{6}")  # формат цвета разметки — определение, не настройка
 
 
 class BadMarkup(Exception):
@@ -270,6 +274,9 @@ class Markup(Model):
     unit: Unit           # единица отметок и масштаба
     pt_per_unit: float = Field(gt=0)
     material: str        # вид основной отделки из library.toml
+    # Цвет роли палитры с листа (gf#470): медиана пикселей её мест на видах (`markup_colors.py`),
+    # `#rrggbb`; роли без цвета — цвет вида из библиотеки. Цвет в условие модели не входит.
+    colors: dict[PaletteRole, str] = {}
     plinth: float = Field(ge=0)       # чистый пол над землёй
     floor_heights: list[float]        # этажи от чистого пола до карниза
     plinth_material: str | None = None  # вид отделки цоколя; None — цоколя на листе нет (absent)
@@ -280,6 +287,13 @@ class Markup(Model):
     # (гамбрел, бабочка, составная), или конёк поперёк правила модуля. Дом остаётся в тесте.
     roof_gaps: list[str] = []
     sides: list[Elevation]
+
+    @field_validator("colors")
+    @classmethod
+    def _check_colors(cls, colors: dict[PaletteRole, str]) -> dict[PaletteRole, str]:
+        if bad := [f"{r}={c}" for r, c in colors.items() if not HEX_COLOR.fullmatch(c)]:
+            raise ValueError(f"цвет роли — #rrggbb: {', '.join(bad)}")
+        return colors
 
     @model_validator(mode="after")
     def _check_roof(self) -> "Markup":
@@ -836,16 +850,24 @@ def _eaves_y(m: Markup, e: Elevation, x: float, tol: float) -> float:
     return next((s.y for s in e.eaves if s.x[0] - tol <= x <= s.x[1] + tol), m.tops_y(e)[-1])
 
 
-def _palette(m: Markup) -> list[Material]:
-    """Палитра дома по разметке: основная, цоколь, карниз, кровля и вторая отделка — те, что на
-    листе."""
+def palette_roles(m: Markup) -> dict[PaletteRole, str]:
+    """Роль → вид материала для ролей, что есть на листе дома: основная, цоколь, карниз, кровля и
+    вторая отделка. Роли нет — у неё нет и цвета (`Markup.colors`)."""
     second = {z.material for e in m.sides for z in e.zones}
     if len(second) > 1:  # у палитры одна роль второй отделки (`PaletteRole.ACCENT`)
         raise BadMarkup(f"{m.id}: видов второй отделки {len(second)} — у палитры один")
     kinds = {PaletteRole.MAIN: m.material, PaletteRole.ACCENT: next(iter(second), None),
              PaletteRole.PLINTH: m.plinth_material if m.plinth > 0 else None,
              PaletteRole.TRIM: m.trim_material, PaletteRole.ROOF: m.roof_material}
-    return [Material(id=role, kind=kind) for role, kind in kinds.items() if kind is not None]
+    return {role: kind for role, kind in kinds.items() if kind is not None}
+
+
+def _palette(m: Markup) -> list[Material]:
+    """Палитра дома по разметке; цвет роли — с листа, если разметка его держит (gf#470)."""
+    roles = palette_roles(m)
+    if lost := sorted(set(m.colors) - set(roles)):
+        raise BadMarkup(f"{m.id}: цвет у ролей без материала в палитре: {', '.join(lost)}")
+    return [Material(id=role, kind=kind, color=m.colors.get(role)) for role, kind in roles.items()]
 
 
 def _metres(box: tuple[float, float, float, float], e: Elevation, m: Markup,

@@ -24,6 +24,7 @@ overhang_by = "drawing"
 unit = "m"
 pt_per_unit = 135.0
 material = "imitation_timber"  # горизонтальные доски шагом 0,15 м по рисунку, подписей нет [по рисунку, не уверен: имитация бруса или блок-хаус]
+colors = { main = "#dedede", plinth = "#eeeeee" }
 plinth = 0.45
 floor_heights = [3.15]  # торец стр. 4: верх стены под свесом 436 при полу 858 и 134 pt/м = 3,15 м; низ свеса +2,85
 plinth_material = "stone"  # каменный/бутовый рисунок под кладкой

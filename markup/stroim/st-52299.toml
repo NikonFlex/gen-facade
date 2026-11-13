@@ -19,6 +19,7 @@ overhang_by = "drawing"
 unit = "m"
 pt_per_unit = 233.4
 material = "plaster"  # белая штукатурка (лист без заливки)
+colors = { main = "#ffffff", plinth = "#ffffff" }
 plinth = 0.5
 floor_heights = [2.92]
 plinth_material = "concrete"  # цоколь −0,500…0,000

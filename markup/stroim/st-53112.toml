@@ -26,6 +26,7 @@ overhang_by = "drawing"
 unit = "m"
 pt_per_unit = 135.5
 material = "plaster"      # серая штукатурка
+colors = { main = "#c4c4c4", plinth = "#343434" }
 plinth = 0.3
 plinth_material = "stone" # тёмный цоколь
 floor_heights = [3.12]

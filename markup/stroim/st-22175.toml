@@ -26,6 +26,7 @@ roof_material = "metal_tile"
 unit = "m"
 pt_per_unit = 211.4
 material = "imitation_timber"   # горизонтальная доска/брус шагом 0,15 м (по рисунку, подписи нет — не уверен: может быть брус или блок-хаус)
+colors = { main = "#9a9b96", plinth = "#bfbfbf", roof = "#c5c5c5" }
 plinth = 0.8                    # земля −0,8 под ±0,000 (камень от −0,4 до земли)
 plinth_material = "stone"       # рваный камень (рисунок кладки)
 floor_heights = [2.283]

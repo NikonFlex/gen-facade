@@ -26,6 +26,7 @@ overhang_by = "drawing"
 unit = "m"
 pt_per_unit = 147.4
 material = "brick"        # кирпич: рисунок кладки на всех стенах (цвет на листе синеватый — тонировка)
+colors = { main = "#575a69", plinth = "#535763", accent = "#946c45" }
 plinth = 0.85
 plinth_material = "stone" # рваный камень; рисунок, подписи нет
 trim_material = "wood"    # свес и торцевая доска светло-коричневые

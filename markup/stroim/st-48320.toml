@@ -24,6 +24,7 @@ overhang_by = "drawing"
 unit = "m"
 pt_per_unit = 132.6
 material = "board_batten_narrow"  # тёплая вертикальная обшивка, по рисунку (подписи нет), не уверен
+colors = { main = "#cabd9e", plinth = "#46484e", roof = "#2f373a" }
 plinth = 0.355
 floor_heights = [2.71, 1.425]
 plinth_material = "brick"  # тёмная полоса с рисунком кладки, по рисунку

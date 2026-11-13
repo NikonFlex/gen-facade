@@ -22,6 +22,7 @@ chimneys = [
 unit = "m"
 pt_per_unit = 76.3
 material = "plaster"  # по цвету (светло-серая заливка), подписи отделки нет — не уверен
+colors = { main = "#c9c9c9", plinth = "#6e6e6e" }
 plinth = 0.25
 floor_heights = [2.9]
 plinth_material = "concrete"  # тёмная полоса цоколя; по цвету, не уверен

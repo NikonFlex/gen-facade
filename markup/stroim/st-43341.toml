@@ -27,6 +27,7 @@ unit = "m"
 pt_per_unit = 129.6
 # обшивка — зелёные узкие горизонтальные доски с пазами через ≈0,11 м; вид по рисунку, подписи нет — не уверен (siding или imitation_timber)
 material = "siding"
+colors = { main = "#878c69", plinth = "#99948b" }
 plinth = 0.15
 plinth_material = "concrete"  # серый цоколь по низу стены, по цвету — не уверен
 floor_heights = [2.99]

@@ -20,6 +20,7 @@ overhang_by = "drawing"
 unit = "m"
 pt_per_unit = 74.0
 material = "brick"  # белый облицовочный кирпич
+colors = { main = "#cacaca", plinth = "#fefefe" }
 plinth = 0.45
 floor_heights = [2.85]
 plinth_material = "concrete"  # светлая полоса цоколя ниже кладки

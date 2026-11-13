@@ -24,6 +24,7 @@ overhang_by = "drawing"
 unit = "m"
 pt_per_unit = 126.5
 material = "brick"        # светло-жёлтый облицовочный кирпич
+colors = { main = "#bea474", plinth = "#b38767" }
 plinth = 0.78
 plinth_material = "brick" # красная кирпичная полоса и светлая гладкая нижняя — по цвету, не уверен (возможно штукатурка/камень)
 trim_material = "wood"    # тёмно-коричневая фризовая доска свеса — по цвету, не уверен

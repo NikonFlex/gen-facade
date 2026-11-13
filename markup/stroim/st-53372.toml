@@ -41,6 +41,7 @@ roof_gaps = ["юг и север: скат дома продолжен вниз 
 unit = "m"
 pt_per_unit = 93.2
 material = "siding_narrow"  # горизонтальная обшивка, шаг пазов 10 pt = 0,10 м — по рисунку
+colors = { main = "#8d8d8c", plinth = "#605f5b", accent = "#e8ccb4" }
 plinth = 0.18
 plinth_material = "concrete"  # тёмно-серая полоса цоколя, по цвету, не уверен
 floor_heights = [2.9, 1.0]

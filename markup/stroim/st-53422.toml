@@ -24,6 +24,7 @@ overhang_by = "drawing"
 unit = "m"
 pt_per_unit = 309.6
 material = "wood"         # коричневая обшивка «имитация бруса» горизонтально
+colors = { main = "#786048", plinth = "#4b4b4b" }
 plinth = 0.39
 plinth_material = "concrete"  # тёмно-серый цоколь
 floor_heights = [2.73]

@@ -26,6 +26,7 @@ pt_per_unit = 134.2
 # отделка: тонкая вертикальная рейка/доска шагом ≈ 0,11 м по всему фасаду и крыше, подписи нет —
 # board_batten_narrow по рисунку [не проверено: вид по рисунку, цвет серый]
 material = "board_batten_narrow"
+colors = { main = "#c7c7c7", plinth = "#c7c7c7" }
 plinth = 0.45
 plinth_material = "board_batten_narrow"
 floor_heights = [2.55]

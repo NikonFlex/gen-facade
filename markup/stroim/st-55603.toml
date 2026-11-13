@@ -24,6 +24,7 @@ overhang_by = "drawing"
 unit = "m"
 pt_per_unit = 262.4
 material = "log"  # бревенчатый/профилированный брус, горизонтальные венцы
+colors = { main = "#c9bdab", plinth = "#6a6a6a", roof = "#423b2f" }
 plinth = 0.75
 floor_heights = [3.415, 1.885]
 plinth_material = "brick"  # тёмный кирпич цокольной части (по рисунку кладки)

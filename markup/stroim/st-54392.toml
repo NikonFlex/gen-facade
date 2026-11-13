@@ -21,6 +21,7 @@ overhang_by = "default"
 unit = "m"
 pt_per_unit = 87.5
 material = "plaster"      # белая штукатурка
+colors = { main = "#f4f5ef", plinth = "#5b5b5b", accent = "#5b5b5b" }
 # цоколь: от земли до пола 0,15…0,5 м у востока; у юга и запада земля уходит на −1,6 (тёмный цоколь до 1,6 м)
 plinth = 0.5
 plinth_material = "concrete"  # тёмно-серый цоколь, по цвету, не уверен

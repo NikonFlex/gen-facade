@@ -25,6 +25,7 @@ overhang_by = "drawing"
 unit = "m"
 pt_per_unit = 625.0
 material = "wood"   # коричневые вертикальные доски, узкие (шаг ≈0,1 м) — по цвету и рисунку, не уверен
+colors = { main = "#736148", plinth = "#b0a698", accent = "#5b5c5c", roof = "#4e4e4e" }
 plinth = 0.40
 plinth_material = "stone"   # рваный булыжник
 floor_heights = [2.45]

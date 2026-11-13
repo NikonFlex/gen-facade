@@ -686,6 +686,13 @@ class MarkupCompare(Section):
     iou_min: float         # рамка окна или двери найдена, если пересечение с эталонной не меньше
 
 
+class MarkupColors(Section):
+    """Снятие цветов отделки с листа (`tools/markup_colors.py`, gf#470)."""
+
+    min_pixels: int   # у роли пикселей меньше — цвет не пишется: мест роли нет или они узкие
+    line_dark: int    # пиксели темнее (средняя яркость 0–255) — линии чертежа, в медиану не идут
+
+
 class Manual(Section):
     """Ручная разметка реальных коттеджей (config/data.toml, `data: Реальные коттеджи — тест`)."""
 
@@ -699,6 +706,7 @@ class Manual(Section):
     gable_tol_m: float  # окно во фронтоне за стеной с фронтоном модуля не дальше этого (gf#321)
     trim: HouseTrim
     compare: MarkupCompare
+    colors: MarkupColors
 
 
 class Data(Section):

@@ -26,6 +26,7 @@ overhang_by = "drawing"
 unit = "m"
 pt_per_unit = 228.0
 material = "log"           # круглое бревно, горизонтальные венцы (стр. 1, 3)
+colors = { main = "#c2b8a7", plinth = "#754f22" }
 plinth = 0.45
 plinth_material = "concrete"  # тёмная гладкая полоса; по цвету, не уверен
 floor_heights = [3.2, 1.33]

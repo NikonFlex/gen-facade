@@ -13,11 +13,16 @@ STEP = 50         # pt: шаг линейки кадра
 REACH = 15        # pt: насколько далеко от прикидки искать край
 
 
-def page_image(pdf: str, page_no: int) -> Image.Image:
-    """Страница листа в пикселях, 1 px = 1 pt."""
+def page_rgb(pdf: str, page_no: int) -> Image.Image:
+    """Страница листа в цвете, 1 px = 1 pt."""
     with pdfplumber.open(pdf) as doc:
         page = doc.pages[page_no - 1]
-        return page.to_image(resolution=72).original.convert("L")
+        return page.to_image(resolution=72).original.convert("RGB")
+
+
+def page_image(pdf: str, page_no: int) -> Image.Image:
+    """Страница листа в оттенках серого, 1 px = 1 pt."""
+    return page_rgb(pdf, page_no).convert("L")
 
 
 def grid(pdf: str, page_no: int, box: tuple[float, ...], zoom: int) -> Image.Image:

@@ -28,6 +28,7 @@ pt_per_unit = 180.7
 # дверь глухая с узкой вертикальной вставкой (стр. 3), навеса над входом нет
 trim = { sill = "flat", door = "plain" }
 material = "plaster"  # серая штукатурка стен
+colors = { main = "#cacaca", plinth = "#7e635a", accent = "#7e635a" }
 plinth = 0.6  # земля −0,600 под чистым полом
 floor_heights = [3.08]
 plinth_material = "brick"  # коричневый цоколь

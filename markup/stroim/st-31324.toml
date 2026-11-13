@@ -27,6 +27,7 @@ roof_material = "metal_roof"
 unit = "m"
 pt_per_unit = 393.4
 material = "brick"       # красная кирпичная кладка (рисунок кладки), подписи нет
+colors = { main = "#c37d64", plinth = "#9c9d9a" }
 plinth = 0.40
 plinth_material = "concrete"   # серый цоколь плитами — по цвету и швам, не уверен
 floor_heights = [3.4]    # от верха цоколя до подошвы щипца; на длинных стенах низ кровли виден на 3,0 м
