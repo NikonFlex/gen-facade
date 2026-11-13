@@ -32,6 +32,7 @@ from genfacade.unfold import plan_corners
 
 Point3 = tuple[float, float, float]
 KEEP_MIN_M = 10 * EPS  # желоба короче этого — крошка после вычитания, не желоб
+POINT_RIDGE_M = 0.05  # конёк короче этого — вершина шатра: доли конька не определены (gf#471)
 
 
 class ItemKind(StrEnum):
@@ -121,14 +122,17 @@ def _first_near(a: Point, b: Point, corner: Point) -> tuple[Point, Point]:
 
 
 class Site(NamedTuple):
-    """Где ставятся трубы: «конёк» a→b на высоте top, высота кровли в точке плана, сдвиг центра
-    от кромки (у односкатной — внутрь на полсечения, единичный вектор; иначе нули)."""
+    """Где ставятся трубы: ось a→b на высоте top (по ней и считается `ChimneySpot.along`),
+    высота кровли в точке плана, сдвиг центра от кромки (у односкатной — внутрь на полсечения,
+    единичный вектор; иначе нули) и длина настоящего конька span: у шатра конька нет (0), а ось —
+    отрезок в метр от вершины вдоль длинной стороны."""
 
     a: Point
     b: Point
     top: float
     height: Callable[[Point], float]
     lean: Point
+    span: float
 
 
 def site(sheet: FacadeSheet) -> Site | None:
@@ -147,7 +151,19 @@ def _roof_site(line: Roofline) -> Site | None:
     lean = (0.0, 0.0)
     if len(line.slopes) == 1:  # односкатная: конёк — кромка у стены, труба — внутрь от неё
         lean = (-line.slopes[0].inward[0], -line.slopes[0].inward[1])
-    return Site(*found[:2], found[2], line.height, lean)
+    a, b, top = found
+    span = math.dist(a, b)
+    if span < POINT_RIDGE_M:  # шатёр: ось — длинная сторона части, длина оси 1 м
+        u = _long_side(line.corners)
+        b, span = (a[0] + u[0], a[1] + u[1]), 0.0
+    return Site(a, b, top, line.height, lean, span)
+
+
+def _long_side(corners: list[Point]) -> Point:
+    """Единичное направление самой длинной стороны контура (первой из равных)."""
+    p, q = max(zip(corners, corners[1:] + corners[:1], strict=True), key=lambda e: math.dist(*e))
+    length = math.dist(p, q)
+    return (q[0] - p[0]) / length, (q[1] - p[1]) / length
 
 
 def _flat_site(sheet: FacadeSheet) -> Site | None:
@@ -157,16 +173,14 @@ def _flat_site(sheet: FacadeSheet) -> Site | None:
         return None
     corners = plan_corners([f.side for f in sheet.facades])
     poly = shapely.Polygon(corners)
-    p, q = max(zip(corners, corners[1:] + corners[:1], strict=True), key=lambda e: math.dist(*e))
-    length = math.dist(p, q)
-    u = ((q[0] - p[0]) / length, (q[1] - p[1]) / length)
+    u = _long_side(corners)
     c, reach = poly.centroid, 2 * poly.length
     axis = shapely.LineString([(c.x - u[0] * reach, c.y - u[1] * reach),
                                (c.x + u[0] * reach, c.y + u[1] * reach)])
     cut = max(_lines(poly.intersection(axis)), key=lambda g: g.length)
     a, b = _first_near(*_ends(cut), corners[0])
     eaves = sheet.spec.eaves_m
-    return Site(a, b, eaves, lambda _: eaves, (0.0, 0.0))
+    return Site(a, b, eaves, lambda _: eaves, (0.0, 0.0), math.dist(a, b))
 
 
 def _chimneys(found: Site | None, spots: list[ChimneySpot], cfg: RoofItemsLook) -> list[Chimney]:
@@ -183,7 +197,8 @@ def _chimney(found: Site, spot: ChimneySpot, cfg: RoofItemsLook) -> Chimney:
     u = ((bx - ax) / length, (by - ay) / length) if length > EPS else (1.0, 0.0)
     cx = ax + spot.along * (bx - ax) - u[1] * spot.across_m
     cy = ay + spot.along * (by - ay) + u[0] * spot.across_m
-    d = shapely.Point(cx, cy).distance(shapely.LineString([found.a, found.b]))
+    end = (ax + (bx - ax) * found.span / length, ay + (by - ay) * found.span / length)
+    d = shapely.Point(cx, cy).distance(shapely.LineString([found.a, end]))
     cx, cy = cx + found.lean[0] * cfg.chimney_m / 2, cy + found.lean[1] * cfg.chimney_m / 2
     h = cfg.chimney_m / 2
     ring = [(cx + sx * h * u[0] - sy * h * u[1], cy + sx * h * u[1] + sy * h * u[0])
@@ -195,9 +210,9 @@ def _chimney(found: Site, spot: ChimneySpot, cfg: RoofItemsLook) -> Chimney:
 def _top(found: Site, d: float, cfg: RoofItemsLook) -> float:
     """Верх трубы по расстоянию d центра от конька (СНиП 41-01-2003 п. 6.6.12): до near — выше
     конька на over; до far — вровень; дальше — на линии вниз от конька под углом slope."""
-    if d <= cfg.chimney_near_m:
+    if d <= cfg.chimney_near_m + EPS:
         return found.top + cfg.chimney_over_m
-    if d <= cfg.chimney_far_m:
+    if d <= cfg.chimney_far_m + EPS:
         return found.top
     return found.top - d * math.tan(math.radians(cfg.chimney_slope_deg))
 

@@ -29,10 +29,11 @@ PITCH35 = math.tan(math.radians(35))
 CORNERS = [(0.0, 6.0), (10.0, 6.0), (10.0, 0.0), (0.0, 0.0)]  # по часовой, как контур дома
 
 
-def _house(slopes: list[roof.Slope], eave: float, gable: float) -> roof.HouseRoof:
-    """Дом 10 × 6 м со скатами slopes 35°, карниз 3,25 м, одна часть."""
-    line = roof.Roofline(CORNERS, slopes, 3.25, PITCH35, eave, gable)
-    return roof.HouseRoof(CORNERS, [line], [[Span(0.0, 10.0, 0)] for _ in CORNERS])
+def _house(slopes: list[roof.Slope], eave: float, gable: float,
+           corners: list[tuple[float, float]] = CORNERS) -> roof.HouseRoof:
+    """Дом со скатами slopes 35° (10 × 6 м, если corners не заданы), карниз 3,25 м, одна часть."""
+    line = roof.Roofline(corners, slopes, 3.25, PITCH35, eave, gable)
+    return roof.HouseRoof(corners, [line], [[Span(0.0, 10.0, 0)] for _ in corners])
 
 
 def gable_house(eave: float = 0.5, gable: float = 0.3) -> roof.HouseRoof:
@@ -46,10 +47,16 @@ def shed_house() -> roof.HouseRoof:
     return _house([roof.Slope(CORNERS[2], (0.0, 1.0))], 0.5, 0.3)
 
 
+def hip_roof(corners: list[tuple[float, float]]) -> roof.HouseRoof:
+    """Вальма по четырём сторонам контура corners (как у CORNERS), свесы 0,5 м."""
+    c = corners
+    slopes = [roof.Slope(c[0], (0.0, -1.0)), roof.Slope(c[1], (-1.0, 0.0)),
+              roof.Slope(c[2], (0.0, 1.0)), roof.Slope(c[3], (1.0, 0.0))]
+    return _house(slopes, 0.5, 0.5, c)
+
+
 def hip_house() -> roof.HouseRoof:
-    slopes = [roof.Slope(CORNERS[0], (0.0, -1.0)), roof.Slope(CORNERS[1], (-1.0, 0.0)),
-              roof.Slope(CORNERS[2], (0.0, 1.0)), roof.Slope(CORNERS[3], (1.0, 0.0))]
-    return _house(slopes, 0.5, 0.5)
+    return hip_roof(CORNERS)
 
 
 def of_gable(spot: ChimneySpot) -> roof_items.Chimney:
@@ -113,6 +120,38 @@ def test_chimney_on_flat_roof_half_metre_above():
     aside = spec.model_copy(update={"chimneys": [ChimneySpot(along=0.5, across_m=2.0)]})
     found = roof_items.roof_items(sheet.model_copy(update={"spec": aside}), LOOK).chimneys
     assert found[0].z1 == pytest.approx(3.5)  # на плоской крыше — над кровлей при любом отступе
+
+
+def hip_10_by_8(spot: ChimneySpot) -> roof_items.Chimney:
+    """Единственная труба вальмового дома 10 × 8 м: конёк 2 м от x = 4 до x = 6."""
+    house = hip_roof([(0.0, 8.0), (10.0, 8.0), (10.0, 0.0), (0.0, 0.0)])
+    return roof_items.of_house(house, [spot], False, LOOK).chimneys[0]
+
+
+def test_chimney_on_hip_beyond_ridge_end():
+    """Сценарий «Труба на вальме»: дом 10 × 8 м, конёк 2 м, труба в 1 м от торцевой стены по оси —
+    доля −1,5 (за началом конька), центр в x = 1, y = 4; от конца конька 3 м — верх вровень с
+    коньком 6,05 м (3,25 + 4 · tg 35°), низ по вальме ниже."""
+    found = hip_10_by_8(ChimneySpot(along=-1.5))
+    xs = [p[0] for p in found.footprint]
+    ys = [p[1] for p in found.footprint]
+    assert ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2) == pytest.approx((1.0, 4.0))
+    assert found.z1 == pytest.approx(3.25 + 4 * PITCH35)
+    assert found.z0 < found.z1 - 1.0
+
+
+def test_chimney_on_pyramid_hip_counts_metres_from_peak():
+    """Шатёр 8 × 8 м (конька нет): доля — метры вдоль оси от вершины, расстояние до конька — до
+    вершины-точки: в 2 м от неё верх вровень с вершиной, в 3,5 м — на линии 10° вниз от неё."""
+    house = hip_roof([(0.0, 8.0), (8.0, 8.0), (8.0, 0.0), (0.0, 0.0)])
+    top = 3.25 + 4 * PITCH35
+
+    def z1(along: float, across: float) -> float:
+        spot = ChimneySpot(along=along, across_m=across)
+        return roof_items.of_house(house, [spot], False, LOOK).chimneys[0].z1
+
+    assert z1(2.0, 0.0) == pytest.approx(top)
+    assert z1(0.0, -3.5) == pytest.approx(top - 3.5 * math.tan(math.radians(10)))
 
 
 def test_chimney_on_shed_at_high_side():
@@ -375,3 +414,17 @@ def test_old_chimney_fractions_read_as_ridge_spots(house):
     old = house.spec.model_dump(mode="json") | {"chimneys": [0.25, 0.75]}
     assert HouseSpec.model_validate(old).chimneys == [
         ChimneySpot(along=0.25), ChimneySpot(along=0.75)]
+
+
+def test_markup_chimney_depth_past_ridge_end_is_not_clamped():
+    """Труба с выносом за торцом конька (на вальме) — доля вне 0–1; без выноса — у торца конька."""
+    metres = [side("F", 8), side("L", 10), side("B", 8), side("R", 10)]
+    base = markup(unit="m", plinth=0.3, floor_heights=[3.0], sides=metres, cut=[]).model_dump(
+        mode="json") | {"roof_kind": "hip", "pitch_deg": 35.0}
+
+    def built(**mark):
+        raw = base | {"chimneys": [{"side": 1, "x": 100.0 + 1 * PT} | mark]}
+        return manual.house(Markup.model_validate(raw), CFG.data.manual)[0].sheet.spec.chimneys[0]
+
+    assert not 0.0 <= built(depth_m=4.0).along <= 1.0  # x = 1 м от торца: за концом конька
+    assert 0.0 <= built().along <= 1.0

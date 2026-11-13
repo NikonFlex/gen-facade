@@ -437,8 +437,8 @@ def _roof_items(sheet: FacadeSheet, m: Markup, cfg: Manual) -> FacadeSheet:
 
 def _chimney(m: Markup, mark: ChimneyMark, sheet: FacadeSheet, cfg: Manual) -> ChimneySpot:
     """Место трубы на кровле главной части: точка плана — x вида стороны и вынос внутрь от её стены
-    (нет выноса — на самой стене), доля вдоль конька в пределах 0–1 (за торцом — у торца конька)
-    и отступ от конька (`roof_items.site`; нет выноса — на коньке). Ошибка разметки: неверная
+    (нет выноса — на самой стене), доля вдоль конька (не обрезается: на вальме труба за торцом) и
+    отступ от конька (`roof_items.site`; нет выноса — на коньке). Ошибка разметки: неверная
     сторона, точка дальше края кровли на `chimney_beyond_m`, дом без конька."""
     _known_side(m, mark.side, "труба")
     e, length = m.sides[mark.side], sheet.facades[mark.side].side.length_m
@@ -460,16 +460,16 @@ def _chimney(m: Markup, mark: ChimneyMark, sheet: FacadeSheet, cfg: Manual) -> C
 
 
 def _spot(found: roof_items.Site, point: Point, on_ridge: bool) -> ChimneySpot:
-    """Место трубы по точке плана: доля вдоль конька (0–1) и отступ от него со знаком (на коньке —
-    0: точка без выноса лежит на стене вида, а не на кровле)."""
-    (ax, ay), (bx, by) = found.a, found.b
-    run = math.dist(found.a, found.b)
+    """Место трубы по точке плана: доля вдоль конька (за торцом — вне 0–1; у шатра — метры вдоль
+    оси) и отступ от него со знаком. Без выноса точка лежит на стене вида, а не на кровле:
+    труба на коньке (отступ 0, доля в пределах 0–1, у шатра 0)."""
+    (ax, ay), run = found.a, math.dist(found.a, found.b)
+    ux, uy = (found.b[0] - ax) / run, (found.b[1] - ay) / run
     px, py = point[0] - ax, point[1] - ay
-    if run <= EPS:
-        return ChimneySpot(along=0.0, across_m=0.0)
-    ux, uy = (bx - ax) / run, (by - ay) / run
-    return ChimneySpot(along=min(1.0, max(0.0, (px * ux + py * uy) / run)),
-                       across_m=0.0 if on_ridge else round(-px * uy + py * ux, 3))
+    along, across = (px * ux + py * uy) / run, -px * uy + py * ux
+    if on_ridge:
+        return ChimneySpot(along=min(1.0, max(0.0, along)) if found.span else 0.0)
+    return ChimneySpot(along=along, across_m=round(across, 3))
 
 
 def _known_side(m: Markup, side: int, what: str) -> None:
