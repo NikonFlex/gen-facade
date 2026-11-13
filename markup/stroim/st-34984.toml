@@ -32,7 +32,7 @@ plinth_material = "plaster"      # тёмно-серая полоса цокол
 floor_heights = [3.1]
 trim = { door = "plain" }
 chimneys = [
-  { side = 0, x = 1770.0 },
+  { side = 0, x = 1770.0, depth_m = 1.9 },
 ]
 absent = [
   "все стороны: нет карнизной полосы кроме белого водостока/фасции",

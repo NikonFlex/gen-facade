@@ -17,7 +17,7 @@ pitch_deg = 21.0
 overhang_m = 0.5
 overhang_by = "drawing"
 chimneys = [
-  { side = 0, x = 1162.5 },
+  { side = 0, x = 1162.5, depth_m = 1.55 },
 ]
 unit = "m"
 pt_per_unit = 76.3

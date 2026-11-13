@@ -18,7 +18,7 @@ pitch_deg = 25.3
 overhang_m = 0.5
 gable_overhang_m = 0.5
 overhang_by = "drawing"
-chimneys = [{ side = 2, x = 1224.0 }]
+chimneys = [{ side = 2, x = 1224.0, depth_m = 1.7 }]
 porch_roofs = [
   { side = 3, x = [150.0, 1538.0], y = [55.0, 345.0], kind = "hip", posts = 3, depth_m = 3.0 },
   { side = 0, x = [850.0, 1453.0], y = [248.0, 384.0], kind = "hip", posts = 2, depth_m = 1.8 },

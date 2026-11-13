@@ -25,7 +25,7 @@ plinth = 0.4
 plinth_material = "plaster"
 floor_heights = [3.0]
 gutters = true
-chimneys = [{ side = 0, x = 1422.0 }]
+chimneys = [{ side = 0, x = 1422.0, depth_m = 2.1 }]
 trim = { door = "plain" }
 cut = ["все стороны: вентвыходы на скатах (малые патрубки) — не размечены",
        "north: окно из 4 створок (+0,100…+2,500) принято panoramic cols 4 — на плане 2 870 мм с распашными створками, не проверено"]
