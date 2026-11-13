@@ -9,7 +9,7 @@ import vocab
 from simple_house import L_SHAPE
 from test_manual import PT, finished, markup, side
 
-from genfacade import config, pipeline, roof, roof_items
+from genfacade import config, pipeline, roof, roof_items, unfold
 from genfacade.datasets import manual
 from genfacade.datasets.manual import BadMarkup, Markup
 from genfacade.models import stub
@@ -19,7 +19,7 @@ from genfacade.render.house3d import house_3d
 from genfacade.render.ifc import counts, house_ifc
 from genfacade.render.svg import sheet_svg
 from genfacade.roof_items import ItemKind
-from genfacade.schema import Mode, RoofKind
+from genfacade.schema import ChimneySpot, HouseSpec, Mode, RoofKind
 from genfacade.train import tokens
 
 CFG = config.load()
@@ -52,10 +52,15 @@ def hip_house() -> roof.HouseRoof:
     return _house(slopes, 0.5, 0.5)
 
 
+def of_gable(spot: ChimneySpot) -> roof_items.Chimney:
+    """Единственная труба двускатного дома 10 × 6 м."""
+    return roof_items.of_house(gable_house(), [spot], False, LOOK).chimneys[0]
+
+
 def test_chimney_at_ridge():
     """Сценарий «Труба у конька»: центр в 2,5 м от начала конька, верх 5,85 м, сечение 0,51 м,
     низ — внутри кровли (ниже конька)."""
-    found = roof_items.of_house(gable_house(), [0.25], False, LOOK).chimneys[0]
+    found = of_gable(ChimneySpot(along=0.25))
     xs, ys = [p[0] for p in found.footprint], [p[1] for p in found.footprint]
     assert (min(xs) + max(xs)) / 2 == pytest.approx(2.5)  # начало конька — (0, 3)
     assert (min(ys) + max(ys)) / 2 == pytest.approx(3.0)
@@ -73,17 +78,54 @@ def test_ridge_starts_at_corner_zero():
     assert roof_items.ridge(far)[0] == (10.0, 3.0)
 
 
+def test_chimney_on_slope_top_level_with_ridge():
+    """Сценарий «Труба на скате»: отступ 2 м от конька — центр в 2 м от него, верх 5,35 м, низ по
+    скату ниже."""
+    found = of_gable(ChimneySpot(along=0.25, across_m=2.0))
+    ys = [p[1] for p in found.footprint]
+    assert abs((min(ys) + max(ys)) / 2 - 3.0) == pytest.approx(2.0)  # конёк на y = 3
+    assert found.z1 == pytest.approx(3.25 + 3 * PITCH35)
+    assert found.z0 < found.z1 - 1.0
+
+
+def test_chimney_far_from_ridge_under_10_degree_line():
+    """Сценарий «Труба далеко от конька»: отступ 3,5 м — верх на 3,5 · tg 10° ниже конька."""
+    found = of_gable(ChimneySpot(along=0.25, across_m=-3.5))
+    assert found.z1 == pytest.approx(3.25 + 3 * PITCH35 - 3.5 * math.tan(math.radians(10)))
+    assert found.z1 > found.z0
+
+
+def flat_chimney_sheet():
+    """Дом разметки с плоской крышей и трубой на виде стороны 1."""
+    raw = finished().model_dump(mode="json")
+    raw["chimneys"], raw["roof_kind"], raw["pitch_deg"] = [{"side": 1, "x": 150.0}], "flat", 0.0
+    return manual.house(Markup.model_validate(raw), CFG.data.manual)[0].sheet
+
+
+def test_chimney_on_flat_roof_half_metre_above():
+    """Сценарий «Труба на плоской крыше»: кровля на 3,0 м — низ 3,0, верх 3,5 м, сечение 0,51 м."""
+    sheet = flat_chimney_sheet()
+    spec = sheet.spec.model_copy(update={"eaves_m": 3.0})
+    found = roof_items.roof_items(sheet.model_copy(update={"spec": spec}), LOOK).chimneys
+    assert len(found) == 1 and (found[0].z0, found[0].z1) == pytest.approx((3.0, 3.5))
+    xs = [p[0] for p in found[0].footprint]
+    assert max(xs) - min(xs) == pytest.approx(0.51)
+    aside = spec.model_copy(update={"chimneys": [ChimneySpot(along=0.5, across_m=2.0)]})
+    found = roof_items.roof_items(sheet.model_copy(update={"spec": aside}), LOOK).chimneys
+    assert found[0].z1 == pytest.approx(3.5)  # на плоской крыше — над кровлей при любом отступе
+
+
 def test_chimney_on_shed_at_high_side():
     """Односкатная: труба у высокой стороны, внутри контура, верх — высота высокой кромки + 0,5."""
-    found = roof_items.of_house(shed_house(), [0.5], False, LOOK).chimneys[0]
+    found = roof_items.of_house(shed_house(), [ChimneySpot(along=0.5)], False, LOOK).chimneys[0]
     high = 3.25 + 6 * PITCH35
     assert found.z1 == pytest.approx(high + 0.5)
     assert all(0 <= x <= 10 and 5.49 - 1e-9 <= y <= 6.0 + 1e-9 for x, y in found.footprint)
 
 
-def test_flat_roof_has_no_chimney_and_no_gutters(house):
+def test_flat_roof_has_no_gutters(house):
     flat = house.model_copy(update={"spec": house.spec.model_copy(update={
-        "roof": SPEC.roof_shape.roof(RoofKind.FLAT, "roof"), "chimneys": [0.25], "gutters": True})})
+        "roof": SPEC.roof_shape.roof(RoofKind.FLAT, "roof"), "gutters": True})})
     assert roof_items.roof_items(flat, LOOK) == roof_items.Items([], [], [])
 
 
@@ -136,7 +178,7 @@ def test_parted_house_gutters_stay_off_neighbours(cfg, simple_svg):
 
 def test_sheet_draws_chimney_gutters_pipes(house):
     """На виде карнизной стены — труба над кровлей, желоб полосой и две трубы у краёв."""
-    spec = house.spec.model_copy(update={"chimneys": [0.25], "gutters": True})
+    spec = house.spec.model_copy(update={"chimneys": [ChimneySpot(along=0.25)], "gutters": True})
     sheet = house.model_copy(update={"spec": spec.model_copy(update={
         "roof": SPEC.roof_shape.roof(RoofKind.GABLE, "roof")})})
     svg = sheet_svg(sheet, CFG)
@@ -150,7 +192,7 @@ def test_sheet_draws_chimney_gutters_pipes(house):
 
 def test_view_shows_chimney_above_roof_only_on_wall_gutters():
     """Желоб на виде — только у стены, к которой он идёт вдоль; с торца — квадратом."""
-    found = roof_items.of_house(gable_house(), [0.25], True, LOOK)
+    found = roof_items.of_house(gable_house(), [ChimneySpot(along=0.25)], True, LOOK)
     corners = gable_house().corners
     kinds = [[k for k, _ in roof_items.view(found, corners, i)] for i in range(4)]
     assert all(ItemKind.CHIMNEY in row for row in kinds)
@@ -160,7 +202,8 @@ def test_view_shows_chimney_above_roof_only_on_wall_gutters():
 
 def test_3d_data_and_ifc_have_objects(house):
     spec = house.spec.model_copy(update={
-        "chimneys": [0.25], "gutters": True, "roof": SPEC.roof_shape.roof(RoofKind.GABLE, "roof")})
+        "chimneys": [ChimneySpot(along=0.25)], "gutters": True,
+        "roof": SPEC.roof_shape.roof(RoofKind.GABLE, "roof")})
     sheet = house.model_copy(update={"spec": spec})
     items = house_3d(sheet, CFG)["items"]
     assert len(items["chimneys"]) == 1
@@ -184,7 +227,7 @@ def spec_of(text: str):
 
 def test_stub_fireplace_gives_chimney_and_gutters():
     spec = spec_of("деревянный дом с камином и двускатной крышей")
-    assert spec.chimneys == [SPEC.chimney_at] and spec.gutters is True
+    assert spec.chimneys == [ChimneySpot(along=SPEC.chimney_at)] and spec.gutters is True
 
 
 def test_stub_no_gutters_no_chimney():
@@ -221,7 +264,7 @@ def test_model_vocabulary_unchanged_and_condition_ignores_items(house):
     """Модель шага 4 трубу и водосток не видит: словарь тот же, условие не зависит от полей."""
     assert vocab.fingerprint(CFG) == vocab.FROZEN
     with_items = house.model_copy(update={"spec": house.spec.model_copy(
-        update={"chimneys": [0.25], "gutters": True})})
+        update={"chimneys": [ChimneySpot(along=0.25)], "gutters": True})})
     assert tokens.condition(with_items, Mode.WITH_OPENINGS, CFG) == tokens.condition(
         house, Mode.WITH_OPENINGS, CFG)
 
@@ -243,24 +286,21 @@ def chimneys_house(xs_ft: list[float], side: int = 1):
 def test_markup_chimney_becomes_ridge_fraction():
     """Труба в 5' и в 15' на виде стены 20' — доли 0,25 и 0,75 (в каком порядке — от начала
     конька); водосток из разметки."""
-    (near,), (far,) = chimney_house(5).chimneys, chimney_house(15).chimneys
+    near, far = (chimney_house(x).chimneys[0].along for x in (5, 15))
     assert sorted([near, far]) == pytest.approx([0.25, 0.75])
     assert chimney_house(5).gutters is True and near != far
 
 
 def test_markup_chimney_beyond_wall_clamps_and_far_is_error():
     """Центр за краем стены — труба у торца конька; дальше края кровли на chimney_beyond_m —
-    ошибка; неверная сторона — ошибка."""
-    assert chimney_house(-0.5).chimneys[0] in (0.0, 1.0)
-    assert chimney_house(20.5).chimneys[0] in (0.0, 1.0)
+    ошибка; неверная сторона — ошибка; плоская крыша трубу принимает."""
+    assert chimney_house(-0.5).chimneys[0].along in (0.0, 1.0)
+    assert chimney_house(20.5).chimneys[0].along in (0.0, 1.0)
     with pytest.raises(BadMarkup):
         chimney_house(-5)
     with pytest.raises(BadMarkup):
         chimney_house(5, side=9)
-    raw = finished().model_dump(mode="json")
-    raw["chimneys"], raw["roof_kind"], raw["pitch_deg"] = [{"side": 1, "x": 150.0}], "flat", 0.0
-    with pytest.raises(BadMarkup):
-        manual.house(Markup.model_validate(raw), CFG.data.manual)
+    assert len(flat_chimney_sheet().spec.chimneys) == 1  # плоская крыша трубу принимает (gf#471)
 
 
 def test_eave_view_draws_pipes_and_gutter_over_wall_and_roof(house):
@@ -293,7 +333,45 @@ def test_markup_two_chimneys_give_two_ridge_fractions():
     raw = markup(unit="m", plinth=0.3, floor_heights=[3.0], sides=metres, cut=[]).model_dump(
         mode="json") | {"chimneys": [{"side": 1, "x": 100.0 + x * PT} for x in (2.5, 7.5)]}
     sheet = manual.house(Markup.model_validate(raw), CFG.data.manual)[0].sheet
-    assert sorted(sheet.spec.chimneys) == pytest.approx([0.25, 0.75])
+    assert sorted(c.along for c in sheet.spec.chimneys) == pytest.approx([0.25, 0.75])
     assert len(house_3d(sheet, CFG)["items"]["chimneys"]) == 2
     assert counts(house_ifc(sheet, CFG))["IFCCHIMNEY"] == 2
     assert sheet_svg(sheet, CFG).count("roof-item chimney") >= 8
+
+
+def depth_house(depth_m: float | None):
+    """Дом 10 × 6 м (двускатная, конёк вдоль длинной стороны): труба в 5 м от края стороны 1 с
+    выносом depth_m."""
+    metres = [side("F", 6), side("L", 10), side("B", 6), side("R", 10)]
+    mark = {"side": 1, "x": 100.0 + 5 * PT} | ({} if depth_m is None else {"depth_m": depth_m})
+    raw = markup(unit="m", plinth=0.3, floor_heights=[3.0], sides=metres, cut=[]).model_dump(
+        mode="json") | {"chimneys": [mark]}
+    return manual.house(Markup.model_validate(raw), CFG.data.manual)[0].sheet
+
+
+def test_markup_chimney_depth_gives_offset_from_ridge():
+    """Сценарий «Труба на скате»: вынос 1 м от стены длинной стороны у дома шириной 6 м — отступ 2 м
+    от конька к этой стене; без выноса — на коньке; труба на листе и в 3D стоит там же."""
+    (spot,) = depth_house(1.0).spec.chimneys
+    assert abs(spot.across_m) == pytest.approx(2.0) and spot.along == pytest.approx(0.5)
+    assert depth_house(None).spec.chimneys[0].across_m == 0.0
+    sheet = depth_house(1.0)
+    found = roof_items.roof_items(sheet, LOOK).chimneys[0]
+    corners = unfold.plan_corners([f.side for f in sheet.facades])
+    wall = shapely.LineString([corners[1], corners[2]])  # сторона 1 идёт от угла 1 к углу 2
+    centre = shapely.Polygon(found.footprint).centroid
+    assert wall.distance(centre) == pytest.approx(1.0)  # центр в 1 м от стены вида
+    assert len(house_3d(sheet, CFG)["items"]["chimneys"]) == 1
+
+
+def test_markup_chimney_depth_beyond_roof_is_error():
+    """Вынос, что уводит центр дальше края кровли на chimney_beyond_m, — ошибка разметки."""
+    with pytest.raises(BadMarkup):
+        depth_house(-5.0)
+
+
+def test_old_chimney_fractions_read_as_ridge_spots(house):
+    """Доли конька прежних файлов — трубы на коньке."""
+    old = house.spec.model_dump(mode="json") | {"chimneys": [0.25, 0.75]}
+    assert HouseSpec.model_validate(old).chimneys == [
+        ChimneySpot(along=0.25), ChimneySpot(along=0.75)]

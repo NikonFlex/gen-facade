@@ -55,6 +55,7 @@ from genfacade.plan.wings import candidates, edge_runs
 from genfacade.schema import (
     EPS,
     BuildingType,
+    ChimneySpot,
     Dormer,
     DormerRoof,
     Element,
@@ -82,7 +83,7 @@ from genfacade.schema import (
     WallRun,
     ZoneRole,
 )
-from genfacade.unfold import unfold
+from genfacade.unfold import plan_corners, unfold
 from genfacade.validate import errors, validate
 
 
@@ -201,11 +202,14 @@ class PartRoofMark(Model):
 
 
 class ChimneyMark(Model):
-    """Дымовая труба с чертежа (gf#454): центр трубы на виде стороны `side` в x pt — по нему
-    сборщик находит место на коньке главной части (`HouseSpec.chimneys`)."""
+    """Дымовая труба с чертежа (gf#454, gf#471): центр трубы на виде стороны `side` в x pt и
+    вынос центра от стены этого вида внутрь дома `depth_m` в метрах (со второго вида или плана) —
+    по ним сборщик находит место на кровле главной части (`HouseSpec.chimneys`). Выноса нет —
+    труба на коньке."""
 
     side: int = Field(ge=0)
     x: float
+    depth_m: float | None = None
 
 
 class SkylightMark(Model):
@@ -431,25 +435,41 @@ def _roof_items(sheet: FacadeSheet, m: Markup, cfg: Manual) -> FacadeSheet:
     return sheet.model_copy(update={"spec": spec})
 
 
-def _chimney(m: Markup, mark: ChimneyMark, sheet: FacadeSheet, cfg: Manual) -> float:
-    """Доля конька главной части, ближайшая к центру трубы на виде (проекция его точки на конёк, в
-    пределах 0–1: центр за краем стены — труба у торца конька). Ошибка разметки: неверная сторона,
-    x дальше края кровли на `chimney_beyond_m`, дом без конька."""
+def _chimney(m: Markup, mark: ChimneyMark, sheet: FacadeSheet, cfg: Manual) -> ChimneySpot:
+    """Место трубы на кровле главной части: точка плана — x вида стороны и вынос внутрь от её стены
+    (нет выноса — на самой стене), доля вдоль конька в пределах 0–1 (за торцом — у торца конька)
+    и отступ от конька (`roof_items.site`; нет выноса — на коньке). Ошибка разметки: неверная
+    сторона, точка дальше края кровли на `chimney_beyond_m`, дом без конька."""
     _known_side(m, mark.side, "труба")
     e, length = m.sides[mark.side], sheet.facades[mark.side].side.length_m
     x = (mark.x - e.wall[0]) / m.px_per_m(e)
+    corners = plan_corners([f.side for f in sheet.facades])
+    left, u, _ = roof.axis(corners, mark.side)
+    depth = mark.depth_m or 0.0
+    point = (left[0] + u[0] * x - u[1] * depth, left[1] + u[1] * x + u[0] * depth)
     reach = sheet.spec.roof.reach + cfg.chimney_beyond_m  # труба снаружи у щипца — у торца конька
-    if not -reach <= x <= length + reach:
+    far = (not -reach <= x <= length + reach) if mark.depth_m is None else (
+        shapely.Polygon(corners).buffer(reach, join_style="mitre").distance(
+            shapely.Point(point)) > EPS)
+    if far:
         raise BadMarkup(f"{m.id}: {e.view}: труба на x {mark.x} — вне кровли")
-    house = roof.roofs(sheet)
-    found = None if house is None else roof_items.ridge(house.parts[roof.own_parts(house)[0]])
-    if house is None or found is None:
+    found = roof_items.site(sheet)
+    if found is None:
         raise BadMarkup(f"{m.id}: труба у дома без конька")
-    (ax, ay), (bx, by), _ = found
-    left, u, _ = roof.axis(house.corners, mark.side)
-    px, py = left[0] + u[0] * x - ax, left[1] + u[1] * x - ay
-    run = (bx - ax) ** 2 + (by - ay) ** 2
-    return min(1.0, max(0.0, (px * (bx - ax) + py * (by - ay)) / run)) if run > EPS else 0.0
+    return _spot(found, point, on_ridge=mark.depth_m is None)
+
+
+def _spot(found: roof_items.Site, point: Point, on_ridge: bool) -> ChimneySpot:
+    """Место трубы по точке плана: доля вдоль конька (0–1) и отступ от него со знаком (на коньке —
+    0: точка без выноса лежит на стене вида, а не на кровле)."""
+    (ax, ay), (bx, by) = found.a, found.b
+    run = math.dist(found.a, found.b)
+    px, py = point[0] - ax, point[1] - ay
+    if run <= EPS:
+        return ChimneySpot(along=0.0, across_m=0.0)
+    ux, uy = (bx - ax) / run, (by - ay) / run
+    return ChimneySpot(along=min(1.0, max(0.0, (px * ux + py * uy) / run)),
+                       across_m=0.0 if on_ridge else round(-px * uy + py * ux, 3))
 
 
 def _known_side(m: Markup, side: int, what: str) -> None:

@@ -6,9 +6,8 @@
 """
 
 from enum import StrEnum
-from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 EPS = 1e-6  # допуск сравнения координат, м
 
@@ -603,6 +602,19 @@ class DormerRoof(StrEnum):
     SHED = "shed"    # односкатная
 
 
+class ChimneySpot(Model):
+    """Место дымовой трубы на кровле главной части (gf#454, gf#471, `facade: Дымовая труба`).
+
+    along — доля длины конька от его начала: конца, ближнего к углу 0 контура части
+    (`roof_items.ridge`). across_m — отступ центра от конька в метрах со знаком: положительный —
+    влево от направления конька «от начала к концу» в плане (нормаль (−uy, ux)), отрицательный —
+    вправо, 0 — на коньке. У плоской крыши «конёк» — ось главной части вдоль её длинной стороны
+    на высоте кровли (`roof_items.site`)."""
+
+    along: float = Field(ge=0, le=1)
+    across_m: float = 0.0
+
+
 class Dormer(Model):
     """Слуховое окно на карнизном скате главной части дома (gf#457, `facade: Слуховое окно`).
 
@@ -654,10 +666,10 @@ class HouseSpec(Model):
     # Щипец над карнизной стеной со входом назван в тексте (gf#455); шаг 3 ставит его двускатному
     # дому, у остальных признак игнорируется. Условие модели шага 4 его не читает.
     gable_over_entrance: bool = False
-    # Дымовые трубы (gf#454, gf#470): место каждой на коньке главной части — доля длины конька
-    # (0–1) от его начала: конца конька, ближнего к углу 0 контура главной части
-    # (`roof_items.ridge`). Пусто — труб нет; ставит их код, модель шага 4 не видит.
-    chimneys: list[Annotated[float, Field(ge=0, le=1)]] = []
+    # Дымовые трубы (gf#454, gf#470, gf#471): место каждой на кровле главной части (`ChimneySpot`).
+    # Пусто — труб нет; ставит их код, модель шага 4 не видит. Старый вид — число, доля конька,
+    # читается как место на коньке.
+    chimneys: list[ChimneySpot] = []
     gutters: bool = False  # водосток: желоб по карнизным сторонам и трубы у концов (gf#454)
     # Мансардных окон в плоскости каждого карнизного ската главной части (gf#456, `genfacade/
     # skylights.py`); их ставит код, в условие модели шага 4 поле не входит.
@@ -665,6 +677,14 @@ class HouseSpec(Model):
     # Слуховые окна главной части (gf#457): ставит код, модель шага 4 их не видит и не ставит —
     # в условие модели (train/tokens.py) поле не входит.
     dormers: list[Dormer] = []
+
+    @field_validator("chimneys", mode="before")
+    @classmethod
+    def _old_chimneys(cls, value: object) -> object:
+        """Доли конька прежних файлов (gf#454) — трубы на коньке."""
+        if not isinstance(value, list):
+            return value
+        return [{"along": v} if isinstance(v, int | float) else v for v in value]
 
     @model_validator(mode="after")
     def _check(self) -> "HouseSpec":

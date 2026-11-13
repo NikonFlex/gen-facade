@@ -2,11 +2,12 @@
 кровле и по её краю. Считает код по параметрам дома (`HouseSpec.chimneys`, `HouseSpec.gutters`) и
 скатам (`roof.py`); модель шага 4 их не ставит и не видит. Лист, дом объёмом и IFC берут отсюда.
 
-Труба — квадрат `chimney_m` в плане на коньке главной части (`ridge`): конёк — отрезок, где скаты
-сходятся на высшей отметке, начало конька — его конец, ближний к углу 0 контура части. Верх —
-конёк плюс `chimney_over_m` (СНиП 41-01-2003 п. 6.6.12), низ — по самой низкой точке кровли под
-трубой, то есть внутри кровли. У односкатной крыши конёк — высокая кромка у стены, труба сдвинута
-от стены внутрь на полсечения: иначе она стояла бы наружу. У плоской крыши трубы нет.
+Труба — квадрат `chimney_m` в плане в месте `ChimneySpot` на кровле главной части: доля длины
+конька (`ridge`: отрезок, где скаты сходятся на высшей отметке, начало — конец, ближний к углу 0
+контура части) и отступ от него в метрах. Низ — по самой низкой точке кровли под трубой, то есть
+внутри кровли; верх — по расстоянию от конька (`_top`, СНиП 41-01-2003 п. 6.6.12). У односкатной
+крыши конёк — высокая кромка у стены, труба сдвинута от стены внутрь на полсечения: иначе она
+стояла бы наружу. У плоской крыши «конёк» — ось главной части вдоль её длинной стороны (`site`).
 
 Водосток — желоб по краю свеса каждой карнизной стороны части (от угла до угла контура кровли)
 на высоте низа кровли у края и водосточные трубы по стене у каждого конца желоба, от желоба до
@@ -16,6 +17,7 @@
 """
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import NamedTuple
@@ -25,7 +27,8 @@ import shapely
 from genfacade import roof
 from genfacade.config import RoofItemsLook
 from genfacade.roof import HouseRoof, Roofline
-from genfacade.schema import EPS, FacadeSheet, Point, Polygon
+from genfacade.schema import EPS, ChimneySpot, FacadeSheet, Point, Polygon, RoofKind
+from genfacade.unfold import plan_corners
 
 Point3 = tuple[float, float, float]
 KEEP_MIN_M = 10 * EPS  # желоба короче этого — крошка после вычитания, не желоб
@@ -82,17 +85,18 @@ class Items:
 
 
 def roof_items(sheet: FacadeSheet, cfg: RoofItemsLook) -> Items:
-    """Труба и водосток дома по параметрам; крыша плоская или скатов нет — ничего."""
+    """Труба и водосток дома по параметрам; скатов нет — только трубы на плоской крыше."""
     house = roof.roofs(sheet)
     if house is None:
-        return Items([], [], [])
+        return Items(_chimneys(_flat_site(sheet), sheet.spec.chimneys, cfg), [], [])
     return of_house(house, sheet.spec.chimneys, sheet.spec.gutters, cfg)
 
 
-def of_house(house: HouseRoof, chimneys: list[float], gutters: bool, cfg: RoofItemsLook) -> Items:
-    """Трубы в долях `chimneys` конька главной части (пусто — нет) и водосток (gutters)."""
+def of_house(house: HouseRoof, chimneys: list[ChimneySpot], gutters: bool, cfg: RoofItemsLook
+             ) -> Items:
+    """Трубы в местах `chimneys` на кровле главной части (пусто — нет) и водосток (gutters)."""
     order = roof.own_parts(house)
-    found = [c for at in chimneys if (c := _chimney(house.parts[order[0]], at, cfg)) is not None]
+    found = _chimneys(_roof_site(house.parts[order[0]]), chimneys, cfg)
     made, pipes = _gutters(house, order, cfg) if gutters else ([], [])
     return Items(found, made, pipes)
 
@@ -108,26 +112,94 @@ def ridge(line: Roofline) -> tuple[Point, Point, float] | None:
     top = max(z for _, _, z in verts)
     high = {(round(x, 6), round(y, 6)) for x, y, z in verts if z >= top - EPS}
     a, b = max(((p, q) for p in high for q in high), key=lambda pq: math.dist(*pq))
-    if math.dist(b, line.corners[0]) < math.dist(a, line.corners[0]) - EPS:
-        a, b = b, a
-    return a, b, top
+    return _first_near(a, b, line.corners[0]) + (top,)
 
 
-def _chimney(line: Roofline, at: float, cfg: RoofItemsLook) -> Chimney | None:
+def _first_near(a: Point, b: Point, corner: Point) -> tuple[Point, Point]:
+    """Концы отрезка так, что первый — ближний к углу."""
+    return (b, a) if math.dist(b, corner) < math.dist(a, corner) - EPS else (a, b)
+
+
+class Site(NamedTuple):
+    """Где ставятся трубы: «конёк» a→b на высоте top, высота кровли в точке плана, сдвиг центра
+    от кромки (у односкатной — внутрь на полсечения, единичный вектор; иначе нули)."""
+
+    a: Point
+    b: Point
+    top: float
+    height: Callable[[Point], float]
+    lean: Point
+
+
+def site(sheet: FacadeSheet) -> Site | None:
+    """Место труб главной части дома: у скатной крыши — её конёк, у плоской — ось главной части
+    вдоль длинной стороны на высоте кровли; крыши без конька (контур не построить) — None."""
+    house = roof.roofs(sheet)
+    if house is None:
+        return _flat_site(sheet)
+    return _roof_site(house.parts[roof.own_parts(house)[0]])
+
+
+def _roof_site(line: Roofline) -> Site | None:
     found = ridge(line)
     if found is None:
         return None
-    a, b, top = found
-    cx, cy = a[0] + at * (b[0] - a[0]), a[1] + at * (b[1] - a[1])
+    lean = (0.0, 0.0)
     if len(line.slopes) == 1:  # односкатная: конёк — кромка у стены, труба — внутрь от неё
-        inward = line.slopes[0].inward
-        cx, cy = cx - inward[0] * cfg.chimney_m / 2, cy - inward[1] * cfg.chimney_m / 2
-    length = math.dist(a, b)
-    u = ((b[0] - a[0]) / length, (b[1] - a[1]) / length) if length > EPS else (1.0, 0.0)
+        lean = (-line.slopes[0].inward[0], -line.slopes[0].inward[1])
+    return Site(*found[:2], found[2], line.height, lean)
+
+
+def _flat_site(sheet: FacadeSheet) -> Site | None:
+    """Плоская крыша: ось контура вдоль его длинной стороны через центр тяжести, высота кровли —
+    карниз дома."""
+    if sheet.spec.roof.kind is not RoofKind.FLAT:
+        return None
+    corners = plan_corners([f.side for f in sheet.facades])
+    poly = shapely.Polygon(corners)
+    p, q = max(zip(corners, corners[1:] + corners[:1], strict=True), key=lambda e: math.dist(*e))
+    length = math.dist(p, q)
+    u = ((q[0] - p[0]) / length, (q[1] - p[1]) / length)
+    c, reach = poly.centroid, 2 * poly.length
+    axis = shapely.LineString([(c.x - u[0] * reach, c.y - u[1] * reach),
+                               (c.x + u[0] * reach, c.y + u[1] * reach)])
+    cut = max(_lines(poly.intersection(axis)), key=lambda g: g.length)
+    a, b = _first_near(*_ends(cut), corners[0])
+    eaves = sheet.spec.eaves_m
+    return Site(a, b, eaves, lambda _: eaves, (0.0, 0.0))
+
+
+def _chimneys(found: Site | None, spots: list[ChimneySpot], cfg: RoofItemsLook) -> list[Chimney]:
+    return [] if found is None else [_chimney(found, at, cfg) for at in spots]
+
+
+def _chimney(found: Site, spot: ChimneySpot, cfg: RoofItemsLook) -> Chimney:
+    """Труба в месте `spot`: центр — точка на кровле (вдоль конька и поперёк, `ChimneySpot`);
+    низ — самая низкая точка кровли под сечением, верх — `_top`, но не ниже кровли под сечением
+    плюс `chimney_over_m`: на пологой кровле линия 10° уходит под неё, а на плоской крыше это и
+    есть верх — кровля плюс over при любом отступе."""
+    (ax, ay), (bx, by) = found.a, found.b
+    length = math.dist(found.a, found.b)
+    u = ((bx - ax) / length, (by - ay) / length) if length > EPS else (1.0, 0.0)
+    cx = ax + spot.along * (bx - ax) - u[1] * spot.across_m
+    cy = ay + spot.along * (by - ay) + u[0] * spot.across_m
+    d = shapely.Point(cx, cy).distance(shapely.LineString([found.a, found.b]))
+    cx, cy = cx + found.lean[0] * cfg.chimney_m / 2, cy + found.lean[1] * cfg.chimney_m / 2
     h = cfg.chimney_m / 2
     ring = [(cx + sx * h * u[0] - sy * h * u[1], cy + sx * h * u[1] + sy * h * u[0])
             for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
-    return Chimney(ring, min(line.height(p) for p in ring), top + cfg.chimney_over_m)
+    under = [found.height(p) for p in ring]
+    return Chimney(ring, min(under), max(_top(found, d, cfg), max(under) + cfg.chimney_over_m))
+
+
+def _top(found: Site, d: float, cfg: RoofItemsLook) -> float:
+    """Верх трубы по расстоянию d центра от конька (СНиП 41-01-2003 п. 6.6.12): до near — выше
+    конька на over; до far — вровень; дальше — на линии вниз от конька под углом slope."""
+    if d <= cfg.chimney_near_m:
+        return found.top + cfg.chimney_over_m
+    if d <= cfg.chimney_far_m:
+        return found.top
+    return found.top - d * math.tan(math.radians(cfg.chimney_slope_deg))
 
 
 # ——— водосток ———

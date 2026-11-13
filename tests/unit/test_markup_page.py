@@ -229,11 +229,12 @@ def test_roof_pitch_and_chimney_are_saved_to_toml_and_open_again(client, cfg):
     save_edit(client, body)
     saved = manual.read(path)
     assert saved.pitch_deg == 30.0 and saved.roof_kind is RoofKind.HIP
-    assert [c.model_dump(mode="json") for c in saved.chimneys] == [chimney]
+    assert [c.model_dump(mode="json", exclude_none=True) for c in saved.chimneys] == [chimney]
     assert "pitch_deg = 30.0" in path.read_text()
     reopened = client.post(f"/api/markup/{HOUSE}/open").json()
     assert reopened["house"]["pitch_deg"] == 30.0
-    assert [s["marks"][MarkKind.CHIMNEY] for s in reopened["sides"]] == [[chimney], [], [], []]
+    assert [s["marks"][MarkKind.CHIMNEY] for s in reopened["sides"]] == [
+        [chimney | {"depth_m": None}], [], [], []]  # вынос не задан — null
 
 
 def test_edit_keeps_marks_it_does_not_send_and_erases_an_empty_list(client, cfg):

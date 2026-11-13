@@ -77,7 +77,7 @@ def tops(sheet: FacadeSheet, cfg: Config) -> list[Top]:
     """Что над карнизом у каждой стороны листа; скаты не строятся — пусто."""
     house = roof.roofs(sheet)
     if house is None:
-        return [NOTHING_ABOVE for _ in sheet.facades]
+        return _flat_tops(sheet, cfg)
     gables = roof.sheet_gables(sheet)
     found = roof_items.roof_items(sheet, cfg.sheet.roof_items)
     built, out = dormers.build(sheet, cfg), []
@@ -90,6 +90,15 @@ def tops(sheet: FacadeSheet, cfg: Config) -> list[Top]:
                        dormer=dormers.view(built, (left, u), cfg.sheet.roof.thickness_m,
                                            above + cover)))
     return _with_skylights(out, sheet, cfg, house)
+
+
+def _flat_tops(sheet: FacadeSheet, cfg: Config) -> list[Top]:
+    """Плоская крыша: над карнизом только трубы на ней (gf#471), если они есть."""
+    found = roof_items.roof_items(sheet, cfg.sheet.roof_items)
+    if not found.chimneys:
+        return [NOTHING_ABOVE for _ in sheet.facades]
+    corners = plan_corners([f.side for f in sheet.facades])
+    return [Top(items=roof_items.view(found, corners, k)) for k in range(len(sheet.facades))]
 
 
 def _with_skylights(out: list[Top], sheet: FacadeSheet, cfg: Config, house: roof.HouseRoof

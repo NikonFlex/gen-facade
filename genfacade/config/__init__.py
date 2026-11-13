@@ -209,6 +209,9 @@ class RoofItemsLook(Section):
 
     chimney_m: float = Field(gt=0)       # сторона квадратного сечения трубы в плане
     chimney_over_m: float = Field(gt=0)  # верх трубы выше конька (у односкатной — высокой кромки)
+    chimney_near_m: float = Field(gt=0)  # до этого расстояния от конька верх — выше конька на over
+    chimney_far_m: float = Field(gt=0)   # до этого — вровень с коньком, дальше — линия под углом
+    chimney_slope_deg: float = Field(gt=0, lt=90)  # линия вниз от конька, градусов к горизонту
     gutter_m: float = Field(gt=0)        # желоб: сторона сечения
     pipe_m: float = Field(gt=0)          # водосточная труба: диаметр
     pipe_inset_m: float = Field(ge=0)    # труба от угла дома вдоль стены

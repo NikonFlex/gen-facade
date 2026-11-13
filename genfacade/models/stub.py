@@ -18,6 +18,7 @@ from genfacade.config import SpecStub
 from genfacade.models import finish, words
 from genfacade.schema import (
     EPS,
+    ChimneySpot,
     Dormer,
     Element,
     FacadeSheet,
@@ -85,7 +86,7 @@ def gable_over_entrance(text: str, cfg: SpecStub) -> bool:
     return words.first(text, {True: cfg.entrance_gable_words}, cfg.stem_tail) is True
 
 
-def _roof_items(text: str, sloped: bool, cfg: SpecStub) -> tuple[list[float], bool]:
+def _roof_items(text: str, sloped: bool, cfg: SpecStub) -> tuple[list[ChimneySpot], bool]:
     """Труба и водосток дома (gf#454): труба — если названа и перед словом нет «без», в месте по
     настройке; водосток — по настройке, «без водостока» его убирает. У плоской крыши ни того, ни
     другого."""
@@ -99,7 +100,8 @@ def _roof_items(text: str, sloped: bool, cfg: SpecStub) -> tuple[list[float], bo
         elif words.named(token, cfg.chimney_words, cfg.stem_tail) and not no and not (
                 words.named(before, cfg.gutter_words, cfg.stem_tail)):
             chimney = True
-    return ([cfg.chimney_at] if chimney and sloped else []), gutters and sloped
+    return ([ChimneySpot(along=cfg.chimney_at)] if chimney and sloped else []), (
+        gutters and sloped)
 
 
 def _skylights(text: str, roof: Roof, cfg: SpecStub) -> int:
