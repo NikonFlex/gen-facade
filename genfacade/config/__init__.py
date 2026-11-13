@@ -543,6 +543,7 @@ class MarkupLabels(Section):
     level: dict[LevelKind, str]
     house: dict[str, str]          # поле дома на панели правки (gf#470): поле или trim.<элемент>
     mark_kind: str                 # подпись списка видов у выбранной отметки
+    mark_depth: str                # подпись поля выноса отметки от стены вида (gf#471)
     empty_kind: str                # «вид не записан» в списках видов
     delete_mark: str
     delete_zone: str
@@ -580,6 +581,7 @@ class MarkupEditor(Section):
     add_classes: list[ElementClass]  # что можно добавить кнопкой; размер — в default_size_m
     default_size_m: dict[ElementClass, Size]  # рамка от касания: ширина и высота, м
     min_box_m: float               # рамка меньше этого при отпускании — касание, не рамка
+    mark_depth_step_m: float       # шаг поля выноса отметки от стены вида (труба, крыльцо; gf#471)
     house_step: dict[str, float]   # шаг числовых полей дома на панели правки (gf#470)
     marks: dict[MarkKind, MarkStyle]
     zone: ZoneStyle

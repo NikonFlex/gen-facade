@@ -339,6 +339,21 @@ def test_color_of_a_role_without_material_or_not_hex_is_refused(client, cfg, col
     refused(client, cfg, roof_edit(client, {"colors": colors}))
 
 
+def test_chimney_depth_is_saved_to_toml_and_opens_again(client, cfg):
+    """Вынос трубы от стены вида (gf#471) правится на странице: пишется в файл, открывается
+    снова; страница получает подпись и шаг поля из настроек."""
+    path = cfg.viewer.markup.folder / f"{HOUSE}.toml"
+    chimney = {"side": 0, "x": 450.0, "depth_m": 1.5}
+    save_edit(client, roof_edit(client, {}, chimneys=[chimney]))
+    assert manual.read(path).chimneys[0].depth_m == 1.5
+    assert "depth_m = 1.5" in path.read_text()
+    reopened = client.post(f"/api/markup/{HOUSE}/open").json()
+    assert reopened["sides"][0]["marks"][MarkKind.CHIMNEY] == [chimney]
+    options = client.get("/api/markup").json()["options"]
+    assert options["labels"]["mark_depth"] == cfg.viewer.markup.labels.mark_depth
+    assert options["mark_depth_step_m"] == cfg.viewer.markup.mark_depth_step_m
+
+
 def test_page_options_give_every_choice_the_fields_need(client, cfg):
     got = client.get("/api/markup").json()["options"]
     assert got["choices"] == {"roof_kind": list(RoofKind), "dormer_roof": list(DormerRoof)}

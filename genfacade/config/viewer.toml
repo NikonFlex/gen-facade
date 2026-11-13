@@ -125,6 +125,7 @@ cache_dir = "outputs/markup_cache"
 image_max_side = 2400                # сжатие листа для телефона; координаты разметки не меняются
 add_classes = ["window", "door", "garage_door", "porch", "canopy"]
 min_box_m = 0.15                     # рамка уже этого — касание: ставится рамка по умолчанию
+mark_depth_step_m = 0.05             # шаг поля выноса отметки от стены вида (gf#471)
 
 [markup.house_step]                  # шаг числовых полей дома на панели правки (gf#470)
 pitch_deg = 1.0
@@ -194,6 +195,7 @@ canopy = "orange"
 
 [markup.labels]
 mark_kind = "вид кровли отметки"
+mark_depth = "вынос от стены вида, м"
 empty_kind = "— не записан —"
 delete_mark = "Удалить отметку"
 delete_zone = "Удалить зону"

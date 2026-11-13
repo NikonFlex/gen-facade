@@ -103,6 +103,10 @@ function refreshMarkTools() {
     kinds.replaceChildren(...choices.map((c) => el("option", { value: c }, c)));
     kinds.value = m[field];
   }
+  // Вынос от стены вида (труба, крыльцо): у отметки поле есть всегда, пустое — «не задан».
+  const depth = $("mark-depth");
+  depth.hidden = !("depth_m" in m);
+  depth.value = m.depth_m ?? "";
 }
 
 function selectMark(ref) {
@@ -683,6 +687,13 @@ function buildTools() {
   });
   add.append(zone);
   $("mark-del").textContent = o.labels.delete_mark;
+  Object.assign($("mark-depth"), { step: o.mark_depth_step_m, title: o.labels.mark_depth,
+                                   placeholder: o.labels.mark_depth });
+  $("mark-depth").addEventListener("change", () => {
+    const v = $("mark-depth").value;
+    markAt(state.mark).depth_m = v === "" ? null : Number(v);
+    refreshButtons();
+  });
   $("zone-del").textContent = o.labels.delete_zone;
   $("mark-kind").addEventListener("change", () => {
     const m = markAt(state.mark);
