@@ -659,9 +659,9 @@ class IfcHouse:
         w, look = self.w, self.cfg.sheet.roof_items
         found = roof_items.roof_items(self.sheet, look)
         top = self.sheet.spec.floors - 1
-        if (c := found.chimney) is not None:
+        for n, c in enumerate(found.chimneys, 1):
             item = w.solid(w.polygon(c.footprint), c.z1 - c.z0, look.chimney_fill)
-            ref = w.product("IfcChimney", "chimney", self.ifc.names.chimney,
+            ref = w.product("IfcChimney", f"chimney{n}", self.ifc.names.chimney.format(n=n),
                             w.place(self.building_place, (0.0, 0.0, c.z1)), w.shape([item]),
                             None, Enum("NOTDEFINED"))
             self.contained[top].append(ref)

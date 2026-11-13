@@ -72,15 +72,13 @@ def house_3d(sheet: FacadeSheet, cfg: Config) -> dict:
 
 
 def _items(sheet: FacadeSheet, cfg: Config) -> dict:
-    """Труба и водосток в объёме (gf#454): метры плана и высота; труба — призма по четырём углам,
+    """Трубы и водосток в объёме (gf#454): метры плана и высота; труба — призма по четырём углам,
     желоб — брусок по оси, водосточная труба — цилиндр и отвод к желобу."""
     look = cfg.sheet.roof_items
     found = roof_items.roof_items(sheet, look)
-    chimney = found.chimney
     return {
-        "chimney": None if chimney is None else {
-            "footprint": chimney.footprint, "z0": chimney.z0, "z1": chimney.z1,
-            "color": look.chimney_fill},
+        "chimneys": [{"footprint": c.footprint, "z0": c.z0, "z1": c.z1, "color": look.chimney_fill}
+                     for c in found.chimneys],
         "gutters": [{"a": g.a, "b": g.b, "z": g.z, "size": g.size, "color": look.gutter_fill}
                     for g in found.gutters],
         "pipes": [{"center": p.center, "elbow": p.elbow, "z_top": p.z_top,

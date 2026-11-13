@@ -133,8 +133,7 @@ export class HouseStage {
       this.scene.add(mesh);
       return mesh;
     };
-    if (items.chimney) {
-      const c = items.chimney;
+    for (const c of items.chimneys) {
       const shape = new THREE.Shape(c.footprint.map(([x, y]) => new THREE.Vector2(x, y)));
       const geo = new THREE.ExtrudeGeometry(shape, { depth: c.z1 - c.z0, bevelEnabled: false });
       geo.rotateX(-Math.PI / 2);

@@ -21,6 +21,12 @@ gf#199).
 (gf#322): отметка крыши не карниз (`_bare`), ступень режет крыло (`_stepped`, gf#422).
 Чего разметчик не размечает (веранда, ступени), он перечисляет в `cut`.
 
+Дом целиком за один проход (gf#470): вид кровли — `roof_material` (в палитру ролью кровли),
+мансардные окна — `skylights` (на скат — наибольшее число отметок одной стороны), дымовые
+трубы — списком `chimneys` (доля конька на каждую), виды подоконника, наличника, ставен, козырька
+и двери — `trim` (не записан — по умолчанию из настроек), крыльцо или терраса под своей кровлей —
+`porch_roofs`: в пример и стены не идёт, считается в описи. Виды проверяет `check_kinds`.
+
 Отделка (gf#245): цоколь — зона от земли до чистого пола (`plinth`) материалом `plinth_material`,
 основная — от цоколя до карниза, вторая отделка (акцент, пояс) — прямоугольниками стороны; карниз —
 элемент `cornice` стороны рамкой с листа, материалом `trim_material`. Чего на листе нет (цоколя под
@@ -192,10 +198,47 @@ class PartRoofMark(Model):
 
 class ChimneyMark(Model):
     """Дымовая труба с чертежа (gf#454): центр трубы на виде стороны `side` в x pt — по нему
-    сборщик находит место на коньке главной части (`HouseSpec.chimney`)."""
+    сборщик находит место на коньке главной части (`HouseSpec.chimneys`)."""
 
     side: int = Field(ge=0)
     x: float
+
+
+class SkylightMark(Model):
+    """Мансардное окно на виде карнизной стены (gf#470): края x и верх с низом y на скате, pt
+    вида. Сборщик берёт из них число окон на скат (`HouseSpec.skylights`); место и размер окна на
+    скате — по правилам модуля."""
+
+    side: int = Field(ge=0)
+    x: tuple[float, float]
+    y: tuple[float, float]
+
+
+class TrimMark(Model):
+    """Виды выводимых элементов с чертежа (gf#470): записи каталога `config/derive.toml`. Не записан
+    — вид по умолчанию из настроек (`Manual.trim`); есть ли элемент у дома, решают проёмы."""
+
+    sill: str | None = None
+    casing: str | None = None
+    shutters: str | None = None
+    canopy: str | None = None
+    door: str | None = None
+
+    def kind(self, name: str) -> str | None:
+        return getattr(self, name)
+
+
+class PorchRoofMark(Model):
+    """Крыльцо или терраса под своей кровлей на столбах (gf#470): сторона, края x и верх с низом
+    кровли y на виде в pt, вид кровли, число столбов и глубина в метрах. Модуль его не строит: в
+    пример и стены не идёт, считается в описи."""
+
+    side: int = Field(ge=0)
+    x: tuple[float, float]
+    y: tuple[float, float]
+    kind: RoofKind
+    posts: int = Field(ge=0)
+    depth_m: float = Field(gt=0)
 
 
 def _checked(kind: RoofKind, pitch: float, down: int | None) -> None:
@@ -217,9 +260,13 @@ class Markup(Model):
     # пусто — правило вида: двускатная — карнизы на длинных стенах, односкатная — низ у входа.
     roof_down: int | None = Field(default=None, ge=0)
     part_roofs: list[PartRoofMark] = []  # свои крыши частей; у остальных — крыша дома
-    chimney: ChimneyMark | None = None  # дымовая труба на чертеже (gf#454); нет — трубы нет
+    chimneys: list[ChimneyMark] = []  # дымовые трубы на чертеже (gf#454, gf#470); нет — труб нет
     gutters: bool = False  # водосток на чертеже (gf#454)
     dormers: list[DormerMark] = []       # слуховые окна главной части (gf#457)
+    skylights: list[SkylightMark] = []   # мансардные окна на видах карнизных стен (gf#470)
+    porch_roofs: list[PorchRoofMark] = []  # крыльца и террасы под кровлей — только в опись (gf#470)
+    roof_material: str | None = None  # вид кровли из library.toml — в палитру ролью `ROOF` (gf#470)
+    trim: TrimMark = TrimMark()      # виды подоконника, наличника, ставен, козырька, двери
     unit: Unit           # единица отметок и масштаба
     pt_per_unit: float = Field(gt=0)
     material: str        # вид основной отделки из library.toml
@@ -284,6 +331,17 @@ def ids(source: str, rules: Manual) -> set[str]:
     return {read(p).id for p in (rules.paths.markup_dir / source).glob("*.toml")}
 
 
+def check_kinds(m: Markup, cfg: Config) -> None:
+    """Виды разметки есть в каталогах (gf#470): кровля — в `library.toml`, обрамление и дверь — в
+    `derive.toml`. Библиотека и каталог — у `Config`, а не у настроек данных, поэтому проверка
+    отдельно от `house`: её зовут `run` и смотрелка."""
+    if m.roof_material is not None and m.roof_material not in cfg.library.kinds:
+        raise BadMarkup(f"{m.id}: кровля {m.roof_material} — вида нет в library.toml")
+    drawn = HouseTrim(**m.trim.model_dump(exclude_none=True))
+    if bad := cfg.derive.unknown(drawn):
+        raise BadMarkup(f"{m.id}: виды обрамления не из derive.toml: {', '.join(bad)}")
+
+
 def house(m: Markup, cfg: Manual) -> tuple[Sample, int]:
     """Пример дома и сколько элементов обрезано целиком (за карнизом или углом). Отметки разметки
     берутся как есть; не легли на части — без отметок крыши (`_bare`), потом с виртуальными
@@ -327,6 +385,8 @@ def _contour(m: Markup, fp: rect_house.Footprint, cfg: Manual, cut: bool) -> _Co
 
 def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
     fp = _outline(m, cfg)
+    for mark in m.porch_roofs:  # в пример не идёт, но сторона должна быть
+        _known_side(m, mark.side, "крыльцо под кровлей")
     c = _contour(m, fp, cfg, cut)
     spec = _spec(m)
     spec = spec.model_copy(update={"roof": spec.roof.model_copy(
@@ -337,29 +397,31 @@ def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
     first = rect_house.assemble(spec, fp, _laid(raw, [None] * len(raw), c, spec, cfg)[0],
                                 Source.MANUAL)
     laid, dropped = _laid(raw, roof.sheet_gables(_parted(*first, m, c)[1]), c, spec, cfg)
-    spec = spec.model_copy(update={"trim": _trim([xs for _, xs in laid], cfg.trim)})
+    spec = spec.model_copy(update={"trim": _trim([xs for _, xs in laid], cfg.trim, m.trim)})
     plan, sheet = rect_house.assemble(spec, fp, laid, Source.MANUAL)
     facades = [f.model_copy(update={"zones": _zones(e, m, spec, f.side.length_m, r)})
                for f, e, r in zip(sheet.facades, m.sides, c.runs, strict=True)]
     plan, sheet = _parted(plan, sheet.model_copy(update={"facades": facades}), m, c)
     sheet, bare = _no_eaves(sheet)
     sheet = _roof_items(sheet, m, cfg)
-    sheet = _with_dormers(m, sheet)
+    sheet = _with_skylights(m, _with_dormers(m, sheet))
     return (Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet),
             dropped + bare)
 
 
 def _roof_items(sheet: FacadeSheet, m: Markup, cfg: Manual) -> FacadeSheet:
-    """Труба и водосток разметки в параметрах дома (gf#454): труба — доля конька главной части,
-    ближайшая к центру трубы на виде (проекция его точки на конёк, в пределах 0–1: центр за краем
-    стены — труба у торца конька). Ошибка разметки: неверная сторона, x дальше края кровли на
-    `chimney_beyond_m`, дом без конька."""
-    spec = sheet.spec.model_copy(update={"gutters": m.gutters})
-    mark = m.chimney
-    if mark is None:
-        return sheet.model_copy(update={"spec": spec})
-    if mark.side >= len(m.sides):
-        raise BadMarkup(f"{m.id}: труба на стороне {mark.side}, а сторон {len(m.sides)}")
+    """Трубы и водосток разметки в параметрах дома (gf#454, gf#470): труба — доля конька главной
+    части (`_chimney`), на каждую трубу разметки своя; водосток — признак."""
+    chimneys = [_chimney(m, mark, sheet, cfg) for mark in m.chimneys]
+    spec = sheet.spec.model_copy(update={"gutters": m.gutters, "chimneys": chimneys})
+    return sheet.model_copy(update={"spec": spec})
+
+
+def _chimney(m: Markup, mark: ChimneyMark, sheet: FacadeSheet, cfg: Manual) -> float:
+    """Доля конька главной части, ближайшая к центру трубы на виде (проекция его точки на конёк, в
+    пределах 0–1: центр за краем стены — труба у торца конька). Ошибка разметки: неверная сторона,
+    x дальше края кровли на `chimney_beyond_m`, дом без конька."""
+    _known_side(m, mark.side, "труба")
     e, length = m.sides[mark.side], sheet.facades[mark.side].side.length_m
     x = (mark.x - e.wall[0]) / m.px_per_m(e)
     reach = sheet.spec.roof.reach + cfg.chimney_beyond_m  # труба снаружи у щипца — у торца конька
@@ -373,8 +435,22 @@ def _roof_items(sheet: FacadeSheet, m: Markup, cfg: Manual) -> FacadeSheet:
     left, u, _ = roof.axis(house.corners, mark.side)
     px, py = left[0] + u[0] * x - ax, left[1] + u[1] * x - ay
     run = (bx - ax) ** 2 + (by - ay) ** 2
-    at = min(1.0, max(0.0, (px * (bx - ax) + py * (by - ay)) / run)) if run > EPS else 0.0
-    return sheet.model_copy(update={"spec": spec.model_copy(update={"chimney": at})})
+    return min(1.0, max(0.0, (px * (bx - ax) + py * (by - ay)) / run)) if run > EPS else 0.0
+
+
+def _known_side(m: Markup, side: int, what: str) -> None:
+    """Сторона отметки разметки есть среди сторон дома."""
+    if side >= len(m.sides):
+        raise BadMarkup(f"{m.id}: {what} на стороне {side}, а сторон {len(m.sides)}")
+
+
+def _with_skylights(m: Markup, sheet: FacadeSheet) -> FacadeSheet:
+    """Лист с числом мансардных окон на скат (gf#470): наибольшее число отметок на одной стороне
+    вида; место окон на скате — по правилам модуля (`skylights.py`)."""
+    for mark in m.skylights:
+        _known_side(m, mark.side, "мансардное окно")
+    most = max(Counter(mark.side for mark in m.skylights).values(), default=0)
+    return sheet.model_copy(update={"spec": sheet.spec.model_copy(update={"skylights": most})})
 
 
 def _with_dormers(m: Markup, sheet: FacadeSheet) -> FacadeSheet:
@@ -385,8 +461,7 @@ def _with_dormers(m: Markup, sheet: FacadeSheet) -> FacadeSheet:
 
 
 def _dormer(m: Markup, mark: DormerMark, sheet: FacadeSheet) -> Dormer:
-    if mark.side >= len(m.sides):
-        raise BadMarkup(f"{m.id}: дормер на стороне {mark.side}, а сторон {len(m.sides)}")
+    _known_side(m, mark.side, "дормер")
     e = m.sides[mark.side]
     x0, x1 = ((v - e.wall[0]) / m.px_per_m(e) for v in mark.x)
     found = dormers.from_view(sheet, mark.side, (x0, x1), mark.roof)
@@ -687,7 +762,8 @@ def _spec(m: Markup) -> HouseSpec:
     return HouseSpec(building_type=BuildingType.COTTAGE, floors=len(heights),
                      floor_heights_m=heights, plinth_m=plinth, eaves_m=plinth + sum(heights),
                      roof=Roof(kind=m.roof_kind, pitch_deg=m.pitch_deg, overhang_m=m.overhang_m,
-                               gable_overhang_m=m.gable_overhang_m),
+                               gable_overhang_m=m.gable_overhang_m,
+                               material=PaletteRole.ROOF if m.roof_material else None),
                      materials=_palette(m))
 
 
@@ -761,13 +837,14 @@ def _eaves_y(m: Markup, e: Elevation, x: float, tol: float) -> float:
 
 
 def _palette(m: Markup) -> list[Material]:
-    """Палитра дома по разметке: основная, цоколь, карниз и вторая отделка — те, что на листе."""
+    """Палитра дома по разметке: основная, цоколь, карниз, кровля и вторая отделка — те, что на
+    листе."""
     second = {z.material for e in m.sides for z in e.zones}
     if len(second) > 1:  # у палитры одна роль второй отделки (`PaletteRole.ACCENT`)
         raise BadMarkup(f"{m.id}: видов второй отделки {len(second)} — у палитры один")
     kinds = {PaletteRole.MAIN: m.material, PaletteRole.ACCENT: next(iter(second), None),
              PaletteRole.PLINTH: m.plinth_material if m.plinth > 0 else None,
-             PaletteRole.TRIM: m.trim_material}
+             PaletteRole.TRIM: m.trim_material, PaletteRole.ROOF: m.roof_material}
     return [Material(id=role, kind=kind) for role, kind in kinds.items() if kind is not None]
 
 
@@ -868,11 +945,13 @@ def _gap(x: Element, o: Element, trim: Trim) -> float | None:
     return 0.0 if across >= o.w_m - EPS and along >= o.h_m - EPS else None
 
 
-def _trim(walls: list[list[Element]], kinds: HouseTrim) -> HouseTrim:
-    """Виды выводимых элементов дома: по умолчанию — у тех, что есть у проёмов его стен;
-    остальные — none (у дома их нет). Имена элементов — свои у каждой стены."""
+def _trim(walls: list[list[Element]], kinds: HouseTrim, drawn: TrimMark) -> HouseTrim:
+    """Виды выводимых элементов дома: есть ли элемент — по проёмам его стен; вид — с чертежа
+    (`drawn`), не записан — по умолчанию из настроек; остальные — none (у дома их нет). Дверь —
+    вид с чертежа или по умолчанию. Имена элементов — свои у каждой стены."""
     present = {t for wall in walls for marks in derive.flags(wall).values() for t in marks}
-    return HouseTrim(**{t: kinds.kind(t) if t in present else HouseTrim().kind(t) for t in Trim})
+    return HouseTrim(door=drawn.door or kinds.door, **{
+        t: (drawn.kind(t) or kinds.kind(t)) if t in present else HouseTrim().kind(t) for t in Trim})
 
 
 def run(cfg: Config) -> Path:
@@ -883,7 +962,7 @@ def run(cfg: Config) -> Path:
     for old in store.ids(root, Source.MANUAL):
         store.path(root, Source.MANUAL, old).unlink()
     rejected, waiting, cut, roofs, absent, invalid = {}, {}, {}, {}, {}, Counter()
-    kinds, gaps, gables = {}, {}, {}
+    kinds, gaps, gables, porches = {}, {}, {}, {}
     for path in sorted(rules.paths.markup_dir.glob("*/*.toml")):
         try:  # разметка, которая не читается, — отказ этого дома, а не всей сборки (C10)
             m = read(path)
@@ -891,6 +970,7 @@ def run(cfg: Config) -> Path:
             rejected[path.stem] = f"разметка не читается: {e}"
             continue
         try:
+            check_kinds(m, cfg)
             sample, dropped = house(m, rules)
         except BadMarkup as e:
             rejected[m.id] = str(e)
@@ -900,13 +980,14 @@ def run(cfg: Config) -> Path:
             continue
         cut[m.id], roofs[m.id], absent[m.id] = len(m.cut) + dropped, m.roof, m.absent
         kinds[m.id], gaps[m.id] = m.roof_kind, m.roof_gaps
-        gables[m.id] = gable_windows(sample.sheet)
+        gables[m.id], porches[m.id] = gable_windows(sample.sheet), len(m.porch_roofs)
         invalid.update(v.rule for v in errors(validate(sample.sheet, cfg.checks)))
         store.write(sample, root)
     return store.write_manifest(root, Source.MANUAL, {
         "rejected": rejected, "waiting": waiting, "cut": cut, "roofs": roofs, "absent": absent,
         "roof_kinds": kinds, "roof_gaps": {k: v for k, v in gaps.items() if v},
-        "gable_windows": {k: v for k, v in gables.items() if v}, "invalid": dict(invalid)})
+        "gable_windows": {k: v for k, v in gables.items() if v},
+        "porch_roofs": {k: v for k, v in porches.items() if v}, "invalid": dict(invalid)})
 
 
 def gable_windows(sheet: FacadeSheet) -> int:

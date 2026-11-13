@@ -69,9 +69,9 @@ def spec_model(text: str, cfg: SpecStub) -> HouseSpec:
     house = finish.look(text, style, cfg)
     kind = words.first(text, cfg.roof_words, cfg.stem_tail) or house.roof
     roof = cfg.roof_shape.roof(kind, base["roof"]["material"])
-    chimney, gutters = _roof_items(text, roof.kind is not RoofKind.FLAT, cfg)
+    chimneys, gutters = _roof_items(text, roof.kind is not RoofKind.FLAT, cfg)
     return HouseSpec.model_validate(base | {"roof": roof.model_dump(),
-        "chimney": chimney, "gutters": gutters,
+        "chimneys": chimneys, "gutters": gutters,
         "wing_floors": wing_floors, "gable_over_entrance": gable_over_entrance(text, cfg),
         "floors": floors, "floor_heights_m": [height] * floors,
         "style": style, "skylights": _skylights(text, roof, cfg),
@@ -85,7 +85,7 @@ def gable_over_entrance(text: str, cfg: SpecStub) -> bool:
     return words.first(text, {True: cfg.entrance_gable_words}, cfg.stem_tail) is True
 
 
-def _roof_items(text: str, sloped: bool, cfg: SpecStub) -> tuple[float | None, bool]:
+def _roof_items(text: str, sloped: bool, cfg: SpecStub) -> tuple[list[float], bool]:
     """Труба и водосток дома (gf#454): труба — если названа и перед словом нет «без», в месте по
     настройке; водосток — по настройке, «без водостока» его убирает. У плоской крыши ни того, ни
     другого."""
@@ -99,7 +99,7 @@ def _roof_items(text: str, sloped: bool, cfg: SpecStub) -> tuple[float | None, b
         elif words.named(token, cfg.chimney_words, cfg.stem_tail) and not no and not (
                 words.named(before, cfg.gutter_words, cfg.stem_tail)):
             chimney = True
-    return (cfg.chimney_at if chimney and sloped else None), gutters and sloped
+    return ([cfg.chimney_at] if chimney and sloped else []), gutters and sloped
 
 
 def _skylights(text: str, roof: Roof, cfg: SpecStub) -> int:

@@ -30,7 +30,7 @@ skylight = "Мансардное окно {n}"
 shutter = "Ставня {id}"
 canopy = "Козырёк {id}"
 porch = "Крыльцо {id}"
-chimney = "Дымовая труба"
+chimney = "Дымовая труба {n}"
 gutter = "Желоб {n}"
 pipe = "Водосточная труба {n}"
 

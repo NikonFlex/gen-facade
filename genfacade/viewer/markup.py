@@ -167,7 +167,9 @@ def _save(editor, folder: Path, file: Path, m: manual.Markup) -> None:
 def _assembly(cfg: Config, file: Path) -> dict:
     """Собирается ли записанная разметка в пример тем же кодом, что `genfacade manual`."""
     try:
-        manual.house(manual.read(file), cfg.data.manual)
+        m = manual.read(file)
+        manual.check_kinds(m, cfg)
+        manual.house(m, cfg.data.manual)
     except (manual.BadMarkup, manual.Unsupported, tomllib.TOMLDecodeError, ValidationError) as e:
         return {"ok": False, "detail": str(e)}
     return {"ok": True, "detail": ""}

@@ -7,7 +7,7 @@ import pytest
 import shapely
 import vocab
 from simple_house import L_SHAPE
-from test_manual import PT, finished
+from test_manual import PT, finished, markup, side
 
 from genfacade import config, pipeline, roof, roof_items
 from genfacade.datasets import manual
@@ -55,7 +55,7 @@ def hip_house() -> roof.HouseRoof:
 def test_chimney_at_ridge():
     """Сценарий «Труба у конька»: центр в 2,5 м от начала конька, верх 5,85 м, сечение 0,51 м,
     низ — внутри кровли (ниже конька)."""
-    found = roof_items.of_house(gable_house(), 0.25, False, LOOK).chimney
+    found = roof_items.of_house(gable_house(), [0.25], False, LOOK).chimneys[0]
     xs, ys = [p[0] for p in found.footprint], [p[1] for p in found.footprint]
     assert (min(xs) + max(xs)) / 2 == pytest.approx(2.5)  # начало конька — (0, 3)
     assert (min(ys) + max(ys)) / 2 == pytest.approx(3.0)
@@ -75,7 +75,7 @@ def test_ridge_starts_at_corner_zero():
 
 def test_chimney_on_shed_at_high_side():
     """Односкатная: труба у высокой стороны, внутри контура, верх — высота высокой кромки + 0,5."""
-    found = roof_items.of_house(shed_house(), 0.5, False, LOOK).chimney
+    found = roof_items.of_house(shed_house(), [0.5], False, LOOK).chimneys[0]
     high = 3.25 + 6 * PITCH35
     assert found.z1 == pytest.approx(high + 0.5)
     assert all(0 <= x <= 10 and 5.49 - 1e-9 <= y <= 6.0 + 1e-9 for x, y in found.footprint)
@@ -83,14 +83,14 @@ def test_chimney_on_shed_at_high_side():
 
 def test_flat_roof_has_no_chimney_and_no_gutters(house):
     flat = house.model_copy(update={"spec": house.spec.model_copy(update={
-        "roof": SPEC.roof_shape.roof(RoofKind.FLAT, "roof"), "chimney": 0.25, "gutters": True})})
-    assert roof_items.roof_items(flat, LOOK) == roof_items.Items(None, [], [])
+        "roof": SPEC.roof_shape.roof(RoofKind.FLAT, "roof"), "chimneys": [0.25], "gutters": True})})
+    assert roof_items.roof_items(flat, LOOK) == roof_items.Items([], [], [])
 
 
 def test_gutters_along_eaves_and_pipe_at_each_end():
     """Сценарий «Водосток двускатного дома»: два желоба по 10 м + свесы фронтонов вдоль длинных
     сторон по краю свеса, четыре трубы у углов на стене, до земли."""
-    found = roof_items.of_house(gable_house(), None, True, LOOK)
+    found = roof_items.of_house(gable_house(), [], True, LOOK)
     assert len(found.gutters) == 2 and len(found.pipes) == 4
     for g in found.gutters:
         assert math.dist(g.a, g.b) == pytest.approx(10.6)
@@ -104,13 +104,13 @@ def test_gutters_along_eaves_and_pipe_at_each_end():
 
 
 def test_hip_roof_gutters_on_all_sides():
-    found = roof_items.of_house(hip_house(), None, True, LOOK)
+    found = roof_items.of_house(hip_house(), [], True, LOOK)
     assert (len(found.gutters), len(found.pipes)) == (4, 8)
 
 
 def test_house_without_gutters_flag_has_none():
-    found = roof_items.of_house(gable_house(), None, False, LOOK)
-    assert (found.chimney, found.gutters, found.pipes) == (None, [], [])
+    found = roof_items.of_house(gable_house(), [], False, LOOK)
+    assert (found.chimneys, found.gutters, found.pipes) == ([], [], [])
 
 
 def test_parted_house_gutters_stay_off_neighbours(cfg, simple_svg):
@@ -136,7 +136,7 @@ def test_parted_house_gutters_stay_off_neighbours(cfg, simple_svg):
 
 def test_sheet_draws_chimney_gutters_pipes(house):
     """На виде карнизной стены — труба над кровлей, желоб полосой и две трубы у краёв."""
-    spec = house.spec.model_copy(update={"chimney": 0.25, "gutters": True})
+    spec = house.spec.model_copy(update={"chimneys": [0.25], "gutters": True})
     sheet = house.model_copy(update={"spec": spec.model_copy(update={
         "roof": SPEC.roof_shape.roof(RoofKind.GABLE, "roof")})})
     svg = sheet_svg(sheet, CFG)
@@ -144,13 +144,13 @@ def test_sheet_draws_chimney_gutters_pipes(house):
     assert svg.count("roof-item pipe") >= 4
     assert LOOK.chimney_fill in svg
     plain = sheet.model_copy(update={"spec": sheet.spec.model_copy(
-        update={"chimney": None, "gutters": False})})
+        update={"chimneys": [], "gutters": False})})
     assert "roof-item" not in sheet_svg(plain, CFG)
 
 
 def test_view_shows_chimney_above_roof_only_on_wall_gutters():
     """Желоб на виде — только у стены, к которой он идёт вдоль; с торца — квадратом."""
-    found = roof_items.of_house(gable_house(), 0.25, True, LOOK)
+    found = roof_items.of_house(gable_house(), [0.25], True, LOOK)
     corners = gable_house().corners
     kinds = [[k for k, _ in roof_items.view(found, corners, i)] for i in range(4)]
     assert all(ItemKind.CHIMNEY in row for row in kinds)
@@ -160,10 +160,11 @@ def test_view_shows_chimney_above_roof_only_on_wall_gutters():
 
 def test_3d_data_and_ifc_have_objects(house):
     spec = house.spec.model_copy(update={
-        "chimney": 0.25, "gutters": True, "roof": SPEC.roof_shape.roof(RoofKind.GABLE, "roof")})
+        "chimneys": [0.25], "gutters": True, "roof": SPEC.roof_shape.roof(RoofKind.GABLE, "roof")})
     sheet = house.model_copy(update={"spec": spec})
     items = house_3d(sheet, CFG)["items"]
-    assert items["chimney"]["z1"] > items["chimney"]["z0"]
+    assert len(items["chimneys"]) == 1
+    assert items["chimneys"][0]["z1"] > items["chimneys"][0]["z0"]
     assert len(items["gutters"]) == 2 and len(items["pipes"]) == 4
     text = house_ifc(sheet, CFG)
     got = counts(text)
@@ -171,7 +172,7 @@ def test_3d_data_and_ifc_have_objects(house):
     assert text.count(",.GUTTER.)") == 2
     assert got["IFCPIPESEGMENT"] >= 2 + 4  # желоба и трубы, плюс отводы
     bare = house_ifc(house.model_copy(update={"spec": spec.model_copy(update={
-        "chimney": None, "gutters": False})}), CFG)
+        "chimneys": [], "gutters": False})}), CFG)
     assert "IFCCHIMNEY" not in counts(bare) and "IFCPIPESEGMENT" not in counts(bare)
 
 
@@ -183,35 +184,35 @@ def spec_of(text: str):
 
 def test_stub_fireplace_gives_chimney_and_gutters():
     spec = spec_of("деревянный дом с камином и двускатной крышей")
-    assert spec.chimney == SPEC.chimney_at and spec.gutters is True
+    assert spec.chimneys == [SPEC.chimney_at] and spec.gutters is True
 
 
 def test_stub_no_gutters_no_chimney():
     spec = spec_of("кирпичный дом без водостока")
-    assert spec.gutters is False and spec.chimney is None
+    assert spec.gutters is False and spec.chimneys == []
     assert spec_of("A brick house, no gutters").gutters is False
 
 
 def test_stub_chimney_words_and_downpipe_is_not_chimney():
-    assert spec_of("A house with a chimney").chimney is not None
-    assert spec_of("дом с печью").chimney is not None
-    assert spec_of("дом с водосточной трубой").chimney is None
-    assert spec_of("дом без камина").chimney is None
-    assert spec_of("кирпичный дом").chimney is None  # слов нет — трубы нет, водосток по умолчанию
+    assert spec_of("A house with a chimney").chimneys
+    assert spec_of("дом с печью").chimneys
+    assert spec_of("дом с водосточной трубой").chimneys == []
+    assert spec_of("дом без камина").chimneys == []
+    assert spec_of("кирпичный дом").chimneys == []  # слов нет — трубы нет, водосток по умолчанию
     assert spec_of("кирпичный дом").gutters is SPEC.gutters_default
 
 
 def test_stub_flat_roof_has_neither():
     spec = spec_of("дом с камином и плоской крышей")
-    assert spec.roof.kind is RoofKind.FLAT and spec.chimney is None and spec.gutters is False
+    assert spec.roof.kind is RoofKind.FLAT and spec.chimneys == [] and spec.gutters is False
 
 
 def test_old_json_without_fields_is_valid(raw_house):
-    raw_house["spec"].pop("chimney", None)
+    raw_house["spec"].pop("chimneys", None)
     raw_house["spec"].pop("gutters", None)
     from genfacade.schema import FacadeSheet
     sheet = FacadeSheet.model_validate(raw_house)
-    assert sheet.spec.chimney is None and sheet.spec.gutters is False
+    assert sheet.spec.chimneys == [] and sheet.spec.gutters is False
 
 
 # ——— словарь модели ———
@@ -220,7 +221,7 @@ def test_model_vocabulary_unchanged_and_condition_ignores_items(house):
     """Модель шага 4 трубу и водосток не видит: словарь тот же, условие не зависит от полей."""
     assert vocab.fingerprint(CFG) == vocab.FROZEN
     with_items = house.model_copy(update={"spec": house.spec.model_copy(
-        update={"chimney": 0.25, "gutters": True})})
+        update={"chimneys": [0.25], "gutters": True})})
     assert tokens.condition(with_items, Mode.WITH_OPENINGS, CFG) == tokens.condition(
         house, Mode.WITH_OPENINGS, CFG)
 
@@ -228,8 +229,13 @@ def test_model_vocabulary_unchanged_and_condition_ignores_items(house):
 # ——— разметка ———
 
 def chimney_house(x_ft: float, side: int = 1):
+    """Дом разметки с одной трубой в x_ft от левого края стены стороны `side`."""
+    return chimneys_house([x_ft], side)
+
+
+def chimneys_house(xs_ft: list[float], side: int = 1):
     raw = finished().model_dump(mode="json")
-    raw["chimney"] = {"side": side, "x": 100.0 + x_ft * PT}
+    raw["chimneys"] = [{"side": side, "x": 100.0 + x * PT} for x in xs_ft]
     raw["gutters"] = True
     return manual.house(Markup.model_validate(raw), CFG.data.manual)[0].sheet.spec
 
@@ -237,7 +243,7 @@ def chimney_house(x_ft: float, side: int = 1):
 def test_markup_chimney_becomes_ridge_fraction():
     """Труба в 5' и в 15' на виде стены 20' — доли 0,25 и 0,75 (в каком порядке — от начала
     конька); водосток из разметки."""
-    near, far = chimney_house(5).chimney, chimney_house(15).chimney
+    (near,), (far,) = chimney_house(5).chimneys, chimney_house(15).chimneys
     assert sorted([near, far]) == pytest.approx([0.25, 0.75])
     assert chimney_house(5).gutters is True and near != far
 
@@ -245,14 +251,14 @@ def test_markup_chimney_becomes_ridge_fraction():
 def test_markup_chimney_beyond_wall_clamps_and_far_is_error():
     """Центр за краем стены — труба у торца конька; дальше края кровли на chimney_beyond_m —
     ошибка; неверная сторона — ошибка."""
-    assert chimney_house(-0.5).chimney in (0.0, 1.0)
-    assert chimney_house(20.5).chimney in (0.0, 1.0)
+    assert chimney_house(-0.5).chimneys[0] in (0.0, 1.0)
+    assert chimney_house(20.5).chimneys[0] in (0.0, 1.0)
     with pytest.raises(BadMarkup):
         chimney_house(-5)
     with pytest.raises(BadMarkup):
         chimney_house(5, side=9)
     raw = finished().model_dump(mode="json")
-    raw["chimney"], raw["roof_kind"], raw["pitch_deg"] = {"side": 1, "x": 150.0}, "flat", 0.0
+    raw["chimneys"], raw["roof_kind"], raw["pitch_deg"] = [{"side": 1, "x": 150.0}], "flat", 0.0
     with pytest.raises(BadMarkup):
         manual.house(Markup.model_validate(raw), CFG.data.manual)
 
@@ -278,3 +284,16 @@ def test_eave_view_draws_pipes_and_gutter_over_wall_and_roof(house):
     gutter = re.search(r'class="roof-item gutter" points="([^"]+)"', group)[1]
     ys = [float(p.split(",")[1]) for p in gutter.split()]
     assert max(ys) - min(ys) == pytest.approx(0.125)
+
+
+def test_markup_two_chimneys_give_two_ridge_fractions():
+    """Сценарий «Две трубы»: дом 10 × 6 м, трубы в 2,5 и 7,5 м от края стены вдоль конька — доли
+    0,25 и 0,75, на листе и в 3D по две."""
+    metres = [side("F", 6), side("L", 10), side("B", 6), side("R", 10)]
+    raw = markup(unit="m", plinth=0.3, floor_heights=[3.0], sides=metres, cut=[]).model_dump(
+        mode="json") | {"chimneys": [{"side": 1, "x": 100.0 + x * PT} for x in (2.5, 7.5)]}
+    sheet = manual.house(Markup.model_validate(raw), CFG.data.manual)[0].sheet
+    assert sorted(sheet.spec.chimneys) == pytest.approx([0.25, 0.75])
+    assert len(house_3d(sheet, CFG)["items"]["chimneys"]) == 2
+    assert counts(house_ifc(sheet, CFG))["IFCCHIMNEY"] == 2
+    assert sheet_svg(sheet, CFG).count("roof-item chimney") >= 8

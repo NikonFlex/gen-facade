@@ -1,5 +1,5 @@
 """Дымовая труба и водосток (gf#454, `facade: Дымовая труба`, `facade: Водосток`): то, что стоит на
-кровле и по её краю. Считает код по параметрам дома (`HouseSpec.chimney`, `HouseSpec.gutters`) и
+кровле и по её краю. Считает код по параметрам дома (`HouseSpec.chimneys`, `HouseSpec.gutters`) и
 скатам (`roof.py`); модель шага 4 их не ставит и не видит. Лист, дом объёмом и IFC берут отсюда.
 
 Труба — квадрат `chimney_m` в плане на коньке главной части (`ridge`): конёк — отрезок, где скаты
@@ -76,7 +76,7 @@ class Pipe:
 
 @dataclass(frozen=True)
 class Items:
-    chimney: Chimney | None
+    chimneys: list[Chimney]
     gutters: list[Gutter]
     pipes: list[Pipe]
 
@@ -85,14 +85,14 @@ def roof_items(sheet: FacadeSheet, cfg: RoofItemsLook) -> Items:
     """Труба и водосток дома по параметрам; крыша плоская или скатов нет — ничего."""
     house = roof.roofs(sheet)
     if house is None:
-        return Items(None, [], [])
-    return of_house(house, sheet.spec.chimney, sheet.spec.gutters, cfg)
+        return Items([], [], [])
+    return of_house(house, sheet.spec.chimneys, sheet.spec.gutters, cfg)
 
 
-def of_house(house: HouseRoof, chimney: float | None, gutters: bool, cfg: RoofItemsLook) -> Items:
-    """Труба в доле `chimney` конька главной части (None — нет) и водосток (gutters)."""
+def of_house(house: HouseRoof, chimneys: list[float], gutters: bool, cfg: RoofItemsLook) -> Items:
+    """Трубы в долях `chimneys` конька главной части (пусто — нет) и водосток (gutters)."""
     order = roof.own_parts(house)
-    found = None if chimney is None else _chimney(house.parts[order[0]], chimney, cfg)
+    found = [c for at in chimneys if (c := _chimney(house.parts[order[0]], at, cfg)) is not None]
     made, pipes = _gutters(house, order, cfg) if gutters else ([], [])
     return Items(found, made, pipes)
 
@@ -266,9 +266,9 @@ def view(items: Items, corners: list[Point], k: int) -> list[tuple[ItemKind, Pol
     depth = [at(c)[1] for c in corners]
     front = (max(depth) + min(depth)) / 2
     out: list[tuple[ItemKind, Polygon]] = []
-    if items.chimney is not None:
-        xs = [at(p)[0] for p in items.chimney.footprint]
-        out.append((ItemKind.CHIMNEY, _rect(min(xs), items.chimney.z0, max(xs), items.chimney.z1)))
+    for c in items.chimneys:
+        xs = [at(p)[0] for p in c.footprint]
+        out.append((ItemKind.CHIMNEY, _rect(min(xs), c.z0, max(xs), c.z1)))
     for g in items.gutters:
         (xa, da), (xb, db) = at(g.a), at(g.b)
         if _on_wall(g.wall, g.normal, at, toward):
@@ -295,5 +295,5 @@ def _rect(x0: float, y0: float, x1: float, y1: float) -> Polygon:
 
 
 def height(items: Items) -> float:
-    """Высота верха трубы — для рамки листа; трубы нет — 0."""
-    return items.chimney.z1 if items.chimney else 0.0
+    """Высота верха самой высокой трубы — для рамки листа; труб нет — 0."""
+    return max((c.z1 for c in items.chimneys), default=0.0)

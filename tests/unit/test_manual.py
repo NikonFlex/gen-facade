@@ -4,6 +4,7 @@
 
 import json
 import math
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,7 @@ from genfacade.schema import (
     Facing,
     Mode,
     OpeningKind,
+    PaletteRole,
     RoofKind,
     Rule,
     Source,
@@ -399,6 +401,15 @@ def test_one_second_finish_per_house():
         manual.house(Markup.model_validate(raw), CFG.data.manual)
 
 
+def config_over(tmp_path: Path, marks: Path) -> config.Config:
+    """Настройки с разметкой из `marks` и примерами в `tmp_path/samples`."""
+    data = CFG.data.model_copy(update={
+        "paths": CFG.data.paths.model_copy(update={"samples_dir": tmp_path / "samples"}),
+        "manual": CFG.data.manual.model_copy(update={
+            "paths": CFG.data.manual.paths.model_copy(update={"markup_dir": marks})})})
+    return CFG.model_copy(update={"data": data})
+
+
 def test_run_writes_samples_and_manifest(tmp_path):
     marks = tmp_path / "markup"
     ffh = marks / "freefarmhouse"  # папка на источник
@@ -410,11 +421,7 @@ def test_run_writes_samples_and_manifest(tmp_path):
     annex = {"eaves": [{"x": markup().sides[1].wall, "y": pt_y(EAVE_FT - 2), "floors": 1}]}
     annexed = drawn(annex).model_copy(update={"id": "ffh-annex"})
     (ffh / "ffh-annex.toml").write_text(markup_toml.dumps(annexed))
-    data = CFG.data.model_copy(update={
-        "paths": CFG.data.paths.model_copy(update={"samples_dir": tmp_path / "samples"}),
-        "manual": CFG.data.manual.model_copy(update={
-            "paths": CFG.data.manual.paths.model_copy(update={"markup_dir": marks})})})
-    saved = json.loads(manual.run(CFG.model_copy(update={"data": data})).read_text())
+    saved = json.loads(manual.run(config_over(tmp_path, marks)).read_text())
     assert store.ids(tmp_path / "samples", Source.MANUAL) == ["ffh-test"]
     assert saved["cut"] == {"ffh-test": 2}  # фронтон из описи разметчика и навес за карнизом
     # битая разметка — отказ своего дома, остальные собраны (C10, gf#293)
@@ -729,3 +736,84 @@ def test_markup_overhangs_and_their_source_go_into_the_roof():
 def test_unknown_overhang_source_is_an_error():
     with pytest.raises(ValueError, match="overhang_by"):
         markup(overhang_by="guess")
+
+
+# ——— разметка дома целиком (gf#470, `data: Кровля в разметке` и соседние) ———
+
+def skylight(side_no: int, x_ft: float) -> dict:
+    return {"side": side_no, "x": [100.0 + x_ft * PT, 100.0 + (x_ft + 2) * PT],
+            "y": [pt_y(12), pt_y(9)]}
+
+
+def test_skylights_per_slope_is_the_most_on_one_side():
+    """Сценарий «Окна на двух скатах»: два окна на одной стороне и одно на другой — 2 на скат."""
+    marks = [skylight(1, 3), skylight(1, 12), skylight(3, 8)]
+    assert manual.house(markup(skylights=marks), CFG.data.manual)[0].sheet.spec.skylights == 2
+    assert manual.house(markup(), CFG.data.manual)[0].sheet.spec.skylights == 0
+    with pytest.raises(manual.BadMarkup, match="сторон 4"):
+        manual.house(markup(skylights=[skylight(7, 3)]), CFG.data.manual)
+
+
+def test_roof_material_goes_into_palette_under_roof_role():
+    """Сценарий «Металлочерепица с чертежа»: кровля metal_roof — роль кровли в палитре, её же
+    берёт крыша; без поля роли нет; вида нет в библиотеке — отказ разметки."""
+    spec = manual.house(markup(roof_material="metal_roof"), CFG.data.manual)[0].sheet.spec
+    assert {m.id: m.kind for m in spec.materials}[PaletteRole.ROOF] == "metal_roof"
+    assert spec.roof.material == PaletteRole.ROOF
+    plain = manual.house(markup(), CFG.data.manual)[0].sheet.spec
+    assert PaletteRole.ROOF not in {m.id for m in plain.materials} and plain.roof.material is None
+    with pytest.raises(manual.BadMarkup, match="кровля thatch"):
+        manual.check_kinds(markup(roof_material="thatch"), CFG)
+    manual.check_kinds(markup(roof_material="profiled_sheet"), CFG)
+
+
+def test_trim_kinds_from_markup_else_default():
+    """Сценарий «Ставни с чертежа»: ставни louvered, остальные виды — по умолчанию из настроек;
+    вида у элемента, которого у дома нет (наличник), не появляется; вид двери — с чертежа."""
+    drawn = {"shutters": "louvered", "casing": "wide", "door": "panel6"}
+    trim = manual.house(markup(trim=drawn), CFG.data.manual)[0].sheet.spec.trim
+    assert (trim.shutters, trim.door) == ("louvered", "panel6")
+    assert not trim.has(Trim.CASING)  # наличника у проёмов нет — вид из разметки его не создаёт
+    base = CFG.data.manual.trim
+    assert (trim.canopy, trim.sill) == ("none", "none")  # навес срезан, подоконника на листе нет
+    plain = manual.house(markup(), CFG.data.manual)[0].sheet.spec.trim
+    assert (plain.shutters, plain.door) == (base.shutters, base.door)
+
+
+def test_trim_kind_outside_catalog_is_refused():
+    manual.check_kinds(markup(trim={"sill": "stone", "door": "double"}), CFG)
+    with pytest.raises(manual.BadMarkup, match="shutters=gothic"):
+        manual.check_kinds(markup(trim={"shutters": "gothic"}), CFG)
+    with pytest.raises(manual.BadMarkup, match="door=none"):
+        manual.check_kinds(markup(trim={"door": "none"}), CFG)
+
+
+def porch(side_no: int = 0) -> dict:
+    return {"side": side_no, "x": [100.0, 100.0 + 12 * PT], "y": [pt_y(12), pt_y(9)],
+            "kind": "shed", "posts": 3, "depth_m": 2.4}
+
+
+def test_porch_roof_is_counted_but_changes_neither_walls_nor_sample(tmp_path):
+    """Сценарий «Терраса под односкатной кровлей»: пример есть, стены те же, в описи — 1."""
+    plain = manual.house(markup(), CFG.data.manual)[0]
+    with_porch = manual.house(markup(porch_roofs=[porch()]), CFG.data.manual)[0]
+    assert with_porch.sheet.facades == plain.sheet.facades
+    assert with_porch.plan == plain.plan
+    with pytest.raises(manual.BadMarkup, match="сторон 4"):
+        manual.house(markup(porch_roofs=[porch(5)]), CFG.data.manual)
+    folder = tmp_path / "markup" / "freefarmhouse"
+    folder.mkdir(parents=True)
+    (folder / "ffh-test.toml").write_text(markup_toml.dumps(markup(porch_roofs=[porch()])))
+    (folder / "ffh-bare.toml").write_text(markup_toml.dumps(markup(id="ffh-bare")))
+    saved = json.loads(manual.run(config_over(tmp_path, tmp_path / "markup")).read_text())
+    assert saved["porch_roofs"] == {"ffh-test": 1} and saved["rejected"] == {}
+
+
+def test_new_markup_fields_survive_the_toml_writer():
+    """Записанная смотрелкой разметка читается назад с теми же полями; пустые не пишутся."""
+    m = markup(roof_material="metal_roof", skylights=[skylight(1, 3)], porch_roofs=[porch()],
+               trim={"shutters": "louvered"}, chimneys=[{"side": 1, "x": 150.0}])
+    text = markup_toml.dumps(m)
+    assert manual.Markup.model_validate(tomllib.loads(text)) == m
+    bare = markup_toml.dumps(markup())
+    assert "trim" not in bare and "chimneys" not in bare
