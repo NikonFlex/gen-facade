@@ -428,8 +428,8 @@ def test_casing_of_a_slope_window_follows_the_window_outline(gable_houses, gable
             assert parse_sheet_svg(text)[k][0] == f.elements
             nodes = list(ElementTree.fromstring(text).iter())
             above = roof.gables(sheet)[k]
-            room = roof.room(f.side.length_m, sheet.spec.eaves_m, above,
-                             gable_cfg.checks.slope_offset_m)
+            room = window_shape.gable_room(f.side.length_m, sheet.spec.eaves_m, above,
+                                           gable_cfg.checks.slope_offset_m)
             for e in casings:
                 at = next(i for i, n in enumerate(nodes) if n.get(sheet_format.ID) == e.id)
                 parent = next(w for w in f.elements if w.id == e.parent)

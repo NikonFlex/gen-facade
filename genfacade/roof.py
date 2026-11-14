@@ -297,10 +297,10 @@ def _not_above(s: Slope, other: Slope) -> shapely.Polygon:
         other.inward[0] * other.at[0] + other.inward[1] * other.at[1])
     if math.hypot(*n) <= EPS:  # скаты параллельны в одну сторону — у прямоугольника не бывает
         raise ValueError("два ската от параллельных стен с одной стороны")
-    return _halfplane(n, c)
+    return halfplane(n, c)
 
 
-def _halfplane(n: Point, c: float) -> shapely.Polygon:
+def halfplane(n: Point, c: float) -> shapely.Polygon:
     """Полуплоскость n·p ≤ c (n ненулевой) — полосой длины FAR."""
     size = math.hypot(*n)
     unit = (n[0] / size, n[1] / size)
@@ -804,7 +804,7 @@ def _higher(pieces: list[tuple[shapely.Geometry, Plane]], plane: Plane) -> shape
             if q.c >= plane.c - EPS:
                 out.append(shape)
             continue
-        out.append(shape.intersection(_halfplane((-n[0], -n[1]), -c)))
+        out.append(shape.intersection(halfplane((-n[0], -n[1]), -c)))
     return shapely.union_all(out) if out else shapely.Polygon()
 
 

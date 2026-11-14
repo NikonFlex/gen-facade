@@ -2,6 +2,8 @@
 в SVG`): рамка остаётся прямоугольником, контур по виду считает window_shape.py; лист, разбор
 листа и дом объёмом — на каждом виде окна."""
 
+import math
+
 import shapely
 from test_roof import CFG, _with_window, bare
 
@@ -58,11 +60,12 @@ def test_slope_window_is_cut_by_the_slope():
     проверяет контур — ни `outside`, ни `slope`; прямоугольное окно с той же рамкой — брак."""
     sheet, k = _gabled(VariantKind.SLOPE, top=2.5)
     above = roof.gables(sheet)[k]
-    room = roof.room(sheet.facades[k].side.length_m, sheet.spec.eaves_m, above,
-                     CFG.checks.slope_offset_m)
+    gable = window_shape.gable_room(sheet.facades[k].side.length_m, sheet.spec.eaves_m, above,
+                                    CFG.checks.slope_offset_m)
     [window] = sheet.facades[k].elements
-    shape = shapely.Polygon(window_shape.outline(window, room))
-    assert room.buffer(1e-9).contains(shape) and 4 < len(window_shape.outline(window, room)) <= 6
+    shape = shapely.Polygon(window_shape.outline(window, gable))
+    assert gable.room.buffer(1e-9).contains(shape)
+    assert 4 < len(window_shape.outline(window, gable)) <= 6
     assert not [v for v in validate(sheet, CFG.checks) if v.side == k and v.element == "g1"]
     plain = sheet.model_copy(update={"facades": [
         f.model_copy(update={"elements": [e.model_copy(update={"variant": None})
@@ -92,3 +95,46 @@ def test_slope_window_with_most_of_the_frame_behind_the_slope_is_a_defect():
     assert any(v.rule is Rule.SLOPE and "за скатом" in v.message
                for v in validate(bad, CFG.checks) if v.element == "g1")
     assert not any("за скатом" in v.message for v in validate(sheet, CFG.checks))
+
+
+# Окно по скату gf#470 (`facade: Окно по скату`): стена 6 м, карниз 3 м, скат 35°, конёк по оси.
+TAN = math.tan(math.radians(35))
+RIDGE = 3.0 + 3.0 * TAN
+GABLE = window_shape.gable_room(6.0, 3.0, [(0.0, 3.0), (6.0, 3.0), (3.0, RIDGE)], 0.2)
+
+
+def _slope_outline(x: float, y: float, w: float, h: float) -> list[tuple[float, float]]:
+    window = Element(id="w", cls=ElementClass.WINDOW, x_m=x, y_m=y, w_m=w, h_m=h,
+                     variant=OpeningVariant(kind=VariantKind.SLOPE))
+    return window_shape.outline(window, GABLE)
+
+
+def _same(shape, want) -> bool:
+    """Те же вершины с точностью 0,01 м (начало обхода не важно)."""
+    return len(shape) == len(want) and shapely.Polygon(shape).symmetric_difference(
+        shapely.Polygon(want)).area < 1e-4 and all(
+        min(math.dist(p, q) for q in shape) < 0.01 for p in want)
+
+
+def test_slope_window_beside_the_slope_is_a_trapezoid_without_a_shelf():
+    """Рамка 1,0 × 1,5 м под скатом 35° (верхние углы рамки — на 3,8 м, скат там 3,35 и 4,05 м):
+    верх окна — отрезок параллельно скату через дальний верхний угол рамки, полки нет."""
+    shape = _slope_outline(0.5, 2.3, 1.0, 1.5)
+    left = 3.8 - TAN * 1.0  # верх у левого края: параллельно скату от угла (1,5; 3,8)
+    assert _same(shape, [(0.5, 2.3), (1.5, 2.3), (1.5, 3.8), (0.5, left)]), shape
+    top = [p for p in shape if p[1] > 3.0]  # верх: два угла выше карниза
+    assert abs((top[0][1] - top[1][1]) / (top[0][0] - top[1][0])) - TAN < 0.01
+
+
+def test_slope_window_under_the_ridge_is_a_pentagon_with_a_sharp_ridge():
+    """Рамка 1,0 × 1,6 м у конька: оба ската сдвинуты до касания верха рамки по оси — острый
+    конёк на верху рамки (4,6 м), боковые углы ниже на 0,5 · tg 35°."""
+    shape = _slope_outline(2.5, 3.0, 1.0, 1.6)
+    side = 4.6 - 0.5 * TAN
+    want = [(2.5, 3.0), (3.5, 3.0), (3.5, side), (3.0, 4.6), (2.5, side)]
+    assert _same(shape, want), shape
+
+
+def test_slope_window_far_from_the_slope_stays_the_frame():
+    """Рамка не ближе отступа к скату — прямоугольник, как прежде."""
+    assert len(_slope_outline(0.5, 3.0, 1.0, 0.1)) == 4
