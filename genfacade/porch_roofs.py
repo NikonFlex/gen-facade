@@ -35,6 +35,8 @@ from genfacade.schema import (
 )
 from genfacade.unfold import plan_corners
 
+BISECT_STEPS = 40  # деление пополам при поиске встречи: точность в доли микрона
+
 
 class Part(StrEnum):
     """Что нарисовано на виде стены."""
@@ -165,6 +167,8 @@ def _awning(sheet: FacadeSheet, house: roof.HouseRoof | None, p: PorchRoof, cfg:
     frame = Frame((wall[0] + u[0] * p.x_m[0], wall[1] + u[1] * p.x_m[0]), u, n)
     flush = (p.x_m[0] <= EPS, p.x_m[1] >= length - EPS)  # отрезок доходит до края стены
     cover = _cover(sheet, _line(sheet, house, p), frame, flush)
+    if house is not None:
+        cover = cover._replace(surface=roof.surface(house))
     made = _continued if p.kind is PorchKind.MAIN else _own
     found = made(frame, p, cover, cfg)
     return replace(found, decks=_decks(sheet, p, frame, cfg), stairs=_stairs(sheet, p, frame, cfg))
@@ -268,36 +272,91 @@ def _tilt(p: PorchRoof, kind: RoofKind, cover: "Cover", cfg: Sheet) -> float:
     return cover.rise if gap <= cfg.porch_roof.pitch_tol_deg else marked
 
 
-def _inward(cover: "Cover", z_wall: float, rising: float, cfg: Sheet) -> float:
-    """Насколько (меньше нуля) продлить кровлю навеса за стену внутрь дома: верх у стены `z_wall`
-    выше карниза — кровля идёт вверх к стене со скоростью `rising` и упирается в скат кровли дома
-    (он у карнизной стены поднимается внутрь со скоростью `rise`); разность скоростей не меньше доли
-    `min_rise_share` от `rise`, иначе почти параллельная кровля уходила бы в бесконечность. Ниже
-    карниза, щипцовая стена, плоская крыша — кровля кончается на стене."""
-    if not cover.sloped or cover.rise <= EPS or z_wall <= cover.eaves:
+class Probe(NamedTuple):
+    """Где искать встречу кровли навеса с кровлей дома: точка плана по (x вдоль стены, d от неё),
+    x поперёк отрезка, шаг и предел поиска внутрь дома."""
+
+    at: Callable[[float, float], Point]
+    xs: list[float]
+    step: float
+    limit: float
+
+
+def _probe(frame: Frame, length: float, cfg: Sheet) -> Probe:
+    look, n = cfg.porch_roof, cfg.porch_roof.meet_samples
+    return Probe(frame.at, [length * i / (n - 1) for i in range(n)], look.meet_step_m,
+                 look.meet_max_m)
+
+
+class Meet(NamedTuple):
+    """Встреча верха плиты с кровлей дома на одном x вдоль стены: глубина (≤ 0), нашлась ли она и
+    запас кровли над плитой там (≥ 0 — встретила; иначе — наименьшее превышение плиты)."""
+
+    d: float
+    found: bool
+    gap: float
+
+
+def _inward(cover: "Cover", probe: Probe, top: Callable[[float, float], float]) -> float:
+    """Насколько (меньше нуля) продлить кровлю навеса за стену внутрь дома: верх плиты `top(x, d)`
+    идёт внутрь, пока не упрётся в настоящую кровлю дома (`cover.surface`: со скатом, коньком и
+    вальмами, а не в плоскость одного ската). Участок плиты выше пика кровли её не встречает и
+    конец продления не определяет — он по остальным участкам. Не встретила нигде (плита выше дома
+    или параллельна скату) — там, где плита ближе всего к кровле, при равенстве — у стены. Щипцовая
+    стена, плоская крыша — кровля кончается на стене."""
+    if not cover.sloped or cover.rise <= EPS:
         return 0.0
-    floor = cover.rise * cfg.porch_roof.min_rise_share
-    return -(z_wall - cover.eaves) / max(cover.rise - rising, floor)
+    found = [_meets(cover, probe, x, top) for x in probe.xs]
+    if any(m.found for m in found):
+        return min(m.d for m in found if m.found)
+    return max(found, key=lambda m: (round(m.gap, 3), m.d)).d
+
+
+def _meets(cover: "Cover", probe: Probe, x: float, top: Callable[[float, float], float]) -> Meet:
+    """Где верх плиты на расстоянии x вдоль стены встречает кровлю дома: первая точка, где кровля
+    не ниже плиты; нет — где плита ближе всего к кровле."""
+    def gap(d: float) -> float | None:
+        z = cover.surface(probe.at(x, d))
+        return None if z is None else z - top(x, d)
+
+    prev, d, near = 0.0, 0.0, Meet(0.0, False, -math.inf)
+    while d > -probe.limit:
+        g = gap(d)
+        if g is not None and g >= 0:
+            return Meet(_bisect(gap, prev, d), True, g)
+        if g is not None and g > near.gap + EPS:
+            near = Meet(d, False, g)
+        prev, d = d, d - probe.step
+    return near
+
+
+def _bisect(gap: Callable[[float], float | None], above: float, below: float) -> float:
+    """Точка между `above` (кровля ниже плиты) и `below` (не ниже), где они сходятся; они совпали
+    (встреча у стены) — она."""
+    for _ in range(BISECT_STEPS):
+        mid = (above + below) / 2
+        g = gap(mid)
+        above, below = (above, mid) if g is not None and g >= 0 else (mid, below)
+    return below
 
 
 def _own(frame: Frame, p: PorchRoof, cover: "Cover", cfg: Sheet) -> Awning:
     """Кровля своего вида: уклон — как у дома или по разметке (`_tilt`), край кровли на высоте низа
-    с вида (`bottom_m`); верх у стены продлён до ската кровли дома (`_inward`), дыры между навесом
-    и кровлей нет."""
+    с вида (`bottom_m`); верх у стены продлён до настоящей кровли дома (`_inward`), дыры между
+    навесом и кровлей нет, а за коньком и вальмой кровля навеса не торчит над домом."""
     thick, d, length = cfg.roof.thickness_m, p.depth_m, p.x_m[1] - p.x_m[0]
-    lo = p.bottom_m
+    lo, probe = p.bottom_m, _probe(frame, length, cfg)
     kind = RoofKind.GABLE if p.kind in (PorchKind.HIP, PorchKind.GABLE) else RoofKind(p.kind)
     tilt = _tilt(p, kind, cover, cfg)
     reach, slab = 0.0, kind is not RoofKind.FLAT
     if kind is RoofKind.GABLE:
-        ridge = lo + tilt * length / 2
-        reach = _inward(cover, ridge + thick, 0.0, cfg)  # верх плиты упирается в скат
-        profile = _slab([(0.0, lo), (length / 2, ridge), (length, lo)], thick)
+        reach = _inward(cover, probe, lambda x, at: lo + tilt * min(x, length - x) + thick)
+        profile = _slab([(0.0, lo), (length / 2, lo + tilt * length / 2), (length, lo)], thick)
     elif kind is RoofKind.SHED:
-        top = _inward(cover, lo + tilt * d + thick, tilt, cfg)
+        top = _inward(cover, probe, lambda x, at: lo + tilt * (d - at) + thick)
         profile = _slab([(top, lo + tilt * (d - top)), (d, lo)], thick)
     else:
-        top, hi = _inward(cover, lo, 0.0, cfg), lo + max(p.top_m - lo, thick)
+        top, hi = _inward(cover, probe, lambda x, at: lo), lo + max(p.top_m - lo, thick)
         profile = [(top, lo), (d, lo), (d, hi), (top, hi)]
 
     def under(x: float, at: float) -> float:
@@ -334,7 +393,8 @@ class Cover(NamedTuple):
     """Кровля у стены навеса: скаты части дома (нет — плоская), высота низа над точкой плана, скат
     идёт от этой стены, свес дома у этой стены и вдоль неё, вид кровли дома, карниз и рост высоты
     на метр глубины, на сколько кровля дома выступает за край стены вида на концах отрезка (слева,
-    справа; нуль — конец отрезка не у края стены)."""
+    справа; нуль — конец отрезка не у края стены), высота настоящей кровли дома над точкой плана
+    (`roof.surface`; нет кровли — None)."""
 
     line: roof.Roofline | None
     height: Callable[[Point], float]
@@ -344,6 +404,7 @@ class Cover(NamedTuple):
     eaves: float
     rise: float
     pad: tuple[float, float]
+    surface: Callable[[Point], float | None] = lambda pt: None
 
 
 def _cover(sheet: FacadeSheet, line: roof.Roofline | None, frame: Frame,

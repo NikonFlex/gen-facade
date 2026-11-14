@@ -486,3 +486,20 @@ def test_gable_awning_top_meets_hip_slope():
               gable.left[1] + gable.u[1] * gable.length / 2 + gable.n[1] * gable.reach)
     slope = roof.roofs(sheet).parts[0].height(middle)
     assert max(z for _, z in gable.profile) == pytest.approx(slope, abs=0.01)
+
+
+def test_gable_awning_stops_at_house_ridge():
+    """Сценарий «Навес кончается у конька дома»: двускатный навес на карнизной стене, верх
+    4,5 м; продление по плоскости одного ската шло бы на (4,5 − 2,74) / tg 32° = 2,8 м — дальше
+    конька дома (1,83 м от стены), где кровля дома уже опускается. Продление кончается там, где верх
+    плиты упирается в кровлю дома со стороны её подъёма: не доходит до конька, и там верх плиты на
+    краю отрезка, ниже пика кровли, лежит на её скате."""
+    a = built(kind=PorchKind.GABLE, depth=1.4, low=1.6, high=4.5, x=(0.0, 3.6), posts=2, side=1)
+    surface = roof.surface(roof.roofs(awning(side=1)))
+    ridge_at = LENGTHS[0] / 2  # коньк дома — на середине его ширины
+    assert -(4.5 - EAVES) / HOUSE_TAN < -ridge_at < a.reach < 0
+    tilt = (a.profile[1][1] - 1.6) / 1.8
+    end = (a.left[0] + a.n[0] * a.reach, a.left[1] + a.n[1] * a.reach)
+    gaps = [surface((end[0] + a.u[0] * x, end[1] + a.u[1] * x)) - (1.6 + tilt * x + 0.2)
+            for x in (i * 0.01 for i in range(181))]
+    assert min(abs(g) for g in gaps) < 0.01

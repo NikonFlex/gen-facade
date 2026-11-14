@@ -875,6 +875,36 @@ def house_faces(house: HouseRoof) -> list[list[Point3]]:
     return [face for k in range(len(house.parts)) for face in _faces_of(house, k)]
 
 
+def _face_plane(face: list[Point3]) -> Plane | None:
+    """Плоскость грани по трём неколлинеарным вершинам; вертикальная — None."""
+    (x0, y0, z0) = face[0]
+    for (x1, y1, z1), (x2, y2, z2) in combinations(face[1:], 2):
+        det = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0)
+        if abs(det) > EPS:
+            a = ((z1 - z0) * (y2 - y0) - (z2 - z0) * (y1 - y0)) / det
+            b = ((x1 - x0) * (z2 - z0) - (x2 - x0) * (z1 - z0)) / det
+            return Plane(a, b, z0 - a * x0 - b * y0)
+    return None
+
+
+def surface(house: HouseRoof) -> Callable[[Point], float | None]:
+    """Высота настоящей кровли дома (со свесом, коньками, вальмами и ендовами — по `house_faces`)
+    над точкой плана; точка вне кровли — None. Там, где грани перекрываются, — высшая."""
+    prepared = []
+    for face in house_faces(house):
+        plane = _face_plane(face)
+        if plane is not None:
+            shape = shapely.Polygon([(x, y) for x, y, _ in face])
+            shapely.prepare(shape)
+            prepared.append((shape, plane))
+
+    def height(p: Point) -> float | None:
+        at = shapely.Point(p)
+        found = [a * p[0] + b * p[1] + c for shape, (a, b, c) in prepared if shape.covers(at)]
+        return max(found, default=None)
+    return height
+
+
 def main_faces(sheet: FacadeSheet) -> tuple[Roofline, list[tuple[Slope, list[Point3]]]] | None:
     """Скаты главной части дома — той, что старше остальных по `_outranks` (щипцы над карнизными
     стенами в счёт не идут: это не части контура); крыши нет — None. Для мансардных окон."""
