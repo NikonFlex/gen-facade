@@ -54,3 +54,17 @@ def page_image(cfg: Config, m: Markup, number: int) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out, "JPEG", quality=88)
     return out
+
+
+def ink_box(cfg: Config, m: Markup, number: int) -> list[float]:
+    """Рамка рисунка на странице, pt: всё темнее бумаги (`ink_level`). Окно вида стороны — по ней,
+    чтобы фасад был виден весь, от земли до трубы; листа без рисунка — вся страница."""
+    width, height = page_size(cfg, m, number)
+    with Image.open(page_image(cfg, m, number)) as img:
+        dark = img.convert("L").point(lambda v: 255 if v < cfg.viewer.markup.ink_level else 0)
+        found = dark.getbbox()
+        scale = (width / img.width, height / img.height)
+    if found is None:
+        return [0.0, 0.0, width, height]
+    x0, y0, x1, y1 = found
+    return [x0 * scale[0], y0 * scale[1], x1 * scale[0], y1 * scale[1]]

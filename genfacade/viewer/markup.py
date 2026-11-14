@@ -32,7 +32,8 @@ from genfacade.viewer import markup_queue, markup_sheet, review
 
 EDIT_LOCK = "markup.lock"  # правка файла разметки и решение о доме — одним замком, по одной
 STATUS = {Refusal.NO_MARKUP_HOUSE: 404, Refusal.NO_MARKUP_SHEET: 404, Refusal.BAD_MARKUP_EDIT: 422,
-          Refusal.BAD_CHECK_STEP: 409, Refusal.BAD_CHECK_STATE: 500}
+          Refusal.BAD_CHECK_STEP: 409, Refusal.BAD_CHECK_STATE: 500,
+          Refusal.HOUSE_NOT_BUILT: 422}
 
 
 class Control(StrEnum):
@@ -74,8 +75,7 @@ def api(app: FastAPI, cfg: Config, folder: Path) -> None:
     @app.post("/api/markup/{house}/preview")
     def preview(house: str, edit: markup_edit.Edit) -> dict:
         """Линии сторон после правки, без записи: потянули линию — стороны пересчитаны."""
-        old = manual.read(_guard(lambda: _file(folder, house)))
-        m = _guard(lambda: _edited(cfg, old, markup_edit.uncolored(edit)))
+        m = _applied(cfg, folder, house, edit)
         return {"geometry": [markup_edit.geometry(m, k) for k in range(len(m.sides))],
                 "roles": _guard(lambda: _roles(m))}
 
@@ -101,6 +101,12 @@ def _file(folder: Path, house: str) -> Path:
     if house not in markup_queue.houses(folder):
         raise Refused(Refusal.NO_MARKUP_HOUSE, house)
     return folder / f"{house}.toml"
+
+
+def _applied(cfg: Config, folder: Path, house: str, edit: markup_edit.Edit) -> manual.Markup:
+    """Разметка дома с правкой, ещё не записанной: одно тело у предпросмотра линий и сборки."""
+    old = manual.read(_guard(lambda: _file(folder, house)))
+    return _guard(lambda: _edited(cfg, old, markup_edit.uncolored(edit)))
 
 
 def _edited(cfg: Config, m: manual.Markup, edit: markup_edit.Edit) -> manual.Markup:
@@ -145,7 +151,8 @@ def _options(cfg: Config) -> dict:
                        "cls": cfg.viewer.labels.cls},
             "add_classes": editor.add_classes,
             "default_size_m": {k: list(v) for k, v in editor.default_size_m.items()},
-            "min_box_m": editor.min_box_m, "mark_depth_step_m": editor.mark_depth_step_m,
+            "min_box_m": editor.min_box_m,
+            "view_pad_m": editor.view_pad_m, "mark_depth_step_m": editor.mark_depth_step_m,
             "zone": editor.zone.model_dump(mode="json"),
             "marks": {k: {**v.model_dump(mode="json"), "field": markup_edit.MARK_FIELDS[k]}
                       for k, v in editor.marks.items()},
@@ -194,6 +201,7 @@ def _side(cfg: Config, m: manual.Markup, k: int, house: str) -> dict:
     width, height = markup_sheet.page_size(cfg, m, e.page)
     return {"view": e.view, "page": e.page, "image": f"/api/markup/{house}/page/{e.page}.jpg",
             "size": [width, height], "wall": list(e.wall), "geometry": markup_edit.geometry(m, k),
+            "ink": markup_sheet.ink_box(cfg, m, e.page),
             "elements": [x.model_dump(mode="json") for x in e.elements],
             "zones": [z.model_dump(mode="json") for z in e.zones],
             "outline": e.outline, "roof": e.roof,

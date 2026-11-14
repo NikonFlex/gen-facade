@@ -16,7 +16,6 @@ import { serial } from "/static/serial.js";
 topbar(document.getElementById("topbar"), "markup");
 
 const NS = "http://www.w3.org/2000/svg";
-const LEVEL_PAD_M = 1.0; // поле вокруг стены на кадре, как в tools/markup.py overlay
 const MARK_PX = 12; // толщина отметки-полоски (трубы, слухового окна) на экране, px
 const state = {
   options: null, queue: null, house: null, initial: "", selected: null, adding: null,
@@ -153,14 +152,12 @@ function selectZone(ref) {
 
 // ——— рисование ———
 
+// Окно вида — весь рисунок фасада страницы (рамка чернил с сервера) и небольшое поле: фасад
+// виден от земли до трубы, а стена стороны на нём подсвечена своей рамкой.
 function fit(side) {
-  const g = side.geometry, pad = LEVEL_PAD_M * g.px_per_m;
-  const ys = [g.ground, g.floor, ...g.tops, ...side.elements.map((e) => e.box[1]),
-              ...side.outline.map((p) => p[1]), ...side.roof.flat().map((p) => p[1]),
-              ...side.eaves.map((e) => e.y)];
-  const x0 = Math.max(0, side.wall[0] - pad), x1 = Math.min(side.size[0], side.wall[1] + pad);
-  const y0 = Math.max(0, Math.min(...ys) - pad), y1 = Math.min(side.size[1], g.ground + pad);
-  return [x0, y0, x1 - x0, y1 - y0];
+  const pad = state.options.view_pad_m * side.geometry.px_per_m, [x0, y0, x1, y1] = side.ink;
+  const [vx0, vy0] = [Math.max(0, x0 - pad), Math.max(0, y0 - pad)];
+  return [vx0, vy0, Math.min(side.size[0], x1 + pad) - vx0, Math.min(side.size[1], y1 + pad) - vy0];
 }
 
 function line(parent, [x0, y0, x1, y1], color, role) {

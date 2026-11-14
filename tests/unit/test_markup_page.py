@@ -461,3 +461,14 @@ def test_box_dragged_in_browser_is_saved_and_assembled(server, cfg):
     state = json.loads((cfg.viewer.markup.folder / cfg.viewer.markup.state_file).read_text())
     assert state["houses"][HOUSE]["state"] == CheckState.EDITED
     assert state["houses"][HOUSE]["seconds"] > 0
+
+
+def test_view_window_is_the_ink_of_the_page_not_the_whole_sheet(cfg, client):
+    drawn = Image.new("RGB", PAGE, "white")
+    drawn.paste("black", (360, 270, 1080, 810))   # рисунок фасада: четверть листа в центре
+    blank = [Image.new("RGB", PAGE, "white") for _ in range(3)]
+    drawn.save(cfg.data.manual.paths.pdf_dirs["stroim"] / "test" / "sheet.pdf",
+               save_all=True, append_images=blank)
+    sides = client.post(f"/api/markup/{HOUSE}/open").json()["sides"]
+    assert sides[0]["ink"] == pytest.approx([360, 270, 1080, 810], abs=3)
+    assert sides[1]["ink"] == [0.0, 0.0, *map(float, PAGE)]   # листа без рисунка — вся страница
