@@ -13,7 +13,7 @@ from xml.etree import ElementTree
 
 import shapely
 
-from genfacade import dormers, roof, roof_items, skylights, window_shape
+from genfacade import dormers, porch_roofs, roof, roof_items, skylights, window_shape
 from genfacade.config import Axes, Config, DoorLook, Hatch, Levels, Sheet, SheetLayout
 from genfacade.render import hatch, sheet_format, trim
 from genfacade.render.shapes import add_line, box, points
@@ -62,10 +62,12 @@ class Top(NamedTuple):
     items: list[tuple[roof_items.ItemKind, Polygon]] = []  # труба, желоб, трубы (gf#454)
     skylights: list[tuple[Polygon, Polygon]] = []  # мансардные окна на кровле: рамка и стекло
     dormer: list[tuple[dormers.Part, Polygon]] = []  # слуховые окна над кровлей (gf#457)
+    awnings: list[tuple[porch_roofs.Part, Polygon]] = []  # навесы на столбах: поверх стены (gf#472)
 
     def height(self, facade: SideFacade) -> float:
         """Верх рисунка стороны: силуэт стены, стена над карнизом, кровля и труба."""
         shapes = [facade.silhouette or [], *self.above, *self.roof, *(p for _, p in self.items)]
+        shapes += [p for _, p in self.awnings]
         return max(y for shape in shapes for _, y in shape)
 
 
@@ -74,7 +76,14 @@ NOTHING_ABOVE = Top()  # плоская крыша: над карнизом ни
 
 
 def tops(sheet: FacadeSheet, cfg: Config) -> list[Top]:
-    """Что над карнизом у каждой стороны листа; скаты не строятся — пусто."""
+    """Что над карнизом у каждой стороны листа (скаты не строятся — пусто) и навесы на столбах."""
+    found = porch_roofs.find(sheet, cfg.sheet)
+    corners = plan_corners([f.side for f in sheet.facades])
+    return [top._replace(awnings=porch_roofs.view(found, corners, k))
+            for k, top in enumerate(_roof_tops(sheet, cfg))]
+
+
+def _roof_tops(sheet: FacadeSheet, cfg: Config) -> list[Top]:
     house = roof.roofs(sheet)
     if house is None:
         return _flat_tops(sheet, cfg)
@@ -319,7 +328,17 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
         ElementTree.SubElement(g, "polyline", {"class": "outline joint", "points": points(seam)})
     _items(g, top, pen, roof_items.ItemKind.GUTTER)  # желоб и трубы — на кромке кровли и стене
     _items(g, top, pen, roof_items.ItemKind.PIPE)
+    _awnings(g, top, pen)
     return g
+
+
+def _awnings(g: ElementTree.Element, top: Top, pen: Pen) -> None:
+    """Навесы на столбах (gf#472): кровля — цветом кровли дома, столбы — из `[porch_roof]` листа."""
+    for part, shape in top.awnings:
+        post = part is porch_roofs.Part.POST
+        fill = pen.cfg.sheet.porch_roof.post_fill if post else _roof_fill(pen)
+        ElementTree.SubElement(g, "polygon", {"class": f"porch-{part}", "points": points(shape),
+                                              "fill": fill})
 
 
 def _items(g: ElementTree.Element, top: Top, pen: Pen, kind: roof_items.ItemKind) -> None:

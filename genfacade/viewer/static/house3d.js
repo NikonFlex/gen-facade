@@ -35,6 +35,7 @@ export class HouseStage {
     await this._tiles(threeModule, data.swatches);
     this._roof(threeModule, data);
     this._items(threeModule, data.items);
+    this._awnings(threeModule, data.items);
     this._ground(threeModule);
     this.pxPerM = this._wallScale(data.walls);
     await Promise.all(data.walls.map((w) => this._wall(threeModule, w)));
@@ -159,6 +160,32 @@ export class HouseStage {
       const elbow = add(new THREE.CylinderGeometry(r, r, from.distanceTo(to), 12), p.color,
         from.clone().add(to).multiplyScalar(0.5));
       elbow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
+    }
+  }
+
+  // Навесы на столбах (gf#472): кровля — профиль (расстояние от стены, высота), выдавленный вдоль
+  // стены; в сцене (x, высота, −y) базис профиля (наружу, вверх, −вдоль стены) правый, поэтому
+  // выдавливание идёт от правого края назад. Столбы — бруски по центру в плане.
+  _awnings(THREE, items) {
+    const at = ([x, y], h) => new THREE.Vector3(x, h, -y);
+    for (const a of items.awnings || []) {
+      const shape = new THREE.Shape(a.profile.map(([d, z]) => new THREE.Vector2(d, z)));
+      const geo = new THREE.ExtrudeGeometry(shape, { depth: a.length, bevelEnabled: false });
+      const mesh = new THREE.Mesh(geo, this._material(THREE, a.material, a.color || this.look.roof));
+      const [nx, ny, ux, uy] = [...a.n, ...a.u];
+      mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
+        new THREE.Vector3(nx, 0, -ny), new THREE.Vector3(0, 1, 0), new THREE.Vector3(-ux, 0, uy)));
+      mesh.position.copy(at([a.left[0] + ux * a.length, a.left[1] + uy * a.length], 0));
+      mesh.add(this._edges(THREE, geo));
+      this.scene.add(mesh);
+    }
+    for (const p of items.posts || []) {
+      const geo = new THREE.BoxGeometry(p.size, p.z1, p.size);
+      const mesh = new THREE.Mesh(geo, this._material(THREE, null, p.color));
+      mesh.position.copy(at(p.center, p.z1 / 2));
+      mesh.rotation.y = Math.atan2(p.u[1], p.u[0]);
+      mesh.add(this._edges(THREE, geo));
+      this.scene.add(mesh);
     }
   }
 

@@ -33,6 +33,8 @@ porch = "Крыльцо {id}"
 chimney = "Дымовая труба {n}"
 gutter = "Желоб {n}"
 pipe = "Водосточная труба {n}"
+porch_roof = "Навес {n}"
+porch_post = "Столб навеса {n}"
 
 [ifc.pset]
 facade = "GenFacade"       # набор свойств объекта: сторона листа, id элемента, материал

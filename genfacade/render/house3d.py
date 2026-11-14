@@ -13,7 +13,7 @@ import math
 
 import shapely
 
-from genfacade import dormers, parts, roof, roof_items, skylights, window_shape
+from genfacade import dormers, parts, porch_roofs, roof, roof_items, skylights, window_shape
 from genfacade.config import Config, House3d
 from genfacade.derive import DERIVED
 from genfacade.render.svg import (
@@ -68,7 +68,7 @@ def house_3d(sheet: FacadeSheet, cfg: Config) -> dict:
     swatches = {m: s for m in used - {None} if (s := swatch(m, pen)) is not None}
     return {"corners": corners, "eaves_m": sheet.spec.eaves_m,
             "trim": cfg.sheet.trim.model_dump(), "walls": walls, "roof": roof_part,
-            "items": _items(sheet, cfg), "swatches": swatches}
+            "items": _items(sheet, cfg) | _awnings(sheet, cfg, roof_part), "swatches": swatches}
 
 
 def _items(sheet: FacadeSheet, cfg: Config) -> dict:
@@ -83,6 +83,19 @@ def _items(sheet: FacadeSheet, cfg: Config) -> dict:
                     for g in found.gutters],
         "pipes": [{"center": p.center, "elbow": p.elbow, "z_top": p.z_top,
                    "diameter": p.diameter, "color": look.gutter_fill} for p in found.pipes]}
+
+
+def _awnings(sheet: FacadeSheet, cfg: Config, roof_part: dict) -> dict:
+    """Навесы на столбах в объёме (gf#472): кровля — призма по профилю (расстояние от стены,
+    высота), выдавленная вдоль стены от левого края `left` по `u`, `n` — наружная нормаль;
+    столбы — призмы по центру в плане до высоты `z1`. Кровля того же материала, что кровля дома."""
+    look = cfg.sheet.porch_roof
+    found = porch_roofs.find(sheet, cfg.sheet)
+    return {"awnings": [{"left": a.left, "u": a.u, "n": a.n, "length": a.length,
+                         "profile": a.profile, "material": roof_part["material"],
+                         "color": roof_part.get("color")} for a in found],
+            "posts": [{"center": c, "size": a.post_m, "z1": a.post_top, "color": look.post_fill,
+                       "u": a.u} for a in found for c in a.posts]}
 
 
 def _look(sheet: FacadeSheet, look: House3d) -> House3d:

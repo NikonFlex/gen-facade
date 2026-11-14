@@ -630,6 +630,31 @@ class Dormer(Model):
     roof: DormerRoof
 
 
+class PorchRoof(Model):
+    """Навес на столбах над крыльцом или террасой (gf#472, `facade: Навес на столбах`).
+
+    side — сторона листа; x_m — края отрезка вдоль стены, как стена видна снаружи (от левого
+    края), метры; depth_m — вынос от стены наружу; bottom_m и top_m — низ и верх кровли над
+    землёй (`porch_roofs.py`: что из них где); kind — вид кровли (вальмовая строится двускатной);
+    posts — число столбов на наружном крае."""
+
+    side: int = Field(ge=0)
+    x_m: tuple[float, float]
+    depth_m: float = Field(gt=0)
+    bottom_m: float = Field(gt=0)
+    top_m: float
+    kind: RoofKind
+    posts: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _check(self) -> "PorchRoof":
+        if self.x_m[1] <= self.x_m[0]:
+            raise ValueError(f"x_m: края {self.x_m} не по возрастанию")
+        if self.top_m <= self.bottom_m:
+            raise ValueError(f"top_m {self.top_m} не выше bottom_m {self.bottom_m}")
+        return self
+
+
 class HouseTrim(Model):
     """Виды выводимых элементов дома — одни на все стены (`facade: Общие параметры дома`): у проёма
     модель решает только, есть ли элемент (Trim), а вид — дома. Вид — имя записи
@@ -679,6 +704,9 @@ class HouseSpec(Model):
     # Слуховые окна главной части (gf#457): ставит код, модель шага 4 их не видит и не ставит —
     # в условие модели (train/tokens.py) поле не входит.
     dormers: list[Dormer] = []
+    # Навесы на столбах (gf#472): ставит код по разметке, модель шага 4 и стаб шага 1 — нет;
+    # в условие модели поле не входит. Старые файлы без поля — навесов нет.
+    porch_roofs: list[PorchRoof] = []
 
     @field_validator("chimneys", mode="before")
     @classmethod
