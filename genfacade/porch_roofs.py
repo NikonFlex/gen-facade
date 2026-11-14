@@ -13,7 +13,7 @@
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from itertools import combinations, pairwise
 from typing import NamedTuple
@@ -24,6 +24,7 @@ from genfacade import roof
 from genfacade.config import Sheet
 from genfacade.schema import (
     EPS,
+    ElementClass,
     FacadeSheet,
     Point,
     Polygon,
@@ -39,6 +40,7 @@ class Part(StrEnum):
 
     ROOF = "roof"
     POST = "post"
+    DECK = "deck"
 
 
 class Post(NamedTuple):
@@ -48,15 +50,23 @@ class Post(NamedTuple):
     top: float
 
 
+class Deck(NamedTuple):
+    """Настил под навесом: четыре угла в плане, низ и верх по высоте."""
+
+    ring: list[Point]
+    z0: float
+    z1: float
+
+
 @dataclass(frozen=True)
 class Awning:
     """Навес в плане: левый край отрезка на стене, направление вдоль стены слева направо, наружная
     нормаль, длина и вынос, профиль кровли (пусто — кровля дома уже покрывает весь вынос), столбы,
-    сечение столба, вид кровли с учётом вальмы. `outward` — профиль (вдоль стены от правого края,
-    высота) выдавлен наружу от `reach` до выноса; иначе — профиль (вынос, высота) выдавлен вдоль
-    стены на длину. `reach` и начало профиля вдоль выноса меньше нуля, если кровля продолжена за
-    стену внутрь дома — до ската кровли дома (там она скрыта кровлей). `slab` — кровля плита
-    постоянной толщины по вертикали, её скаты — плоские грани (`planes`)."""
+    сечение столба, настил под ней, вид кровли с учётом вальмы. `outward` — профиль (вдоль стены
+    от правого края, высота) выдавлен наружу от `reach` до выноса; иначе — профиль (вынос, высота)
+    выдавлен вдоль стены на длину. `reach` и начало профиля вдоль выноса меньше нуля, если кровля
+    продолжена за стену внутрь дома — до ската кровли дома (там она скрыта кровлей). `slab` —
+    кровля плита постоянной толщины по вертикали, её скаты — плоские грани (`planes`)."""
 
     left: Point
     u: Point
@@ -70,6 +80,7 @@ class Awning:
     outward: bool = False
     reach: float = 0.0
     slab: bool = True
+    decks: list[Deck] = field(default_factory=list)
 
     @property
     def footprint(self) -> list[Point]:
@@ -138,9 +149,39 @@ def _awning(sheet: FacadeSheet, house: roof.HouseRoof | None, p: PorchRoof, cfg:
     frame = Frame((wall[0] + u[0] * p.x_m[0], wall[1] + u[1] * p.x_m[0]), u, n)
     flush = (p.x_m[0] <= EPS, p.x_m[1] >= length - EPS)  # отрезок доходит до края стены
     cover = _cover(sheet, _line(sheet, house, p), frame, flush)
-    if p.kind is PorchKind.MAIN:
-        return _continued(frame, p, cover, cfg)
-    return _own(frame, p, cover, cfg)
+    made = _continued if p.kind is PorchKind.MAIN else _own
+    found = made(frame, p, cover, cfg)
+    return replace(found, decks=_decks(sheet, p, frame, cfg))
+
+
+def _decks(sheet: FacadeSheet, p: PorchRoof, frame: Frame, cfg: Sheet) -> list[Deck]:
+    """Настил террасы под навесом (`Настил под навесом`): площадка от стены до наружного края
+    навеса между краями отрезка, верх — на уровне чистого пола. Пол выше земли не больше
+    `deck_min_m` или у отрезка стены нет двери (карпорт на земле) — настила нет. Там, где у стены
+    стоит крыльцо двери (`porch`), его площадка уже есть: настил обходит её, двойной плиты нет."""
+    top, look = sheet.spec.plinth_m, cfg.porch_roof
+    elements = sheet.facades[p.side].elements
+    doors = [e for e in elements if e.cls is ElementClass.DOOR
+             and min(e.x_m + e.w_m, p.x_m[1]) - max(e.x_m, p.x_m[0]) > EPS]
+    if top <= look.deck_min_m or not doors:
+        return []
+    taken = [(e.x_m, e.x_m + e.w_m) for e in elements if e.cls is ElementClass.PORCH]
+    rings = ([frame.at(a - p.x_m[0], 0.0), frame.at(b - p.x_m[0], 0.0),
+              frame.at(b - p.x_m[0], p.depth_m), frame.at(a - p.x_m[0], p.depth_m)]
+             for a, b in _free(p.x_m, taken))
+    return [Deck(ring, max(top - look.deck_m, 0.0), top) for ring in rings]
+
+
+def _free(span: tuple[float, float], taken: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """Отрезок span без занятых отрезков; крохи короче EPS отбрасываются."""
+    free, start = [], span[0]
+    for a, b in sorted(taken):
+        if a - start > EPS:
+            free.append((start, min(a, span[1])))
+        start = max(start, b)
+    if span[1] - start > EPS:
+        free.append((start, span[1]))
+    return [(a, b) for a, b in free if b - a > EPS]
 
 
 def _inset(p: PorchRoof, cfg: Sheet) -> float:
@@ -333,8 +374,9 @@ def view(awnings: list[Awning], corners: list[Point], k: int) -> list[tuple[Part
 
 def _front(a: Awning, at: roof.PlanToView) -> list[tuple[Part, Polygon]]:
     """Спереди: столбы от земли и кровля — сечение (фронтон) или полоса между низом и верхом."""
-    out = [(Part.POST, _rect(x - a.post_m / 2, 0.0, x + a.post_m / 2, p.top))
-           for p in a.posts for x in (at(p.at)[0],)]
+    out = _decks_view(a, at)
+    out += [(Part.POST, _rect(x - a.post_m / 2, 0.0, x + a.post_m / 2, p.top))
+            for p in a.posts for x in (at(p.at)[0],)]
     if not a.profile:
         return out
     if a.outward:
@@ -351,7 +393,7 @@ def _side(a: Awning, at: roof.PlanToView, sign: float) -> list[tuple[Part, Polyg
     кромки стены навеса — одна у всех точек, вынос откладывается по знаку нормали вдоль x вида.
     Кровля за стеной внутрь дома не рисуется — её скрывает кровля дома."""
     x = at(a.left)[0]
-    out: list[tuple[Part, Polygon]] = []
+    out = _decks_view(a, at)
     if a.posts:
         c = at(a.posts[0].at)[0]
         top = max(p.top for p in a.posts)
@@ -366,6 +408,16 @@ def _side(a: Awning, at: roof.PlanToView, sign: float) -> list[tuple[Part, Polyg
     shape = shapely.Polygon([(x + d * sign, z) for d, z in a.profile]).intersection(
         shapely.box(ends[0], -roof.FAR, ends[1], roof.FAR))
     return out + [(Part.ROOF, q) for q in roof.polygons(shape)]
+
+
+def _decks_view(a: Awning, at: roof.PlanToView) -> list[tuple[Part, Polygon]]:
+    """Настил на виде: полоса от низа до верха настила между крайними x его углов — спереди
+    его ширина, сбоку его глубина."""
+    out = []
+    for d in a.decks:
+        xs = [at(p)[0] for p in d.ring]
+        out.append((Part.DECK, _rect(min(xs), d.z0, max(xs), d.z1)))
+    return out
 
 
 def _rect(x0: float, y0: float, x1: float, y1: float) -> Polygon:

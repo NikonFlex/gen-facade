@@ -18,6 +18,7 @@ from genfacade.config import Config, House3d
 from genfacade.derive import DERIVED
 from genfacade.render.svg import (
     Pen,
+    deck_fill,
     element_fill,
     element_material,
     facade_svg,
@@ -68,7 +69,7 @@ def house_3d(sheet: FacadeSheet, cfg: Config) -> dict:
     swatches = {m: s for m in used - {None} if (s := swatch(m, pen)) is not None}
     return {"corners": corners, "eaves_m": sheet.spec.eaves_m,
             "trim": cfg.sheet.trim.model_dump(), "walls": walls, "roof": roof_part,
-            "items": _items(sheet, cfg) | _awnings(sheet, cfg, roof_part), "swatches": swatches}
+            "items": _items(sheet, cfg) | _awnings(sheet, pen, roof_part), "swatches": swatches}
 
 
 def _items(sheet: FacadeSheet, cfg: Config) -> dict:
@@ -85,19 +86,22 @@ def _items(sheet: FacadeSheet, cfg: Config) -> dict:
                    "diameter": p.diameter, "color": look.gutter_fill} for p in found.pipes]}
 
 
-def _awnings(sheet: FacadeSheet, cfg: Config, roof_part: dict) -> dict:
+def _awnings(sheet: FacadeSheet, pen: Pen, roof_part: dict) -> dict:
     """Навесы на столбах в объёме (gf#472): кровля — призма по профилю (расстояние от стены,
     высота), выдавленная вдоль стены от левого края `left` по `u`, `n` — наружная нормаль;
-    столбы — призмы по центру в плане до высоты `z1`. Кровля того же материала, что кровля дома;
+    столбы — призмы по центру в плане до высоты `z1`; настил — призма по четырём углам плана
+    от `z0` до `z1`, цветом цоколя. Кровля того же материала, что кровля дома;
     плита с постоянной толщиной — плоскими гранями `awning_faces` (как скаты дома: тот же рисунок
     кровли идёт по скату без шва), остальное (плоская кровля) — призмой."""
-    look = cfg.sheet.porch_roof
-    found = porch_roofs.find(sheet, cfg.sheet)
+    look = pen.cfg.sheet.porch_roof
+    found = porch_roofs.find(sheet, pen.cfg.sheet)
     return {"awnings": [{"origin": a.origin, "x_axis": a.x_axis, "sweep": a.sweep[0],
                          "length": a.sweep[1], "profile": a.profile,
                          "material": roof_part["material"], "color": roof_part.get("color")}
                         for a in found if a.profile and not a.slab],
             "awning_faces": [f for a in found for f in a.planes],
+            "decks": [{"footprint": d.ring, "z0": d.z0, "z1": d.z1, "color": deck_fill(pen)}
+                      for a in found for d in a.decks],
             "posts": [{"center": q.at, "size": a.post_m, "z1": q.top, "color": look.post_fill,
                        "u": a.u} for a in found for q in a.posts]}
 

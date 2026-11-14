@@ -22,7 +22,7 @@ from genfacade import dormers, parts, porch_roofs, roof, roof_items, skylights, 
 from genfacade.config import Config, PorchRoofLook
 from genfacade.render.house3d import house_3d
 from genfacade.render.ifc_step import STAR, Enum, Ref, Step, Typed, guid
-from genfacade.render.svg import Pen, element_fill, pen_for
+from genfacade.render.svg import Pen, deck_fill, element_fill, pen_for
 from genfacade.schema import (
     EPS,
     OPENINGS,
@@ -692,6 +692,8 @@ class IfcHouse:
                 self._porch_roof(n, a)
             for m, q in enumerate(a.posts, 1):
                 self._post(f"{n}/{m}", a, q, look)
+            for m, d in enumerate(a.decks, 1):
+                self._deck(f"{n}/{m}", d)
 
     def _porch_roof(self, n: int, a: porch_roofs.Awning) -> None:
         """Кровля навеса. Местные оси: x — вдоль профиля, z — против выдавливания (оно идёт
@@ -715,6 +717,16 @@ class IfcHouse:
         ref = w.product("IfcColumn", f"porchpost{key}", self.ifc.names.porch_post.format(n=key),
                         w.place(self.building_place, corner, UP, (*a.n, 0.0)), w.shape([item]),
                         None, Enum("COLUMN"))
+        self.contained[0].append(ref)
+
+    def _deck(self, key: str, deck: porch_roofs.Deck) -> None:
+        """Настил под навесом: IfcSlab FLOOR — многоугольник в плане, выдавленный вниз от верха на
+        толщину; цвет — как на листе (`deck_fill`)."""
+        w = self.w
+        item = w.solid(w.polygon(deck.ring), deck.z1 - deck.z0, deck_fill(self.pen))
+        ref = w.product("IfcSlab", f"porchdeck{key}", self.ifc.names.porch_deck.format(n=key),
+                        w.place(self.building_place, (0.0, 0.0, deck.z1)), w.shape([item]), None,
+                        Enum("FLOOR"))
         self.contained[0].append(ref)
 
     def _segment(self, key: str, name: str, bar: Bar) -> None:

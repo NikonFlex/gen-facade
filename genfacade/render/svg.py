@@ -338,12 +338,20 @@ def _top_layers(g: ElementTree.Element, top: Top, pen: Pen) -> None:
 
 
 def _awnings(g: ElementTree.Element, top: Top, pen: Pen) -> None:
-    """Навесы на столбах (gf#472): кровля — цветом кровли дома, столбы — из `[porch_roof]` листа."""
+    """Навесы на столбах (gf#472): кровля — цветом кровли дома, столбы — из `[porch_roof]` листа,
+    настил — цветом цоколя (`deck_fill`)."""
     for part, shape in top.awnings:
-        post = part is porch_roofs.Part.POST
-        fill = pen.cfg.sheet.porch_roof.post_fill if post else _roof_fill(pen)
+        fills = {porch_roofs.Part.POST: pen.cfg.sheet.porch_roof.post_fill,
+                 porch_roofs.Part.DECK: deck_fill(pen)}
+        fill = fills.get(part) or _roof_fill(pen)
         ElementTree.SubElement(g, "polygon", {"class": f"porch-{part}", "points": points(shape),
                                               "fill": fill})
+
+
+def deck_fill(pen: Pen) -> str:
+    """Цвет настила под навесом: цоколя дома, как у крыльца двери; в палитре его нет — из
+    `[porch_roof]`. Им же красят настил в 3D и IFC."""
+    return pen.colors.get(PaletteRole.PLINTH, pen.cfg.sheet.porch_roof.deck_fill)
 
 
 def _items(g: ElementTree.Element, top: Top, pen: Pen, kind: roof_items.ItemKind) -> None:

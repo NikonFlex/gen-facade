@@ -4,6 +4,7 @@
 import math
 
 import pytest
+import shapely
 from test_manual import FLOOR, PT, finished, ft, pt_y
 
 from genfacade import config, porch_roofs
@@ -12,8 +13,9 @@ from genfacade.datasets.manual import BadMarkup, Markup
 from genfacade.porch_roofs import Part
 from genfacade.render.house3d import house_3d
 from genfacade.render.ifc import house_ifc
-from genfacade.render.svg import sheet_svg, tops
+from genfacade.render.svg import deck_fill, pen_for, sheet_svg, tops
 from genfacade.schema import (
+    Element,
     ElementClass,
     FacadeSheet,
     HouseSpec,
@@ -333,3 +335,58 @@ def test_pillars_of_awning_not_on_wall():
     стене не остаются; одного при трёх столбах отметки мало — он остаётся плашкой."""
     assert wall_pillars(pillars_markup(3, 7)) == 0
     assert wall_pillars(pillars_markup(3)) == 1
+
+
+def terrace(x=(2.0, 8.0), porch=False, **mark) -> FacadeSheet:
+    """Дом разметки с навесом на стороне входа (дверь на 5–7 футах); `porch` — крыльцо у двери."""
+    sheet = manual.house(markup_with(x=[100.0 + x[0] * PT, 100.0 + x[1] * PT], **mark),
+                         CFG.data.manual)[0].sheet
+    if not porch:
+        return sheet
+    step = Element(id="p1", cls=ElementClass.PORCH, x_m=ft(4), y_m=0.0, w_m=ft(4),
+                   h_m=sheet.spec.plinth_m, floor=1)
+    front = sheet.facades[0]
+    facades = [front.model_copy(update={"elements": [*front.elements, step]}), *sheet.facades[1:]]
+    return sheet.model_copy(update={"facades": facades})
+
+
+def test_deck_under_awning():
+    """Сценарий «Настил под навесом»: пол на 0,3048 м, навес 2–8 футов, вынос 2,4 м, дверь на
+    5–7 футах — плита 1,829 × 2,4 м от 0,1548 до 0,3048 м, цветом цоколя; на виде стены — полоса
+    ширины отрезка, на боковом — глубины выноса; в 3D `decks`, в IFC плита."""
+    sheet = terrace()
+    (a,) = porch_roofs.find(sheet, CFG.sheet)
+    (deck,) = a.decks
+    top = sheet.spec.plinth_m
+    assert (deck.z0, deck.z1) == pytest.approx((top - CFG.sheet.porch_roof.deck_m, top))
+    assert shapely.Polygon(deck.ring).area == pytest.approx(ft(6) * 2.4)
+    widths = sorted(round(max(p[0] for p in s) - min(p[0] for p in s), 3)
+                    for k in range(len(LENGTHS)) for s in parts_of(sheet, k, Part.DECK))
+    assert widths == [round(ft(6), 3), 2.4, 2.4]  # лицо и два боковых вида
+    items = house_3d(sheet, CFG)["items"]
+    assert [d["color"] for d in items["decks"]] == [deck_fill(pen_for(sheet, CFG))]
+    assert house_ifc(sheet, CFG).count("IFCSLAB(") == house_ifc(SHEET, CFG).count("IFCSLAB(") + 1
+    assert 'class="porch-deck"' in sheet_svg(sheet, CFG)
+
+
+def test_no_deck_without_door_or_floor():
+    """Сценарий «Настил под навесом»: у отрезка без двери (карпорт на земле) и при поле у земли
+    настила нет."""
+    assert porch_roofs.find(terrace(x=(8.5, 11.0)), CFG.sheet)[0].decks == []
+    low = terrace()
+    low = low.model_copy(update={"spec": low.spec.model_copy(update={"plinth_m": 0.1})})
+    assert porch_roofs.find(low, CFG.sheet)[0].decks == []
+    assert house_3d(low, CFG)["items"]["decks"] == []
+
+
+def test_deck_continues_porch_without_double_slab():
+    """Сценарий «Настил продолжает крыльцо»: крыльцо двери на 4–8 футах — настил на 2–4 футах
+    (левее него), справа от крыльца ничего: плит над крыльцом нет."""
+    (a,) = porch_roofs.find(terrace(porch=True), CFG.sheet)
+    (deck,) = a.decks
+    assert shapely.Polygon(deck.ring).area == pytest.approx(ft(2) * 2.4)
+
+
+def test_deck_threshold_is_the_porch_threshold():
+    """Допуск настила — тот же, что у крыльца двери (`checks.porch_min_m`): одно значение."""
+    assert CFG.sheet.porch_roof.deck_min_m == CFG.checks.porch_min_m

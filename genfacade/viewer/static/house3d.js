@@ -140,12 +140,7 @@ export class HouseStage {
       this.scene.add(mesh);
       return mesh;
     };
-    for (const c of items.chimneys) {
-      const shape = new THREE.Shape(c.footprint.map(([x, y]) => new THREE.Vector2(x, y)));
-      const geo = new THREE.ExtrudeGeometry(shape, { depth: c.z1 - c.z0, bevelEnabled: false });
-      geo.rotateX(-Math.PI / 2);
-      add(geo, c.color, new THREE.Vector3(0, c.z0, 0));
-    }
+    for (const c of items.chimneys) this._prism(THREE, c);
     for (const g of items.gutters) {
       const [a, b] = [at(g.a, g.z - g.size / 2), at(g.b, g.z - g.size / 2)];
       const geo = new THREE.BoxGeometry(a.distanceTo(b), g.size, g.size);
@@ -161,6 +156,17 @@ export class HouseStage {
         from.clone().add(to).multiplyScalar(0.5));
       elbow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
     }
+  }
+
+  // Призма по четырём углам в плане от z0 до z1 (труба, настил под навесом).
+  _prism(THREE, c) {
+    const shape = new THREE.Shape(c.footprint.map(([x, y]) => new THREE.Vector2(x, y)));
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: c.z1 - c.z0, bevelEnabled: false });
+    geo.rotateX(-Math.PI / 2);
+    const mesh = new THREE.Mesh(geo, this._material(THREE, null, c.color));
+    mesh.position.set(0, c.z0, 0);
+    mesh.add(this._edges(THREE, geo));
+    this.scene.add(mesh);
   }
 
   // Навесы на столбах (gf#472): кровля — профиль, выдавленный от `origin` по `sweep` на `length`;
@@ -184,6 +190,7 @@ export class HouseStage {
     if (faces.length) {  // те же грани и рисунок, что у скатов дома (`_slopes`): без шва на стыке
       this._slopes(THREE, { ...roof, faces, above: [], windows: [], skylight_frames: [], skylights: [] });
     }
+    for (const d of items.decks || []) this._prism(THREE, d);  // настил под навесом
     for (const p of items.posts || []) {
       const geo = new THREE.BoxGeometry(p.size, p.z1, p.size);
       const mesh = new THREE.Mesh(geo, this._material(THREE, null, p.color));
