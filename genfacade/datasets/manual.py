@@ -424,7 +424,7 @@ def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
     sheet, bare = _no_eaves(sheet)
     sheet = _roof_items(sheet, m, cfg)
     sheet = _with_skylights(m, _with_dormers(m, sheet))
-    sheet = _with_porch_roofs(m, sheet)
+    sheet = _with_porch_roofs(m, sheet, cfg)
     return (Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet),
             dropped + bare)
 
@@ -506,24 +506,42 @@ def _dormer(m: Markup, mark: DormerMark, sheet: FacadeSheet) -> Dormer:
     return found
 
 
-def _with_porch_roofs(m: Markup, sheet: FacadeSheet) -> FacadeSheet:
+def _with_porch_roofs(m: Markup, sheet: FacadeSheet, cfg: Manual) -> FacadeSheet:
     """Лист с навесами разметки в параметрах дома (gf#472): края с вида — метры вдоль стены, низ и
     верх кровли — метры над землёй; стена навеса — сторона отметки."""
-    found = [_porch_roof(m, mark, sheet) for mark in m.porch_roofs]
+    found = [_porch_roof(m, mark, sheet, cfg) for mark in m.porch_roofs]
     return sheet.model_copy(update={"spec": sheet.spec.model_copy(update={"porch_roofs": found})})
 
 
-def _porch_roof(m: Markup, mark: PorchRoofMark, sheet: FacadeSheet) -> PorchRoof:
+def _porch_roof(m: Markup, mark: PorchRoofMark, sheet: FacadeSheet, cfg: Manual) -> PorchRoof:
     """Навес по отметке. Края по x не обрезаются: терраса бывает за углом, на продолжении стены
     (у 5 домов из 60 навес целиком за краем стены вида). Ошибка разметки — низ кровли не над землёй
-    или верх не выше низа."""
+    или верх не выше низа. Столбы — по `pillar` на виде той же стены, если они есть."""
     _known_side(m, mark.side, "навес")
     e = m.sides[mark.side]
     x0, bottom, x1, top = _metres((mark.x[0], mark.y[0], mark.x[1], mark.y[1]), e, m, sheet.spec)
     if bottom <= 0 or top <= bottom:
         raise BadMarkup(f"{m.id}: {e.view}: навес — низ кровли {bottom:.2f} м, верх {top:.2f} м")
     return PorchRoof(side=mark.side, x_m=(x0, x1), depth_m=mark.depth_m, bottom_m=bottom,
-                     top_m=top, kind=mark.kind, posts=mark.posts)
+                     top_m=top, kind=mark.kind, posts=mark.posts,
+                     post_x_m=_pillars(m, e, (x0, x1, mark.posts),
+                                       (sheet.spec, cfg.pillar_slack_m)))
+
+
+def _pillars(m: Markup, e: Elevation, span: tuple[float, float, int],
+             near: tuple[HouseSpec, float]) -> list[float]:
+    """Центры столбов вдоль стены (метры от левого края): `pillar` вида, чей центр в отрезке навеса
+    (`span` — края и число столбов отметки) с запасом `slack`; по возрастанию. Меньше двух (или
+    меньше столбов отметки, если их меньше двух) — вид показывает не все столбы: пусто, столбы
+    равномерно."""
+    spec, slack = near
+    centres = []
+    for mark in e.elements:
+        if mark.cls is ElementClass.PILLAR:
+            x0, _, x1, _ = _metres(mark.box, e, m, spec)
+            centres.append((x0 + x1) / 2)
+    found = sorted(c for c in centres if span[0] - slack <= c <= span[1] + slack)
+    return found if len(found) >= min(span[2], 2) else []
 
 
 def _parted(plan: Plan, sheet: FacadeSheet, m: Markup, c: _Contour) -> tuple[Plan, FacadeSheet]:

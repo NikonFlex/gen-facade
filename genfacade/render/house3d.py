@@ -88,13 +88,16 @@ def _items(sheet: FacadeSheet, cfg: Config) -> dict:
 def _awnings(sheet: FacadeSheet, cfg: Config, roof_part: dict) -> dict:
     """Навесы на столбах в объёме (gf#472): кровля — призма по профилю (расстояние от стены,
     высота), выдавленная вдоль стены от левого края `left` по `u`, `n` — наружная нормаль;
-    столбы — призмы по центру в плане до высоты `z1`. Кровля того же материала, что кровля дома."""
+    столбы — призмы по центру в плане до высоты `z1`. Кровля того же материала, что кровля дома;
+    плита с постоянной толщиной — плоскими гранями `awning_faces` (как скаты дома: тот же рисунок
+    кровли идёт по скату без шва), остальное (плоская кровля) — призмой."""
     look = cfg.sheet.porch_roof
     found = porch_roofs.find(sheet, cfg.sheet)
     return {"awnings": [{"origin": a.origin, "x_axis": a.x_axis, "sweep": a.sweep[0],
                          "length": a.sweep[1], "profile": a.profile,
                          "material": roof_part["material"], "color": roof_part.get("color")}
-                        for a in found if a.profile],
+                        for a in found if a.profile and not a.slab],
+            "awning_faces": [f for a in found for f in a.planes],
             "posts": [{"center": q.at, "size": a.post_m, "z1": q.top, "color": look.post_fill,
                        "u": a.u} for a in found for q in a.posts]}
 

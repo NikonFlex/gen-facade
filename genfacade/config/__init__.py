@@ -223,6 +223,8 @@ class PorchRoofLook(Section):
 
     post_m: float = Field(gt=0)  # сторона квадратного сечения столба
     post_fill: str
+    overhang_m: float = Field(ge=0)  # свес кровли за столбы: по выносу и по краям отрезка
+    pitch_tol_deg: float = Field(ge=0)  # разметка расходится с домом не больше — уклон как у дома
 
 
 class SkylightLook(Section):
@@ -750,6 +752,7 @@ class Manual(Section):
     wall_m: float
     inside_share: float
     link_tol_m: float
+    pillar_slack_m: float  # `pillar` дальше этого за краем отрезка навеса — не его (gf#472)
     gable_tol_m: float  # окно во фронтоне за стеной с фронтоном модуля не дальше этого (gf#321)
     trim: HouseTrim
     compare: MarkupCompare

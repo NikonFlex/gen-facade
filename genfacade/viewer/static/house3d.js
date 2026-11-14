@@ -35,7 +35,7 @@ export class HouseStage {
     await this._tiles(threeModule, data.swatches);
     this._roof(threeModule, data);
     this._items(threeModule, data.items);
-    this._awnings(threeModule, data.items);
+    this._awnings(threeModule, data.items, data.roof);
     this._ground(threeModule);
     this.pxPerM = this._wallScale(data.walls);
     await Promise.all(data.walls.map((w) => this._wall(threeModule, w)));
@@ -165,8 +165,9 @@ export class HouseStage {
 
   // Навесы на столбах (gf#472): кровля — профиль, выдавленный от `origin` по `sweep` на `length`;
   // в сцене (x, высота, −y) базис профиля (`x_axis`, вверх, −`sweep`) правый, поэтому выдавливание
-  // идёт от конца назад. Столбы — бруски по центру в плане.
-  _awnings(THREE, items) {
+  // идёт от конца назад. Плита постоянной толщины — гранями (`awning_faces`) тем же путём, что скаты дома.
+  // Столбы — бруски по центру в плане.
+  _awnings(THREE, items, roof) {
     const at = ([x, y], h) => new THREE.Vector3(x, h, -y);
     for (const a of items.awnings || []) {
       const shape = new THREE.Shape(a.profile.map(([d, z]) => new THREE.Vector2(d, z)));
@@ -178,6 +179,10 @@ export class HouseStage {
       mesh.position.copy(at([a.origin[0] + sx * a.length, a.origin[1] + sy * a.length], 0));
       mesh.add(this._edges(THREE, geo));
       this.scene.add(mesh);
+    }
+    const faces = items.awning_faces || [];
+    if (faces.length) {  // те же грани и рисунок, что у скатов дома (`_slopes`): без шва на стыке
+      this._slopes(THREE, { ...roof, faces, above: [], windows: [], skylight_frames: [], skylights: [] });
     }
     for (const p of items.posts || []) {
       const geo = new THREE.BoxGeometry(p.size, p.z1, p.size);

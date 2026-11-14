@@ -15,8 +15,10 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
-from itertools import combinations
+from itertools import combinations, pairwise
 from typing import NamedTuple
+
+import shapely
 
 from genfacade import roof
 from genfacade.config import Sheet
@@ -52,7 +54,9 @@ class Awning:
     нормаль, длина и вынос, профиль кровли (пусто — кровля дома уже покрывает весь вынос), столбы,
     сечение столба, вид кровли с учётом вальмы. `outward` — профиль (вдоль стены от правого края,
     высота) выдавлен наружу от `reach` до выноса; иначе — профиль (вынос, высота) выдавлен вдоль
-    стены на длину."""
+    стены на длину. `reach` и начало профиля вдоль выноса меньше нуля, если кровля продолжена за
+    стену внутрь дома — до ската кровли дома (там она скрыта кровлей). `slab` — кровля плита
+    постоянной толщины по вертикали, её скаты — плоские грани (`planes`)."""
 
     left: Point
     u: Point
@@ -65,6 +69,7 @@ class Awning:
     kind: RoofKind
     outward: bool = False
     reach: float = 0.0
+    slab: bool = True
 
     @property
     def footprint(self) -> list[Point]:
@@ -92,6 +97,19 @@ class Awning:
         """Направление выдавливания в плане и его длина."""
         return (self.n, self.depth - self.reach) if self.outward else (self.u, self.length)
 
+    @property
+    def planes(self) -> list[list[roof.Point3]]:
+        """Низ плиты плоскими гранями (x, y плана, высота) — как скаты кровли дома: так 3D кладёт
+        на них тот же рисунок кровли, и навес продолжает скат без шва. Не плита — пусто."""
+        if not (self.slab and self.profile):
+            return []
+        (dx, dy), run = self.sweep
+        (ox, oy), (ax, ay) = self.origin, self.x_axis
+        bottom = self.profile[:len(self.profile) // 2]
+        return [[(ox + ax * s + dx * run * k, oy + ay * s + dy * run * k, z)
+                 for (s, z), k in ((a, 0), (b, 0), (b, 1), (a, 1))]
+                for a, b in pairwise(bottom)]
+
 
 class Frame(NamedTuple):
     """Отрезок стены: левый край, вдоль стены, наружу."""
@@ -111,27 +129,37 @@ def find(sheet: FacadeSheet, cfg: Sheet) -> list[Awning]:
     if not sheet.spec.porch_roofs:
         return []
     corners = plan_corners([f.side for f in sheet.facades])
-    house = roof.roofs(sheet) if any(
-        p.kind is PorchKind.MAIN for p in sheet.spec.porch_roofs) else None
+    house = roof.roofs(sheet)
     return [_awning(sheet, house, corners, p, cfg) for p in sheet.spec.porch_roofs]
 
 
 def _awning(sheet: FacadeSheet, house: roof.HouseRoof | None, corners: list[Point], p: PorchRoof,
             cfg: Sheet) -> Awning:
-    wall, u, _ = roof.axis(corners, p.side)
+    wall, u, length = roof.axis(corners, p.side)
     n = (u[1], -u[0])
     frame = Frame((wall[0] + u[0] * p.x_m[0], wall[1] + u[1] * p.x_m[0]), u, n)
+    flush = (p.x_m[0] <= EPS, p.x_m[1] >= length - EPS)  # отрезок доходит до края стены
+    cover = _cover(sheet, _line(sheet, house, p), frame, flush)
     if p.kind is PorchKind.MAIN:
-        return _continued(sheet, house, frame, p, cfg)
-    return _own(frame, p, cfg)
+        return _continued(frame, p, cover, cfg)
+    return _own(frame, p, cover, cfg)
 
 
-def _posts_at(p: PorchRoof, size: float) -> list[float]:
-    """Положения столбов вдоль отрезка от левого края: равномерно, крайние вровень с краями."""
-    half, length = size / 2, p.x_m[1] - p.x_m[0]
+def _inset(p: PorchRoof, cfg: Sheet) -> float:
+    """Свес кровли за столбы: из настроек, но не больше трети выноса."""
+    return min(cfg.porch_roof.overhang_m, p.depth_m / 3)
+
+
+def _posts_at(p: PorchRoof, size: float, inset: float) -> list[float]:
+    """Положения столбов вдоль отрезка от левого края: по разметке (`post_x_m`), иначе равномерно,
+    крайние — на свес от краёв кровли."""
+    length = p.x_m[1] - p.x_m[0]
+    if p.post_x_m and p.posts:
+        return [c - p.x_m[0] for c in p.post_x_m]
+    lo = min(inset + size / 2, length / 2)
     if p.posts == 1:
         return [length / 2]
-    return [half + i * (length - size) / (p.posts - 1) for i in range(p.posts)]
+    return [lo + i * (length - 2 * lo) / (p.posts - 1) for i in range(p.posts)]
 
 
 def _slab(bottom: list[Point], thick: float) -> list[Point]:
@@ -139,31 +167,62 @@ def _slab(bottom: list[Point], thick: float) -> list[Point]:
     return bottom + [(s, z + thick) for s, z in reversed(bottom)]
 
 
-def _own(frame: Frame, p: PorchRoof, cfg: Sheet) -> Awning:
-    """Кровля своего вида: низ и верх — с вида (`bottom_m`, `top_m`), но не тоньше кровли дома."""
-    thick, d, length = cfg.roof.thickness_m, p.depth_m, p.x_m[1] - p.x_m[0]
-    lo, hi = p.bottom_m, max(p.top_m, p.bottom_m + thick)
-    kind = RoofKind.GABLE if p.kind in (PorchKind.HIP, PorchKind.GABLE) else RoofKind(p.kind)
-    gable = kind is RoofKind.GABLE
-    if gable:
-        bottom = [(0.0, lo), (length / 2, hi - thick), (length, lo)]
-    elif kind is RoofKind.SHED:
-        bottom = [(0.0, hi - thick), (d, lo)]
-    else:
-        bottom = [(0.0, lo), (d, lo)]
-    flat = kind is RoofKind.FLAT
-    profile = [(0.0, lo), (d, lo), (d, hi), (0.0, hi)] if flat else _slab(bottom, thick)
+def _tilt(p: PorchRoof, kind: RoofKind, cover: "Cover", cfg: Sheet) -> float:
+    """Тангенс уклона ската навеса: как у кровли дома, если разметка (высоты верха и низа)
+    расходится с ним не больше `pitch_tol_deg`; больше — по разметке («козырёк обычно параллелен
+    крыше, либо явно видно, что нет»). Плоская — без уклона."""
+    if kind is RoofKind.FLAT:
+        return 0.0
+    run = p.depth_m if kind is RoofKind.SHED else (p.x_m[1] - p.x_m[0]) / 2
+    marked = max(p.top_m - cfg.roof.thickness_m - p.bottom_m, 0.0) / run
+    gap = abs(math.degrees(math.atan(marked)) - math.degrees(math.atan(cover.rise)))
+    return cover.rise if gap <= cfg.porch_roof.pitch_tol_deg else marked
 
-    def under(x: float) -> float:
-        return lo + (hi - thick - lo) * (1 - abs(2 * x / length - 1)) if gable else lo
+
+def _inward(cover: "Cover", z_wall: float, rising: float) -> float:
+    """Насколько (меньше нуля) продлить кровлю навеса за стену внутрь дома: верх у стены `z_wall`
+    выше карниза — кровля идёт вверх к стене со скоростью `rising` и упирается в скат кровли дома
+    (он у карнизной стены поднимается внутрь со скоростью `rise`). Ниже карниза, щипцовая стена,
+    плоская крыша — кровля кончается на стене."""
+    if not cover.sloped or cover.rise <= EPS or z_wall <= cover.eaves:
+        return 0.0
+    return -(z_wall - cover.eaves) / max(cover.rise - rising, cover.rise / 2)
+
+
+def _own(frame: Frame, p: PorchRoof, cover: "Cover", cfg: Sheet) -> Awning:
+    """Кровля своего вида: уклон — как у дома или по разметке (`_tilt`), край кровли на высоте низа
+    с вида (`bottom_m`); верх у стены продлён до ската кровли дома (`_inward`), дыры между навесом
+    и кровлей нет."""
+    thick, d, length = cfg.roof.thickness_m, p.depth_m, p.x_m[1] - p.x_m[0]
+    lo = p.bottom_m
+    kind = RoofKind.GABLE if p.kind in (PorchKind.HIP, PorchKind.GABLE) else RoofKind(p.kind)
+    tilt = _tilt(p, kind, cover, cfg)
+    reach, slab = 0.0, kind is not RoofKind.FLAT
+    if kind is RoofKind.GABLE:
+        ridge = lo + tilt * length / 2
+        reach = _inward(cover, ridge, 0.0)
+        profile = _slab([(0.0, lo), (length / 2, ridge), (length, lo)], thick)
+    elif kind is RoofKind.SHED:
+        top = _inward(cover, lo + tilt * d, tilt)
+        profile = _slab([(top, lo + tilt * (d - top)), (d, lo)], thick)
+    else:
+        top, hi = _inward(cover, lo, 0.0), lo + max(p.top_m - lo, thick)
+        profile = [(top, lo), (d, lo), (d, hi), (top, hi)]
+
+    def under(x: float, at: float) -> float:
+        return lo + tilt * (min(x, length - x) if kind is RoofKind.GABLE else
+                            d - at if kind is RoofKind.SHED else 0.0)
     return Awning(frame.left, frame.u, frame.n, length, d, profile,
-                  _posts(frame, p, cfg, under), cfg.porch_roof.post_m, kind, gable)
+                  _posts(frame, p, cfg, under), cfg.porch_roof.post_m, kind,
+                  kind is RoofKind.GABLE, reach, slab)
 
 
 def _posts(frame: Frame, p: PorchRoof, cfg: Sheet, under) -> list[Post]:
-    """Столбы на наружном крае; высота каждого — `under(x)`, низ кровли над ним."""
-    size = cfg.porch_roof.post_m
-    return [Post(frame.at(x, p.depth_m - size / 2), under(x)) for x in _posts_at(p, size)]
+    """Столбы на свес внутрь от наружного края кровли; высота каждого — `under(x, d)`: низ кровли
+    над ним."""
+    size, inset = cfg.porch_roof.post_m, _inset(p, cfg)
+    out = max(p.depth_m - inset - size / 2, size / 2)
+    return [Post(frame.at(x, out), under(x, out)) for x in _posts_at(p, size, inset)]
 
 
 # ——— продолжение крыши дома ———
@@ -180,51 +239,62 @@ def _line(sheet: FacadeSheet, house: roof.HouseRoof | None, p: PorchRoof) -> roo
 
 
 class Cover(NamedTuple):
-    """Кровля у стены навеса: высота низа над точкой плана, скат идёт от этой стены, свес дома у
-    этой стены, вид кровли дома."""
+    """Кровля у стены навеса: скаты части дома (нет — плоская), высота низа над точкой плана, скат
+    идёт от этой стены, свес дома у этой стены и вдоль неё, вид кровли дома, карниз и рост высоты
+    на метр глубины, на сколько кровля дома выступает за край стены вида на концах отрезка (слева,
+    справа; нуль — конец отрезка не у края стены)."""
 
+    line: roof.Roofline | None
     height: Callable[[Point], float]
     sloped: bool
     reach: float
     kind: RoofKind
+    eaves: float
+    rise: float
+    pad: tuple[float, float]
 
 
-def _cover(sheet: FacadeSheet, line: roof.Roofline | None, frame: Frame) -> Cover:
+def _cover(sheet: FacadeSheet, line: roof.Roofline | None, frame: Frame,
+           flush: tuple[bool, bool]) -> Cover:
     """Кровля у стены; плоской крыши нет — плита на уровне карниза со свесом из крыши дома."""
+    spec = sheet.spec
     if line is None:
-        return Cover(lambda pt: sheet.spec.eaves_m, True, sheet.spec.roof.overhang_m,
-                     RoofKind.FLAT)
+        over = spec.roof.overhang_m
+        return Cover(None, lambda pt: spec.eaves_m, True, over, RoofKind.FLAT, spec.eaves_m, 0.0,
+                     (over if flush[0] else 0.0, over if flush[1] else 0.0))
     sloped = any(math.dist(s.inward, (-frame.n[0], -frame.n[1])) <= EPS for s in line.slopes)
-    return Cover(line.height, sloped, line.overhang if sloped else line.gable_overhang,
-                 sheet.spec.roof.kind)
+    side = line.gable_overhang if sloped else line.overhang
+    return Cover(line, line.height, sloped, line.overhang if sloped else line.gable_overhang,
+                 spec.roof.kind, line.eaves, line.rise,
+                 (side if flush[0] else 0.0, side if flush[1] else 0.0))
 
 
-def _continued(sheet: FacadeSheet, house: roof.HouseRoof | None, frame: Frame, p: PorchRoof,
-               cfg: Sheet) -> Awning:
+def _continued(frame: Frame, p: PorchRoof, cover: Cover, cfg: Sheet) -> Awning:
     """Навес — продолжение крыши. Скат от этой стены — карнизная стена: скат продолжается вниз
-    за свес. Иначе щипцовая: сечение щипца выдавлено наружу."""
-    line, size = _line(sheet, house, p), cfg.porch_roof.post_m
-    cover = _cover(sheet, line, frame)
-    reach, out = min(cover.reach, p.depth_m), p.depth_m - size / 2
+    за свес. Иначе щипцовая: сечение щипца выдавлено наружу. Кровля шире отрезка на свес дома там,
+    где отрезок доходит до края стены, — как кровля дома."""
+    size, inset = cfg.porch_roof.post_m, _inset(p, cfg)
+    reach, out = min(cover.reach, p.depth_m), p.depth_m - inset - size / 2
     posts = [Post(frame.at(x, out), cover.height(frame.at(x, out if cover.sloped else 0.0)))
-             for x in _posts_at(p, size)]
-    return Awning(frame.left, frame.u, frame.n, p.x_m[1] - p.x_m[0], p.depth_m,
-                  _continued_profile(line, frame, p, (cover, reach), cfg.roof.thickness_m), posts,
-                  size, cover.kind, not cover.sloped, reach)
+             for x in _posts_at(p, size, inset)]
+    wide = Frame(frame.at(-cover.pad[0], 0.0), frame.u, frame.n)
+    length = p.x_m[1] - p.x_m[0] + sum(cover.pad)
+    profile = _continued_profile(cover, wide, (reach, p.depth_m, length), cfg.roof.thickness_m)
+    return Awning(wide.left, wide.u, wide.n, length, p.depth_m, profile, posts, size, cover.kind,
+                  not cover.sloped, reach)
 
 
-def _continued_profile(line: roof.Roofline | None, frame: Frame, p: PorchRoof,
-                       over: tuple[Cover, float], thick: float) -> list[Point]:
+def _continued_profile(cover: Cover, frame: Frame, size: tuple[float, float, float],
+                       thick: float) -> list[Point]:
     """Профиль продолжения: от свеса дома до выноса — скат вниз (профиль вынос–высота) или
-    сечение щипца (вдоль стены от правого края–высота); вынос не больше свеса — кровли нет."""
-    cover, reach = over
-    length = p.x_m[1] - p.x_m[0]
-    if p.depth_m - reach <= EPS:
+    сечение щипца (вдоль стены от правого края–высота); вынос не больше свеса — кровли нет.
+    `size` — свес дома у стены, вынос навеса, длина кровли вдоль стены."""
+    reach, depth, length = size
+    if depth - reach <= EPS:
         return []
     if cover.sloped:
-        return _slab([(d, cover.height(frame.at(length / 2, d))) for d in (reach, p.depth_m)],
-                     thick)
-    xs = sorted(_breaks(line, frame, length), reverse=True)
+        return _slab([(d, cover.height(frame.at(length / 2, d))) for d in (reach, depth)], thick)
+    xs = sorted(_breaks(cover.line, frame, length), reverse=True)
     return _slab([(length - x, cover.height(frame.at(x, 0.0))) for x in xs], thick)
 
 
@@ -277,20 +347,24 @@ def _front(a: Awning, at) -> list[tuple[Part, Polygon]]:
 
 def _side(a: Awning, at, sign: float) -> list[tuple[Part, Polygon]]:
     """Сбоку: кровля от стены до края и один столб (все стоят на одной линии вдоль взгляда); x
-    кромки стены навеса — одна у всех точек, вынос откладывается по знаку нормали вдоль x вида."""
+    кромки стены навеса — одна у всех точек, вынос откладывается по знаку нормали вдоль x вида.
+    Кровля за стеной внутрь дома не рисуется — её скрывает кровля дома."""
     x = at(a.left)[0]
     out: list[tuple[Part, Polygon]] = []
     if a.posts:
-        c = x + (a.depth - a.post_m / 2) * sign
+        c = at(a.posts[0].at)[0]
         top = max(p.top for p in a.posts)
         out.append((Part.POST, _rect(c - a.post_m / 2, 0.0, c + a.post_m / 2, top)))
     if not a.profile:
         return out
+    ends = sorted((x, x + a.depth * sign))
     if a.outward:
         zs = [z for _, z in a.profile]
-        xs = sorted((x + a.reach * sign, x + a.depth * sign))
-        return out + [(Part.ROOF, _rect(xs[0], min(zs), xs[1], max(zs)))]
-    return out + [(Part.ROOF, [(x + d * sign, z) for d, z in a.profile])]
+        edge = sorted((x + max(a.reach, 0.0) * sign, x + a.depth * sign))
+        return out + [(Part.ROOF, _rect(edge[0], min(zs), edge[1], max(zs)))]
+    shape = shapely.Polygon([(x + d * sign, z) for d, z in a.profile]).intersection(
+        shapely.box(ends[0], -roof.FAR, ends[1], roof.FAR))
+    return out + [(Part.ROOF, q) for q in roof.polygons(shape)]
 
 
 def _rect(x0: float, y0: float, x1: float, y1: float) -> Polygon:

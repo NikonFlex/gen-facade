@@ -648,7 +648,8 @@ class PorchRoof(Model):
     края), метры; depth_m — вынос от стены наружу; bottom_m и top_m — низ и верх кровли над
     землёй (`porch_roofs.py`: что из них где); kind — вид кровли (вальмовая строится двускатной;
     `main` — продолжение крыши дома);
-    posts — число столбов на наружном крае."""
+    posts — число столбов на наружном крае; post_x_m — их центры вдоль стены, если разметка их
+    показывает (тогда число — по ним)."""
 
     side: int = Field(ge=0)
     x_m: tuple[float, float]
@@ -657,6 +658,7 @@ class PorchRoof(Model):
     top_m: float
     kind: PorchKind
     posts: int = Field(ge=0)
+    post_x_m: list[float] = []  # центры столбов по `pillar` вида, как x_m; нет — равномерно
 
     @model_validator(mode="after")
     def _check(self) -> "PorchRoof":
