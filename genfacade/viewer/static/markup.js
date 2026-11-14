@@ -103,9 +103,10 @@ function refreshMarkTools() {
     kinds.replaceChildren(...choices.map((c) => el("option", { value: c }, c)));
     kinds.value = m[field];
   }
-  // Вынос от стены вида (труба, крыльцо): у отметки поле есть всегда, пустое — «не задан».
+  // Вынос от стены вида (труба, крыльцо) — по виду отметки, а не по полю: у новой трубы поля
+  // ещё нет, а вписать вынос надо; пустое — «не задан».
   const depth = $("mark-depth");
-  depth.hidden = !("depth_m" in m);
+  depth.hidden = !state.options.marks[state.mark.kind].depth;
   depth.value = m.depth_m ?? "";
 }
 

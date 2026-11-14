@@ -559,6 +559,7 @@ class MarkStyle(Section):
     color: str
     size_m: Size | None = None     # от касания: ширина × высота, м; у касания-точки нет
     defaults: dict[str, str | int | float] = {}   # поля новой отметки, кроме места на виде
+    depth: bool = False            # есть вынос от стены вида, м (gf#471)
 
 
 class ZoneStyle(Section):

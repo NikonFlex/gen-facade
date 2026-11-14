@@ -137,6 +137,7 @@ roof_down = 1.0
 label = "труба"
 shape = "point"
 color = "firebrick"
+depth = true
 
 [markup.marks.skylight]
 label = "мансардное окно"
@@ -157,6 +158,7 @@ shape = "box"
 color = "darkgoldenrod"
 size_m = [2.5, 2.5]
 defaults = { kind = "shed", posts = 2, depth_m = 1.5 }
+depth = true
 
 [markup.zone]                        # зона второй отделки на виде (gf#470)
 label = "зона отделки"
