@@ -410,7 +410,8 @@ def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
     spec = _spec(m)
     spec = spec.model_copy(update={"roof": spec.roof.model_copy(
         update={"down_to": _down(m, m.roof_down, c.normals)})})
-    raw = [_side_elements(e, m, spec) for e in m.sides]
+    posts = _post_marks(m, spec, cfg.pillar_slack_m)
+    raw = [_side_elements(e, m, spec, posts.get(k, set())) for k, e in enumerate(m.sides)]
     # стороны плана — по проёмам первого этажа, фронтон — по крыше листа без окон выше карниза
     # (они на стороны не влияют): та же зона, что у валидатора и листа (`roof.sheet_gables`)
     first = rect_house.assemble(spec, fp, _laid(raw, [None] * len(raw), c, spec, cfg)[0],
@@ -524,24 +525,43 @@ def _porch_roof(m: Markup, mark: PorchRoofMark, sheet: FacadeSheet, cfg: Manual)
         raise BadMarkup(f"{m.id}: {e.view}: навес — низ кровли {bottom:.2f} м, верх {top:.2f} м")
     return PorchRoof(side=mark.side, x_m=(x0, x1), depth_m=mark.depth_m, bottom_m=bottom,
                      top_m=top, kind=mark.kind, posts=mark.posts,
-                     post_x_m=_pillars(m, e, (x0, x1, mark.posts),
-                                       (sheet.spec, cfg.pillar_slack_m)))
+                     post_x_m=[c for c, _ in _pillars(m, e, (x0, x1, mark.posts),
+                                                      (sheet.spec, cfg.pillar_slack_m))])
 
 
 def _pillars(m: Markup, e: Elevation, span: tuple[float, float, int],
-             near: tuple[HouseSpec, float]) -> list[float]:
-    """Центры столбов вдоль стены (метры от левого края): `pillar` вида, чей центр в отрезке навеса
-    (`span` — края и число столбов отметки) с запасом `slack`; по возрастанию. Меньше двух (или
-    меньше столбов отметки, если их меньше двух) — вид показывает не все столбы: пусто, столбы
-    равномерно."""
+             near: tuple[HouseSpec, float]) -> list[tuple[float, int]]:
+    """Столбы навеса на виде: центр вдоль стены (метры от левого края) и номер элемента `pillar`
+    вида, чей центр в отрезке навеса (`span` — края и число столбов отметки) с запасом `slack`; по
+    возрастанию центра. Меньше двух (или меньше столбов отметки, если их меньше двух) — вид
+    показывает не все столбы: пусто, столбы равномерно, `pillar` остаются плашками стены."""
     spec, slack = near
     centres = []
-    for mark in e.elements:
+    for n, mark in enumerate(e.elements):
         if mark.cls is ElementClass.PILLAR:
             x0, _, x1, _ = _metres(mark.box, e, m, spec)
-            centres.append((x0 + x1) / 2)
-    found = sorted(c for c in centres if span[0] - slack <= c <= span[1] + slack)
+            centres.append(((x0 + x1) / 2, n))
+    found = sorted(c for c in centres if span[0] - slack <= c[0] <= span[1] + slack)
     return found if len(found) >= min(span[2], 2) else []
+
+
+def _porch_span(m: Markup, mark: PorchRoofMark, spec: HouseSpec) -> tuple[float, float]:
+    """Края навеса вдоль стены: метры от левого края вида."""
+    x0, _, x1, _ = _metres((mark.x[0], mark.y[0], mark.x[1], mark.y[1]), m.sides[mark.side], m,
+                           spec)
+    return x0, x1
+
+
+def _post_marks(m: Markup, spec: HouseSpec, slack: float) -> dict[int, set[int]]:
+    """Элементы `pillar`, ставшие столбами навеса, по сторонам: на стене их не рисуют (gf#472,
+    столб стоит у стены под кровлей, а не плашкой на ней)."""
+    out: dict[int, set[int]] = {}
+    for mark in m.porch_roofs:
+        _known_side(m, mark.side, "навес")
+        span = (*_porch_span(m, mark, spec), mark.posts)
+        found = _pillars(m, m.sides[mark.side], span, (spec, slack))
+        out.setdefault(mark.side, set()).update(n for _, n in found)
+    return out
 
 
 def _parted(plan: Plan, sheet: FacadeSheet, m: Markup, c: _Contour) -> tuple[Plan, FacadeSheet]:
@@ -944,10 +964,13 @@ def _metres(box: tuple[float, float, float, float], e: Elevation, m: Markup,
     return x0 - left, spec.plinth_m + floor - bottom, x1 - left, spec.plinth_m + floor - top
 
 
-def _side_elements(e: Elevation, m: Markup, spec: HouseSpec) -> list[Element]:
-    """Прямоугольники листа → элементы стены; карниз — материалом карниза дома."""
+def _side_elements(e: Elevation, m: Markup, spec: HouseSpec, skip: set[int]) -> list[Element]:
+    """Прямоугольники листа → элементы стены (кроме номеров `skip` — столбов навеса); карниз —
+    материалом карниза дома."""
     out = []
     for n, mark in enumerate(e.elements):
+        if n in skip:
+            continue
         x0, y0, x1, y1 = _metres(mark.box, e, m, spec)
         trim = mark.cls is ElementClass.CORNICE and m.trim_material is not None
         out.append(Element(id=f"e{n}", cls=mark.cls, x_m=x0, y_m=y0, w_m=x1 - x0, h_m=y1 - y0,

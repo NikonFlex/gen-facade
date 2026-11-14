@@ -13,7 +13,14 @@ from genfacade.porch_roofs import Part
 from genfacade.render.house3d import house_3d
 from genfacade.render.ifc import house_ifc
 from genfacade.render.svg import sheet_svg, tops
-from genfacade.schema import FacadeSheet, HouseSpec, PorchKind, PorchRoof, RoofKind
+from genfacade.schema import (
+    ElementClass,
+    FacadeSheet,
+    HouseSpec,
+    PorchKind,
+    PorchRoof,
+    RoofKind,
+)
 
 CFG = config.load()
 SHEET = manual.house(finished(), CFG.data.manual)[0].sheet
@@ -313,3 +320,16 @@ def test_manual_posts_from_pillars():
         round(ft(3), 3), round(ft(7), 3)]
     few = manual.house(pillars_markup(3), CFG.data.manual)[0].sheet.spec.porch_roofs[0]
     assert few.post_x_m == []
+
+
+def wall_pillars(markup: Markup) -> int:
+    """Сколько `pillar` осталось плашками на стенах листа."""
+    sheet = manual.house(markup, CFG.data.manual)[0].sheet
+    return sum(e.cls is ElementClass.PILLAR for f in sheet.facades for e in f.elements)
+
+
+def test_pillars_of_awning_not_on_wall():
+    """Сценарий «Столбы навеса не рисуются на стене»: два `pillar`, ставшие столбами навеса, на
+    стене не остаются; одного при трёх столбах отметки мало — он остаётся плашкой."""
+    assert wall_pillars(pillars_markup(3, 7)) == 0
+    assert wall_pillars(pillars_markup(3)) == 1
