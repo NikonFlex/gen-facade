@@ -6,12 +6,12 @@ import pytest
 from test_roof import L_HOUSE, wing_house
 from test_unfold import L_SIDES, sides_of
 
-from genfacade import roof
+from genfacade import config, roof
 from genfacade.datasets.synthetic import build
 from genfacade.render import hatch
 from genfacade.render.house3d import house_3d
 from genfacade.render.sheet_format import num
-from genfacade.render.svg import element_fill, pen_for, sheet_svg
+from genfacade.render.svg import element_fill, facade_svg, pen_for, sheet_svg
 from genfacade.schema import (
     Element,
     ElementClass,
@@ -292,3 +292,31 @@ def test_house_of_parts_draws_gable_window_where_the_sheet_does(cfg, low):
     out = cfg.viewer.house3d.window_out_m
     assert all(((x - left[0]) * nx + (y - left[1]) * ny) == pytest.approx(out)
                for q in quads for x, y, _ in q)
+
+
+def test_gable_window_has_frame_like_wall_window(cfg):
+    """Сценарий «Стена и фронтон — одна плоскость»: окно во фронтоне — с рамой шириной, как у окна
+    на стене (`stroke-width` окна в sheet.css) и её цветом (`stroke` листа); рама лежит выше
+    карниза, цвет и ширина берутся из настроек 3D, а не из числа в коде."""
+    sheet, _ = _gable_window_house(False)
+    roof_part = house_3d(sheet, cfg)["roof"]
+    assert roof_part["window_frames"]
+    assert all(z >= sheet.spec.eaves_m - 1e-9 for q in roof_part["window_frames"] for *_, z in q)
+    css = config.load().css
+    look = cfg.viewer.house3d
+    assert f'.facade [data-cls="window"] {{ stroke-width: {look.window_frame_m}px; }}' in css
+    assert f".facade {{ stroke: {roof_part['frame']};" in css
+    assert roof_part["frame"] == look.window_frame_fill
+
+
+def test_wall_under_gable_has_no_top_edge(cfg):
+    """Сценарий «Стена и фронтон — одна плоскость»: у стены с фронтоном в 3D стена помечена
+    `gable` и в её текстуре нет верхней кромки контура — по карнизу через окна нет шва; у стены
+    без фронтона контур замкнут."""
+    sheet, k = _gable_window_house(False)
+    walls = house_3d(sheet, cfg)["walls"]
+    assert walls[k]["gable"] is True
+    pen = pen_for(sheet, cfg)
+    assert 'class="outline"' in facade_svg(sheet.facades[k], pen)
+    open_top = facade_svg(sheet.facades[k], pen, True)
+    assert "<polygon class=\"outline\"" not in open_top and open_top.count('class="outline"') == 3

@@ -63,6 +63,7 @@ class Top(NamedTuple):
     skylights: list[tuple[Polygon, Polygon]] = []  # мансардные окна на кровле: рамка и стекло
     dormer: list[tuple[dormers.Part, Polygon]] = []  # слуховые окна над кровлей (gf#457)
     awnings: list[tuple[porch_roofs.Part, Polygon]] = []  # навесы на столбах: поверх стены (gf#472)
+    open_top: bool = False  # контур стены без верхней кромки: выше идёт фронтон той же стеной (3D)
 
     def height(self, facade: SideFacade) -> float:
         """Верх рисунка стороны: силуэт стены, стена над карнизом, кровля и труба."""
@@ -179,14 +180,15 @@ def sheet_svg(sheet: FacadeSheet, cfg: Config, violations: list[Violation] | Non
     return ElementTree.tostring(root, encoding="unicode")
 
 
-def facade_svg(facade: SideFacade, pen: Pen) -> str:
+def facade_svg(facade: SideFacade, pen: Pen, gabled: bool = False) -> str:
     """Одна стена без подписей: SVG ровно по стене (длина × верх силуэта), левый край — x = 0.
-    Для текстуры дома объёмом (render/house3d.py)."""
+    Для текстуры дома объёмом (render/house3d.py); `gabled` — над стеной фронтон: у контура нет
+    верхней кромки, иначе по карнизу через окна шёл бы шов."""
     top = _top(facade)
     root = canvas(facade.side.length_m, top, pen.cfg.css, _patterns([facade], pen))
     if len(facade.silhouette or []) > RECT_POINTS:  # ступень (gf#322): над ней — не белый фон
         root.remove(next(e for e in root if e.get("class") == "background"))
-    _facade_geometry(root, facade, (0.0, top), pen)
+    _facade_geometry(root, facade, (0.0, top), pen, Top(open_top=gabled))
     return ElementTree.tostring(root, encoding="unicode")
 
 
@@ -298,12 +300,12 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
         "transform": f"translate({num(ox)},{num(oy)}) scale(1,-1)",
     })
     silhouette = points(facade.silhouette or [])
-    ElementTree.SubElement(g, "polygon", {"class": "wall", "points": silhouette,
-                                 "fill": pen.cfg.library.fill.wall})
+    wall = {"class": "wall", "points": silhouette, "fill": pen.cfg.library.fill.wall}
+    ElementTree.SubElement(g, "polygon", wall | ({"stroke": "none"} if top.open_top else {}))
     for z in facade.zones:
         _zone(g, z, pen)
     # Контур — до элементов: карниз у края стены ложится поверх линии, а не под неё.
-    ElementTree.SubElement(g, "polygon", {"class": "outline", "points": silhouette})
+    _wall_outline(g, facade.silhouette or [], top.open_top)
     _items(g, top, pen, roof_items.ItemKind.CHIMNEY)  # труба — за стеной над карнизом и кровлей
     for shape in top.above:  # стена над карнизом — основной отделкой, как стена под ним
         ElementTree.SubElement(g, "polygon", {"class": "above-eaves", "points": points(shape),
@@ -316,6 +318,17 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
         _element(g, e, pen, facade, _shape(e, room), _casing_shape(e, by, room))
     _top_layers(g, top, pen)
     return g
+
+
+def _wall_outline(g: ElementTree.Element, shape: Polygon, open_top: bool) -> None:
+    """Контур стены; `open_top` — без рёбер на самой высокой отметке (верх стены под фронтоном)."""
+    if not (open_top and shape):
+        ElementTree.SubElement(g, "polygon", {"class": "outline", "points": points(shape)})
+        return
+    high = max(y for _, y in shape)
+    for a, b in zip(shape, shape[1:] + shape[:1], strict=True):
+        if min(a[1], b[1]) < high - EPS:
+            ElementTree.SubElement(g, "polyline", {"class": "outline", "points": points([a, b])})
 
 
 def _top_layers(g: ElementTree.Element, top: Top, pen: Pen) -> None:

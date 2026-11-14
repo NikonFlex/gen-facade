@@ -217,13 +217,20 @@ export class HouseStage {
       [roof.above, roof.wall_material, roof.wall || this.look.roof],
       // окна во фронтоне (gf#321): стекло чуть перед гладким многоугольником фронтона
       [roof.windows || [], null, roof.glass],
+      // рама окон во фронтоне: кромка контура окна, как рама на стене ниже карниза
+      [roof.window_frames || [], null, roof.frame],
       // мансардные окна (gf#456): рама и стекло на верху кровли, высоты уже с толщиной кровли
       [roof.skylight_frames || [], null, this.look.edges], [roof.skylights || [], null, roof.glass]];
     for (const [shapes, id, color] of parts) {
       const material = this._material(THREE, id, color, THREE.DoubleSide);
       for (const shape of shapes) {
         const lift = shapes === roof.faces ? roof.thickness_m : 0;  // грань ската — низ плиты (gf#447)
-        const points = shape.map(([x, y, h]) => new THREE.Vector3(x, h + lift, -y));
+        // фронтон и окна в нём стыкуются с текстурой стены по карнизу: нижняя кромка заходит на стену
+        // на `seam_m`, иначе в щели между плоскостями виден фон — волосяная линия поперёк окон
+        const low = (shapes === roof.above || shapes === roof.windows || shapes === roof.window_frames)
+          ? Math.min(...shape.map(([, , h]) => h)) : Infinity;
+        const points = shape.map(([x, y, h]) => new THREE.Vector3(
+          x, h + lift - (h <= low + 1e-6 ? this.look.seam_m : 0), -y));
         let tris = fan(points.map((_, i) => i));
         if (shapes === roof.faces) {
           // скат плоский, но после обрыва на стене соседней части не обязательно выпуклый: по плану
@@ -233,7 +240,10 @@ export class HouseStage {
         const geo = new THREE.BufferGeometry().setFromPoints(tris.map((i) => points[i]));
         geo.computeVertexNormals();
         if (this.tiles.has(id)) this._faceUV(THREE, geo, points, tris, this.tiles.get(id).size_m);
-        this.scene.add(new THREE.Mesh(geo, material), this._edges(THREE, geo));
+        // у окон фронтона своя рама: рёбра стекла дали бы линию по карнизу поперёк окон
+        const bare = shapes === roof.windows || shapes === roof.window_frames;
+        this.scene.add(new THREE.Mesh(geo, material),
+          bare ? new THREE.Group() : this._edges(THREE, geo, undefined, shapes === roof.above));
         if (lift) this._slopeBody(THREE, points, tris, lift, material);
       }
     }
@@ -272,9 +282,20 @@ export class HouseStage {
     this.scene.add(ground);
   }
 
-  _edges(THREE, geo, position) {
+  // `slanted` — только неровные рёбра: у стены над карнизом (фронтон) нижняя горизонтальная кромка
+  // лежит на карнизе, а выше и ниже неё идёт та же стена — линия шла бы через окна швом.
+  _edges(THREE, geo, position, slanted = false) {
     if (!this.look.outline) return new THREE.Group();  // рёбра выключены в настройках
-    const lines = new THREE.LineSegments(new THREE.EdgesGeometry(geo),
+    let edges = new THREE.EdgesGeometry(geo);
+    if (slanted) {
+      const p = edges.getAttribute("position");
+      const keep = [];
+      for (let i = 0; i < p.count; i += 2) {
+        if (Math.abs(p.getY(i) - p.getY(i + 1)) > 1e-6) keep.push(p.getX(i), p.getY(i), p.getZ(i), p.getX(i + 1), p.getY(i + 1), p.getZ(i + 1));
+      }
+      edges = new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(keep, 3));
+    }
+    const lines = new THREE.LineSegments(edges,
       new THREE.LineBasicMaterial({ color: this.look.edges }));
     if (position) lines.position.copy(position);
     return lines;
@@ -282,11 +303,16 @@ export class HouseStage {
 
   // Обводка стены по её силуэту (x от левого края, высота), а не по прямоугольнику плоскости:
   // выше ступени текстура прозрачна, а рамка висела бы над нижней частью и шла по её крыше (gf#431).
+  // У стены с фронтоном (`gable`) верхней кромки нет: выше идёт та же стена — иначе по карнизу
+  // через окна шла бы линия, шов между стеной и фронтоном.
   _outline(THREE, w) {
     if (!this.look.outline) return new THREE.Group();
     const ring = w.outline || [[0, 0], [w.length_m, 0], [w.length_m, w.height_m], [0, w.height_m]];
     const points = ring.map(([x, y]) => new THREE.Vector3(x - w.length_m / 2, y - w.height_m / 2, 0));
-    return new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(points),
+    const pairs = points.map((p, i) => [p, points[(i + 1) % points.length]]);
+    const top = (a, b) => w.gable && Math.min(a.y, b.y) >= w.height_m / 2 - 1e-6;
+    return new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints(pairs.filter(([a, b]) => !top(a, b)).flat()),
       new THREE.LineBasicMaterial({ color: this.look.edges }));
   }
 
