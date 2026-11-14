@@ -95,8 +95,10 @@ def _gable_walls(sheet: FacadeSheet) -> dict[int, Whole]:
     found = {}
     for k, f in enumerate(sheet.facades):
         above = roof.house_above(house, k) if house is not None else []
-        whole = shapely.unary_union([shapely.Polygon(f.silhouette or []),
-                                     *(shapely.Polygon(a) for a in above)])
+        # вершины — на сетку EPS: карниз силуэта и основание фронтона считаются разными путями и
+        # расходятся в последних знаках — без этого стык по карнизу оставался щелью, а не краем
+        whole = shapely.unary_union([shapely.set_precision(shapely.Polygon(ring), EPS)
+                                     for ring in (f.silhouette or [], *above)])
         if above and whole.geom_type == "Polygon":
             found[k] = Whole(f.model_copy(update={"silhouette": list(whole.exterior.coords)[:-1]}),
                              above)

@@ -1,15 +1,17 @@
 """Дом объёмом для смотрелки: стены по контуру, лицом наружу, фасад стороны — текстурой."""
 
 import math
+from pathlib import Path
 
 import pytest
 from test_roof import L_HOUSE, wing_house
 from test_unfold import L_SIDES, sides_of
 
-from genfacade import roof
+from genfacade import porch_roofs, roof
+from genfacade.datasets import manual
 from genfacade.datasets.synthetic import build
 from genfacade.render import hatch
-from genfacade.render.house3d import house_3d
+from genfacade.render.house3d import _gable_walls, house_3d
 from genfacade.render.sheet_format import num
 from genfacade.render.svg import element_fill, pen_for, sheet_svg
 from genfacade.schema import (
@@ -290,3 +292,13 @@ def test_wall_with_gable_is_one_face_with_one_texture(cfg):
     assert 'data-id="w1"' in wall["svg"] and 'data-id="g1"' in wall["svg"]  # под карнизом и выше
     assert data["roof"]["windows"] == []
     assert data["roof"]["above"] == []  # у этого дома других стен над карнизом нет
+
+
+@pytest.mark.parametrize(("house", "side"), [
+    ("st-54412", 1), ("st-55603", 1), ("st-54617", 2), ("st-53372", 1)])
+def test_wall_with_gable_is_one_face_on_real_houses(cfg, house, side):
+    """Сценарий «Стена и фронтон — одна грань» (gf#472, сверка домов, датчик 7): карниз силуэта и
+    основание фронтона у реального дома расходятся в последних знаках (5,65 и 5,6499999999999995 м):
+    стена со щипцом всё равно одна грань, а не стена и фронтон кровлей отдельно."""
+    sample, _ = manual.house(manual.read(Path("markup/stroim") / f"{house}.toml"), cfg.data.manual)
+    assert side in _gable_walls(porch_roofs.settled(sample.sheet, cfg.sheet))
