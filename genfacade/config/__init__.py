@@ -543,6 +543,9 @@ class MarkupLabels(Section):
     level: dict[LevelKind, str]
     house: dict[str, str]          # поле дома на панели правки (gf#470): поле или trim.<элемент>
     mark_kind: str                 # подпись списка видов у выбранной отметки
+    build_sheet: str               # заголовок листа, собранного модулем из разметки (gf#470)
+    build_house: str               # заголовок 3D дома из разметки
+    build_wait: str                # пока дом собирается
     mark_depth: str                # подпись поля выноса отметки от стены вида (gf#471)
     empty_kind: str                # «вид не записан» в списках видов
     delete_mark: str
@@ -585,6 +588,8 @@ class MarkupEditor(Section):
     mark_depth_step_m: float       # шаг поля выноса отметки от стены вида (труба, крыльцо; gf#471)
     view_pad_m: float              # поле вокруг рисунка фасада в окне вида стороны, м вида (gf#470)
     ink_level: int                 # серость пикселя листа (0–255), темнее — рисунок, а не бумага
+    build_delay_ms: int            # пауза после правки перед пересборкой листа и 3D, мс
+    build_height_px: int           # высота панели «лист модуля и 3D» на странице, px (gf#470)
     house_step: dict[str, float]   # шаг числовых полей дома на панели правки (gf#470)
     marks: dict[MarkKind, MarkStyle]
     zone: ZoneStyle

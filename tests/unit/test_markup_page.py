@@ -463,6 +463,30 @@ def test_box_dragged_in_browser_is_saved_and_assembled(server, cfg):
     assert state["houses"][HOUSE]["seconds"] > 0
 
 
+def test_build_gives_sheet_and_3d_with_unsaved_chimney_and_leaves_file(client, cfg):
+    path = cfg.viewer.markup.folder / f"{HOUSE}.toml"
+    before = path.read_text()
+    plain = client.post(f"/api/markup/{HOUSE}/build", json=roof_edit(client)).json()
+    body = roof_edit(client, chimneys=[{"side": 0, "x": 450.0}])
+    got = client.post(f"/api/markup/{HOUSE}/build", json=body)
+    assert got.status_code == 200 and got.json()["sheet"].startswith("<svg")
+    assert plain["house3d"]["items"]["chimneys"] == []
+    assert len(got.json()["house3d"]["items"]["chimneys"]) == 1
+    assert got.json()["sheet"] != plain["sheet"] and path.read_text() == before
+
+
+def test_build_of_a_house_that_does_not_assemble_is_a_refusal_with_text(client, monkeypatch):
+    def broken(*_):
+        raise manual.Unsupported("крыша не ложится")
+    monkeypatch.setattr(manual, "house", broken)
+    got = client.post(f"/api/markup/{HOUSE}/build", json=roof_edit(client))
+    text = json.dumps(got.json(), ensure_ascii=False)
+    assert got.status_code == 422 and "крыша не ложится" in text and Refusal.HOUSE_NOT_BUILT in text
+    unknown = roof_edit(client, {"roof_material": "нет такой"})
+    bad = client.post(f"/api/markup/{HOUSE}/build", json=unknown)
+    assert bad.status_code == 422 and Refusal.BAD_MARKUP_EDIT in json.dumps(bad.json())
+
+
 def test_view_window_is_the_ink_of_the_page_not_the_whole_sheet(cfg, client):
     drawn = Image.new("RGB", PAGE, "white")
     drawn.paste("black", (360, 270, 1080, 810))   # рисунок фасада: четверть листа в центре

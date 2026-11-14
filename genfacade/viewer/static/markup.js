@@ -11,6 +11,7 @@ import {
 import { topbar } from "/static/shell.js";
 import { $, el, toast } from "/static/dom.js";
 import { refusedFrom } from "/static/refusal.js";
+import { BuildPanel } from "/static/markup_build.js";
 import { serial } from "/static/serial.js";
 
 topbar(document.getElementById("topbar"), "markup");
@@ -20,7 +21,7 @@ const MARK_PX = 12; // толщина отметки-полоски (трубы,
 const state = {
   options: null, queue: null, house: null, initial: "", selected: null, adding: null,
   addingMark: null, addingZone: false, zone: null, mark: null, drag: null, levels: [], busy: false,
-  openedAt: 0,
+  openedAt: 0, panel: null, built: "", timer: 0,
 };
 const ordered = serial(); // предпросмотр линий — по очереди: последний ответ принадлежит последней правке
 
@@ -64,7 +65,29 @@ function editBody() {
 
 const isDirty = () => JSON.stringify(editBody()) !== state.initial;
 
+// Лист и 3D из разметки с правкой: после паузы, и только если правка изменилась — выбор рамки
+// и ручки не пересобирают (запрос — отдельный от `preview`, он дороже: десятки–сотни мс).
+function scheduleBuild() {
+  clearTimeout(state.timer);
+  state.timer = setTimeout(rebuild, state.options.build_delay_ms);
+}
+
+function rebuild() {
+  const body = editBody(), key = JSON.stringify(body), id = state.house.id;
+  if (key === state.built) return Promise.resolve();
+  state.built = key;
+  return ordered("build", async () => {
+    try {
+      const got = await call(`/api/markup/${id}/build`, body);
+      if (id === state.house.id) await state.panel.show(got);
+    } catch (err) {
+      if (id === state.house.id) state.panel.refuse(err.message);
+    }
+  });
+}
+
 function refreshButtons() {
+  if (state.house) scheduleBuild();
   $("good").textContent = isDirty() ? "Сохранить правку" : "Хорошо";
   for (const id of ["good", "reject", "prev", "next", "list-open"]) $(id).disabled = state.busy;
   const chosen = selectedElement();
@@ -556,9 +579,12 @@ async function openHouse(id) {
   chip.className = `mk-chip ${house.state}`;
   buildHouseForm();
   buildColors();
+  state.built = "";
+  state.panel.wait();
   $("sides").replaceChildren(...house.sides.map(buildSide));
   drawAll();
   state.initial = JSON.stringify(editBody());
+  rebuild();
   state.queue = await call("/api/markup");
   progress();
   refreshButtons();
@@ -711,6 +737,7 @@ async function boot() {
   state.queue = await call("/api/markup");
   state.options = state.queue.options;
   buildTools();
+  state.panel = new BuildPanel($("build"), state.options);
   $("good").addEventListener("click", () => decide({ good: true, edit: isDirty() ? editBody() : null }));
   $("reject").addEventListener("click", showReasons);
   $("reasons-close").addEventListener("click", () => $("reasons").close());

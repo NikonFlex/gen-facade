@@ -25,7 +25,11 @@ export class HouseStage {
   }
 
   async load(url) {
-    const data = await (await this._fetch(url)).json();
+    await this.show(await (await this._fetch(url)).json());
+  }
+
+  // view — взгляд прежнего дома: после правки дом пересобирается с того же места.
+  async show(data, view = null) {
     threeModule ??= await import(this.look.three_url);
     this._scene(threeModule, data);
     await this._tiles(threeModule, data.swatches);
@@ -35,7 +39,9 @@ export class HouseStage {
     this.pxPerM = this._wallScale(data.walls);
     await Promise.all(data.walls.map((w) => this._wall(threeModule, w)));
     this._bind();
-    this.fit();
+    if (!view) return this.fit();
+    this.view = { ...view };
+    this.render();
   }
 
   fit() {

@@ -18,6 +18,9 @@ from pydantic import ValidationError, model_validator
 
 from genfacade.config import Config
 from genfacade.datasets import manual, markup_edit, markup_toml
+from genfacade.plan.genplan_svg import PlanError
+from genfacade.render.house3d import house_3d
+from genfacade.render.svg import sheet_svg
 from genfacade.schema import (
     CheckState,
     DormerRoof,
@@ -45,6 +48,7 @@ class Control(StrEnum):
 
 
 TRIM_PREFIX = "trim."   # поле обрамления на панели: trim.<элемент>, как в `TrimMark`
+BUILD_LABELS = ("build_sheet", "build_house", "build_wait")  # подписи панели листа и 3D
 NUMBERS = ("pitch_deg", "overhang_m", "gable_overhang_m", "roof_down")  # порядок панели
 
 
@@ -79,6 +83,12 @@ def api(app: FastAPI, cfg: Config, folder: Path) -> None:
         return {"geometry": [markup_edit.geometry(m, k) for k in range(len(m.sides))],
                 "roles": _guard(lambda: _roles(m))}
 
+    @app.post("/api/markup/{house}/build")
+    def build(house: str, edit: markup_edit.Edit) -> dict:
+        """Лист фасадов и 3D дома, как их соберёт модуль из разметки с правкой, без записи."""
+        m = _applied(cfg, folder, house, edit)
+        return _guard(lambda: _built(cfg, m))
+
     @app.post("/api/markup/{house}/decision")
     def decision(house: str, decision: Decision) -> dict:
         return _guard(lambda: _decide(cfg, folder, house, decision))
@@ -107,6 +117,15 @@ def _applied(cfg: Config, folder: Path, house: str, edit: markup_edit.Edit) -> m
     """Разметка дома с правкой, ещё не записанной: одно тело у предпросмотра линий и сборки."""
     old = manual.read(_guard(lambda: _file(folder, house)))
     return _guard(lambda: _edited(cfg, old, markup_edit.uncolored(edit)))
+
+
+def _built(cfg: Config, m: manual.Markup) -> dict:
+    """Лист и 3D тем же кодом, что `genfacade manual` и смотрелка; не собралось — отказ текстом."""
+    try:
+        sheet = manual.house(m, cfg.data.manual)[0].sheet
+        return {"sheet": sheet_svg(sheet, cfg), "house3d": house_3d(sheet, cfg)}
+    except (manual.Unsupported, manual.BadMarkup, PlanError) as e:
+        raise Refused(Refusal.HOUSE_NOT_BUILT, str(e)) from e
 
 
 def _edited(cfg: Config, m: manual.Markup, edit: markup_edit.Edit) -> manual.Markup:
@@ -145,13 +164,15 @@ def _options(cfg: Config) -> dict:
             "labels": {"state": editor.labels.state, "reason": editor.labels.reason,
                        "level": editor.labels.level, "mark_kind": editor.labels.mark_kind,
                        "mark_depth": editor.labels.mark_depth,
+                       **{k: getattr(editor.labels, k) for k in BUILD_LABELS},
                        "delete_mark": editor.labels.delete_mark,
                        "empty_kind": editor.labels.empty_kind, "no_color": editor.labels.no_color,
                        "delete_zone": editor.labels.delete_zone, "role": editor.labels.role,
                        "cls": cfg.viewer.labels.cls},
             "add_classes": editor.add_classes,
             "default_size_m": {k: list(v) for k, v in editor.default_size_m.items()},
-            "min_box_m": editor.min_box_m,
+            "house3d": cfg.viewer.house3d.model_dump(), "min_box_m": editor.min_box_m,
+            "build_height_px": editor.build_height_px, "build_delay_ms": editor.build_delay_ms,
             "view_pad_m": editor.view_pad_m, "mark_depth_step_m": editor.mark_depth_step_m,
             "zone": editor.zone.model_dump(mode="json"),
             "marks": {k: {**v.model_dump(mode="json"), "field": markup_edit.MARK_FIELDS[k]}
