@@ -128,14 +128,12 @@ def find(sheet: FacadeSheet, cfg: Sheet) -> list[Awning]:
     """Навесы дома; нет — пусто."""
     if not sheet.spec.porch_roofs:
         return []
-    corners = plan_corners([f.side for f in sheet.facades])
     house = roof.roofs(sheet)
-    return [_awning(sheet, house, corners, p, cfg) for p in sheet.spec.porch_roofs]
+    return [_awning(sheet, house, p, cfg) for p in sheet.spec.porch_roofs]
 
 
-def _awning(sheet: FacadeSheet, house: roof.HouseRoof | None, corners: list[Point], p: PorchRoof,
-            cfg: Sheet) -> Awning:
-    wall, u, length = roof.axis(corners, p.side)
+def _awning(sheet: FacadeSheet, house: roof.HouseRoof | None, p: PorchRoof, cfg: Sheet) -> Awning:
+    wall, u, length = roof.axis(plan_corners([f.side for f in sheet.facades]), p.side)
     n = (u[1], -u[0])
     frame = Frame((wall[0] + u[0] * p.x_m[0], wall[1] + u[1] * p.x_m[0]), u, n)
     flush = (p.x_m[0] <= EPS, p.x_m[1] >= length - EPS)  # отрезок доходит до края стены
@@ -146,8 +144,8 @@ def _awning(sheet: FacadeSheet, house: roof.HouseRoof | None, corners: list[Poin
 
 
 def _inset(p: PorchRoof, cfg: Sheet) -> float:
-    """Свес кровли за столбы: из настроек, но не больше трети выноса."""
-    return min(cfg.porch_roof.overhang_m, p.depth_m / 3)
+    """Свес кровли за столбы: из настроек, но не больше доли выноса `max_inset_share`."""
+    return min(cfg.porch_roof.overhang_m, p.depth_m * cfg.porch_roof.max_inset_share)
 
 
 def _posts_at(p: PorchRoof, size: float, inset: float) -> list[float]:
@@ -179,14 +177,16 @@ def _tilt(p: PorchRoof, kind: RoofKind, cover: "Cover", cfg: Sheet) -> float:
     return cover.rise if gap <= cfg.porch_roof.pitch_tol_deg else marked
 
 
-def _inward(cover: "Cover", z_wall: float, rising: float) -> float:
+def _inward(cover: "Cover", z_wall: float, rising: float, cfg: Sheet) -> float:
     """Насколько (меньше нуля) продлить кровлю навеса за стену внутрь дома: верх у стены `z_wall`
     выше карниза — кровля идёт вверх к стене со скоростью `rising` и упирается в скат кровли дома
-    (он у карнизной стены поднимается внутрь со скоростью `rise`). Ниже карниза, щипцовая стена,
-    плоская крыша — кровля кончается на стене."""
+    (он у карнизной стены поднимается внутрь со скоростью `rise`); разность скоростей не меньше доли
+    `min_rise_share` от `rise`, иначе почти параллельная кровля уходила бы в бесконечность. Ниже
+    карниза, щипцовая стена, плоская крыша — кровля кончается на стене."""
     if not cover.sloped or cover.rise <= EPS or z_wall <= cover.eaves:
         return 0.0
-    return -(z_wall - cover.eaves) / max(cover.rise - rising, cover.rise / 2)
+    floor = cover.rise * cfg.porch_roof.min_rise_share
+    return -(z_wall - cover.eaves) / max(cover.rise - rising, floor)
 
 
 def _own(frame: Frame, p: PorchRoof, cover: "Cover", cfg: Sheet) -> Awning:
@@ -200,13 +200,13 @@ def _own(frame: Frame, p: PorchRoof, cover: "Cover", cfg: Sheet) -> Awning:
     reach, slab = 0.0, kind is not RoofKind.FLAT
     if kind is RoofKind.GABLE:
         ridge = lo + tilt * length / 2
-        reach = _inward(cover, ridge, 0.0)
+        reach = _inward(cover, ridge, 0.0, cfg)
         profile = _slab([(0.0, lo), (length / 2, ridge), (length, lo)], thick)
     elif kind is RoofKind.SHED:
-        top = _inward(cover, lo + tilt * d, tilt)
+        top = _inward(cover, lo + tilt * d, tilt, cfg)
         profile = _slab([(top, lo + tilt * (d - top)), (d, lo)], thick)
     else:
-        top, hi = _inward(cover, lo, 0.0), lo + max(p.top_m - lo, thick)
+        top, hi = _inward(cover, lo, 0.0, cfg), lo + max(p.top_m - lo, thick)
         profile = [(top, lo), (d, lo), (d, hi), (top, hi)]
 
     def under(x: float, at: float) -> float:
@@ -217,7 +217,8 @@ def _own(frame: Frame, p: PorchRoof, cover: "Cover", cfg: Sheet) -> Awning:
                   kind is RoofKind.GABLE, reach, slab)
 
 
-def _posts(frame: Frame, p: PorchRoof, cfg: Sheet, under) -> list[Post]:
+def _posts(frame: Frame, p: PorchRoof, cfg: Sheet,
+           under: Callable[[float, float], float]) -> list[Post]:
     """Столбы на свес внутрь от наружного края кровли; высота каждого — `under(x, d)`: низ кровли
     над ним."""
     size, inset = cfg.porch_roof.post_m, _inset(p, cfg)
@@ -330,7 +331,7 @@ def view(awnings: list[Awning], corners: list[Point], k: int) -> list[tuple[Part
     return out
 
 
-def _front(a: Awning, at) -> list[tuple[Part, Polygon]]:
+def _front(a: Awning, at: roof.PlanToView) -> list[tuple[Part, Polygon]]:
     """Спереди: столбы от земли и кровля — сечение (фронтон) или полоса между низом и верхом."""
     out = [(Part.POST, _rect(x - a.post_m / 2, 0.0, x + a.post_m / 2, p.top))
            for p in a.posts for x in (at(p.at)[0],)]
@@ -345,7 +346,7 @@ def _front(a: Awning, at) -> list[tuple[Part, Polygon]]:
     return out + [(Part.ROOF, _rect(min(xs), min(zs), max(xs), max(zs)))]
 
 
-def _side(a: Awning, at, sign: float) -> list[tuple[Part, Polygon]]:
+def _side(a: Awning, at: roof.PlanToView, sign: float) -> list[tuple[Part, Polygon]]:
     """Сбоку: кровля от стены до края и один столб (все стоят на одной линии вдоль взгляда); x
     кромки стены навеса — одна у всех точек, вынос откладывается по знаку нормали вдоль x вида.
     Кровля за стеной внутрь дома не рисуется — её скрывает кровля дома."""

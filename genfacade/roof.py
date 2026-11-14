@@ -214,17 +214,20 @@ def axis(corners: list[Point], k: int) -> tuple[Point, Point, float]:
     return left, ((right[0] - left[0]) / length, (right[1] - left[1]) / length), length
 
 
+PlanToView = Callable[[Point], tuple[float, float]]  # точка плана → (x вдоль стены, d к зрителю)
+
+
 class ViewFrame(NamedTuple):
     """Вид стены k: `at` — точка плана → (x вдоль стены слева направо, расстояние к зрителю от
     стены), `toward` — наружная нормаль стены, `front` — середина глубины дома: что дальше от
     зрителя, чем она, — в задней половине, за домом."""
 
-    at: Callable[[Point], tuple[float, float]]
+    at: PlanToView
     toward: Point
     front: float
 
 
-def projector(left: Point, u: Point, toward: Point) -> Callable[[Point], tuple[float, float]]:
+def projector(left: Point, u: Point, toward: Point) -> PlanToView:
     """Точка плана → (x вдоль стены от left по u, d от стены по toward)."""
     return lambda p: ((p[0] - left[0]) * u[0] + (p[1] - left[1]) * u[1],
                       (p[0] - left[0]) * toward[0] + (p[1] - left[1]) * toward[1])

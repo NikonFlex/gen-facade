@@ -73,6 +73,8 @@ class Decision(Model):
 
 
 def api(app: FastAPI, cfg: Config, folder: Path) -> None:
+    _build_routes(app, cfg, folder)
+
     @app.get("/api/markup")
     def queue() -> dict:
         return _guard(lambda: _queue(cfg, folder))
@@ -88,26 +90,29 @@ def api(app: FastAPI, cfg: Config, folder: Path) -> None:
         return {"geometry": [markup_edit.geometry(m, k) for k in range(len(m.sides))],
                 "roles": _guard(lambda: _roles(m))}
 
+    @app.post("/api/markup/{house}/decision")
+    def decision(house: str, decision: Decision) -> dict:
+        return _guard(lambda: _decide(cfg, folder, house, decision))
+
+    @app.get("/api/markup/{house}/page/{number}.jpg")
+    def sheet(house: str, number: int) -> FileResponse:
+        m = manual.read(_guard(lambda: _file(folder, house)))
+        return FileResponse(str(_guard(lambda: markup_sheet.page_image(cfg, m, number))))
+
+
+def _build_routes(app: FastAPI, cfg: Config, folder: Path) -> None:
+    """Сборка дома и страница плана — маршруты, которым нужна разметка с правкой или без."""
     @app.post("/api/markup/{house}/build")
     def build(house: str, edit: markup_edit.Edit) -> dict:
         """Лист, 3D и входной план дома, как их соберёт модуль из разметки с правкой, без записи."""
         m = _applied(cfg, folder, house, edit)
         return _guard(lambda: _built(cfg, m))
 
-    @app.post("/api/markup/{house}/decision")
-    def decision(house: str, decision: Decision) -> dict:
-        return _guard(lambda: _decide(cfg, folder, house, decision))
-
     @app.get("/api/markup/{house}/plan.jpg")
     def source_plan(house: str) -> FileResponse:
         """Страница плана с листа строим.дом.рф — для сверки контура со сборкой."""
         m = manual.read(_guard(lambda: _file(folder, house)))
         return FileResponse(str(_guard(lambda: markup_sheet.plan_image(cfg, m))))
-
-    @app.get("/api/markup/{house}/page/{number}.jpg")
-    def sheet(house: str, number: int) -> FileResponse:
-        m = manual.read(_guard(lambda: _file(folder, house)))
-        return FileResponse(str(_guard(lambda: markup_sheet.page_image(cfg, m, number))))
 
 
 def _guard(call):

@@ -314,6 +314,12 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
     by = {e.id: e for e in facade.elements}
     for e in facade.elements:
         _element(g, e, pen, facade, _shape(e, room), _casing_shape(e, by, room))
+    _top_layers(g, top, pen)
+    return g
+
+
+def _top_layers(g: ElementTree.Element, top: Top, pen: Pen) -> None:
+    """Слои над карнизом, поверх стены: кровля, окна и желоба на ней, навесы."""
     for shape in top.roof:  # кровля — поверх: свес закрывает верх стены
         ElementTree.SubElement(g, "polygon", {"class": "roof", "points": points(shape),
                                               "fill": _roof_fill(pen)})
@@ -329,7 +335,6 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
     _items(g, top, pen, roof_items.ItemKind.GUTTER)  # желоб и трубы — на кромке кровли и стене
     _items(g, top, pen, roof_items.ItemKind.PIPE)
     _awnings(g, top, pen)
-    return g
 
 
 def _awnings(g: ElementTree.Element, top: Top, pen: Pen) -> None:

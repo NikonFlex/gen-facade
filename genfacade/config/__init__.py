@@ -225,6 +225,8 @@ class PorchRoofLook(Section):
     post_fill: str
     overhang_m: float = Field(ge=0)  # свес кровли за столбы: по выносу и по краям отрезка
     pitch_tol_deg: float = Field(ge=0)  # разметка расходится с домом не больше — уклон как у дома
+    max_inset_share: float = Field(gt=0, le=1)  # свес за столбы — не больше этой доли выноса
+    min_rise_share: float = Field(gt=0, le=1)  # продление за стену: разность уклонов не меньше доли
 
 
 class SkylightLook(Section):
