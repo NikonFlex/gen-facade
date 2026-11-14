@@ -174,13 +174,18 @@ def _awning(sheet: FacadeSheet, house: roof.HouseRoof | None, p: PorchRoof, cfg:
     return replace(found, decks=_decks(sheet, p, frame, cfg), stairs=_stairs(sheet, p, frame, cfg))
 
 
+def _overlaps(e: Element, x0: float, x1: float) -> bool:
+    """Элемент стены пересекается с отрезком [x0, x1] вдоль стены."""
+    return min(e.x_m + e.w_m, x1) - max(e.x_m, x0) > EPS
+
+
 def _deck_doors(sheet: FacadeSheet, p: PorchRoof, cfg: Sheet) -> list[Element]:
     """Двери отрезка стены под навесом, у которых есть настил: пол выше земли больше `deck_min_m`;
     у отрезка без двери (карпорт на земле) настила нет."""
     if sheet.spec.plinth_m <= cfg.porch_roof.deck_min_m:
         return []
     return [e for e in sheet.facades[p.side].elements if e.cls is ElementClass.DOOR
-            and min(e.x_m + e.w_m, p.x_m[1]) - max(e.x_m, p.x_m[0]) > EPS]
+            and _overlaps(e, p.x_m[0], p.x_m[1])]
 
 
 def _decks(sheet: FacadeSheet, p: PorchRoof, frame: Frame, cfg: Sheet) -> list[Deck]:
@@ -229,7 +234,7 @@ def settled(sheet: FacadeSheet, cfg: Sheet) -> FacadeSheet:
         doors = _deck_doors(sheet, p, cfg)
         gone.setdefault(p.side, set()).update(
             e.id for e in sheet.facades[p.side].elements if e.cls is ElementClass.PORCH
-            and any(min(e.x_m + e.w_m, d.x_m + d.w_m) - max(e.x_m, d.x_m) > EPS for d in doors))
+            and any(_overlaps(e, d.x_m, d.x_m + d.w_m) for d in doors))
     if not any(gone.values()):
         return sheet
     facades = [f.model_copy(update={"elements": [e for e in f.elements

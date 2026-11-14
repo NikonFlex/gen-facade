@@ -310,10 +310,7 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
     if not top.merged:
         ElementTree.SubElement(g, "polygon", outline)
     _items(g, top, pen, roof_items.ItemKind.CHIMNEY)  # труба — за стеной над карнизом и кровлей
-    for shape in top.above:  # стена над карнизом — основной отделкой, как стена под ним
-        ElementTree.SubElement(g, "polygon", {"class": "above-eaves", "points": points(shape),
-                                              "fill": _main(pen)}
-                               | ({"stroke": "none"} if top.merged else {}))
+    _above_eaves(g, top, pen)
     if top.merged:  # фронтон закрыл верх контура: рисуем его по целому силуэту
         ElementTree.SubElement(g, "polygon", outline)
     room = None if top.gable is None else window_shape.gable_room(
@@ -324,6 +321,15 @@ def _facade_geometry(root: ElementTree.Element, facade: SideFacade, origin,
         _element(g, e, pen, facade, _shape(e, room), _casing_shape(e, by, room))
     _top_layers(g, top, pen)
     return g
+
+
+def _above_eaves(g: ElementTree.Element, top: Top, pen: Pen) -> None:
+    """Стена над карнизом — основной отделкой, как стена под ним; слитая со стеной — без обводки
+    (контур рисуется по целому силуэту)."""
+    extra = {"stroke": "none"} if top.merged else {}
+    for shape in top.above:
+        ElementTree.SubElement(g, "polygon", {"class": "above-eaves", "points": points(shape),
+                                              "fill": _main(pen)} | extra)
 
 
 def _top_layers(g: ElementTree.Element, top: Top, pen: Pen) -> None:

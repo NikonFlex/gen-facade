@@ -381,6 +381,11 @@ def test_no_deck_without_door_or_floor():
     assert house_3d(low, CFG)["items"]["decks"] == []
 
 
+def _ifc_data(sheet) -> str:
+    """Тело IFC без заголовка: в нём время выгрузки, секунда расхождения — ложное различие."""
+    return house_ifc(sheet, CFG).split("DATA;", 1)[1]
+
+
 def test_deck_absorbs_porch_of_door():
     """Сценарий «Настил поглощает крыльцо»: крыльцо двери на 4–8 футах под навесом на 2–8 футах —
     настил на весь отрезок (1,829 × 2,4 м), крыльца на листе, в 3D и IFC нет: его площадка —
@@ -393,7 +398,7 @@ def test_deck_absorbs_porch_of_door():
     assert not [e for f in lone.facades for e in f.elements if e.cls is ElementClass.PORCH]
     assert not [r for w in house_3d(sheet, CFG)["walls"] for r in w["relief"]
                 if r["cls"] is ElementClass.PORCH]
-    assert house_ifc(sheet, CFG) == house_ifc(terrace(), CFG)
+    assert _ifc_data(sheet) == _ifc_data(terrace())  # заголовок со временем — не сравниваем
 
 
 def test_stairs_from_deck_edge_to_ground():
