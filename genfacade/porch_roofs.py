@@ -291,10 +291,10 @@ def _own(frame: Frame, p: PorchRoof, cover: "Cover", cfg: Sheet) -> Awning:
     reach, slab = 0.0, kind is not RoofKind.FLAT
     if kind is RoofKind.GABLE:
         ridge = lo + tilt * length / 2
-        reach = _inward(cover, ridge, 0.0, cfg)
+        reach = _inward(cover, ridge + thick, 0.0, cfg)  # верх плиты упирается в скат
         profile = _slab([(0.0, lo), (length / 2, ridge), (length, lo)], thick)
     elif kind is RoofKind.SHED:
-        top = _inward(cover, lo + tilt * d, tilt, cfg)
+        top = _inward(cover, lo + tilt * d + thick, tilt, cfg)
         profile = _slab([(top, lo + tilt * (d - top)), (d, lo)], thick)
     else:
         top, hi = _inward(cover, lo, 0.0, cfg), lo + max(p.top_m - lo, thick)

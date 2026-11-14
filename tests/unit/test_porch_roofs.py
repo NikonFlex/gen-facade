@@ -2,12 +2,13 @@
 `Навес на листе`; `data: Крыльцо под кровлей в разметке`): кодом на листе, в 3D и IFC."""
 
 import math
+from pathlib import Path
 
 import pytest
 import shapely
 from test_manual import FLOOR, PT, finished, ft, pt_y
 
-from genfacade import config, porch_roofs
+from genfacade import config, porch_roofs, roof
 from genfacade.datasets import manual
 from genfacade.datasets.manual import BadMarkup, Markup
 from genfacade.porch_roofs import Part
@@ -71,11 +72,12 @@ def test_shed_roof_and_posts():
 
 def test_gable_roof_pitch_of_house():
     """Сценарий «Двускатный навес»: уклон по разметке 31,4° на 0,6° от дома (32°) — как у дома:
-    низ 1,6 м по краям и 1,6 + 1,8 · tg 32° на коньке; выше конька ниже карниза — кровля кончается
-    на стене; столбы на 0,375 и 3,225 м, высота по низу ската над ними."""
+    низ 1,6 м по краям и 1,6 + 1,8 · tg 32° на коньке; верх конька выше карниза — кровля продлена
+    за стену до ската верхом плиты; столбы на 0,375 и 3,225 м, высота по низу ската над ними."""
     a = built(kind=PorchKind.GABLE, depth=1.4, low=1.6, high=2.9, x=(0.0, 3.6), posts=2)
     ridge = 1.6 + 1.8 * HOUSE_TAN
-    assert a.outward and a.sweep[1] == pytest.approx(1.4) and a.reach == 0.0
+    assert a.outward and a.reach == pytest.approx(-(ridge + 0.2 - EAVES) / HOUSE_TAN)
+    assert a.sweep[1] == pytest.approx(1.4 - a.reach)
     assert flat(a.profile) == pytest.approx(flat([(0.0, 1.6), (1.8, ridge), (3.6, 1.6),
                                                   (3.6, 1.8), (1.8, ridge + 0.2), (0.0, 1.8)]))
     assert [along(a, q.at)[0] for q in a.posts] == pytest.approx([0.375, 3.225])
@@ -83,11 +85,11 @@ def test_gable_roof_pitch_of_house():
 
 
 def test_gable_roof_steeper_than_house_reaches_house_roof():
-    """Сценарий «Навес круче дома»: уклон по разметке 45° — конёк 3,4 м выше карниза 2,74 м, кровля
-    продлена за стену внутрь дома до ската кровли: на (3,4 − 2,74) / tg 32°."""
+    """Сценарий «Навес круче дома»: уклон по разметке 45° — верх плиты на коньке 3,6 м выше карниза
+    2,74 м, кровля продлена за стену внутрь дома до ската кровли: на (3,6 − 2,74) / tg 32°."""
     a = built(kind=PorchKind.GABLE, depth=1.4, low=1.6, high=3.6, x=(0.0, 3.6), posts=2)
     assert a.profile[1] == pytest.approx((1.8, 3.4))
-    assert a.reach == pytest.approx(-(3.4 - EAVES) / HOUSE_TAN)
+    assert a.reach == pytest.approx(-(3.4 + 0.2 - EAVES) / HOUSE_TAN)
     assert a.sweep[1] == pytest.approx(1.4 - a.reach)
 
 
@@ -469,3 +471,18 @@ def test_gable_fill_on_sheet_3d_and_ifc():
     assert len(house_3d(sheet, CFG)["items"]["awning_gables"]) == 1
     assert house_3d(awning(), CFG)["items"]["awning_gables"] == []
     assert house_ifc(sheet, CFG).count("IFCWALL(") == house_ifc(SHEET, CFG).count("IFCWALL(") + 1
+
+
+def test_gable_awning_top_meets_hip_slope():
+    """Сценарий «Верх навеса упирается в кровлю дома»: щипец входа на торцевой стене под вальмой
+    (дом 105878) продлён за стену так, что верх плиты на коньке навеса лежит на скате вальмы, а не
+    ниже него — торец продления не стоит над скатом вертикальной плоскостью."""
+    given = manual.read(Path("markup/stroim/st-105878.toml"))
+    sheet = manual.house(given, CFG.data.manual)[0].sheet
+    gable = next(a for a in porch_roofs.find(sheet, CFG.sheet) if a.kind is RoofKind.GABLE
+                 and a.outward)
+    assert gable.reach < 0
+    middle = (gable.left[0] + gable.u[0] * gable.length / 2 + gable.n[0] * gable.reach,
+              gable.left[1] + gable.u[1] * gable.length / 2 + gable.n[1] * gable.reach)
+    slope = roof.roofs(sheet).parts[0].height(middle)
+    assert max(z for _, z in gable.profile) == pytest.approx(slope, abs=0.01)
