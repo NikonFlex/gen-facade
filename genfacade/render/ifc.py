@@ -694,18 +694,35 @@ class IfcHouse:
                 self._post(f"{n}/{m}", a, q, look)
             for m, d in enumerate(a.decks, 1):
                 self._deck(f"{n}/{m}", d)
+            if a.gable:
+                self._porch_gable(n, a)
 
     def _porch_roof(self, n: int, a: porch_roofs.Awning) -> None:
         """Кровля навеса. Местные оси: x — вдоль профиля, z — против выдавливания (оно идёт
         вдоль −z)."""
-        w, names, (e, length) = self.w, self.ifc.names, a.sweep
-        place = w.place(self.building_place, (*a.origin, 0.0), (-e[0], -e[1], 0.0),
-                        (*a.x_axis, 0.0))
+        w, names, length = self.w, self.ifc.names, a.sweep[1]
+        place = self._profile_place(a, 0.0)
         item = w.solid(w.polygon(a.profile), length, self._roof_color())
-        ref = w.product("IfcRoof", f"porchroof{n}", names.porch_roof.format(n=n), place,
-                        w.shape([item]), None, Enum(f"{a.kind.name}_ROOF"))
-        self.awnings.append(ref)
+        ref = self._solid("IfcRoof", f"porchroof{n}", names.porch_roof.format(n=n),
+                          (place, item, f"{a.kind.name}_ROOF"))
+        self._seat(ref, self.awnings, a)
+
+    def _seat(self, ref: Ref, group: list[Ref], a: porch_roofs.Awning) -> None:
+        """Изделие кровли навеса: в группу материала и на этаж, где низ его профиля."""
+        group.append(ref)
         self.contained[self._storey_at(min(z for _, z in a.profile))].append(ref)
+
+    def _solid(self, kind: str, key: str, name: str, body: tuple[Ref, Ref, str]) -> Ref:
+        """Изделие навеса из одного выдавленного тела: `body` — место, тело и вид (Predefined)."""
+        place, item, predefined = body
+        return self.w.product(kind, key, name, place, self.w.shape([item]), None, Enum(predefined))
+
+    def _profile_place(self, a: porch_roofs.Awning, shift: float) -> Ref:
+        """Оси профиля навеса: начало — на `shift` метров вдоль выдавливания от его начала, x —
+        вдоль профиля, z — против выдавливания."""
+        e = a.sweep[0]
+        origin = (a.origin[0] + e[0] * shift, a.origin[1] + e[1] * shift, 0.0)
+        return self.w.place(self.building_place, origin, (-e[0], -e[1], 0.0), (*a.x_axis, 0.0))
 
     def _post(self, key: str, a: porch_roofs.Awning, post: porch_roofs.Post,
               look: PorchRoofLook) -> None:
@@ -719,14 +736,25 @@ class IfcHouse:
                         None, Enum("COLUMN"))
         self.contained[0].append(ref)
 
+    def _porch_gable(self, n: int, a: porch_roofs.Awning) -> None:
+        """Фронтон двускатного навеса: IfcWall — треугольник под скатами, как на листе, толщиной
+        `porch_gable_m` внутрь от наружного торца, цветом стены дома; оси — как у кровли."""
+        w = self.w
+        place = self._profile_place(a, a.sweep[1] - self.ifc.porch_gable_m)
+        item = w.solid(w.polygon(a.profile[:len(a.profile) // 2]), self.ifc.porch_gable_m,
+                       self.pen.colors.get(PaletteRole.MAIN, self.cfg.library.fill.wall))
+        ref = self._solid("IfcWall", f"porchgable{n}", self.ifc.names.porch_gable.format(n=n),
+                          (place, item, "STANDARD"))
+        self._seat(ref, self.walls, a)
+
     def _deck(self, key: str, deck: porch_roofs.Deck) -> None:
-        """Настил под навесом: IfcSlab FLOOR — многоугольник в плане, выдавленный вниз от верха на
-        толщину; цвет — как на листе (`deck_fill`)."""
+        """Настил под навесом: IfcSlab FLOOR — многоугольник в плане, выдавленный вниз от верха до
+        земли; цвет — как на листе (`deck_fill`)."""
         w = self.w
         item = w.solid(w.polygon(deck.ring), deck.z1 - deck.z0, deck_fill(self.pen))
-        ref = w.product("IfcSlab", f"porchdeck{key}", self.ifc.names.porch_deck.format(n=key),
-                        w.place(self.building_place, (0.0, 0.0, deck.z1)), w.shape([item]), None,
-                        Enum("FLOOR"))
+        place = w.place(self.building_place, (0.0, 0.0, deck.z1))
+        ref = self._solid("IfcSlab", f"porchdeck{key}", self.ifc.names.porch_deck.format(n=key),
+                          (place, item, "FLOOR"))
         self.contained[0].append(ref)
 
     def _segment(self, key: str, name: str, bar: Bar) -> None:

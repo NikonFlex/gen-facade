@@ -352,10 +352,10 @@ def _top_layers(g: ElementTree.Element, top: Top, pen: Pen) -> None:
 
 def _awnings(g: ElementTree.Element, top: Top, pen: Pen) -> None:
     """Навесы на столбах (gf#472): кровля — цветом кровли дома, столбы — из `[porch_roof]` листа,
-    настил — цветом цоколя (`deck_fill`)."""
+    настил — цветом цоколя (`deck_fill`), фронтон — стены дома."""
     for part, shape in top.awnings:
         fills = {porch_roofs.Part.POST: pen.cfg.sheet.porch_roof.post_fill,
-                 porch_roofs.Part.DECK: deck_fill(pen)}
+                 porch_roofs.Part.DECK: deck_fill(pen), porch_roofs.Part.GABLE: _main(pen)}
         fill = fills.get(part) or _roof_fill(pen)
         ElementTree.SubElement(g, "polygon", {"class": f"porch-{part}", "points": points(shape),
                                               "fill": fill})

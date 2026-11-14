@@ -352,13 +352,13 @@ def terrace(x=(2.0, 8.0), porch=False, **mark) -> FacadeSheet:
 
 def test_deck_under_awning():
     """Сценарий «Настил под навесом»: пол на 0,3048 м, навес 2–8 футов, вынос 2,4 м, дверь на
-    5–7 футах — плита 1,829 × 2,4 м от 0,1548 до 0,3048 м, цветом цоколя; на виде стены — полоса
+    5–7 футах — плита 1,829 × 2,4 м от земли до 0,3048 м, цветом цоколя; на виде стены — полоса
     ширины отрезка, на боковом — глубины выноса; в 3D `decks`, в IFC плита."""
     sheet = terrace()
     (a,) = porch_roofs.find(sheet, CFG.sheet)
     (deck,) = a.decks
     top = sheet.spec.plinth_m
-    assert (deck.z0, deck.z1) == pytest.approx((top - CFG.sheet.porch_roof.deck_m, top))
+    assert (deck.z0, deck.z1) == pytest.approx((0.0, top))
     assert shapely.Polygon(deck.ring).area == pytest.approx(ft(6) * 2.4)
     widths = sorted(round(max(p[0] for p in s) - min(p[0] for p in s), 3)
                     for k in range(len(LENGTHS)) for s in parts_of(sheet, k, Part.DECK))
@@ -390,3 +390,32 @@ def test_deck_continues_porch_without_double_slab():
 def test_deck_threshold_is_the_porch_threshold():
     """Допуск настила — тот же, что у крыльца двери (`checks.porch_min_m`): одно значение."""
     assert CFG.sheet.porch_roof.deck_min_m == CFG.checks.porch_min_m
+
+
+GABLE_FRONT = {"kind": PorchKind.GABLE, "depth": 1.4, "low": 1.6, "high": 2.9, "x": (0.0, 3.6),
+               "posts": 2}
+
+
+def test_gable_front_is_filled():
+    """Сценарий «Фронтон двускатного навеса закрыт»: наружный торец — треугольник под скатами
+    (3,6 м у основания, от 1,6 м до конька 1,6 + 1,8 · tg 32°), в плоскости торца, в 1,4 м от стены;
+    у односкатного фронтона нет."""
+    a = built(**GABLE_FRONT)
+    ridge = 1.6 + 1.8 * HOUSE_TAN
+    assert sorted(z for *_, z in a.gable) == pytest.approx(sorted([1.6, 1.6, ridge]))
+    assert {round(along(a, p[:2])[1], 6) for p in a.gable} == {1.4}
+    assert shapely.Polygon([(along(a, p[:2])[0], p[2]) for p in a.gable]).area == pytest.approx(
+        3.6 * (ridge - 1.6) / 2)
+    assert built().gable == [] and built(kind=PorchKind.FLAT).gable == []
+
+
+def test_gable_fill_on_sheet_3d_and_ifc():
+    """Фронтон навеса: на листе — заливка перед лентой кровли, в 3D — `awning_gables` стены дома,
+    в IFC — стена IfcWall сверх стен дома; односкатному навесу ничего."""
+    sheet = awning(**GABLE_FRONT)
+    (fill,) = parts_of(sheet, LONG, Part.GABLE)
+    assert max(p[1] for p in fill) == pytest.approx(1.6 + 1.8 * HOUSE_TAN)
+    assert 'class="porch-gable"' in sheet_svg(sheet, CFG)
+    assert len(house_3d(sheet, CFG)["items"]["awning_gables"]) == 1
+    assert house_3d(awning(), CFG)["items"]["awning_gables"] == []
+    assert house_ifc(sheet, CFG).count("IFCWALL(") == house_ifc(SHEET, CFG).count("IFCWALL(") + 1

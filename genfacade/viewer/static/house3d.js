@@ -190,6 +190,11 @@ export class HouseStage {
     if (faces.length) {  // те же грани и рисунок, что у скатов дома (`_slopes`): без шва на стыке
       this._slopes(THREE, { ...roof, faces, above: [], windows: [], skylight_frames: [], skylights: [] });
     }
+    const gables = items.awning_gables || [];
+    if (gables.length) {  // фронтон навеса — стена дома, тем же рисунком, что стена над карнизом
+      this._slopes(THREE, { ...roof, faces: [], above: gables, windows: [], window_frames: [],
+        skylight_frames: [], skylights: [] });
+    }
     for (const d of items.decks || []) this._prism(THREE, d);  // настил под навесом
     for (const p of items.posts || []) {
       const geo = new THREE.BoxGeometry(p.size, p.z1, p.size);

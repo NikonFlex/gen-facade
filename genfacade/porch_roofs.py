@@ -41,6 +41,7 @@ class Part(StrEnum):
     ROOF = "roof"
     POST = "post"
     DECK = "deck"
+    GABLE = "gable"
 
 
 class Post(NamedTuple):
@@ -51,7 +52,7 @@ class Post(NamedTuple):
 
 
 class Deck(NamedTuple):
-    """Настил под навесом: четыре угла в плане, низ и верх по высоте."""
+    """Настил под навесом: четыре угла в плане, низ (земля) и верх (чистый пол) по высоте."""
 
     ring: list[Point]
     z0: float
@@ -108,18 +109,30 @@ class Awning:
         """Направление выдавливания в плане и его длина."""
         return (self.n, self.depth - self.reach) if self.outward else (self.u, self.length)
 
+    def _at(self, s: float, z: float, k: float) -> roof.Point3:
+        """Точка профиля (s вдоль x, высота z) на доле k выдавливания: x, y плана и высота."""
+        (dx, dy), run = self.sweep
+        (ox, oy), (ax, ay) = self.origin, self.x_axis
+        return (ox + ax * s + dx * run * k, oy + ay * s + dy * run * k, z)
+
     @property
     def planes(self) -> list[list[roof.Point3]]:
         """Низ плиты плоскими гранями (x, y плана, высота) — как скаты кровли дома: так 3D кладёт
         на них тот же рисунок кровли, и навес продолжает скат без шва. Не плита — пусто."""
         if not (self.slab and self.profile):
             return []
-        (dx, dy), run = self.sweep
-        (ox, oy), (ax, ay) = self.origin, self.x_axis
         bottom = self.profile[:len(self.profile) // 2]
-        return [[(ox + ax * s + dx * run * k, oy + ay * s + dy * run * k, z)
-                 for (s, z), k in ((a, 0), (b, 0), (b, 1), (a, 1))]
+        return [[self._at(*a, 0), self._at(*b, 0), self._at(*b, 1), self._at(*a, 1)]
                 for a, b in pairwise(bottom)]
+
+    @property
+    def gable(self) -> list[roof.Point3]:
+        """Фронтон двускатного навеса — заполненный треугольник под скатами на наружном торце
+        (x, y плана, высота): без него торец плиты открыт и сквозь него видно кровлю дома. Не
+        фронтоном наружу или не плита — пусто."""
+        if not (self.slab and self.outward and self.profile):
+            return []
+        return [self._at(s, z, 1) for s, z in self.profile[:len(self.profile) // 2]]
 
 
 class Frame(NamedTuple):
@@ -156,9 +169,9 @@ def _awning(sheet: FacadeSheet, house: roof.HouseRoof | None, p: PorchRoof, cfg:
 
 def _decks(sheet: FacadeSheet, p: PorchRoof, frame: Frame, cfg: Sheet) -> list[Deck]:
     """Настил террасы под навесом (`Настил под навесом`): площадка от стены до наружного края
-    навеса между краями отрезка, верх — на уровне чистого пола. Пол выше земли не больше
-    `deck_min_m` или у отрезка стены нет двери (карпорт на земле) — настила нет. Там, где у стены
-    стоит крыльцо двери (`porch`), его площадка уже есть: настил обходит её, двойной плиты нет."""
+    навеса между краями отрезка, от земли до чистого пола (основание, как у крыльца). Пол выше
+    земли не больше `deck_min_m` или у отрезка стены нет двери (карпорт на земле) — настила нет.
+    Где у стены стоит крыльцо двери (`porch`), его площадка уже есть: настил обходит её."""
     top, look = sheet.spec.plinth_m, cfg.porch_roof
     elements = sheet.facades[p.side].elements
     doors = [e for e in elements if e.cls is ElementClass.DOOR
@@ -169,7 +182,7 @@ def _decks(sheet: FacadeSheet, p: PorchRoof, frame: Frame, cfg: Sheet) -> list[D
     rings = ([frame.at(a - p.x_m[0], 0.0), frame.at(b - p.x_m[0], 0.0),
               frame.at(b - p.x_m[0], p.depth_m), frame.at(a - p.x_m[0], p.depth_m)]
              for a, b in _free(p.x_m, taken))
-    return [Deck(ring, max(top - look.deck_m, 0.0), top) for ring in rings]
+    return [Deck(ring, 0.0, top) for ring in rings]
 
 
 def _free(span: tuple[float, float], taken: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -373,7 +386,8 @@ def view(awnings: list[Awning], corners: list[Point], k: int) -> list[tuple[Part
 
 
 def _front(a: Awning, at: roof.PlanToView) -> list[tuple[Part, Polygon]]:
-    """Спереди: столбы от земли и кровля — сечение (фронтон) или полоса между низом и верхом."""
+    """Спереди: настил, столбы от земли и кровля — сечение (фронтон) или полоса между низом и
+    верхом. Заполненный фронтон двускатного навеса закрывает столбы за ним."""
     out = _decks_view(a, at)
     out += [(Part.POST, _rect(x - a.post_m / 2, 0.0, x + a.post_m / 2, p.top))
             for p in a.posts for x in (at(p.at)[0],)]
@@ -382,7 +396,9 @@ def _front(a: Awning, at: roof.PlanToView) -> list[tuple[Part, Polygon]]:
     if a.outward:
         x0 = at(a.origin)[0]
         sign = a.x_axis[0] * a.u[0] + a.x_axis[1] * a.u[1]
-        return out + [(Part.ROOF, [(x0 + s * sign, z) for s, z in a.profile])]
+        band = [(x0 + s * sign, z) for s, z in a.profile]
+        fill = band[:len(band) // 2] if a.slab else []
+        return out + ([(Part.GABLE, fill)] if fill else []) + [(Part.ROOF, band)]
     xs = [at(p)[0] for p in a.footprint]
     zs = [z for _, z in a.profile]
     return out + [(Part.ROOF, _rect(min(xs), min(zs), max(xs), max(zs)))]

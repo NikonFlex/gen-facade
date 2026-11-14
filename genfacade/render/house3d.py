@@ -99,7 +99,8 @@ def _items(sheet: FacadeSheet, cfg: Config) -> dict:
 def _awnings(sheet: FacadeSheet, pen: Pen, roof_part: dict) -> dict:
     """Навесы на столбах в объёме (gf#472): кровля — призма по профилю (расстояние от стены,
     высота), выдавленная вдоль стены от левого края `left` по `u`, `n` — наружная нормаль;
-    столбы — призмы по центру в плане до высоты `z1`; настил — призма по четырём углам плана
+    столбы — призмы по центру в плане до высоты `z1`; фронтон двускатного навеса — многоугольник
+    стены дома (`awning_gables`), как стена над карнизом; настил — призма по четырём углам плана
     от `z0` до `z1`, цветом цоколя. Кровля того же материала, что кровля дома;
     плита с постоянной толщиной — плоскими гранями `awning_faces` (как скаты дома: тот же рисунок
     кровли идёт по скату без шва), остальное (плоская кровля) — призмой."""
@@ -110,6 +111,7 @@ def _awnings(sheet: FacadeSheet, pen: Pen, roof_part: dict) -> dict:
                          "material": roof_part["material"], "color": roof_part.get("color")}
                         for a in found if a.profile and not a.slab],
             "awning_faces": [f for a in found for f in a.planes],
+            "awning_gables": [a.gable for a in found if a.gable],
             "decks": [{"footprint": d.ring, "z0": d.z0, "z1": d.z1, "color": deck_fill(pen)}
                       for a in found for d in a.decks],
             "posts": [{"center": q.at, "size": a.post_m, "z1": q.top, "color": look.post_fill,
