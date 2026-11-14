@@ -28,6 +28,7 @@ from genfacade.schema import (
     RejectReason,
     RoofKind,
     Source,
+    VariantKind,
 )
 from genfacade.viewer import markup_queue
 from genfacade.viewer.app import create_app
@@ -506,3 +507,40 @@ def test_view_window_is_the_ink_of_the_page_not_the_whole_sheet(cfg, client):
     sides = client.post(f"/api/markup/{HOUSE}/open").json()["sides"]
     assert sides[0]["ink"] == pytest.approx([360, 270, 1080, 810], abs=3)
     assert sides[1]["ink"] == [0.0, 0.0, *map(float, PAGE)]   # листа без рисунка — вся страница
+
+
+def variant_edit(client: TestClient, k: int, cls: ElementClass, variant: dict | None) -> dict:
+    """Правка: у элемента k южной стороны — класс и вид проёма, как их присылает страница."""
+    body = edit_body(client, WINDOW)
+    body["sides"][0]["elements"][k] = {**body["sides"][0]["elements"][k], "cls": cls,
+                                       "variant": variant}
+    return body
+
+
+def test_window_variant_is_saved_built_and_reopened_and_door_cannot_have_it(client, cfg):
+    """Вид проёма правится на странице (gf#471): окно «по скату» уходит в сборку и в файл, дверь с
+    видом окна — отказ с кодом; виды классов приходят в настройках страницы."""
+    options = client.get("/api/markup").json()["options"]
+    assert VariantKind.SLOPE in options["variant_kinds"][ElementClass.WINDOW]
+    assert options["variant_kinds"][ElementClass.DOOR] == ["glazed", "transom"]
+    assert options["labels"]["no_variant"] == cfg.viewer.markup.labels.no_variant
+    slope = {"kind": VariantKind.SLOPE, "cols": 2, "rows": 1}
+    flat = client.post(f"/api/markup/{HOUSE}/build", json=edit_body(client, WINDOW)).json()
+    body = variant_edit(client, 0, ElementClass.WINDOW, slope)
+    built = client.post(f"/api/markup/{HOUSE}/build", json=body).json()
+    assert built["sheet"] != flat["sheet"] and built["house3d"]
+    save_edit(client, body)
+    path = cfg.viewer.markup.folder / f"{HOUSE}.toml"
+    assert manual.read(path).sides[0].elements[0].variant.kind == VariantKind.SLOPE
+    reopened = client.post(f"/api/markup/{HOUSE}/open").json()
+    assert reopened["sides"][0]["elements"][0]["variant"] == slope
+
+
+@pytest.mark.parametrize("cls, variant", [
+    (ElementClass.DOOR, {"kind": VariantKind.SLOPE}),        # вид окна у двери
+    (ElementClass.WINDOW, {"kind": VariantKind.GLAZED}),     # вид двери у окна
+    (ElementClass.GARAGE_DOOR, {"kind": VariantKind.REGULAR}),  # у ворот видов нет
+])
+def test_variant_not_for_the_class_is_refused_by_code_and_file_stays(client, cfg, cls, variant):
+    refused(client, cfg, variant_edit(client, 0, cls, variant))
+

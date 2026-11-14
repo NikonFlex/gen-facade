@@ -174,6 +174,10 @@ def _options(cfg: Config) -> dict:
             "labels": {"state": editor.labels.state, "reason": editor.labels.reason,
                        "level": editor.labels.level, "mark_kind": editor.labels.mark_kind,
                        "mark_depth": editor.labels.mark_depth,
+                       "variant_kind": editor.labels.variant_kind,
+                       "variant_cols": editor.labels.variant_cols,
+                       "variant_rows": editor.labels.variant_rows,
+                       "no_variant": editor.labels.no_variant,
                        **{k: getattr(editor.labels, k) for k in BUILD_LABELS},
                        "delete_mark": editor.labels.delete_mark,
                        "empty_kind": editor.labels.empty_kind, "no_color": editor.labels.no_color,
@@ -188,6 +192,7 @@ def _options(cfg: Config) -> dict:
             "marks": {k: {**v.model_dump(mode="json"), "field": markup_edit.MARK_FIELDS[k]}
                       for k, v in editor.marks.items()},
             "choices": {"roof_kind": list(RoofKind), "dormer_roof": list(DormerRoof)},
+            "variant_kinds": markup_edit.VARIANT_KINDS,
             "house_form": _house_form(cfg)}
 
 

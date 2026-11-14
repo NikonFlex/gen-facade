@@ -95,6 +95,7 @@ function refreshButtons() {
   $("zone-tools").hidden = !state.zone;
   refreshMarkTools();
   if (chosen) {
+    refreshVariantTools(chosen);
     $("cls").value = chosen.cls;
     const g = sides()[state.selected.k].geometry;
     const [x0, y0, x1, y1] = normalize(chosen.box);
@@ -105,6 +106,34 @@ function refreshButtons() {
   document.querySelectorAll("[data-mark]").forEach((b) =>
     b.classList.toggle("on", b.dataset.mark === state.addingMark));
   document.querySelectorAll("[data-zone]").forEach((b) => b.classList.toggle("on", state.addingZone));
+}
+
+// Список из пар [значение, подпись] с выбранным значением: общий у видов отметки и вида проёма.
+function fillSelect(select, pairs, value) {
+  select.replaceChildren(...pairs.map(([v, text]) => el("option", { value: v }, text)));
+  select.value = value;
+}
+
+// ——— вид проёма выбранного элемента ———
+
+// Список видов у класса приходит с сервера; «— нет —» — вариант не записан (`variant: null`),
+// и тогда число створок не спрашиваем. Класс без видов (гаражные ворота) — поля скрыты.
+function refreshVariantTools(chosen) {
+  const o = state.options, kinds = o.variant_kinds[chosen.cls] ?? [], v = chosen.variant;
+  $("variant-tools").hidden = !kinds.length;
+  fillSelect($("variant-kind"), [["", o.labels.no_variant], ...kinds.map((k) => [k, k])],
+             v?.kind ?? "");
+  for (const f of ["cols", "rows"]) {
+    $(`variant-${f}`).hidden = !v;
+    $(`variant-${f}`).value = v?.[f] ?? 1;
+  }
+}
+
+function editVariant() {
+  const kind = $("variant-kind").value, count = (f) =>
+    Math.max(1, Math.trunc(Number($(`variant-${f}`).value)) || 1);
+  selectedElement().variant = kind ? { kind, cols: count("cols"), rows: count("rows") } : null;
+  refreshButtons();
 }
 
 // ——— отметки на виде ———
@@ -119,12 +148,8 @@ function refreshMarkTools() {
   if (!state.mark) return;
   const m = markAt(state.mark), field = "roof" in m ? "roof" : "kind" in m ? "kind" : null;
   const choices = state.options.choices[field === "roof" ? "dormer_roof" : "roof_kind"];
-  const kinds = $("mark-kind");
-  kinds.hidden = !field;
-  if (field) {
-    kinds.replaceChildren(...choices.map((c) => el("option", { value: c }, c)));
-    kinds.value = m[field];
-  }
+  $("mark-kind").hidden = !field;
+  if (field) fillSelect($("mark-kind"), choices.map((c) => [c, c]), m[field]);
   // Вынос от стены вида (труба, крыльцо) — по виду отметки, а не по полю: у новой трубы поля
   // ещё нет, а вписать вынос надо; пустое — «не задан».
   const depth = $("mark-depth");
@@ -718,6 +743,10 @@ function buildTools() {
     markAt(state.mark).depth_m = v === "" ? null : Number(v);
     refreshButtons();
   });
+  for (const [id, label] of [["kind", "variant_kind"], ["cols", "variant_cols"], ["rows", "variant_rows"]]) {
+    Object.assign($(`variant-${id}`), { title: o.labels[label], placeholder: o.labels[label] });
+    $(`variant-${id}`).addEventListener("change", editVariant);
+  }
   $("zone-del").textContent = o.labels.delete_zone;
   $("mark-kind").addEventListener("change", () => {
     const m = markAt(state.mark);

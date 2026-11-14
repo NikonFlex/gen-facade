@@ -28,7 +28,17 @@ from genfacade.datasets.manual import (
     TrimMark,
     ZoneMark,
 )
-from genfacade.schema import EPS, LevelKind, MarkKind, Model, PaletteRole, RoofKind
+from genfacade.schema import (
+    DOOR_KINDS,
+    EPS,
+    ElementClass,
+    LevelKind,
+    MarkKind,
+    Model,
+    PaletteRole,
+    RoofKind,
+    VariantKind,
+)
 
 MARK_ROUND = 1   # знаков после запятой у координат в pt: 0,1 pt листа — меньше пикселя
 UNIT_ROUND = 3   # у цоколя и высот этажей в единицах вида: миллиметры при метрах
@@ -86,6 +96,14 @@ MARK_FIELDS = {MarkKind.CHIMNEY: "chimneys", MarkKind.SKYLIGHT: "skylights",
                MarkKind.DORMER: "dormers", MarkKind.PORCH_ROOF: "porch_roofs"}
 
 
+# виды проёма, которые странице можно ставить классу: у двери — полотно, у окна — остальные;
+# у остальных классов (гаражные ворота тоже) вида нет
+VARIANT_KINDS = {
+    ElementClass.WINDOW: [k for k in VariantKind if k not in DOOR_KINDS],
+    ElementClass.DOOR: list(DOOR_KINDS),
+}
+
+
 def _box(box: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
     """Рамка с x0 < x1 и верхом выше низа: тянут за любой угол, и через противоположный."""
     x0, y0, x1, y1 = (round(v, MARK_ROUND) for v in box)
@@ -93,7 +111,10 @@ def _box(box: tuple[float, float, float, float]) -> tuple[float, float, float, f
 
 
 def _mark(mark: Mark, count: int) -> Mark:
-    """Рамка начисто; родитель, которого нет в списке стороны, — ошибка, а не потерянная связь."""
+    """Рамка начисто; родитель, которого нет в списке стороны, и вид проёма не для класса — ошибка,
+    а не потерянная связь."""
+    if mark.variant is not None and mark.variant.kind not in VARIANT_KINDS.get(mark.cls, []):
+        raise ValueError(f"вид {mark.variant.kind} не бывает у класса {mark.cls}")
     if mark.parent is not None and not 0 <= mark.parent < count:
         raise ValueError(f"родитель {mark.parent} — вне списка из {count} элементов")
     return mark.model_copy(update={"box": _box(mark.box)})

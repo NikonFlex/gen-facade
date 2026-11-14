@@ -549,6 +549,10 @@ class MarkupLabels(Section):
     build_source_plan: str         # подпись исходного плана листа рядом с ним
     build_wait: str                # пока дом собирается
     mark_depth: str                # подпись поля выноса отметки от стены вида (gf#471)
+    variant_kind: str              # подписи полей вида проёма у выбранного окна, двери (gf#471)
+    variant_cols: str
+    variant_rows: str
+    no_variant: str                # «вида нет» — вариант проёма не записан
     empty_kind: str                # «вид не записан» в списках видов
     delete_mark: str
     delete_zone: str
