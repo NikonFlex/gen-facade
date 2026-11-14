@@ -21,7 +21,7 @@ from typing import NamedTuple
 import shapely
 
 from genfacade import roof
-from genfacade.config import Sheet
+from genfacade.config import Config, Sheet
 from genfacade.schema import (
     EPS,
     Element,
@@ -153,7 +153,7 @@ class Frame(NamedTuple):
                 self.left[1] + self.u[1] * x + self.n[1] * d)
 
 
-def find(sheet: FacadeSheet, cfg: Sheet) -> list[Awning]:
+def find(sheet: FacadeSheet, cfg: Config) -> list[Awning]:
     """Навесы дома; нет — пусто."""
     if not sheet.spec.porch_roofs:
         return []
@@ -161,7 +161,8 @@ def find(sheet: FacadeSheet, cfg: Sheet) -> list[Awning]:
     return [_awning(sheet, house, p, cfg) for p in sheet.spec.porch_roofs]
 
 
-def _awning(sheet: FacadeSheet, house: roof.HouseRoof | None, p: PorchRoof, cfg: Sheet) -> Awning:
+def _awning(sheet: FacadeSheet, house: roof.HouseRoof | None, p: PorchRoof,
+            cfg: Config) -> Awning:
     wall, u, length = roof.axis(plan_corners([f.side for f in sheet.facades]), p.side)
     n = (u[1], -u[0])
     frame = Frame((wall[0] + u[0] * p.x_m[0], wall[1] + u[1] * p.x_m[0]), u, n)
@@ -170,7 +171,7 @@ def _awning(sheet: FacadeSheet, house: roof.HouseRoof | None, p: PorchRoof, cfg:
     if house is not None:
         cover = cover._replace(surface=roof.surface(house))
     made = _continued if p.kind is PorchKind.MAIN else _own
-    found = made(frame, p, cover, cfg)
+    found = made(frame, p, cover, cfg.sheet)
     return replace(found, decks=_decks(sheet, p, frame, cfg), stairs=_stairs(sheet, p, frame, cfg))
 
 
@@ -179,16 +180,17 @@ def _overlaps(e: Element, x0: float, x1: float) -> bool:
     return min(e.x_m + e.w_m, x1) - max(e.x_m, x0) > EPS
 
 
-def _deck_doors(sheet: FacadeSheet, p: PorchRoof, cfg: Sheet) -> list[Element]:
-    """Двери отрезка стены под навесом, у которых есть настил: пол выше земли больше `deck_min_m`;
+def _deck_doors(sheet: FacadeSheet, p: PorchRoof, cfg: Config) -> list[Element]:
+    """Двери отрезка стены под навесом, у которых есть настил: пол выше земли больше
+    `checks.porch_min_m` — тот же допуск, что у крыльца двери;
     у отрезка без двери (карпорт на земле) настила нет."""
-    if sheet.spec.plinth_m <= cfg.porch_roof.deck_min_m:
+    if sheet.spec.plinth_m <= cfg.checks.porch_min_m:
         return []
     return [e for e in sheet.facades[p.side].elements if e.cls is ElementClass.DOOR
             and _overlaps(e, p.x_m[0], p.x_m[1])]
 
 
-def _decks(sheet: FacadeSheet, p: PorchRoof, frame: Frame, cfg: Sheet) -> list[Deck]:
+def _decks(sheet: FacadeSheet, p: PorchRoof, frame: Frame, cfg: Config) -> list[Deck]:
     """Настил террасы под навесом (`Настил под навесом`): площадка от стены до наружного края
     навеса между краями отрезка, от земли до чистого пола (основание, как у крыльца). Крыльцо
     двери (`porch`) настил поглощает целиком (`settled`): площадка у двери — это он."""
@@ -199,18 +201,18 @@ def _decks(sheet: FacadeSheet, p: PorchRoof, frame: Frame, cfg: Sheet) -> list[D
     return [Deck(ring, 0.0, sheet.spec.plinth_m)]
 
 
-def _stairs(sheet: FacadeSheet, p: PorchRoof, frame: Frame, cfg: Sheet) -> list[Deck]:
+def _stairs(sheet: FacadeSheet, p: PorchRoof, frame: Frame, cfg: Config) -> list[Deck]:
     """Ступени настила (`Настил под навесом`): у наружного края напротив каждой двери шириной
-    с дверь и запасом `stair_pad_m` с каждой стороны (в пределах отрезка), вниз до земли.
-    Подступёнков ceil(пол / `stair_riser_m`) — верхняя ступень это сам настил, наружу идут
-    остальные, глубиной `stair_tread_m`; каждая — блок от земли, ближняя к земле самая длинная
-    и низкая. Двери рядом, чьи ступени сошлись, — одна лестница."""
-    look, top = cfg.porch_roof, sheet.spec.plinth_m
-    risers = max(1, math.ceil(top / look.stair_riser_m - EPS))
+    с дверь и запасом `checks.porch_pad_m` с каждой стороны (в пределах отрезка), вниз до земли.
+    Подступёнков ceil(пол / `viewer.house3d.riser_m`) — верхняя ступень это сам настил, наружу
+    идут остальные, глубиной `tread_m` — числа крыльца двери; каждая — блок от земли, ближняя к
+    земле самая длинная и низкая. Двери рядом, чьи ступени сошлись, — одна лестница."""
+    look, pad, top = cfg.viewer.house3d, cfg.checks.porch_pad_m, sheet.spec.plinth_m
+    risers = max(1, math.ceil(top / look.riser_m - EPS))
     spans: list[list[float]] = []
     for d in sorted(_deck_doors(sheet, p, cfg), key=lambda e: e.x_m):
-        a = max(d.x_m - look.stair_pad_m, p.x_m[0])
-        b = min(d.x_m + d.w_m + look.stair_pad_m, p.x_m[1])
+        a = max(d.x_m - pad, p.x_m[0])
+        b = min(d.x_m + d.w_m + pad, p.x_m[1])
         if spans and a - spans[-1][1] <= EPS:
             spans[-1][1] = max(spans[-1][1], b)
         else:
@@ -219,14 +221,14 @@ def _stairs(sheet: FacadeSheet, p: PorchRoof, frame: Frame, cfg: Sheet) -> list[
     for a, b in spans:
         a, b = a - p.x_m[0], b - p.x_m[0]
         for i in range(risers - 1, 0, -1):  # i-я ступень от земли: высота i · подступёнок
-            far = p.depth_m + (risers - i) * look.stair_tread_m
+            far = p.depth_m + (risers - i) * look.tread_m
             ring = [frame.at(a, p.depth_m), frame.at(b, p.depth_m), frame.at(b, far),
                     frame.at(a, far)]
             out.append(Deck(ring, 0.0, i * top / risers))
     return out
 
 
-def settled(sheet: FacadeSheet, cfg: Sheet) -> FacadeSheet:
+def settled(sheet: FacadeSheet, cfg: Config) -> FacadeSheet:
     """Лист без крылец двери, что слились с настилом: у двери на настиле площадка и ступени
     крыльца не стоят — площадка у двери это настил, а ступени идут от его наружного края."""
     gone: dict[int, set[str]] = {}

@@ -301,4 +301,4 @@ def test_wall_with_gable_is_one_face_on_real_houses(cfg, house, side):
     основание фронтона у реального дома расходятся в последних знаках (5,65 и 5,6499999999999995 м):
     стена со щипцом всё равно одна грань, а не стена и фронтон кровлей отдельно."""
     sample, _ = manual.house(manual.read(Path("markup/stroim") / f"{house}.toml"), cfg.data.manual)
-    assert side in _gable_walls(porch_roofs.settled(sample.sheet, cfg.sheet))
+    assert side in _gable_walls(porch_roofs.settled(sample.sheet, cfg))

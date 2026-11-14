@@ -44,7 +44,7 @@ def awning(kind: PorchKind = PorchKind.SHED, x=(1.0, 5.0), depth=2.4, low=2.0, h
 
 
 def built(**kw) -> porch_roofs.Awning:
-    return porch_roofs.find(awning(**kw), CFG.sheet)[0]
+    return porch_roofs.find(awning(**kw), CFG)[0]
 
 
 def flat(points) -> list[float]:
@@ -139,7 +139,7 @@ def test_old_spec_reads_without_porch_roofs():
     raw = SHEET.spec.model_dump(mode="json")
     raw.pop("porch_roofs")
     assert HouseSpec.model_validate(raw).porch_roofs == []
-    assert porch_roofs.find(SHEET, CFG.sheet) == []
+    assert porch_roofs.find(SHEET, CFG) == []
 
 
 def parts_of(sheet: FacadeSheet, k: int, part: Part) -> list:
@@ -258,7 +258,7 @@ def continued(side: int, x=(0.0, LENGTHS[GABLE_WALL]), depth=1.5) -> porch_roofs
     sheet = awning(PorchKind.MAIN, x=x, depth=depth, low=2.0, high=3.0, side=side)
     roof_30 = sheet.spec.roof.model_copy(update={"pitch_deg": PITCH})
     sheet = sheet.model_copy(update={"spec": sheet.spec.model_copy(update={"roof": roof_30})})
-    return porch_roofs.find(sheet, CFG.sheet)[0]
+    return porch_roofs.find(sheet, CFG)[0]
 
 
 def test_continued_at_gable_wall():
@@ -318,8 +318,7 @@ def test_manual_posts_from_pillars():
     одного `pillar` при трёх столбах отметки мало — столбы равномерно."""
     given = manual.house(pillars_markup(3, 7), CFG.data.manual)[0].sheet.spec.porch_roofs[0]
     assert given.post_x_m == pytest.approx([ft(3), ft(7)])
-    awnings = porch_roofs.find(manual.house(pillars_markup(3, 7), CFG.data.manual)[0].sheet,
-                               CFG.sheet)
+    awnings = porch_roofs.find(manual.house(pillars_markup(3, 7), CFG.data.manual)[0].sheet, CFG)
     assert [round(along(awnings[0], q.at)[0] + given.x_m[0], 3) for q in awnings[0].posts] == [
         round(ft(3), 3), round(ft(7), 3)]
     few = manual.house(pillars_markup(3), CFG.data.manual)[0].sheet.spec.porch_roofs[0]
@@ -357,7 +356,7 @@ def test_deck_under_awning():
     5–7 футах — плита 1,829 × 2,4 м от земли до 0,3048 м, цветом цоколя; на виде стены — полоса
     ширины отрезка, на боковом — глубины выноса; в 3D `decks`, в IFC плита."""
     sheet = terrace()
-    (a,) = porch_roofs.find(sheet, CFG.sheet)
+    (a,) = porch_roofs.find(sheet, CFG)
     (deck,) = a.decks
     top = sheet.spec.plinth_m
     assert (deck.z0, deck.z1) == pytest.approx((0.0, top))
@@ -374,10 +373,10 @@ def test_deck_under_awning():
 def test_no_deck_without_door_or_floor():
     """Сценарий «Настил под навесом»: у отрезка без двери (карпорт на земле) и при поле у земли
     настила нет."""
-    assert porch_roofs.find(terrace(x=(8.5, 11.0)), CFG.sheet)[0].decks == []
+    assert porch_roofs.find(terrace(x=(8.5, 11.0)), CFG)[0].decks == []
     low = terrace()
     low = low.model_copy(update={"spec": low.spec.model_copy(update={"plinth_m": 0.1})})
-    assert porch_roofs.find(low, CFG.sheet)[0].decks == []
+    assert porch_roofs.find(low, CFG)[0].decks == []
     assert house_3d(low, CFG)["items"]["decks"] == []
 
 
@@ -391,10 +390,10 @@ def test_deck_absorbs_porch_of_door():
     настил на весь отрезок (1,829 × 2,4 м), крыльца на листе, в 3D и IFC нет: его площадка —
     настил, ступени — от наружного края настила."""
     sheet = terrace(porch=True)
-    (a,) = porch_roofs.find(sheet, CFG.sheet)
+    (a,) = porch_roofs.find(sheet, CFG)
     (deck,) = a.decks
     assert shapely.Polygon(deck.ring).area == pytest.approx(ft(6) * 2.4)
-    lone = porch_roofs.settled(sheet, CFG.sheet)
+    lone = porch_roofs.settled(sheet, CFG)
     assert not [e for f in lone.facades for e in f.elements if e.cls is ElementClass.PORCH]
     assert not [r for w in house_3d(sheet, CFG)["walls"] for r in w["relief"]
                 if r["cls"] is ElementClass.PORCH]
@@ -406,7 +405,7 @@ def test_stairs_from_deck_edge_to_ground():
     подступёнка по 0,1524 м, наружу одна ступень шириной 0,610 + 2 · 0,30 = 1,210 м и глубиной
     0,30 м от края настила, от земли до 0,1524 м; на листе — спереди и в профиль, в 3D и IFC."""
     sheet = terrace()
-    (a,) = porch_roofs.find(sheet, CFG.sheet)
+    (a,) = porch_roofs.find(sheet, CFG)
     (step,) = a.stairs
     assert (step.z0, step.z1) == pytest.approx((0.0, sheet.spec.plinth_m / 2))
     box = shapely.Polygon(step.ring)
@@ -425,7 +424,7 @@ def test_stairs_steps_follow_riser():
     каждая на 0,30 м дальше от настила и на 0,1525 м выше."""
     high = terrace()
     high = high.model_copy(update={"spec": high.spec.model_copy(update={"plinth_m": 0.61})})
-    (a,) = porch_roofs.find(high, CFG.sheet)
+    (a,) = porch_roofs.find(high, CFG)
     assert sorted(round(s.z1, 4) for s in a.stairs) == [0.1525, 0.305, 0.4575]
     reach = {round(s.z1, 4): max(_depth_of(a, s.ring)) for s in a.stairs}
     assert reach[0.1525] - reach[0.4575] == pytest.approx(0.6)
@@ -434,19 +433,6 @@ def test_stairs_steps_follow_riser():
 def _depth_of(a, ring):
     """Расстояния углов кольца от стены наружу."""
     return [(p[0] - a.left[0]) * a.n[0] + (p[1] - a.left[1]) * a.n[1] for p in ring]
-
-
-def test_stair_numbers_are_the_porch_numbers():
-    """Подступёнок, проступь и запас ступеней настила — те же, что у крыльца двери."""
-    look = CFG.sheet.porch_roof
-    assert (look.stair_riser_m, look.stair_tread_m) == (
-        CFG.viewer.house3d.riser_m, CFG.viewer.house3d.tread_m)
-    assert look.stair_pad_m == CFG.checks.porch_pad_m
-
-
-def test_deck_threshold_is_the_porch_threshold():
-    """Допуск настила — тот же, что у крыльца двери (`checks.porch_min_m`): одно значение."""
-    assert CFG.sheet.porch_roof.deck_min_m == CFG.checks.porch_min_m
 
 
 GABLE_FRONT = {"kind": PorchKind.GABLE, "depth": 1.4, "low": 1.6, "high": 2.9, "x": (0.0, 3.6),
@@ -484,7 +470,7 @@ def test_gable_awning_top_meets_hip_slope():
     ниже него — торец продления не стоит над скатом вертикальной плоскостью."""
     given = manual.read(Path("markup/stroim/st-105878.toml"))
     sheet = manual.house(given, CFG.data.manual)[0].sheet
-    gable = next(a for a in porch_roofs.find(sheet, CFG.sheet) if a.kind is RoofKind.GABLE
+    gable = next(a for a in porch_roofs.find(sheet, CFG) if a.kind is RoofKind.GABLE
                  and a.outward)
     assert gable.reach < 0
     middle = (gable.left[0] + gable.u[0] * gable.length / 2 + gable.n[0] * gable.reach,

@@ -229,11 +229,7 @@ class PorchRoofLook(Section):
     meet_step_m: float = Field(gt=0)  # продление за стену: шаг поиска встречи с кровлей дома
     meet_max_m: float = Field(gt=0)  # предел поиска внутрь дома
     meet_samples: int = Field(ge=2)  # точек поперёк отрезка, где ищется встреча
-    deck_min_m: float = Field(ge=0)  # пол выше земли больше этого — под навесом настил
     deck_fill: str  # цвет настила, если в палитре дома нет цоколя
-    stair_riser_m: float = Field(gt=0)  # ступени настила: высота подступёнка
-    stair_tread_m: float = Field(gt=0)  # глубина проступи
-    stair_pad_m: float = Field(ge=0)  # запас шире двери с каждой стороны
 
 
 class SkylightLook(Section):

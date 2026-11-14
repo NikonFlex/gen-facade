@@ -50,7 +50,7 @@ COMMON = {ElementClass.WINDOW: "Pset_WindowCommon", ElementClass.DOOR: "Pset_Doo
 
 def house_ifc(sheet: FacadeSheet, cfg: Config, name: str = IFC_FILE) -> str:
     """Текст файла IFC4 дома по листу."""
-    return IfcHouse(porch_roofs.settled(sheet, cfg.sheet), cfg, name).build()
+    return IfcHouse(porch_roofs.settled(sheet, cfg), cfg, name).build()
 
 
 def counts(text: str) -> dict[str, int]:
@@ -687,7 +687,7 @@ class IfcHouse:
         """Навес — IfcRoof (SHED_ROOF, GABLE_ROOF, HIP_ROOF, FLAT_ROOF): профиль кровли,
         выдавленный от `origin` по `sweep`; столбы — IfcColumn, призмы от земли до низа кровли."""
         look = self.cfg.sheet.porch_roof
-        for n, a in enumerate(porch_roofs.find(self.sheet, self.cfg.sheet), 1):
+        for n, a in enumerate(porch_roofs.find(self.sheet, self.cfg), 1):
             if a.profile:
                 self._porch_roof(n, a)
             for m, q in enumerate(a.posts, 1):

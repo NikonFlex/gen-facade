@@ -78,7 +78,7 @@ NOTHING_ABOVE = Top()  # плоская крыша: над карнизом ни
 
 def tops(sheet: FacadeSheet, cfg: Config) -> list[Top]:
     """Что над карнизом у каждой стороны листа (скаты не строятся — пусто) и навесы на столбах."""
-    found = porch_roofs.find(sheet, cfg.sheet)
+    found = porch_roofs.find(sheet, cfg)
     corners = plan_corners([f.side for f in sheet.facades])
     return [top._replace(awnings=porch_roofs.view(found, corners, k))
             for k, top in enumerate(_roof_tops(sheet, cfg))]
@@ -159,7 +159,7 @@ def sheet_svg(sheet: FacadeSheet, cfg: Config, violations: list[Violation] | Non
     Слой без data-cls, поэтому разбор листа его не видит. annotations — отметки, оси, земля
     и подписи: оформление листа (шаг 6), на промежуточных шагах их нет.
     """
-    sheet = porch_roofs.settled(sheet, cfg.sheet)
+    sheet = porch_roofs.settled(sheet, cfg)
     over = tops(sheet, cfg)
     cells, width, height = _layout(sheet, over, cfg.sheet.sheet)
     mm_per_m = 1000 / cfg.sheet.sheet.scale
