@@ -25,6 +25,7 @@ from genfacade.render.svg import sheet_svg
 from genfacade.schema import (
     CheckState,
     DormerRoof,
+    MarkKind,
     Model,
     PaletteRole,
     Refusal,
@@ -35,6 +36,7 @@ from genfacade.schema import (
 from genfacade.viewer import markup_queue, markup_sheet, review
 
 EDIT_LOCK = "markup.lock"  # правка файла разметки и решение о доме — одним замком, по одной
+ROOF_ITEMS = (MarkKind.CHIMNEY,)  # отметки, что прячет `roof_items = false` (вместе с водостоком)
 STATUS = {Refusal.NO_MARKUP_HOUSE: 404, Refusal.NO_MARKUP_SHEET: 404, Refusal.BAD_MARKUP_EDIT: 422,
           Refusal.BAD_CHECK_STEP: 409, Refusal.BAD_CHECK_STATE: 500,
           Refusal.HOUSE_NOT_BUILT: 422}
@@ -130,6 +132,8 @@ def _applied(cfg: Config, folder: Path, house: str, edit: markup_edit.Edit) -> m
 def _built(cfg: Config, m: manual.Markup) -> dict:
     """Лист, 3D и план тем же кодом, что `genfacade manual`; не собралось — отказ текстом."""
     try:
+        if not cfg.viewer.markup.roof_items:  # отложено: файл цел, строим без них
+            m = m.model_copy(update={"chimneys": [], "gutters": False})
         sample = manual.house(m, cfg.data.manual)[0]
         return {"sheet": sheet_svg(sample.sheet, cfg), "house3d": house_3d(sample.sheet, cfg),
                 "plan": plan_svg(sample.plan, cfg), "plan_sides": len(sample.plan.sides),
@@ -190,7 +194,7 @@ def _options(cfg: Config) -> dict:
             "view_pad_m": editor.view_pad_m, "mark_depth_step_m": editor.mark_depth_step_m,
             "zone": editor.zone.model_dump(mode="json"),
             "marks": {k: {**v.model_dump(mode="json"), "field": markup_edit.MARK_FIELDS[k]}
-                      for k, v in editor.marks.items()},
+                      for k, v in editor.marks.items() if editor.roof_items or k not in ROOF_ITEMS},
             "choices": {"roof_kind": list(RoofKind), "dormer_roof": list(DormerRoof)},
             "variant_kinds": markup_edit.VARIANT_KINDS,
             "house_form": _house_form(cfg)}
@@ -210,7 +214,8 @@ def _house_form(cfg: Config) -> list[dict]:
             for n, c in selects]
     rows += [{"name": n, "type": Control.NUMBER, "step": editor.house_step[n],
               "empty": _nullable(n)} for n in NUMBERS]
-    rows.append({"name": "gutters", "type": Control.FLAG})
+    if editor.roof_items:
+        rows.append({"name": "gutters", "type": Control.FLAG})
     return [{**r, "label": editor.labels.house[r["name"]]} for r in rows]
 
 

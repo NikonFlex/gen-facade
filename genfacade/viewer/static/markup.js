@@ -168,6 +168,7 @@ function selectMark(ref) {
 function drawMarks(side, k, scale) {
   const o = state.options, top = side.geometry.tops.at(-1), bar = MARK_PX / scale;
   for (const [kind, marks] of Object.entries(side.marks)) {
+    if (!(kind in o.marks)) continue; // отложенные отметки (трубы) не показываем
     marks.forEach((m, i) => {
       const chosen = sameMark(state.mark, { k, kind, i });
       const style = o.marks[kind], color = chosen ? o.colors.selected : style.color;

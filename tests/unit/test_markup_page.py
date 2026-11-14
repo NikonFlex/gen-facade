@@ -68,7 +68,7 @@ def make_cfg(root: Path) -> config.Config:
         "manual": manual_rules,
         "paths": cfg.data.paths.model_copy(update={"samples_dir": root / "samples"})})
     editor = cfg.viewer.markup.model_copy(update={
-        "folder": root / "markup" / "stroim", "cache_dir": root / "cache"})
+        "folder": root / "markup" / "stroim", "cache_dir": root / "cache", "roof_items": True})
     viewer = cfg.viewer.model_copy(update={
         "markup": editor, "paths": cfg.viewer.paths.model_copy(update={"runs_dir": root / "runs"})})
     return cfg.model_copy(update={"data": data, "viewer": viewer})
@@ -544,3 +544,26 @@ def test_window_variant_is_saved_built_and_reopened_and_door_cannot_have_it(clie
 def test_variant_not_for_the_class_is_refused_by_code_and_file_stays(client, cfg, cls, variant):
     refused(client, cfg, variant_edit(client, 0, cls, variant))
 
+
+def test_deferred_roof_items_are_hidden_not_built_and_not_lost_on_save(cfg):
+    """Трубы и водостоки отложены (хозяин 14.11): `roof_items = false` — нет отметки трубы и
+    поля водостока, лист и 3D строятся без них, а труба в разметке при сохранении остаётся."""
+    path = cfg.viewer.markup.folder / f"{HOUSE}.toml"
+    on = TestClient(create_app(cfg))
+    chimney = {"side": 0, "x": 450.0}
+    save_edit(on, roof_edit(on, {"gutters": True}, chimneys=[chimney]))
+    with_pipe = on.post(f"/api/markup/{HOUSE}/build", json=roof_edit(on)).json()
+    assert len(with_pipe["house3d"]["items"]["chimneys"]) == 1
+    off_cfg = cfg.model_copy(update={"viewer": cfg.viewer.model_copy(update={
+        "markup": cfg.viewer.markup.model_copy(update={"roof_items": False})})})
+    off = TestClient(create_app(off_cfg))
+    options = off.get("/api/markup").json()["options"]
+    assert MarkKind.CHIMNEY not in options["marks"]
+    assert "gutters" not in {r["name"] for r in options["house_form"]}
+    built = off.post(f"/api/markup/{HOUSE}/build", json=roof_edit(off)).json()
+    assert built["house3d"]["items"]["chimneys"] == [] and built["sheet"] != with_pipe["sheet"]
+    body = roof_edit(off, {"pitch_deg": 31.0})  # страница труб не присылает
+    assert "chimneys" not in body
+    save_edit(off, body)
+    saved = manual.read(path)
+    assert [c.x for c in saved.chimneys] == [450.0] and saved.gutters
