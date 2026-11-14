@@ -229,6 +229,9 @@ class PorchRoofLook(Section):
     min_rise_share: float = Field(gt=0, le=1)  # продление за стену: разность уклонов не меньше доли
     deck_min_m: float = Field(ge=0)  # пол выше земли больше этого — под навесом настил
     deck_fill: str  # цвет настила, если в палитре дома нет цоколя
+    stair_riser_m: float = Field(gt=0)  # ступени настила: высота подступёнка
+    stair_tread_m: float = Field(gt=0)  # глубина проступи
+    stair_pad_m: float = Field(ge=0)  # запас шире двери с каждой стороны
 
 
 class SkylightLook(Section):
@@ -479,6 +482,7 @@ class IfcNames(Section):
     porch_roof: str  # {n} — номер
     porch_post: str  # {n} — номер
     porch_deck: str  # {n} — номер
+    porch_step: str  # {n} — номер
     porch_gable: str  # {n} — номер
 
 

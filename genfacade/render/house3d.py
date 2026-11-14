@@ -48,6 +48,7 @@ TRIM_OF = {cls: trim for trim, cls in DERIVED.items()}  # класс вывод�
 def house_3d(sheet: FacadeSheet, cfg: Config) -> dict:
     """Углы контура, высота карниза и стены: края в плане, нормаль наружу, выпуклость левого угла,
     SVG фасада. Контур не ортогональный или не замкнут — PlanError из plan_corners."""
+    sheet = porch_roofs.settled(sheet, cfg.sheet)
     corners = plan_corners([f.side for f in sheet.facades])
     pen = pen_for(sheet, cfg)
     look = _look(sheet, cfg.viewer.house3d)
@@ -143,7 +144,7 @@ def _awnings(sheet: FacadeSheet, pen: Pen, roof_part: dict) -> dict:
             "awning_faces": [f for a in found for f in a.planes],
             "awning_gables": [a.gable for a in found if a.gable],
             "decks": [{"footprint": d.ring, "z0": d.z0, "z1": d.z1, "color": deck_fill(pen)}
-                      for a in found for d in a.decks],
+                      for a in found for d in (*a.decks, *a.stairs)],
             "posts": [{"center": q.at, "size": a.post_m, "z1": q.top, "color": look.post_fill,
                        "u": a.u} for a in found for q in a.posts]}
 

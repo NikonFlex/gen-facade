@@ -50,7 +50,7 @@ COMMON = {ElementClass.WINDOW: "Pset_WindowCommon", ElementClass.DOOR: "Pset_Doo
 
 def house_ifc(sheet: FacadeSheet, cfg: Config, name: str = IFC_FILE) -> str:
     """Текст файла IFC4 дома по листу."""
-    return IfcHouse(sheet, cfg, name).build()
+    return IfcHouse(porch_roofs.settled(sheet, cfg.sheet), cfg, name).build()
 
 
 def counts(text: str) -> dict[str, int]:
@@ -693,7 +693,9 @@ class IfcHouse:
             for m, q in enumerate(a.posts, 1):
                 self._post(f"{n}/{m}", a, q, look)
             for m, d in enumerate(a.decks, 1):
-                self._deck(f"{n}/{m}", d)
+                self._deck(f"{n}/{m}", d, self.ifc.names.porch_deck)
+            for m, d in enumerate(a.stairs, 1):
+                self._deck(f"{n}/s{m}", d, self.ifc.names.porch_step)
             if a.gable:
                 self._porch_gable(n, a)
 
@@ -747,13 +749,13 @@ class IfcHouse:
                           (place, item, "STANDARD"))
         self._seat(ref, self.walls, a)
 
-    def _deck(self, key: str, deck: porch_roofs.Deck) -> None:
+    def _deck(self, key: str, deck: porch_roofs.Deck, name: str) -> None:
         """Настил под навесом: IfcSlab FLOOR — многоугольник в плане, выдавленный вниз от верха до
-        земли; цвет — как на листе (`deck_fill`)."""
+        земли; цвет — как на листе (`deck_fill`). Ступень настила — такая же плита от земли."""
         w = self.w
         item = w.solid(w.polygon(deck.ring), deck.z1 - deck.z0, deck_fill(self.pen))
         place = w.place(self.building_place, (0.0, 0.0, deck.z1))
-        ref = self._solid("IfcSlab", f"porchdeck{key}", self.ifc.names.porch_deck.format(n=key),
+        ref = self._solid("IfcSlab", f"porchdeck{key}", name.format(n=key),
                           (place, item, "FLOOR"))
         self.contained[0].append(ref)
 

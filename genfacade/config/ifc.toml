@@ -37,6 +37,7 @@ pipe = "Водосточная труба {n}"
 porch_roof = "Навес {n}"
 porch_post = "Столб навеса {n}"
 porch_deck = "Настил под навесом {n}"
+porch_step = "Ступень настила {n}"
 porch_gable = "Фронтон навеса {n}"
 
 [ifc.pset]

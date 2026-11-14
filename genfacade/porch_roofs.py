@@ -24,6 +24,7 @@ from genfacade import roof
 from genfacade.config import Sheet
 from genfacade.schema import (
     EPS,
+    Element,
     ElementClass,
     FacadeSheet,
     Point,
@@ -41,6 +42,7 @@ class Part(StrEnum):
     ROOF = "roof"
     POST = "post"
     DECK = "deck"
+    STEP = "step"
     GABLE = "gable"
 
 
@@ -82,6 +84,7 @@ class Awning:
     reach: float = 0.0
     slab: bool = True
     decks: list[Deck] = field(default_factory=list)
+    stairs: list[Deck] = field(default_factory=list)
 
     @property
     def footprint(self) -> list[Point]:
@@ -164,37 +167,71 @@ def _awning(sheet: FacadeSheet, house: roof.HouseRoof | None, p: PorchRoof, cfg:
     cover = _cover(sheet, _line(sheet, house, p), frame, flush)
     made = _continued if p.kind is PorchKind.MAIN else _own
     found = made(frame, p, cover, cfg)
-    return replace(found, decks=_decks(sheet, p, frame, cfg))
+    return replace(found, decks=_decks(sheet, p, frame, cfg), stairs=_stairs(sheet, p, frame, cfg))
+
+
+def _deck_doors(sheet: FacadeSheet, p: PorchRoof, cfg: Sheet) -> list[Element]:
+    """Двери отрезка стены под навесом, у которых есть настил: пол выше земли больше `deck_min_m`;
+    у отрезка без двери (карпорт на земле) настила нет."""
+    if sheet.spec.plinth_m <= cfg.porch_roof.deck_min_m:
+        return []
+    return [e for e in sheet.facades[p.side].elements if e.cls is ElementClass.DOOR
+            and min(e.x_m + e.w_m, p.x_m[1]) - max(e.x_m, p.x_m[0]) > EPS]
 
 
 def _decks(sheet: FacadeSheet, p: PorchRoof, frame: Frame, cfg: Sheet) -> list[Deck]:
     """Настил террасы под навесом (`Настил под навесом`): площадка от стены до наружного края
-    навеса между краями отрезка, от земли до чистого пола (основание, как у крыльца). Пол выше
-    земли не больше `deck_min_m` или у отрезка стены нет двери (карпорт на земле) — настила нет.
-    Где у стены стоит крыльцо двери (`porch`), его площадка уже есть: настил обходит её."""
-    top, look = sheet.spec.plinth_m, cfg.porch_roof
-    elements = sheet.facades[p.side].elements
-    doors = [e for e in elements if e.cls is ElementClass.DOOR
-             and min(e.x_m + e.w_m, p.x_m[1]) - max(e.x_m, p.x_m[0]) > EPS]
-    if top <= look.deck_min_m or not doors:
+    навеса между краями отрезка, от земли до чистого пола (основание, как у крыльца). Крыльцо
+    двери (`porch`) настил поглощает целиком (`settled`): площадка у двери — это он."""
+    if not _deck_doors(sheet, p, cfg):
         return []
-    taken = [(e.x_m, e.x_m + e.w_m) for e in elements if e.cls is ElementClass.PORCH]
-    rings = ([frame.at(a - p.x_m[0], 0.0), frame.at(b - p.x_m[0], 0.0),
-              frame.at(b - p.x_m[0], p.depth_m), frame.at(a - p.x_m[0], p.depth_m)]
-             for a, b in _free(p.x_m, taken))
-    return [Deck(ring, 0.0, top) for ring in rings]
+    b = p.x_m[1] - p.x_m[0]
+    ring = [frame.at(0.0, 0.0), frame.at(b, 0.0), frame.at(b, p.depth_m), frame.at(0.0, p.depth_m)]
+    return [Deck(ring, 0.0, sheet.spec.plinth_m)]
 
 
-def _free(span: tuple[float, float], taken: list[tuple[float, float]]) -> list[tuple[float, float]]:
-    """Отрезок span без занятых отрезков; крохи короче EPS отбрасываются."""
-    free, start = [], span[0]
-    for a, b in sorted(taken):
-        if a - start > EPS:
-            free.append((start, min(a, span[1])))
-        start = max(start, b)
-    if span[1] - start > EPS:
-        free.append((start, span[1]))
-    return [(a, b) for a, b in free if b - a > EPS]
+def _stairs(sheet: FacadeSheet, p: PorchRoof, frame: Frame, cfg: Sheet) -> list[Deck]:
+    """Ступени настила (`Настил под навесом`): у наружного края напротив каждой двери шириной
+    с дверь и запасом `stair_pad_m` с каждой стороны (в пределах отрезка), вниз до земли.
+    Подступёнков ceil(пол / `stair_riser_m`) — верхняя ступень это сам настил, наружу идут
+    остальные, глубиной `stair_tread_m`; каждая — блок от земли, ближняя к земле самая длинная
+    и низкая. Двери рядом, чьи ступени сошлись, — одна лестница."""
+    look, top = cfg.porch_roof, sheet.spec.plinth_m
+    risers = max(1, math.ceil(top / look.stair_riser_m - EPS))
+    spans: list[list[float]] = []
+    for d in sorted(_deck_doors(sheet, p, cfg), key=lambda e: e.x_m):
+        a = max(d.x_m - look.stair_pad_m, p.x_m[0])
+        b = min(d.x_m + d.w_m + look.stair_pad_m, p.x_m[1])
+        if spans and a - spans[-1][1] <= EPS:
+            spans[-1][1] = max(spans[-1][1], b)
+        else:
+            spans.append([a, b])
+    out = []
+    for a, b in spans:
+        a, b = a - p.x_m[0], b - p.x_m[0]
+        for i in range(risers - 1, 0, -1):  # i-я ступень от земли: высота i · подступёнок
+            far = p.depth_m + (risers - i) * look.stair_tread_m
+            ring = [frame.at(a, p.depth_m), frame.at(b, p.depth_m), frame.at(b, far),
+                    frame.at(a, far)]
+            out.append(Deck(ring, 0.0, i * top / risers))
+    return out
+
+
+def settled(sheet: FacadeSheet, cfg: Sheet) -> FacadeSheet:
+    """Лист без крылец двери, что слились с настилом: у двери на настиле площадка и ступени
+    крыльца не стоят — площадка у двери это настил, а ступени идут от его наружного края."""
+    gone: dict[int, set[str]] = {}
+    for p in sheet.spec.porch_roofs:
+        doors = _deck_doors(sheet, p, cfg)
+        gone.setdefault(p.side, set()).update(
+            e.id for e in sheet.facades[p.side].elements if e.cls is ElementClass.PORCH
+            and any(min(e.x_m + e.w_m, d.x_m + d.w_m) - max(e.x_m, d.x_m) > EPS for d in doors))
+    if not any(gone.values()):
+        return sheet
+    facades = [f.model_copy(update={"elements": [e for e in f.elements
+                                                 if e.id not in gone.get(k, ())]})
+               for k, f in enumerate(sheet.facades)]
+    return sheet.model_copy(update={"facades": facades})
 
 
 def _inset(p: PorchRoof, cfg: Sheet) -> float:
@@ -388,7 +425,7 @@ def view(awnings: list[Awning], corners: list[Point], k: int) -> list[tuple[Part
 def _front(a: Awning, at: roof.PlanToView) -> list[tuple[Part, Polygon]]:
     """Спереди: настил, столбы от земли и кровля — сечение (фронтон) или полоса между низом и
     верхом. Заполненный фронтон двускатного навеса закрывает столбы за ним."""
-    out = _decks_view(a, at)
+    out = _decks_view(a, at, low_first=False)
     out += [(Part.POST, _rect(x - a.post_m / 2, 0.0, x + a.post_m / 2, p.top))
             for p in a.posts for x in (at(p.at)[0],)]
     if not a.profile:
@@ -409,7 +446,7 @@ def _side(a: Awning, at: roof.PlanToView, sign: float) -> list[tuple[Part, Polyg
     кромки стены навеса — одна у всех точек, вынос откладывается по знаку нормали вдоль x вида.
     Кровля за стеной внутрь дома не рисуется — её скрывает кровля дома."""
     x = at(a.left)[0]
-    out = _decks_view(a, at)
+    out = _decks_view(a, at, low_first=True)
     if a.posts:
         c = at(a.posts[0].at)[0]
         top = max(p.top for p in a.posts)
@@ -426,13 +463,16 @@ def _side(a: Awning, at: roof.PlanToView, sign: float) -> list[tuple[Part, Polyg
     return out + [(Part.ROOF, q) for q in roof.polygons(shape)]
 
 
-def _decks_view(a: Awning, at: roof.PlanToView) -> list[tuple[Part, Polygon]]:
-    """Настил на виде: полоса от низа до верха настила между крайними x его углов — спереди
-    его ширина, сбоку его глубина."""
+def _decks_view(a: Awning, at: roof.PlanToView, low_first: bool) -> list[tuple[Part, Polygon]]:
+    """Настил и ступени на виде: полоса от низа до верха между крайними x углов — спереди ширина,
+    сбоку глубина. Ступени от земли: спереди нижние рисуются позже (виден подступёнок), сбоку
+    длинные нижние — раньше (виден профиль) — `low_first`."""
     out = []
-    for d in a.decks:
-        xs = [at(p)[0] for p in d.ring]
-        out.append((Part.DECK, _rect(min(xs), d.z0, max(xs), d.z1)))
+    for kind, blocks in ((Part.DECK, a.decks),
+                         (Part.STEP, sorted(a.stairs, key=lambda d: d.z1, reverse=not low_first))):
+        for d in blocks:
+            xs = [at(p)[0] for p in d.ring]
+            out.append((kind, _rect(min(xs), d.z0, max(xs), d.z1)))
     return out
 
 

@@ -364,8 +364,8 @@ def test_deck_under_awning():
                     for k in range(len(LENGTHS)) for s in parts_of(sheet, k, Part.DECK))
     assert widths == [round(ft(6), 3), 2.4, 2.4]  # лицо и два боковых вида
     items = house_3d(sheet, CFG)["items"]
-    assert [d["color"] for d in items["decks"]] == [deck_fill(pen_for(sheet, CFG))]
-    assert house_ifc(sheet, CFG).count("IFCSLAB(") == house_ifc(SHEET, CFG).count("IFCSLAB(") + 1
+    assert {d["color"] for d in items["decks"]} == {deck_fill(pen_for(sheet, CFG))}
+    assert house_ifc(sheet, CFG).count("IFCSLAB(") == house_ifc(SHEET, CFG).count("IFCSLAB(") + 2
     assert 'class="porch-deck"' in sheet_svg(sheet, CFG)
 
 
@@ -379,12 +379,62 @@ def test_no_deck_without_door_or_floor():
     assert house_3d(low, CFG)["items"]["decks"] == []
 
 
-def test_deck_continues_porch_without_double_slab():
-    """Сценарий «Настил продолжает крыльцо»: крыльцо двери на 4–8 футах — настил на 2–4 футах
-    (левее него), справа от крыльца ничего: плит над крыльцом нет."""
-    (a,) = porch_roofs.find(terrace(porch=True), CFG.sheet)
+def test_deck_absorbs_porch_of_door():
+    """Сценарий «Настил поглощает крыльцо»: крыльцо двери на 4–8 футах под навесом на 2–8 футах —
+    настил на весь отрезок (1,829 × 2,4 м), крыльца на листе, в 3D и IFC нет: его площадка —
+    настил, ступени — от наружного края настила."""
+    sheet = terrace(porch=True)
+    (a,) = porch_roofs.find(sheet, CFG.sheet)
     (deck,) = a.decks
-    assert shapely.Polygon(deck.ring).area == pytest.approx(ft(2) * 2.4)
+    assert shapely.Polygon(deck.ring).area == pytest.approx(ft(6) * 2.4)
+    lone = porch_roofs.settled(sheet, CFG.sheet)
+    assert not [e for f in lone.facades for e in f.elements if e.cls is ElementClass.PORCH]
+    assert not [r for w in house_3d(sheet, CFG)["walls"] for r in w["relief"]
+                if r["cls"] is ElementClass.PORCH]
+    assert house_ifc(sheet, CFG) == house_ifc(terrace(), CFG)
+
+
+def test_stairs_from_deck_edge_to_ground():
+    """Сценарий «Ступени настила»: пол 0,3048 м, дверь 5–7 футов (0,610 м), вынос 2,4 м — два
+    подступёнка по 0,1524 м, наружу одна ступень шириной 0,610 + 2 · 0,30 = 1,210 м и глубиной
+    0,30 м от края настила, от земли до 0,1524 м; на листе — спереди и в профиль, в 3D и IFC."""
+    sheet = terrace()
+    (a,) = porch_roofs.find(sheet, CFG.sheet)
+    (step,) = a.stairs
+    assert (step.z0, step.z1) == pytest.approx((0.0, sheet.spec.plinth_m / 2))
+    box = shapely.Polygon(step.ring)
+    assert box.area == pytest.approx((ft(2) + 0.6) * 0.3)
+    depths = sorted(round(d, 3) for d in _depth_of(a, step.ring))
+    assert depths == [2.4, 2.4, 2.7, 2.7]
+    steps = [s for k in range(len(LENGTHS)) for s in parts_of(sheet, k, Part.STEP)]
+    assert len(steps) == 3  # спереди и два боковых вида
+    assert len(house_3d(sheet, CFG)["items"]["decks"]) == 2  # настил и ступень
+    assert house_ifc(sheet, CFG).count("IFCSLAB(") == house_ifc(SHEET, CFG).count("IFCSLAB(") + 2
+    assert 'class="porch-step"' in sheet_svg(sheet, CFG)
+
+
+def test_stairs_steps_follow_riser():
+    """Чем выше пол, тем больше ступеней: пол 0,61 м — четыре подступёнка, три ступени наружу,
+    каждая на 0,30 м дальше от настила и на 0,1525 м выше."""
+    high = terrace()
+    high = high.model_copy(update={"spec": high.spec.model_copy(update={"plinth_m": 0.61})})
+    (a,) = porch_roofs.find(high, CFG.sheet)
+    assert sorted(round(s.z1, 4) for s in a.stairs) == [0.1525, 0.305, 0.4575]
+    reach = {round(s.z1, 4): max(_depth_of(a, s.ring)) for s in a.stairs}
+    assert reach[0.1525] - reach[0.4575] == pytest.approx(0.6)
+
+
+def _depth_of(a, ring):
+    """Расстояния углов кольца от стены наружу."""
+    return [(p[0] - a.left[0]) * a.n[0] + (p[1] - a.left[1]) * a.n[1] for p in ring]
+
+
+def test_stair_numbers_are_the_porch_numbers():
+    """Подступёнок, проступь и запас ступеней настила — те же, что у крыльца двери."""
+    look = CFG.sheet.porch_roof
+    assert (look.stair_riser_m, look.stair_tread_m) == (
+        CFG.viewer.house3d.riser_m, CFG.viewer.house3d.tread_m)
+    assert look.stair_pad_m == CFG.checks.porch_pad_m
 
 
 def test_deck_threshold_is_the_porch_threshold():
