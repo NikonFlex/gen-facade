@@ -545,6 +545,8 @@ class MarkupLabels(Section):
     mark_kind: str                 # подпись списка видов у выбранной отметки
     build_sheet: str               # заголовок листа, собранного модулем из разметки (gf#470)
     build_house: str               # заголовок 3D дома из разметки
+    build_plan: str                # заголовок плана, собранного сборщиком разметки
+    build_source_plan: str         # подпись исходного плана листа рядом с ним
     build_wait: str                # пока дом собирается
     mark_depth: str                # подпись поля выноса отметки от стены вида (gf#471)
     empty_kind: str                # «вид не записан» в списках видов
@@ -589,6 +591,7 @@ class MarkupEditor(Section):
     view_pad_m: float              # поле вокруг рисунка фасада в окне вида стороны, м вида (gf#470)
     ink_level: int                 # серость пикселя листа (0–255), темнее — рисунок, а не бумага
     build_delay_ms: int            # пауза после правки перед пересборкой листа и 3D, мс
+    plan_image: str                # исходная страница плана в папке листа дома (gf#470)
     build_height_px: int           # высота панели «лист модуля и 3D» на странице, px (gf#470)
     house_step: dict[str, float]   # шаг числовых полей дома на панели правки (gf#470)
     marks: dict[MarkKind, MarkStyle]

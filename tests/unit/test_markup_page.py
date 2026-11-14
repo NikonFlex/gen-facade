@@ -475,6 +475,16 @@ def test_build_gives_sheet_and_3d_with_unsaved_chimney_and_leaves_file(client, c
     assert got.json()["sheet"] != plain["sheet"] and path.read_text() == before
 
 
+def test_build_gives_input_plan_with_a_wall_per_marked_side_and_source_plan_page(client, cfg):
+    opened = client.post(f"/api/markup/{HOUSE}/open").json()
+    got = client.post(f"/api/markup/{HOUSE}/build", json=roof_edit(client)).json()
+    assert got["plan"].startswith("<svg") and got["plan_sides"] == len(opened["sides"])
+    assert client.get(got["source_plan"]).status_code == 404   # листа плана нет — отказ, не 500
+    folder = cfg.data.manual.paths.pdf_dirs["stroim"] / "test"
+    Image.new("RGB", (40, 30), "white").save(folder / cfg.viewer.markup.plan_image)
+    assert client.get(got["source_plan"]).headers["content-type"] == "image/jpeg"
+
+
 def test_build_of_a_house_that_does_not_assemble_is_a_refusal_with_text(client, monkeypatch):
     def broken(*_):
         raise manual.Unsupported("крыша не ложится")

@@ -31,6 +31,14 @@ def _page(pdf: Path, number: int) -> pdfplumber.page.Page:
     return doc.pages[number - 1]
 
 
+def plan_image(cfg: Config, m: Markup) -> Path:
+    """Страница плана рядом с листом дома (`plan_image`); нет файла — отказ с причиной."""
+    file = pdf_path(cfg, m).parent / cfg.viewer.markup.plan_image
+    if not file.exists():
+        raise Refused(Refusal.NO_MARKUP_SHEET, f"нет файла {file}")
+    return file
+
+
 def page_size(cfg: Config, m: Markup, number: int) -> tuple[float, float]:
     """Размер страницы в pt: в нём записана разметка."""
     page = _page(pdf_path(cfg, m), number)

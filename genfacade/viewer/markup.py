@@ -20,6 +20,7 @@ from genfacade.config import Config
 from genfacade.datasets import manual, markup_edit, markup_toml
 from genfacade.plan.genplan_svg import PlanError
 from genfacade.render.house3d import house_3d
+from genfacade.render.plan_svg import plan_svg
 from genfacade.render.svg import sheet_svg
 from genfacade.schema import (
     CheckState,
@@ -48,7 +49,8 @@ class Control(StrEnum):
 
 
 TRIM_PREFIX = "trim."   # поле обрамления на панели: trim.<элемент>, как в `TrimMark`
-BUILD_LABELS = ("build_sheet", "build_house", "build_wait")  # подписи панели листа и 3D
+# подписи панели: лист, 3D, входной план с исходной страницей и «собираю…»
+BUILD_LABELS = ("build_sheet", "build_house", "build_plan", "build_source_plan", "build_wait")
 NUMBERS = ("pitch_deg", "overhang_m", "gable_overhang_m", "roof_down")  # порядок панели
 
 
@@ -85,13 +87,19 @@ def api(app: FastAPI, cfg: Config, folder: Path) -> None:
 
     @app.post("/api/markup/{house}/build")
     def build(house: str, edit: markup_edit.Edit) -> dict:
-        """Лист фасадов и 3D дома, как их соберёт модуль из разметки с правкой, без записи."""
+        """Лист, 3D и входной план дома, как их соберёт модуль из разметки с правкой, без записи."""
         m = _applied(cfg, folder, house, edit)
         return _guard(lambda: _built(cfg, m))
 
     @app.post("/api/markup/{house}/decision")
     def decision(house: str, decision: Decision) -> dict:
         return _guard(lambda: _decide(cfg, folder, house, decision))
+
+    @app.get("/api/markup/{house}/plan.jpg")
+    def source_plan(house: str) -> FileResponse:
+        """Страница плана с листа строим.дом.рф — для сверки контура со сборкой."""
+        m = manual.read(_guard(lambda: _file(folder, house)))
+        return FileResponse(str(_guard(lambda: markup_sheet.plan_image(cfg, m))))
 
     @app.get("/api/markup/{house}/page/{number}.jpg")
     def sheet(house: str, number: int) -> FileResponse:
@@ -120,10 +128,12 @@ def _applied(cfg: Config, folder: Path, house: str, edit: markup_edit.Edit) -> m
 
 
 def _built(cfg: Config, m: manual.Markup) -> dict:
-    """Лист и 3D тем же кодом, что `genfacade manual` и смотрелка; не собралось — отказ текстом."""
+    """Лист, 3D и план тем же кодом, что `genfacade manual`; не собралось — отказ текстом."""
     try:
-        sheet = manual.house(m, cfg.data.manual)[0].sheet
-        return {"sheet": sheet_svg(sheet, cfg), "house3d": house_3d(sheet, cfg)}
+        sample = manual.house(m, cfg.data.manual)[0]
+        return {"sheet": sheet_svg(sample.sheet, cfg), "house3d": house_3d(sample.sheet, cfg),
+                "plan": plan_svg(sample.plan, cfg), "plan_sides": len(sample.plan.sides),
+                "source_plan": f"/api/markup/{m.id}/plan.jpg"}
     except (manual.Unsupported, manual.BadMarkup, PlanError) as e:
         raise Refused(Refusal.HOUSE_NOT_BUILT, str(e)) from e
 
