@@ -451,9 +451,6 @@ class House3d(Section):
     plinth_wash_m: float = Field(ge=0)
     cornice_steps: list[tuple[float, float]] = Field(min_length=1)
     window_out_m: float = Field(ge=0)  # окно во фронтоне — на столько наружу от стены (gf#321)
-    seam_m: float = Field(ge=0)  # фронтон заходит на стену по карнизу на столько
-    window_frame_m: float = Field(gt=0)  # рама окна во фронтоне: ширина кромки, как у окна на стене
-    window_frame_fill: str  # и её цвет
 
 
 class IfcNames(Section):

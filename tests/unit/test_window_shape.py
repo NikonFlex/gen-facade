@@ -43,7 +43,7 @@ def _gabled(kind: VariantKind, top: float = 0.6):
 
 def test_every_window_kind_draws_parses_and_stands_in_3d():
     """Каждый вид окна рисуется на листе и разбирается обратно тем же элементом; не прямоугольный
-    — контуром `window-shape`; в 3D окно во фронтоне — многоугольником контура."""
+    — контуром `window-shape`; в 3D окно во фронтоне — в текстуре стены, как окна под карнизом."""
     for kind in WINDOW_KINDS:
         sheet, k = _gabled(kind)
         text = sheet_svg(sheet, CFG)
@@ -51,8 +51,10 @@ def test_every_window_kind_draws_parses_and_stands_in_3d():
         assert window == sheet.facades[k].elements[0], kind
         shaped = 'class="window-shape"' in text
         assert shaped == (kind in (VariantKind.ARCH, VariantKind.OVAL)), kind
-        [glass] = house_3d(sheet, CFG)["roof"]["windows"]
-        assert len(glass) > 4 if kind in (VariantKind.ARCH, VariantKind.OVAL) else len(glass) == 4
+        data = house_3d(sheet, CFG)
+        assert data["roof"]["windows"] == [], kind  # окно во фронтоне — в текстуре стены
+        assert 'data-id="g1"' in data["walls"][k]["svg"], kind
+        assert ('class="window-shape"' in data["walls"][k]["svg"]) == shaped, kind
 
 
 def test_slope_window_is_cut_by_the_slope():

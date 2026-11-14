@@ -10,7 +10,7 @@
 """
 
 import math
-from itertools import pairwise
+from typing import NamedTuple
 
 import shapely
 
@@ -19,6 +19,7 @@ from genfacade.config import Config, House3d
 from genfacade.derive import DERIVED
 from genfacade.render.svg import (
     Pen,
+    Top,
     deck_fill,
     element_fill,
     element_material,
@@ -50,7 +51,8 @@ def house_3d(sheet: FacadeSheet, cfg: Config) -> dict:
     corners = plan_corners([f.side for f in sheet.facades])
     pen = pen_for(sheet, cfg)
     look = _look(sheet, cfg.viewer.house3d)
-    gabled = _gabled(sheet)
+    whole = _gable_walls(sheet)
+    zones = roof.sheet_gables(sheet)
     walls = [{
         "side": f.side.index,
         "left": corners[(k + 1) % len(corners)],
@@ -58,12 +60,13 @@ def house_3d(sheet: FacadeSheet, cfg: Config) -> dict:
         "normal": f.side.orientation,
         "length_m": f.side.length_m,
         "convex_left": _convex(corners, (k + 1) % len(corners)),
-        "gable": gabled[k],
-        "height_m": max((y for _, y in f.silhouette or []), default=sheet.spec.eaves_m),
+        "height_m": max((y for _, y in (whole[k].facade if k in whole else f).silhouette or []),
+                        default=sheet.spec.eaves_m),
         # Силуэт стены (x от левого края, высота): обводка — по нему, а не по прямоугольнику
         # текстуры, иначе у стены со ступенью рамка висит над нижней частью (gf#431). Нет — рамка.
-        "outline": f.silhouette,
-        "svg": facade_svg(_flat(f, look), pen, gabled[k]),
+        # У стены с фронтоном силуэт — вместе с фронтоном: одна грань, одна текстура.
+        "outline": (whole[k].facade if k in whole else f).silhouette,
+        "svg": _wall_svg(f, whole.get(k), zones[k], pen, look),
         "relief": _relief(f, pen, look),
     } for k, f in enumerate(sheet.facades)]
     roof_part = _roof(sheet, pen, corners, look)
@@ -75,11 +78,38 @@ def house_3d(sheet: FacadeSheet, cfg: Config) -> dict:
             "items": _items(sheet, cfg) | _awnings(sheet, pen, roof_part), "swatches": swatches}
 
 
-def _gabled(sheet: FacadeSheet) -> list[bool]:
-    """У какой стены над карнизом идёт фронтон той же стеной: без верхней кромки обводки."""
+class Whole(NamedTuple):
+    """Стена вместе с фронтоном: сторона с силуэтом в одну грань и стена над карнизом."""
+
+    facade: SideFacade
+    above: list[Polygon]
+
+
+def _gable_walls(sheet: FacadeSheet) -> dict[int, Whole]:
+    """Стены, у которых над карнизом идёт фронтон, — со силуэтом вместе с ним. В 3D это одна грань
+    с одной текстурой: фронтон отдельной гранью давал шов по карнизу и разрезал окна, что стоят
+    через карниз (хозяин 14.11: «почему есть какая-то линия, после которой дома по-другому
+    выглядят»). Фронтон, не слившийся со стеной в один многоугольник, остаётся гранью крыши."""
     house = roof.roofs(sheet)
-    return [house is not None and bool(roof.house_above(house, k))
-            for k in range(len(sheet.facades))]
+    found = {}
+    for k, f in enumerate(sheet.facades):
+        above = roof.house_above(house, k) if house is not None else []
+        whole = shapely.unary_union([shapely.Polygon(f.silhouette or []),
+                                     *(shapely.Polygon(a) for a in above)])
+        if above and whole.geom_type == "Polygon":
+            found[k] = Whole(f.model_copy(update={"silhouette": list(whole.exterior.coords)[:-1]}),
+                             above)
+    return found
+
+
+def _wall_svg(f: SideFacade, whole: Whole | None, zone: Polygon | None, pen: Pen,
+              look: House3d) -> str:
+    """Текстура стены; у стены с фронтоном — вместе с ним: стена над карнизом основной отделкой,
+    окна во фронтоне — тем же рисунком, что окна под карнизом."""
+    if whole is None:
+        return facade_svg(_flat(f, look), pen)
+    over = Top(above=whole.above, gable=zone, merged=True)
+    return facade_svg(_flat(whole.facade, look), pen, over)
 
 
 def _items(sheet: FacadeSheet, cfg: Config) -> dict:
@@ -169,15 +199,17 @@ def _roof_shape(sheet: FacadeSheet, pen: Pen, corners: list[Point], look: House3
                 "material": None, "wall_material": None,
                 "flat": list(flat.exterior.coords)[:-1] if flat else corners}
     zones = roof.sheet_gables(sheet)  # окна во фронтоне (gf#321, gf#453) — в зоне листа
-    above, windows, frames = [], [], []
+    whole = _gable_walls(sheet)  # их фронтон и окна в нём — уже в текстуре стены
+    above, windows = [], []
     for k, f in enumerate(sheet.facades):
+        if k in whole:
+            continue
         left, u, _ = roof.axis(house.corners, k)
         for shape in roof.house_above(house, k):
             above.append([(left[0] + u[0] * x, left[1] + u[1] * x, y) for x, y in shape])
         if zones[k] is not None:
-            glass, frame = _gable_windows(f, (left, u), zones[k], sheet.spec.eaves_m, look,
-                                          pen.cfg.checks.slope_offset_m)
-            windows, frames = windows + glass, frames + frame
+            windows += _gable_windows(f, (left, u), zones[k], sheet.spec.eaves_m, look,
+                                      pen.cfg.checks.slope_offset_m)
     above += [wall for joint in roof.joints(house) for wall in joint.walls]
     built = dormers.build(sheet, pen.cfg)  # слуховые окна (gf#457): вырез в кровле, куски дормера
     found = dormers.solids(built, look.window_out_m)
@@ -187,43 +219,27 @@ def _roof_shape(sheet: FacadeSheet, pen: Pen, corners: list[Point], look: House3
             "above": above, "flat": None,
             "color": pen.colors.get(pen.roof or ""), "wall": pen.colors.get(PaletteRole.MAIN),
             "material": material, "wall_material": wall_material,
-            "windows": windows, "window_frames": frames, "glass": pen.cfg.library.fill.glass,
-            "frame": look.window_frame_fill}
+            "windows": windows, "glass": pen.cfg.library.fill.glass}
 
 
 def _gable_windows(f: SideFacade, axis: tuple[Point, Point], zone: Polygon, eaves: float,
-                   look: House3d, offset: float) -> tuple[list[list], list[list]]:
-    """Окна во фронтоне (gf#321) в объёме: стекло и рама. Часть окна выше карниза — текстура стены
-    кончается на карнизе, а фронтон — гладкий многоугольник; стекло — чуть наружу от стены, чтобы
-    не тонуть в ней, рама — ещё чуть дальше. Рама — кромка контура окна шириной, как у окна на
-    стене (`window_frame_m`): без неё окно ниже карниза в раме, а выше — голое, и по карнизу идёт
-    шов (хозяин 14.11: «почему есть какая-то линия, после которой дома по-другому выглядят»)."""
+                   look: House3d, offset: float) -> list[list]:
+    """Окна во фронтоне (gf#321) в объёме: часть рамки выше карниза — текстура стены кончается на
+    карнизе, а фронтон — гладкий многоугольник; чуть наружу от стены, чтобы не тонуть в ней."""
     left, u = axis
+    out = (u[1] * look.window_out_m, -u[0] * look.window_out_m)  # наружная нормаль стены
+    quads = []
     room = window_shape.gable_room(f.side.length_m, eaves, zone, offset)
     above = shapely.box(-roof.FAR, eaves, roof.FAR, roof.FAR)
-    glass, frames = [], []
     for e in f.elements:
-        if not roof.over_eaves(e, eaves):
-            continue
-        # контур по виду окна (gf#319), выше карниза — ниже он в текстуре стены
-        full = shapely.Polygon(window_shape.outline(e, room))
-        glass += [_lifted(q, (left, u), look.window_out_m)
-                  for q in roof.polygons(full.intersection(above))]
-        ring = list(full.exterior.coords)
-        for a, b in pairwise(ring):
-            edge = shapely.LineString([a, b]).buffer(look.window_frame_m / 2, cap_style="square",
-                                                     join_style="mitre")
-            frames += [_lifted(q, (left, u), 1.5 * look.window_out_m)
-                       for q in roof.polygons(edge.intersection(above))]
-    return glass, frames
-
-
-def _lifted(part: Polygon, axis: tuple[Point, Point], out: float) -> list:
-    """Многоугольник стены (x от левого края, высота) → точки (x, y плана, высота), на `out`
-    метров наружу от стены."""
-    left, u = axis
-    return [(left[0] + u[0] * x + u[1] * out, left[1] + u[1] * x - u[0] * out, y)
-            for x, y in part]
+        if roof.over_eaves(e, eaves):
+            # контур по виду окна (gf#319), выше карниза — ниже он в текстуре стены
+            part = shapely.Polygon(window_shape.outline(e, room)).intersection(above)
+            if part.is_empty or part.geom_type != "Polygon":
+                continue
+            quads.append([(left[0] + u[0] * x + out[0], left[1] + u[1] * x + out[1], y)
+                          for x, y in list(part.exterior.coords)[:-1]])
+    return quads
 
 
 def _convex(corners: list[Point], k: int) -> bool:

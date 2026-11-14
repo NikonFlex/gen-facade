@@ -6,12 +6,12 @@ import pytest
 from test_roof import L_HOUSE, wing_house
 from test_unfold import L_SIDES, sides_of
 
-from genfacade import config, roof
+from genfacade import roof
 from genfacade.datasets.synthetic import build
 from genfacade.render import hatch
 from genfacade.render.house3d import house_3d
 from genfacade.render.sheet_format import num
-from genfacade.render.svg import element_fill, facade_svg, pen_for, sheet_svg
+from genfacade.render.svg import element_fill, pen_for, sheet_svg
 from genfacade.schema import (
     Element,
     ElementClass,
@@ -276,47 +276,17 @@ def _gable_window_house(low: bool = False) -> tuple[FacadeSheet, int]:
     return sheet.model_copy(update={"wall_gables": [gable], "facades": facades}), k
 
 
-@pytest.mark.parametrize("low", [False, True], ids=["gable-only", "plus-wall-window"])
-def test_house_of_parts_draws_gable_window_where_the_sheet_does(cfg, low):
-    """Окно в щипце над карнизной стеной дома из частей (gf#453) — в 3D выше карниза, чуть
-    наружу от стены; сколько окон выше карниза на листе, столько и в 3D; окно под карнизом — в
-    текстуре стены, во фронтоне не дублируется."""
-    sheet, k = _gable_window_house(low)
-    assert roof.roofline(sheet) is None and roof.roofs(sheet) is not None
-    assert len(roof.gable_windows(sheet)) == 1
-    quads = house_3d(sheet, cfg)["roof"]["windows"]
-    assert len(quads) == len(roof.gable_windows(sheet))
-    wall = house_3d(sheet, cfg)["walls"][k]
-    left, nx, ny = wall["left"], *wall["normal"]
-    assert all(z >= sheet.spec.eaves_m - 1e-9 for q in quads for *_, z in q)
-    out = cfg.viewer.house3d.window_out_m
-    assert all(((x - left[0]) * nx + (y - left[1]) * ny) == pytest.approx(out)
-               for q in quads for x, y, _ in q)
-
-
-def test_gable_window_has_frame_like_wall_window(cfg):
-    """Сценарий «Стена и фронтон — одна плоскость»: окно во фронтоне — с рамой шириной, как у окна
-    на стене (`stroke-width` окна в sheet.css) и её цветом (`stroke` листа); рама лежит выше
-    карниза, цвет и ширина берутся из настроек 3D, а не из числа в коде."""
-    sheet, _ = _gable_window_house(False)
-    roof_part = house_3d(sheet, cfg)["roof"]
-    assert roof_part["window_frames"]
-    assert all(z >= sheet.spec.eaves_m - 1e-9 for q in roof_part["window_frames"] for *_, z in q)
-    css = config.load().css
-    look = cfg.viewer.house3d
-    assert f'.facade [data-cls="window"] {{ stroke-width: {look.window_frame_m}px; }}' in css
-    assert f".facade {{ stroke: {roof_part['frame']};" in css
-    assert roof_part["frame"] == look.window_frame_fill
-
-
-def test_wall_under_gable_has_no_top_edge(cfg):
-    """Сценарий «Стена и фронтон — одна плоскость»: у стены с фронтоном в 3D стена помечена
-    `gable` и в её текстуре нет верхней кромки контура — по карнизу через окна нет шва; у стены
-    без фронтона контур замкнут."""
-    sheet, k = _gable_window_house(False)
-    walls = house_3d(sheet, cfg)["walls"]
-    assert walls[k]["gable"] is True
-    pen = pen_for(sheet, cfg)
-    assert 'class="outline"' in facade_svg(sheet.facades[k], pen)
-    open_top = facade_svg(sheet.facades[k], pen, True)
-    assert "<polygon class=\"outline\"" not in open_top and open_top.count('class="outline"') == 3
+def test_wall_with_gable_is_one_face_with_one_texture(cfg):
+    """Сценарий «Стена и фронтон — одна грань»: у стены со щипцом в 3D силуэт — стена вместе с
+    фронтоном, одна текстура (и стена, и фронтон, и окно во фронтоне, выше карниза); отдельной
+    грани фронтона и стекла окна в крыше нет, а у других стен всё как было."""
+    sheet, k = _gable_window_house(True)
+    assert roof.roofline(sheet) is None and len(roof.gable_windows(sheet)) == 1
+    data = house_3d(sheet, cfg)
+    wall, eaves = data["walls"][k], sheet.spec.eaves_m
+    assert max(y for _, y in wall["outline"]) == pytest.approx(eaves + 2.0)  # щипец 4 м, 45°
+    assert wall["height_m"] == pytest.approx(eaves + 2.0)
+    assert wall["svg"].count("<svg") == 1 and 'class="above-eaves"' in wall["svg"]
+    assert 'data-id="w1"' in wall["svg"] and 'data-id="g1"' in wall["svg"]  # под карнизом и выше
+    assert data["roof"]["windows"] == []
+    assert data["roof"]["above"] == []  # у этого дома других стен над карнизом нет

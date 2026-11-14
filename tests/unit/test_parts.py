@@ -415,9 +415,13 @@ def test_house_3d_walls_and_roof_follow_parts(plain_model):
     """В 3D стена — до верха своей высокой части, над нижней частью текстура прозрачна, плита
     кровли — над каждой частью на её карнизе."""
     made, data, high, low = in_3d(laid_out())
-    assert [w["height_m"] for w in data["walls"]] == [high, high, high, high, low, low]
+    # у стены с фронтоном (скатная крыша частей) грань — вместе с фронтоном, выше карниза части
+    heights = [w["height_m"] for w in data["walls"]]
+    assert all(h >= want - 1e-9 for h, want in zip(heights, [high] * 4 + [low] * 2, strict=True))
+    assert heights[0] == high and heights[5] == low
     assert 'class="background"' not in data["walls"][0]["svg"]
-    assert 'class="background"' in data["walls"][1]["svg"]
+    plain = [w for w in data["walls"] if len(w["outline"]) == 4]  # без ступени и фронтона
+    assert plain and all('class="background"' in w["svg"] for w in plain)
     assert not data["roof"].get("slabs")  # скатная крыша (по умолчанию двускатная) — скаты частей
     tops = sorted({round(z, 3) for face in data["roof"]["faces"] for _, _, z in face})
     assert low - 0.5 < min(tops) <= low and max(tops) > high  # свес опускает кромку ниже карниза
