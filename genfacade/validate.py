@@ -123,8 +123,9 @@ def _outside(f: SideFacade, above: Polygon | None, spec: HouseSpec,
              cfg: Checks) -> list[Violation]:
     """Элемент — в силуэте стены, а на стене с фронтоном — в силуэте с фронтоном (gf#321)."""
     wall = shapely.Polygon(f.silhouette or [])
-    if above is not None:
-        wall = wall.union(roof.wall_shape(f.side.length_m, spec.eaves_m, above))
+    if above is not None:  # у стены со ступенями силуэт уже её форма: карниз дома не её высота
+        wall = wall.union(shapely.Polygon(above) if f.silhouette else
+                          roof.wall_shape(f.side.length_m, spec.eaves_m, above))
     wall = wall.buffer(cfg.eps_m, join_style="mitre")
     room = _room(f, above, spec, cfg)
     by = {e.id: e for e in f.elements}

@@ -851,12 +851,19 @@ def test_bad_color_marks_are_refused():
         manual.house(markup(colors={"trim": "#aabbcc"}), CFG.data.manual)
 
 
-def test_real_slope_windows_of_an_l_house_reach_the_gable():
-    """gf#472, st-102359: у Г-образного дома (дом из частей) окна `slope` на щипцовой стене идут
-    до ската, как на чертеже, а не режутся по карнизу: фронтон берётся по крыше частей."""
-    sample, dropped = manual.house(real("st-102359"), CFG.data.manual)
+@pytest.mark.parametrize(("house", "side", "ids"), [
+    ("st-102359", 2, None),          # Г-дом: окна slope — все три окна щипцовой стены
+    ("st-55603", 6, {"e0", "e1"}),   # выступ со щипцом под главной крышей: `part_roofs`
+    ("st-52759", 2, {"e4", "e5"}),   # щипцы на длинных стенах: конёк север–юг — `roof_down`
+    ("st-54617", 4, {"e0", "e1"}),   # Г-дом: щипцы на юге и севере — `roof_down`
+])
+def test_real_slope_windows_reach_the_gable(house, side, ids):
+    """gf#472, st-102359 и сверка домов (датчик 6): окна `slope` на щипцовой стене идут до ската,
+    как на чертеже, — не режутся по карнизу и не пропадают; верх окна выше карниза. Без `ids` —
+    все окна стены (их три)."""
+    sample, dropped = manual.house(real(house), CFG.data.manual)
     sheet = sample.sheet
-    windows = sheet.facades[2].elements
-    assert dropped == 0 and len(windows) == 3
+    windows = [w for w in sheet.facades[side].elements if ids is None or w.id in ids]
+    assert dropped == 0 and len(windows) == (3 if ids is None else len(ids))
     assert all(w.floor == sheet.spec.floors + 1 for w in windows)
     assert all(w.y_m + w.h_m > sheet.spec.eaves_m + 0.4 for w in windows)
