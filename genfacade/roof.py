@@ -23,7 +23,7 @@
 
 import dataclasses
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from itertools import combinations
 from typing import NamedTuple
@@ -212,6 +212,30 @@ def axis(corners: list[Point], k: int) -> tuple[Point, Point, float]:
     left, right = corners[(k + 1) % n], corners[k]
     length = math.dist(left, right)
     return left, ((right[0] - left[0]) / length, (right[1] - left[1]) / length), length
+
+
+class ViewFrame(NamedTuple):
+    """Вид стены k: `at` — точка плана → (x вдоль стены слева направо, расстояние к зрителю от
+    стены), `toward` — наружная нормаль стены, `front` — середина глубины дома: что дальше от
+    зрителя, чем она, — в задней половине, за домом."""
+
+    at: Callable[[Point], tuple[float, float]]
+    toward: Point
+    front: float
+
+
+def projector(left: Point, u: Point, toward: Point) -> Callable[[Point], tuple[float, float]]:
+    """Точка плана → (x вдоль стены от left по u, d от стены по toward)."""
+    return lambda p: ((p[0] - left[0]) * u[0] + (p[1] - left[1]) * u[1],
+                      (p[0] - left[0]) * toward[0] + (p[1] - left[1]) * toward[1])
+
+
+def view_frame(corners: list[Point], k: int) -> ViewFrame:
+    left, u, _ = axis(corners, k)
+    toward = (u[1], -u[0])
+    at = projector(left, u, toward)
+    depth = [at(c)[1] for c in corners]
+    return ViewFrame(at, toward, (max(depth) + min(depth)) / 2)
 
 
 def above_eaves(line: Roofline, k: int) -> Polygon | None:
@@ -1041,10 +1065,7 @@ def covered(house: HouseRoof, k: int) -> list[ForbiddenZone]:
 def _under(face: list[Point3], line: Roofline, left: Point, u: Point, toward: Point,
            strip: shapely.Geometry) -> list[ForbiddenZone]:
     """Часть ската face перед стеной, в полосе strip: зона по x и высоте кровли над ней."""
-    def at(p: Point) -> Point:  # точка плана → (x вдоль стены, d от стены наружу)
-        return ((p[0] - left[0]) * u[0] + (p[1] - left[1]) * u[1],
-                (p[0] - left[0]) * toward[0] + (p[1] - left[1]) * toward[1])
-
+    at = projector(left, u, toward)
     piece = shapely.Polygon([at(p) for p in face]).buffer(0).intersection(strip)
     out = []
     for g in getattr(piece, "geoms", [piece]):

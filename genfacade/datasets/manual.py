@@ -25,7 +25,8 @@ gf#199).
 мансардные окна — `skylights` (на скат — наибольшее число отметок одной стороны), дымовые
 трубы — списком `chimneys` (доля конька на каждую), виды подоконника, наличника, ставен, козырька
 и двери — `trim` (не записан — по умолчанию из настроек), крыльцо или терраса под своей кровлей —
-`porch_roofs`: в пример и стены не идёт, считается в описи. Виды проверяет `check_kinds`.
+`porch_roofs`: стены не меняет, считается в описи и идёт дому навесом (gf#472). Виды проверяет
+`check_kinds`.
 
 Отделка (gf#245): цоколь — зона от земли до чистого пола (`plinth`) материалом `plinth_material`,
 основная — от цоколя до карниза, вторая отделка (акцент, пояс) — прямоугольниками стороны; карниз —
@@ -71,6 +72,7 @@ from genfacade.schema import (
     PaletteRole,
     Plan,
     Polygon,
+    PorchRoof,
     Rect,
     Roof,
     RoofKind,
@@ -238,8 +240,8 @@ class TrimMark(Model):
 
 class PorchRoofMark(Model):
     """Крыльцо или терраса под своей кровлей на столбах (gf#470): сторона, края x и верх с низом
-    кровли y на виде в pt, вид кровли, число столбов и глубина в метрах. Модуль его не строит: в
-    пример и стены не идёт, считается в описи."""
+    кровли y на виде в pt, вид кровли, число столбов и глубина в метрах. Сборщик
+    передаёт его дому навесом (gf#472), стены он не меняет; считается и в описи."""
 
     side: int = Field(ge=0)
     x: tuple[float, float]
@@ -272,7 +274,7 @@ class Markup(Model):
     gutters: bool = False  # водосток на чертеже (gf#454)
     dormers: list[DormerMark] = []       # слуховые окна главной части (gf#457)
     skylights: list[SkylightMark] = []   # мансардные окна на видах карнизных стен (gf#470)
-    porch_roofs: list[PorchRoofMark] = []  # крыльца и террасы под кровлей — только в опись (gf#470)
+    porch_roofs: list[PorchRoofMark] = []  # крыльца и террасы под кровлей: опись, навесы (gf#472)
     roof_material: str | None = None  # вид кровли из library.toml — в палитру ролью `ROOF` (gf#470)
     trim: TrimMark = TrimMark()      # виды подоконника, наличника, ставен, козырька, двери
     unit: Unit           # единица отметок и масштаба
@@ -403,8 +405,6 @@ def _contour(m: Markup, fp: rect_house.Footprint, cfg: Manual, cut: bool) -> _Co
 
 def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
     fp = _outline(m, cfg)
-    for mark in m.porch_roofs:  # в пример не идёт, но сторона должна быть
-        _known_side(m, mark.side, "крыльцо под кровлей")
     c = _contour(m, fp, cfg, cut)
     spec = _spec(m)
     spec = spec.model_copy(update={"roof": spec.roof.model_copy(
@@ -423,6 +423,7 @@ def _house(m: Markup, cfg: Manual, cut: bool) -> tuple[Sample, int]:
     sheet, bare = _no_eaves(sheet)
     sheet = _roof_items(sheet, m, cfg)
     sheet = _with_skylights(m, _with_dormers(m, sheet))
+    sheet = _with_porch_roofs(m, sheet)
     return (Sample(id=m.id, source=Source.MANUAL, split=Split.TEST, plan=plan, sheet=sheet),
             dropped + bare)
 
@@ -502,6 +503,26 @@ def _dormer(m: Markup, mark: DormerMark, sheet: FacadeSheet) -> Dormer:
     if found is None:
         raise BadMarkup(f"{m.id}: {e.view}: лицо дормера на x {mark.x} не на скате главной части")
     return found
+
+
+def _with_porch_roofs(m: Markup, sheet: FacadeSheet) -> FacadeSheet:
+    """Лист с навесами разметки в параметрах дома (gf#472): края с вида — метры вдоль стены, низ и
+    верх кровли — метры над землёй; стена навеса — сторона отметки."""
+    found = [_porch_roof(m, mark, sheet) for mark in m.porch_roofs]
+    return sheet.model_copy(update={"spec": sheet.spec.model_copy(update={"porch_roofs": found})})
+
+
+def _porch_roof(m: Markup, mark: PorchRoofMark, sheet: FacadeSheet) -> PorchRoof:
+    """Навес по отметке. Края по x не обрезаются: терраса бывает за углом, на продолжении стены
+    (у 5 домов из 60 навес целиком за краем стены вида). Ошибка разметки — низ кровли не над землёй
+    или верх не выше низа."""
+    _known_side(m, mark.side, "навес")
+    e = m.sides[mark.side]
+    x0, bottom, x1, top = _metres((mark.x[0], mark.y[0], mark.x[1], mark.y[1]), e, m, sheet.spec)
+    if bottom <= 0 or top <= bottom:
+        raise BadMarkup(f"{m.id}: {e.view}: навес — низ кровли {bottom:.2f} м, верх {top:.2f} м")
+    return PorchRoof(side=mark.side, x_m=(x0, x1), depth_m=mark.depth_m, bottom_m=bottom,
+                     top_m=top, kind=mark.kind, posts=mark.posts)
 
 
 def _parted(plan: Plan, sheet: FacadeSheet, m: Markup, c: _Contour) -> tuple[Plan, FacadeSheet]:

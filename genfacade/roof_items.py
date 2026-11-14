@@ -343,15 +343,7 @@ def view(items: Items, corners: list[Point], k: int) -> list[tuple[ItemKind, Pol
     желоба и трубы — те, что на самой стене (у неё общая линия и наружная нормаль), и те, что
     смотрят на зрителя торцом (перпендикулярны стене) в передней половине дома: задние за домом.
     Порядок — как рисовать."""
-    left, u, _ = roof.axis(corners, k)
-    toward = (u[1], -u[0])
-
-    def at(p: Point) -> tuple[float, float]:  # x вдоль стены, расстояние к зрителю от стены
-        return (p[0] - left[0]) * u[0] + (p[1] - left[1]) * u[1], (
-            (p[0] - left[0]) * toward[0] + (p[1] - left[1]) * toward[1])
-
-    depth = [at(c)[1] for c in corners]
-    front = (max(depth) + min(depth)) / 2
+    at, toward, front = roof.view_frame(corners, k)
     out: list[tuple[ItemKind, Polygon]] = []
     for c in items.chimneys:
         xs = [at(p)[0] for p in c.footprint]

@@ -18,8 +18,8 @@ from typing import NamedTuple
 import shapely
 import shapely.affinity
 
-from genfacade import dormers, parts, roof, roof_items, skylights, unfold
-from genfacade.config import Config
+from genfacade import dormers, parts, porch_roofs, roof, roof_items, skylights, unfold
+from genfacade.config import Config, PorchRoofLook
 from genfacade.render.house3d import house_3d
 from genfacade.render.ifc_step import STAR, Enum, Ref, Step, Typed, guid
 from genfacade.render.svg import Pen, element_fill, pen_for
@@ -32,6 +32,7 @@ from genfacade.schema import (
     FacadeSheet,
     PaletteRole,
     Point,
+    RoofKind,
     SideFacade,
 )
 
@@ -250,6 +251,7 @@ class IfcHouse:
         self.contained: dict[int, list[Ref]] = defaultdict(list)  # этаж → объекты
         self.walls: list[Ref] = []
         self.roof_slabs: list[Ref] = []
+        self.awnings: list[Ref] = []  # кровли навесов на столбах: материал — кровли дома
 
     def build(self) -> str:
         self._structure()
@@ -260,6 +262,7 @@ class IfcHouse:
         self._slabs()
         self._roof()
         self._roof_items()
+        self._porch_roofs()
         self._skylights()
         self._finish()
         return self.w.s.render()
@@ -679,6 +682,38 @@ class IfcHouse:
                 self._segment(f"elbow{n}", name, Bar("RIGIDSEGMENT", (p.center, p.elbow), p.z_top,
                                                     p.diameter, True))
 
+    # ——— навес на столбах (gf#472) ———
+
+    def _porch_roofs(self) -> None:
+        """Навес — IfcRoof (SHED_ROOF, GABLE_ROOF, FLAT_ROOF): профиль кровли (вынос, высота),
+        выдавленный вдоль стены; столбы — IfcColumn, призмы от земли до низа кровли."""
+        w, look, names = self.w, self.cfg.sheet.porch_roof, self.ifc.names
+        kinds = {RoofKind.SHED: "SHED_ROOF", RoofKind.GABLE: "GABLE_ROOF",
+                 RoofKind.FLAT: "FLAT_ROOF"}
+        for n, a in enumerate(porch_roofs.find(self.sheet, self.cfg.sheet), 1):
+            # местные оси: x — наружу, z — против стены (против выдавливания, оно идёт вдоль −z)
+            place = w.place(self.building_place, (*a.left, 0.0), (-a.u[0], -a.u[1], 0.0),
+                            (*a.n, 0.0))
+            item = w.solid(w.polygon(a.profile), a.length, self._roof_color())
+            ref = w.product("IfcRoof", f"porchroof{n}", names.porch_roof.format(n=n), place,
+                            w.shape([item]), None, Enum(kinds[a.kind]))
+            self.awnings.append(ref)
+            self.contained[self._storey_at(min(z for _, z in a.profile))].append(ref)
+            for m, c in enumerate(a.posts, 1):
+                self._post(f"{n}/{m}", a, c, look)
+
+    def _post(self, key: str, a: porch_roofs.Awning, center: Point,
+              look: PorchRoofLook) -> None:
+        """Столб: квадрат сечения в плане, оси — наружу и вдоль стены, от низа кровли вниз."""
+        w, half = self.w, a.post_m / 2
+        corner = (center[0] - (a.n[0] + a.u[0]) * half, center[1] - (a.n[1] + a.u[1]) * half,
+                  a.post_top)
+        item = w.solid(w.rect(a.post_m, a.post_m), a.post_top, look.post_fill)
+        ref = w.product("IfcColumn", f"porchpost{key}", self.ifc.names.porch_post.format(n=key),
+                        w.place(self.building_place, corner, UP, (*a.n, 0.0)), w.shape([item]),
+                        None, Enum("COLUMN"))
+        self.contained[0].append(ref)
+
     def _segment(self, key: str, name: str, bar: Bar) -> None:
         """Труба или желоб по горизонтальной оси bar.ends на высоте оси bar.z."""
         w, (a, b), size = self.w, bar.ends, bar.size
@@ -699,7 +734,7 @@ class IfcHouse:
         w = self.w
         kinds = {m.id: m.kind for m in self.sheet.spec.materials}
         self._material(self.walls, kinds.get(PaletteRole.MAIN))
-        self._material(self.roof_slabs, kinds.get(self.pen.roof or ""))
+        self._material(self.roof_slabs + self.awnings, kinds.get(self.pen.roof or ""))
         for k, items in sorted(self.contained.items()):
             w.relate("IfcRelContainedInSpatialStructure", f"storey{k}", items, self.storeys[k])
 

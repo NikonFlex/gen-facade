@@ -217,6 +217,13 @@ class RoofItemsLook(Section):
     pipe_inset_m: float = Field(ge=0)    # труба от угла дома вдоль стены
     chimney_fill: str
     gutter_fill: str
+class PorchRoofLook(Section):
+    """Навес на столбах (gf#472): сечение столба и цвет; толщина кровли — `RoofDrawing`."""
+
+    post_m: float = Field(gt=0)  # сторона квадратного сечения столба
+    post_fill: str
+
+
 class SkylightLook(Section):
     """Мансардное окно в плоскости ската (gf#456): размер, где ставится и как рисуется."""
 
@@ -240,6 +247,7 @@ class Sheet(Section):
     trim: TrimLook
     roof: RoofDrawing
     roof_items: RoofItemsLook
+    porch_roof: PorchRoofLook
     skylight: SkylightLook
     title: Title
     preview: Preview
@@ -461,6 +469,8 @@ class IfcNames(Section):
     chimney: str
     gutter: str   # {n} — номер
     pipe: str     # {n} — номер
+    porch_roof: str  # {n} — номер
+    porch_post: str  # {n} — номер
 
 
 class IfcPset(Section):
