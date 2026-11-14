@@ -32,7 +32,6 @@ from genfacade.schema import (
     FacadeSheet,
     PaletteRole,
     Point,
-    RoofKind,
     SideFacade,
 )
 
@@ -685,30 +684,34 @@ class IfcHouse:
     # ——— навес на столбах (gf#472) ———
 
     def _porch_roofs(self) -> None:
-        """Навес — IfcRoof (SHED_ROOF, GABLE_ROOF, FLAT_ROOF): профиль кровли (вынос, высота),
-        выдавленный вдоль стены; столбы — IfcColumn, призмы от земли до низа кровли."""
-        w, look, names = self.w, self.cfg.sheet.porch_roof, self.ifc.names
-        kinds = {RoofKind.SHED: "SHED_ROOF", RoofKind.GABLE: "GABLE_ROOF",
-                 RoofKind.FLAT: "FLAT_ROOF"}
+        """Навес — IfcRoof (SHED_ROOF, GABLE_ROOF, HIP_ROOF, FLAT_ROOF): профиль кровли,
+        выдавленный от `origin` по `sweep`; столбы — IfcColumn, призмы от земли до низа кровли."""
+        look = self.cfg.sheet.porch_roof
         for n, a in enumerate(porch_roofs.find(self.sheet, self.cfg.sheet), 1):
-            # местные оси: x — наружу, z — против стены (против выдавливания, оно идёт вдоль −z)
-            place = w.place(self.building_place, (*a.left, 0.0), (-a.u[0], -a.u[1], 0.0),
-                            (*a.n, 0.0))
-            item = w.solid(w.polygon(a.profile), a.length, self._roof_color())
-            ref = w.product("IfcRoof", f"porchroof{n}", names.porch_roof.format(n=n), place,
-                            w.shape([item]), None, Enum(kinds[a.kind]))
-            self.awnings.append(ref)
-            self.contained[self._storey_at(min(z for _, z in a.profile))].append(ref)
-            for m, c in enumerate(a.posts, 1):
-                self._post(f"{n}/{m}", a, c, look)
+            if a.profile:
+                self._porch_roof(n, a)
+            for m, q in enumerate(a.posts, 1):
+                self._post(f"{n}/{m}", a, q, look)
 
-    def _post(self, key: str, a: porch_roofs.Awning, center: Point,
+    def _porch_roof(self, n: int, a: porch_roofs.Awning) -> None:
+        """Кровля навеса. Местные оси: x — вдоль профиля, z — против выдавливания (оно идёт
+        вдоль −z)."""
+        w, names, (e, length) = self.w, self.ifc.names, a.sweep
+        place = w.place(self.building_place, (*a.origin, 0.0), (-e[0], -e[1], 0.0),
+                        (*a.x_axis, 0.0))
+        item = w.solid(w.polygon(a.profile), length, self._roof_color())
+        ref = w.product("IfcRoof", f"porchroof{n}", names.porch_roof.format(n=n), place,
+                        w.shape([item]), None, Enum(f"{a.kind.name}_ROOF"))
+        self.awnings.append(ref)
+        self.contained[self._storey_at(min(z for _, z in a.profile))].append(ref)
+
+    def _post(self, key: str, a: porch_roofs.Awning, post: porch_roofs.Post,
               look: PorchRoofLook) -> None:
-        """Столб: квадрат сечения в плане, оси — наружу и вдоль стены, от низа кровли вниз."""
-        w, half = self.w, a.post_m / 2
+        """Столб: квадрат сечения в плане, оси — наружу и вдоль стены, от земли до низа кровли."""
+        w, half, center = self.w, a.post_m / 2, post.at
         corner = (center[0] - (a.n[0] + a.u[0]) * half, center[1] - (a.n[1] + a.u[1]) * half,
-                  a.post_top)
-        item = w.solid(w.rect(a.post_m, a.post_m), a.post_top, look.post_fill)
+                  post.top)
+        item = w.solid(w.rect(a.post_m, a.post_m), post.top, look.post_fill)
         ref = w.product("IfcColumn", f"porchpost{key}", self.ifc.names.porch_post.format(n=key),
                         w.place(self.building_place, corner, UP, (*a.n, 0.0)), w.shape([item]),
                         None, Enum("COLUMN"))

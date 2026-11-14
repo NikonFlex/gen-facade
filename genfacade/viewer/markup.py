@@ -28,6 +28,7 @@ from genfacade.schema import (
     MarkKind,
     Model,
     PaletteRole,
+    PorchKind,
     Refusal,
     Refused,
     RejectReason,
@@ -196,6 +197,7 @@ def _options(cfg: Config) -> dict:
             "marks": {k: {**v.model_dump(mode="json"), "field": markup_edit.MARK_FIELDS[k]}
                       for k, v in editor.marks.items() if editor.roof_items or k not in ROOF_ITEMS},
             "choices": {"roof_kind": list(RoofKind), "dormer_roof": list(DormerRoof)},
+            "porch_kind": [[k, editor.porch_kind_labels[k]] for k in PorchKind],
             "variant_kinds": markup_edit.VARIANT_KINDS,
             "house_form": _house_form(cfg)}
 

@@ -72,6 +72,7 @@ from genfacade.schema import (
     PaletteRole,
     Plan,
     Polygon,
+    PorchKind,
     PorchRoof,
     Rect,
     Roof,
@@ -246,7 +247,7 @@ class PorchRoofMark(Model):
     side: int = Field(ge=0)
     x: tuple[float, float]
     y: tuple[float, float]
-    kind: RoofKind
+    kind: PorchKind
     posts: int = Field(ge=0)
     depth_m: float = Field(gt=0)
 

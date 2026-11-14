@@ -147,9 +147,11 @@ function refreshMarkTools() {
   $("mark-tools").hidden = !state.mark;
   if (!state.mark) return;
   const m = markAt(state.mark), field = "roof" in m ? "roof" : "kind" in m ? "kind" : null;
-  const choices = state.options.choices[field === "roof" ? "dormer_roof" : "roof_kind"];
+  const options = state.options, porch = state.mark.kind === "porch_roof";
+  const pairs = porch ? options.porch_kind
+    : options.choices[field === "roof" ? "dormer_roof" : "roof_kind"].map((c) => [c, c]);
   $("mark-kind").hidden = !field;
-  if (field) fillSelect($("mark-kind"), choices.map((c) => [c, c]), m[field]);
+  if (field) fillSelect($("mark-kind"), pairs, m[field]);
   // Вынос от стены вида (труба, крыльцо) — по виду отметки, а не по полю: у новой трубы поля
   // ещё нет, а вписать вынос надо; пустое — «не задан».
   const depth = $("mark-depth");

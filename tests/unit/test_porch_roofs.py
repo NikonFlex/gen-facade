@@ -1,6 +1,8 @@
 """Навес на столбах (gf#472, `facade: Навес на столбах`, `Кровля навеса`, `Столбы навеса`,
 `Навес на листе`; `data: Крыльцо под кровлей в разметке`): кодом на листе, в 3D и IFC."""
 
+import math
+
 import pytest
 from test_manual import FLOOR, PT, finished, ft, pt_y
 
@@ -11,7 +13,7 @@ from genfacade.porch_roofs import Part
 from genfacade.render.house3d import house_3d
 from genfacade.render.ifc import house_ifc
 from genfacade.render.svg import sheet_svg, tops
-from genfacade.schema import FacadeSheet, HouseSpec, PorchRoof, RoofKind
+from genfacade.schema import FacadeSheet, HouseSpec, PorchKind, PorchRoof, RoofKind
 
 CFG = config.load()
 SHEET = manual.house(finished(), CFG.data.manual)[0].sheet
@@ -20,7 +22,7 @@ LONG = LENGTHS.index(max(LENGTHS))  # стена, на которой x 0–5 м
 POST = CFG.sheet.porch_roof.post_m
 
 
-def awning(kind: RoofKind = RoofKind.SHED, x=(1.0, 5.0), depth=2.4, low=2.4, high=3.0, posts=3,
+def awning(kind: PorchKind = PorchKind.SHED, x=(1.0, 5.0), depth=2.4, low=2.4, high=3.0, posts=3,
            side: int = LONG) -> FacadeSheet:
     """Дом разметки с одним навесом."""
     given = PorchRoof(side=side, x_m=x, depth_m=depth, bottom_m=low, top_m=high, kind=kind,
@@ -49,38 +51,54 @@ def test_shed_roof_and_posts():
     a = built()
     assert flat(a.profile) == pytest.approx(flat([(0.0, 2.8), (2.4, 2.4), (2.4, 2.6), (0.0, 3.0)]))
     assert a.length == pytest.approx(4.0) and POST == pytest.approx(0.15)
-    spots = [along(a, p) for p in a.posts]
+    spots = [along(a, q.at) for q in a.posts]
     assert [s[0] for s in spots] == pytest.approx([0.075, 2.0, 3.925])
     assert [s[1] for s in spots] == pytest.approx([2.325] * 3)
-    assert a.post_top == pytest.approx(2.4)
+    assert [q.top for q in a.posts] == pytest.approx([2.4] * 3)
 
 
 def test_gable_roof():
-    """Сценарий «Двускатный навес»: конёк в 1,5 м от стены, низ конька 3,2 м, верх 3,4 м; столбы
-    на 0,075 и 3,925 м."""
-    a = built(kind=RoofKind.GABLE, depth=3.0, high=3.4, x=(0.0, 4.0), posts=2)
-    assert flat(a.profile) == pytest.approx(flat([(0.0, 2.4), (1.5, 3.2), (3.0, 2.4), (3.0, 2.6),
-                                                  (1.5, 3.4), (0.0, 2.6)]))
-    assert [along(a, p)[0] for p in a.posts] == pytest.approx([0.075, 3.925])
+    """Сценарий «Двускатный навес»: конёк поперёк стены посередине отрезка (st-102483): в сечении
+    вдоль стены низ 2,55 м по краям и 3,35 м на коньке в 1,8 м от края, верх выше на 0,2 м;
+    выдавлено на вынос 1,4 м; столбы на 0,075 и 3,525 м, высотой по низу ската над ними."""
+    a = built(kind=PorchKind.GABLE, depth=1.4, low=2.55, high=3.55, x=(0.0, 3.6), posts=2)
+    assert a.outward and a.sweep[1] == pytest.approx(1.4)
+    assert flat(a.profile) == pytest.approx(flat([(0.0, 2.55), (1.8, 3.35), (3.6, 2.55),
+                                                  (3.6, 2.75), (1.8, 3.55), (0.0, 2.75)]))
+    assert [along(a, q.at)[0] for q in a.posts] == pytest.approx([0.075, 3.525])
+    assert [q.top for q in a.posts] == pytest.approx([2.55 + 0.8 * 0.075 / 1.8] * 2)
+
+
+def test_gable_sheet_views():
+    """Сценарий «Двускатный навес на листе»: на виде своей стены — треугольник фронтона шириной
+    3,6 м от 2,55 до 3,55 м; сбоку — скат шириной 1,4 м от стены до края."""
+    sheet = awning(kind=PorchKind.GABLE, depth=1.4, low=2.55, high=3.55, x=(0.0, 3.6), posts=2)
+    (front,) = parts_of(sheet, LONG, Part.ROOF)
+    xs, zs = [p[0] for p in front], [p[1] for p in front]
+    assert (max(xs) - min(xs), min(zs), max(zs)) == pytest.approx((3.6, 2.55, 3.55))
+    assert any(p[1] == pytest.approx(3.55) and p[0] == pytest.approx(min(xs) + 1.8) for p in front)
+    side = [s for k in range(len(LENGTHS)) if k != LONG for s in parts_of(sheet, k, Part.ROOF)]
+    assert side and all(max(p[0] for p in s) - min(p[0] for p in s) == pytest.approx(1.4)
+                        for s in side)
 
 
 def test_flat_roof():
     """Сценарий «Плоский навес»: прямоугольник 2 × 0,2 м от 2,5 до 2,7 м; не тоньше кровли дома."""
-    a = built(kind=RoofKind.FLAT, depth=2.0, low=2.5, high=2.7)
+    a = built(kind=PorchKind.FLAT, depth=2.0, low=2.5, high=2.7)
     assert flat(a.profile) == pytest.approx(flat([(0.0, 2.5), (2.0, 2.5), (2.0, 2.7), (0.0, 2.7)]))
-    thin = built(kind=RoofKind.FLAT, depth=2.0, low=2.5, high=2.55)
+    thin = built(kind=PorchKind.FLAT, depth=2.0, low=2.5, high=2.55)
     assert max(z for _, z in thin.profile) == pytest.approx(2.5 + CFG.sheet.roof.thickness_m)
 
 
 def test_hip_is_gable():
     """Сценарий «Вальмовый навес»: такой же, как двускатный."""
-    assert built(kind=RoofKind.HIP).profile == built(kind=RoofKind.GABLE).profile
-    assert built(kind=RoofKind.HIP).kind is RoofKind.GABLE
+    assert built(kind=PorchKind.HIP).profile == built(kind=PorchKind.GABLE).profile
+    assert built(kind=PorchKind.HIP).kind is RoofKind.GABLE
 
 
 def test_posts_count():
     """Один столб — посередине, нуль — без столбов."""
-    assert along(built(posts=1), built(posts=1).posts[0])[0] == pytest.approx(2.0)
+    assert along(built(posts=1), built(posts=1).posts[0].at)[0] == pytest.approx(2.0)
     assert built(posts=0).posts == []
 
 
@@ -187,3 +205,61 @@ def test_sheet_profile_only_on_nearer_side():
     count = len(LENGTHS)
     sides = [(LONG + 1) % count, (LONG - 1) % count]
     assert sorted(len(parts_of(sheet, k, Part.ROOF)) for k in sides) == [0, 1]
+
+
+# ——— продолжение крыши дома (`facade: Кровля навеса`, вид `main`) ———
+
+PITCH = 30.0
+TAN = math.tan(math.radians(PITCH))
+EAVES = SHEET.spec.eaves_m
+OVER = SHEET.spec.roof.overhang_m
+EAVE_WALL = 1
+GABLE_WALL = 0
+
+
+def continued(side: int, x=(0.0, LENGTHS[GABLE_WALL]), depth=1.5) -> porch_roofs.Awning:
+    """Навес-продолжение на доме с уклоном 30°; низ и верх с разметки (2,0 и 3,0 м) ни на что не
+    влияют."""
+    sheet = awning(PorchKind.MAIN, x=x, depth=depth, low=2.0, high=3.0, side=side)
+    roof_30 = sheet.spec.roof.model_copy(update={"pitch_deg": PITCH})
+    sheet = sheet.model_copy(update={"spec": sheet.spec.model_copy(update={"roof": roof_30})})
+    return porch_roofs.find(sheet, CFG.sheet)[0]
+
+
+def test_continued_at_gable_wall():
+    """Сценарий «Продолжение у щипцовой стены»: конёк и скаты идут дальше — сечение щипца
+    выдавлено от свеса дома (0,5 м) до выноса 1,5 м, то есть кровля длиннее на 1,0 м; высота
+    конька — как у дома; столбы стоят под скатом: у края стены — на высоте карниза."""
+    a = continued(GABLE_WALL)
+    ridge = EAVES + TAN * LENGTHS[GABLE_WALL] / 2
+    assert a.outward and a.sweep[1] == pytest.approx(1.5 - OVER) and a.reach == pytest.approx(OVER)
+    bottom = [z for _, z in a.profile[:3]]
+    assert bottom == pytest.approx([EAVES, ridge, EAVES])
+    assert a.profile[1][0] == pytest.approx(LENGTHS[GABLE_WALL] / 2)
+    assert [q.top for q in a.posts][0] == pytest.approx(EAVES + TAN * 0.075)
+    assert a.kind is RoofKind.GABLE
+
+
+def test_continued_at_eave_wall():
+    """Сценарий «Продолжение у карнизной стены»: скат продолжается вниз от свеса дома (0,5 м)
+    до выноса 1,5 м с тем же уклоном: низ кровли на краю ниже карниза на 1,5·tg 30°; столбы на
+    наружном крае — под ним."""
+    a = continued(EAVE_WALL, x=(1.0, 5.0))
+    assert not a.outward and a.sweep[1] == pytest.approx(4.0)
+    assert a.profile[0] == pytest.approx((OVER, EAVES - TAN * OVER))
+    assert a.profile[1] == pytest.approx((1.5, EAVES - TAN * 1.5))
+    thick = CFG.sheet.roof.thickness_m
+    assert a.profile[2][1] - a.profile[1][1] == pytest.approx(thick)
+    assert {round(q.top, 6) for q in a.posts} == {round(EAVES - TAN * (1.5 - POST / 2), 6)}
+
+
+def test_continued_inside_house_overhang():
+    """Вынос не больше свеса дома — дом уже накрывает навес: второй кровли нет, столбы есть."""
+    a = continued(EAVE_WALL, x=(1.0, 5.0), depth=0.4)
+    assert a.profile == [] and len(a.posts) == 3
+
+
+def test_manual_main_kind():
+    """Сценарий «Навес — продолжение крыши»: вид `main` доходит до параметров дома."""
+    sample, _ = manual.house(markup_with(kind="main"), CFG.data.manual)
+    assert sample.sheet.spec.porch_roofs[0].kind is PorchKind.MAIN

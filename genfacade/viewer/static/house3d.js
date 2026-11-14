@@ -163,19 +163,19 @@ export class HouseStage {
     }
   }
 
-  // Навесы на столбах (gf#472): кровля — профиль (расстояние от стены, высота), выдавленный вдоль
-  // стены; в сцене (x, высота, −y) базис профиля (наружу, вверх, −вдоль стены) правый, поэтому
-  // выдавливание идёт от правого края назад. Столбы — бруски по центру в плане.
+  // Навесы на столбах (gf#472): кровля — профиль, выдавленный от `origin` по `sweep` на `length`;
+  // в сцене (x, высота, −y) базис профиля (`x_axis`, вверх, −`sweep`) правый, поэтому выдавливание
+  // идёт от конца назад. Столбы — бруски по центру в плане.
   _awnings(THREE, items) {
     const at = ([x, y], h) => new THREE.Vector3(x, h, -y);
     for (const a of items.awnings || []) {
       const shape = new THREE.Shape(a.profile.map(([d, z]) => new THREE.Vector2(d, z)));
       const geo = new THREE.ExtrudeGeometry(shape, { depth: a.length, bevelEnabled: false });
       const mesh = new THREE.Mesh(geo, this._material(THREE, a.material, a.color || this.look.roof));
-      const [nx, ny, ux, uy] = [...a.n, ...a.u];
+      const [xx, xy, sx, sy] = [...a.x_axis, ...a.sweep];
       mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
-        new THREE.Vector3(nx, 0, -ny), new THREE.Vector3(0, 1, 0), new THREE.Vector3(-ux, 0, uy)));
-      mesh.position.copy(at([a.left[0] + ux * a.length, a.left[1] + uy * a.length], 0));
+        new THREE.Vector3(xx, 0, -xy), new THREE.Vector3(0, 1, 0), new THREE.Vector3(-sx, 0, sy)));
+      mesh.position.copy(at([a.origin[0] + sx * a.length, a.origin[1] + sy * a.length], 0));
       mesh.add(this._edges(THREE, geo));
       this.scene.add(mesh);
     }

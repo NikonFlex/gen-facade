@@ -91,11 +91,12 @@ def _awnings(sheet: FacadeSheet, cfg: Config, roof_part: dict) -> dict:
     столбы — призмы по центру в плане до высоты `z1`. Кровля того же материала, что кровля дома."""
     look = cfg.sheet.porch_roof
     found = porch_roofs.find(sheet, cfg.sheet)
-    return {"awnings": [{"left": a.left, "u": a.u, "n": a.n, "length": a.length,
-                         "profile": a.profile, "material": roof_part["material"],
-                         "color": roof_part.get("color")} for a in found],
-            "posts": [{"center": c, "size": a.post_m, "z1": a.post_top, "color": look.post_fill,
-                       "u": a.u} for a in found for c in a.posts]}
+    return {"awnings": [{"origin": a.origin, "x_axis": a.x_axis, "sweep": a.sweep[0],
+                         "length": a.sweep[1], "profile": a.profile,
+                         "material": roof_part["material"], "color": roof_part.get("color")}
+                        for a in found if a.profile],
+            "posts": [{"center": q.at, "size": a.post_m, "z1": q.top, "color": look.post_fill,
+                       "u": a.u} for a in found for q in a.posts]}
 
 
 def _look(sheet: FacadeSheet, look: House3d) -> House3d:

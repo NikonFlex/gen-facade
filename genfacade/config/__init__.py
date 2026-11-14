@@ -41,6 +41,7 @@ from genfacade.schema import (
     PaletteRole,
     Placement,
     PlanShape,
+    PorchKind,
     Region,
     RejectReason,
     Roof,
@@ -602,6 +603,7 @@ class MarkupEditor(Section):
     default_size_m: dict[ElementClass, Size]  # рамка от касания: ширина и высота, м
     min_box_m: float               # рамка меньше этого при отпускании — касание, не рамка
     roof_items: bool               # трубы и водостоки на странице: нет — скрыты и не строятся
+    porch_kind_labels: dict[PorchKind, str]  # подписи видов кровли навеса в выборе отметки (gf#472)
     mark_depth_step_m: float       # шаг поля выноса отметки от стены вида (труба, крыльцо; gf#471)
     view_pad_m: float              # поле вокруг рисунка фасада в окне вида стороны, м вида (gf#470)
     ink_level: int                 # серость пикселя листа (0–255), темнее — рисунок, а не бумага
