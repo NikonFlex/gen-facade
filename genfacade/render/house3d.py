@@ -177,7 +177,7 @@ def _gable_windows(f: SideFacade, axis: tuple[Point, Point], zone: Polygon, eave
     left, u = axis
     out = (u[1] * look.window_out_m, -u[0] * look.window_out_m)  # наружная нормаль стены
     quads = []
-    room = roof.room(f.side.length_m, eaves, zone, offset)
+    room = window_shape.gable_room(f.side.length_m, eaves, zone, offset)
     above = shapely.box(-roof.FAR, eaves, roof.FAR, roof.FAR)
     for e in f.elements:
         if roof.over_eaves(e, eaves):

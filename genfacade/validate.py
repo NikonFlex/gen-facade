@@ -133,15 +133,14 @@ def _outside(f: SideFacade, above: Polygon | None, spec: HouseSpec,
 
 
 def _room(f: SideFacade, above: Polygon | None, spec: HouseSpec,
-          cfg: Checks) -> shapely.Geometry | None:
-    return None if above is None else roof.room(f.side.length_m, spec.eaves_m, above,
-                                                cfg.slope_offset_m)
+          cfg: Checks) -> window_shape.Gable | None:
+    return window_shape.gable_room(f.side.length_m, spec.eaves_m, above, cfg.slope_offset_m)
 
 
-def _drawn(e: Element, room: shapely.Geometry | None,
+def _drawn(e: Element, room: window_shape.Gable | None,
            by: dict[str, Element] | None = None) -> shapely.Polygon:
     """Что элемент занимает на стене: рамка, а у окна — контур по виду (окно по скату — рамка,
-    срезанная скатом, gf#319), у наличника такого окна — контур наличника."""
+    срезанная скатами, gf#319, gf#470), у наличника такого окна — контур наличника."""
     if e.cls is ElementClass.MOLDING and by is not None and (w := by.get(e.parent or "")):
         if w.cls is ElementClass.WINDOW:
             return shapely.Polygon(window_shape.casing(w, e, room))
@@ -157,15 +156,15 @@ def _slope(f: SideFacade, above: Polygon | None, spec: HouseSpec,
     может выйти за скат, но контур — не меньше `slope_share` рамки."""
     if above is None:
         return []
-    room = _room(f, above, spec, cfg)
-    wide = room.buffer(cfg.eps_m)
+    gable = _room(f, above, spec, cfg)
+    wide = gable.room.buffer(cfg.eps_m)
     near = f"ближе {cfg.slope_offset_m:.2f} м к скату"
     out = [_v(f, Rule.SLOPE, e, f"окно {e.id} во фронтоне {near}")
            for e in f.elements if roof.over_eaves(e, spec.eaves_m + cfg.eps_m)
-           and not wide.contains(_drawn(e, room))]
+           and not wide.contains(_drawn(e, gable))]
     small = [e for e in f.elements if window_shape.kind(e) is VariantKind.SLOPE
              and roof.over_eaves(e, spec.eaves_m + cfg.eps_m)
-             and window_shape.reach(room, e.x_m, e.y_m, e.w_m, e.h_m) < cfg.slope_share - EPS]
+             and window_shape.reach(gable.room, e.x_m, e.y_m, e.w_m, e.h_m) < cfg.slope_share - EPS]
     return out + [_v(f, Rule.SLOPE, e, f"окно {e.id} по скату: за скатом больше "
                      f"{1 - cfg.slope_share:.0%} рамки") for e in small
                   if all(v.element != e.id for v in out)]

@@ -422,7 +422,7 @@ def _glass(g: ElementTree.Element, e: Element, attrs: dict[str, str],
         _mullions(g, e, box)
 
 
-def _shape(e: Element, room: shapely.Geometry | None) -> Polygon | None:
+def _shape(e: Element, room: window_shape.Gable | None) -> Polygon | None:
     """Контур окна не прямоугольником — по его виду (gf#319); прямоугольное окно — None."""
     if e.cls is not ElementClass.WINDOW:
         return None
@@ -436,7 +436,7 @@ def _not_box(e: Element, shape: Polygon) -> Polygon | None:
 
 
 def _casing_shape(e: Element, by: dict[str, Element],
-                  room: shapely.Geometry | None) -> Polygon | None:
+                  room: window_shape.Gable | None) -> Polygon | None:
     """Контур наличника окна не прямоугольником (gf#319); наличник прямоугольного окна — None."""
     w = by.get(e.parent or "")
     if e.cls is not ElementClass.MOLDING or w is None or w.cls is not ElementClass.WINDOW:
