@@ -849,3 +849,14 @@ def test_bad_color_marks_are_refused():
         finished(colors={"main": "d9d4c8"})
     with pytest.raises(manual.BadMarkup, match="trim"):   # у дома без карниза роли trim нет
         manual.house(markup(colors={"trim": "#aabbcc"}), CFG.data.manual)
+
+
+def test_real_slope_windows_of_an_l_house_reach_the_gable():
+    """gf#472, st-102359: у Г-образного дома (дом из частей) окна `slope` на щипцовой стене идут
+    до ската, как на чертеже, а не режутся по карнизу: фронтон берётся по крыше частей."""
+    sample, dropped = manual.house(real("st-102359"), CFG.data.manual)
+    sheet = sample.sheet
+    windows = sheet.facades[2].elements
+    assert dropped == 0 and len(windows) == 3
+    assert all(w.floor == sheet.spec.floors + 1 for w in windows)
+    assert all(w.y_m + w.h_m > sheet.spec.eaves_m + 0.4 for w in windows)

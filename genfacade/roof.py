@@ -385,10 +385,13 @@ def sheet_gables(sheet: FacadeSheet) -> list[Polygon | None]:
     мансарды в щипце остаётся окном под скатом). Условие и разметка шага 4 остаются на `gables`:
     щипцов над стеной в корпусе обучения окон нет. Два щипца на одной стене — зона модели."""
     base = gables(sheet)
-    house = roofs(sheet) if sheet.wall_gables else None
+    # Г-, Т-, П-дом одной высоты: `gables` пуст, фронтон — по скатам крыльев; ступени высоты — нет:
+    # над низкой частью стена выше её карниза — вне силуэта, а не фронтон
+    parted = not stepped(sheet) and bool(_wing_rects(sheet))
+    house = roofs(sheet) if sheet.wall_gables or parted else None
     if house is None:
         return base
-    sides = {g.side for g in sheet.wall_gables}
+    sides = set(range(len(base))) if parted else {g.side for g in sheet.wall_gables}
     found = [house_above(house, k) if k in sides else [] for k in range(len(base))]
     return [f[0] if len(f) == 1 else above for above, f in zip(base, found, strict=True)]
 
