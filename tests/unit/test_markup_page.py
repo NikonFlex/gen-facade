@@ -2,6 +2,7 @@
 браузере, пишется в TOML того же формата, `genfacade manual` собирает его без правок; состояние
 дома — хранимое поле очереди с таблицей переходов; время на дом и счёт — в файле очереди."""
 
+import io
 import itertools
 import json
 import socket
@@ -482,8 +483,11 @@ def test_build_gives_input_plan_with_a_wall_per_marked_side_and_source_plan_page
     assert got["plan"].startswith("<svg") and got["plan_sides"] == len(opened["sides"])
     assert client.get(got["source_plan"]).status_code == 404   # листа плана нет — отказ, не 500
     folder = cfg.data.manual.paths.pdf_dirs["stroim"] / "test"
-    Image.new("RGB", (40, 30), "white").save(folder / cfg.viewer.markup.plan_image)
-    assert client.get(got["source_plan"]).headers["content-type"] == "image/jpeg"
+    side = cfg.viewer.markup.image_max_side
+    Image.new("RGB", (side * 2, 30), "white").save(folder / cfg.viewer.markup.plan_image)
+    plan = client.get(got["source_plan"])
+    assert plan.headers["content-type"] == "image/jpeg"
+    assert Image.open(io.BytesIO(plan.content)).width == side   # сжат, как лист
 
 
 def test_build_of_a_house_that_does_not_assemble_is_a_refusal_with_text(client, monkeypatch):

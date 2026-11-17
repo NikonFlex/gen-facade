@@ -63,7 +63,7 @@ export class HouseStage {
   _canvas(THREE) {
     const { clientWidth: w, clientHeight: h } = this.container;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.look.pixel_ratio_max));
     this.renderer.setSize(w, h);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.container.replaceChildren(this.renderer.domElement);

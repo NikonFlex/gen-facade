@@ -32,11 +32,31 @@ def _page(pdf: Path, number: int) -> pdfplumber.page.Page:
 
 
 def plan_image(cfg: Config, m: Markup) -> Path:
-    """Страница плана рядом с листом дома (`plan_image`); нет файла — отказ с причиной."""
-    file = pdf_path(cfg, m).parent / cfg.viewer.markup.plan_image
+    """Страница плана рядом с листом дома (`plan_image`), сжатая как лист; нет файла — отказ."""
+    editor = cfg.viewer.markup
+    file = pdf_path(cfg, m).parent / editor.plan_image
     if not file.exists():
         raise Refused(Refusal.NO_MARKUP_SHEET, f"нет файла {file}")
-    return file
+    out = editor.cache_dir / f"{m.id}-plan-{editor.image_max_side}-{editor.image_quality}.jpg"
+    if not _fresh(out, file):
+        with Image.open(file) as img:
+            _shrink(img, out, cfg)
+    return out
+
+
+def _fresh(out: Path, source: Path) -> bool:
+    return out.exists() and out.stat().st_mtime >= source.stat().st_mtime
+
+
+def _shrink(img: Image.Image, out: Path, cfg: Config) -> None:
+    """Картинка не больше `image_max_side` по длинной стороне — в кэш JPEG с `image_quality`."""
+    editor = cfg.viewer.markup
+    # JPEG распаковывается сразу уменьшенным: листы бывают по 150 Мпикс
+    img.draft("RGB", (editor.image_max_side, editor.image_max_side))
+    img = img.convert("RGB")
+    img.thumbnail((editor.image_max_side, editor.image_max_side))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    img.save(out, "JPEG", quality=editor.image_quality)
 
 
 def page_size(cfg: Config, m: Markup, number: int) -> tuple[float, float]:
@@ -48,19 +68,13 @@ def page_size(cfg: Config, m: Markup, number: int) -> tuple[float, float]:
 def page_image(cfg: Config, m: Markup, number: int) -> Path:
     """Сжатая картинка страницы в кэше; кэш старше PDF обновляется."""
     editor, pdf = cfg.viewer.markup, pdf_path(cfg, m)
-    out = editor.cache_dir / f"{m.id}-p{number}-{editor.image_max_side}.jpg"
-    if out.exists() and out.stat().st_mtime >= pdf.stat().st_mtime:
+    out = editor.cache_dir / f"{m.id}-p{number}-{editor.image_max_side}-{editor.image_quality}.jpg"
+    if _fresh(out, pdf):
         return out
     page = _page(pdf, number)
     if not page.images:
         raise Refused(Refusal.NO_MARKUP_SHEET, f"на стр. {number} листа {pdf.name} нет картинки")
-    img = Image.open(io.BytesIO(page.images[0]["stream"].get_data()))
-    # JPEG распаковывается сразу уменьшенным: листы бывают по 150 Мпикс
-    img.draft("RGB", (editor.image_max_side, editor.image_max_side))
-    img = img.convert("RGB")
-    img.thumbnail((editor.image_max_side, editor.image_max_side))
-    out.parent.mkdir(parents=True, exist_ok=True)
-    img.save(out, "JPEG", quality=88)
+    _shrink(Image.open(io.BytesIO(page.images[0]["stream"].get_data())), out, cfg)
     return out
 
 

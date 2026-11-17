@@ -433,6 +433,7 @@ class House3d(Section):
     web_ifc_wasm_dir: str
     selected: str
     px_per_m: int
+    pixel_ratio_max: float = Field(gt=0)  # холст не плотнее: на 3× экране сцена в 9 раз дороже
     # потолки текстур стен (gf#353): сторона — не больше этого и не больше MAX_TEXTURE_SIZE
     # видеокарты; все стены вместе — не больше texture_budget_mpx млн пикселей (4 байта каждый)
     texture_max_px: int = Field(gt=0)
@@ -609,7 +610,10 @@ class MarkupEditor(Section):
     state_file: str                # состояние очереди — в папке разметки
     original_dir: str              # исходная разметка автоматики: подпапка, сборщик её не читает
     cache_dir: Path                # сжатые листы
-    image_max_side: int            # длинная сторона листа для страницы, px
+    image_max_side: int            # длинная сторона листа и плана для страницы, px
+    image_quality: int = Field(ge=1, le=95)  # качество JPEG сжатого листа и плана
+    build_px_per_m: int = Field(gt=0)  # текстуры стен 3D панели сборки: пересобирается на правку
+    build_pixel_ratio: float = Field(gt=0)  # потолок плотности пикселей холста 3D панели сборки
     add_classes: list[ElementClass]  # что можно добавить кнопкой; размер — в default_size_m
     default_size_m: dict[ElementClass, Size]  # рамка от касания: ширина и высота, м
     min_box_m: float               # рамка меньше этого при отпускании — касание, не рамка
