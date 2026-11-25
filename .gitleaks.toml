@@ -5,9 +5,15 @@ title = "исключения проекта"
 [extend]
 useDefault = true
 
-[allowlist]
+[[allowlists]]
 description = "не ключи"
 paths = [
   # пример переменных окружения без значений (AGENTS.md, «Ключи и деньги»)
   '''^\.env\.example$''',
 ]
+
+[[allowlists]]
+description = "Синтетический JWT из теста маскирования agent-braille, подпись HS256 обрезана до 12 символов"
+condition = "AND"
+paths = ['''^braille/upstream/lib/selftest\.mjs$''']
+regexes = ['''^eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0NTY3ODkwIn0\.[A-Za-z0-9_-]{12}$''']

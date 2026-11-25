@@ -53,7 +53,9 @@ def test_braille_is_opt_in_per_viewer_app(cfg, monkeypatch):
     script = instrumented.get(script_path)
     assert script.status_code == 200
     assert script.headers["content-type"].startswith("text/javascript")
-    assert "window.__agent" in script.text
+    assert "agent-braille.v2" in script.text
+    assert "win.stalker = api" in script.text
+    assert "win.__agent = api" in script.text
 
 
 # ——— Новый дом ———

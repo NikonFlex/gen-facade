@@ -35,6 +35,9 @@ const ICON = {
 };
 
 const $ = (id) => document.getElementById(id);
+const screen = $("viewer-screen");
+const writes = window.genfacadeBraille ? [] : null;
+window.genfacadeBraille?.registerDataSource("writes", () => writes);
 const state = { runs: [], meta: null, runId: null, step: null, stage: null, nav: 0, shown: 0, options: null, filters: {}, query: "" };
 // Ответ шага, с которого уже ушли, экран не трогает: показан последний выбранный шаг (C13, gf#293).
 const stale = (shown) => shown !== state.shown;
@@ -64,15 +67,26 @@ function listItem(child) {
 
 function toast(text, kind = "") {
   const node = el("div", { className: `toast ${kind}`, textContent: text });
+  node.setAttribute("role", kind === "error" ? "alert" : "status");
   $("toasts").append(node);
   setTimeout(() => node.remove(), kind === "error" ? 7000 : 3000);
 }
 
 async function api(path, body) {
   const init = body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {};
-  const res = await fetch(path, init);
-  if (!res.ok) throw await refusedFrom(res);
-  return res.json();
+  let status = null, code;
+  try {
+    const res = await fetch(path, init);
+    status = res.status;
+    if (!res.ok) {
+      const error = await refusedFrom(res);
+      code = error.refusal?.code;
+      throw error;
+    }
+    return res.json();
+  } finally {
+    if (body) writes?.push({ call: `POST ${path}`, status, at: Date.now(), code });
+  }
 }
 
 const runName = (id) => id.replace(/^\d{8}-\d{6}-/, "").replace(/-\d+$/, "");
@@ -241,17 +255,28 @@ function goToTab(tab) {
   return showTab(tab);
 }
 
+async function loadScreen(load, isCurrent) {
+  screen.dataset.state = "loading";
+  try {
+    await load();
+    if (isCurrent()) screen.dataset.state = "ready";
+  } catch (err) {
+    if (isCurrent()) screen.dataset.state = "error";
+    throw err;
+  }
+}
+
 function showTab(tab) {
-  state.nav += 1; // загрузка прогона, начатая до ухода на вкладку, не откроет его поверх
+  const nav = ++state.nav; // загрузка прогона, начатая до ухода на вкладку, не откроет его поверх
   Object.assign(state, { meta: null, runId: null, step: null, stage: null });
   $("run").hidden = true;
   for (const [name, t] of Object.entries(TABS)) $(t.section).hidden = name !== tab;
-  $("viewer-screen").dataset.testid = `screen.${tab}`;
+  screen.dataset.testid = `screen.${tab}`;
   markCurrent($("topbar"), tab);
   $("run-actions").replaceChildren();
   $("tooltip").hidden = true;
   document.title = "GenFacade · смотрелка";
-  return TABS[tab].load();
+  return loadScreen(TABS[tab].load, () => nav === state.nav);
 }
 
 async function route() {
@@ -274,7 +299,7 @@ async function openRun(id, step = null) {
   state.runId = id;
   for (const t of Object.values(TABS)) $(t.section).hidden = true;
   $("run").hidden = false;
-  $("viewer-screen").dataset.testid = "screen.run";
+  screen.dataset.testid = "screen.run";
   markCurrent($("topbar"), tabOfRun());
   renderHead();
   const done = state.meta.steps.filter((s) => s.file);
@@ -340,7 +365,11 @@ function renderStepper() {
 }
 
 function showStep(wanted) {
-  state.shown += 1;
+  const nav = state.nav, shown = ++state.shown;
+  return loadScreen(() => renderStep(wanted), () => nav === state.nav && !stale(shown));
+}
+
+function renderStep(wanted) {
   if (wanted === HOUSE_STEP.key && state.meta.sheet_json) return showHouse();
   if (wanted === IFC_STEP.key && state.meta.sheet_json) return showIfc();
   const done = state.meta.steps.filter((s) => s.file);
@@ -613,4 +642,7 @@ async function init() {
   await route();
 }
 
-init().catch((err) => toast(err.message, "error"));
+init().catch((err) => {
+  screen.dataset.state = "error";
+  toast(err.message, "error");
+});

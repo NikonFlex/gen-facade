@@ -1,0 +1,15 @@
+{
+  "name": "simple-house",
+  "why": "Готовый план из смотрелки должен открыться как лист фасадов",
+  "verifies": ["gf#480"],
+  "steps": [
+    {"goto": "/#new", "after": {"screen": "new", "state": "ready", "shown": ["new.plan", "new.build"]}},
+    {"click": {"testid": "new.plan"}, "after": {"screen": "new", "state": "ready"}},
+    {"press": "Home", "after": {"screen": "new", "state": "ready"}},
+    {"press": "Enter", "after": {"screen": "new", "state": "ready"}},
+    {"field": {"testid": "new.plan"}, "has": "simple_house"},
+    {"click": {"testid": "new.build"}, "after": {"screen": "run", "state": "ready", "shown": ["run.step-6"]}},
+    {"click": {"testid": "run.step-6"}, "after": {"screen": "run", "state": "ready", "shown": ["run.svg-6"]}},
+    {"wait": {"testid": "run.svg-6"}}
+  ]
+}

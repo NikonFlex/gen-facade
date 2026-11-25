@@ -19,8 +19,6 @@ dev = ["pytest", "pytest-testmon>=2.2", "pytest-xdist>=3.6", "ruff", "pyyaml>=6"
 # смотрелка прогонов: genfacade serve
 # pdfplumber и Pillow — листы домов на странице /markup (gf#348)
 viewer = ["fastapi>=0.142", "uvicorn>=0.54", "pdfplumber>=0.11"]
-# Браузерный раннер для проверки смотрелки агентами
-braille = ["playwright>=1.55"]
 # обучение — отдельно, чтобы CI и смотрелка не тянули torch; matplotlib — кривая потерь
 train = ["torch", "matplotlib"]
 # FID и KID в таблице метрик (gf#143): Inception torch-fidelity; без них колонки — None
@@ -33,7 +31,7 @@ include = ["genfacade*", "braille"]
 # настройки по умолчанию — внутри пакета, чтобы работали и при обычной установке
 "genfacade.config" = ["*.toml", "*.css"]
 "genfacade.viewer" = ["static/*"]
-"braille" = ["agent.js", "braille.json", "LICENSE", "NOTICE"]
+"braille" = ["agent.js", "NOTICE", "upstream/LICENSE"]
 "genfacade.models" = ["stub_data/*.json"]
 
 [tool.pytest.ini_options]
