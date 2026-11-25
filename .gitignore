@@ -62,3 +62,6 @@ materials/telegram/
 # замки очереди проверки разметки (gf#348)
 markup/**/*.lock
 markup/**/orig/
+
+# Локальные зависимости раннера agent-braille
+/braille/upstream/node_modules/

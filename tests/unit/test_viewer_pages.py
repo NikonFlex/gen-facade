@@ -39,6 +39,25 @@ def client(cfg):
     return TestClient(create_app(cfg))
 
 
+def test_braille_is_opt_in_per_viewer_app(cfg, monkeypatch):
+    script_path = "/braille/agent.js"
+    monkeypatch.delenv("AGENT_API", raising=False)
+    ordinary = TestClient(create_app(cfg))
+    monkeypatch.setenv("AGENT_API", "1")
+    instrumented = TestClient(create_app(cfg))
+
+    assert ordinary.get(script_path).status_code == 404
+    assert script_path not in ordinary.get("/").text
+    page = instrumented.get("/").text
+    assert page.index(f'<script src="{script_path}"></script>') < page.index("/static/app.js")
+    script = instrumented.get(script_path)
+    assert script.status_code == 200
+    assert script.headers["content-type"].startswith("text/javascript")
+    assert "agent-braille.v2" in script.text
+    assert "win.stalker = api" in script.text
+    assert "win.__agent = api" in script.text
+
+
 # ——— Новый дом ———
 
 def test_form_choices_come_from_stub_config(client, cfg):

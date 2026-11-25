@@ -338,7 +338,10 @@ def test_page_waits_for_its_own_answers():
     assert "form.inert = false;" in STATIC.joinpath("newhouse.js").read_text()
     assert "await mountNewHouse(" in js
     # withData (шаги JSON и токенов), renderSvgStep, renderInput сверяют шаг после ответа
-    assert js.count("stale(shown)") == 3
+    assert js.count("if (stale(shown)) return;") == 2
+    assert "if (!stale(shown)) render(step, data);" in js
+    # Запоздавший ответ также не выставляет ready/error для уже другого экрана Braille.
+    assert "nav === state.nav && !stale(shown)" in js
     assert "withData(step, renderJsonStep)" in js and "withData(step, renderTokensStep)" in js
 
 

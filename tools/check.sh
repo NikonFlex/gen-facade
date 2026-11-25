@@ -99,6 +99,8 @@ run "paths_check.py: docs/examples/project" python3 tools/paths_check.py docs/ex
 run "task_links.py --selftest" python3 tools/task_links.py --selftest
 run "task_links.py" python3 tools/task_links.py
 run "task_links.py: docs/examples/project" python3 tools/task_links.py docs/examples/project
+run "braille selftest" node braille/upstream/bin/braille.mjs selftest
+run "braille check" node braille/upstream/bin/braille.mjs check tests/fixtures/braille
 run "scenario.py --selftest" python3 tools/scenario.py --selftest
 run "scenario.py --control" python3 tools/scenario.py --control
 run "req_status.py --selftest" python3 tools/req_status.py --selftest

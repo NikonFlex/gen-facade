@@ -13,10 +13,11 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import braille
 from genfacade import pipeline
 from genfacade.config import Config, Review
 from genfacade.datasets import preview, store
@@ -60,9 +61,16 @@ def create_app(cfg: Config, checked: Path | None = None, marked: Path | None = N
     app.mount("/files", StaticFiles(directory=runs_dir), name="files")
     app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
+    agent_enabled = braille.install(app)
+
     @app.get("/")
-    def index() -> FileResponse:
-        return FileResponse(str(STATIC.joinpath("index.html")))
+    def index() -> Response:
+        page = STATIC.joinpath("index.html")
+        if not agent_enabled:
+            return FileResponse(str(page))
+        script = f'<script src="{braille.SCRIPT_URL}"></script>'
+        html = page.read_text(encoding="utf-8")
+        return HTMLResponse(html.replace("</head>", f"{script}\n</head>"))
 
     @app.get("/review")
     def review_page() -> FileResponse:

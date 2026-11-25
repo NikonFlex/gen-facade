@@ -12,7 +12,7 @@
 <body>
   <header id="topbar"></header>
 
-  <main class="main">
+  <main class="main" id="viewer-screen" data-testid="screen.houses" data-state="loading">
     <section class="home" id="houses" hidden aria-labelledby="houses-title">
       <div class="page">
         <div class="page-head">
@@ -40,7 +40,7 @@
             <div class="panel-body">
               <div class="segmented" id="nh-source" role="radiogroup" aria-label="Откуда план"></div>
               <div class="nh-pick" id="nh-pick-ready">
-                <select class="select" id="nh-plan" aria-label="Готовый план"></select>
+                <select class="select" id="nh-plan" data-testid="new.plan" aria-label="Готовый план"></select>
               </div>
               <div class="nh-pick" id="nh-pick-random" hidden>
                 <select class="select" id="nh-shape" aria-label="Форма плана"></select>
@@ -81,7 +81,7 @@
               <span>Разных планов</span>
               <input class="input" type="number" id="nh-count" min="1" max="6" inputmode="numeric">
             </label>
-            <button class="btn primary" id="nh-go" type="submit"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg><span>Построить фасады</span></button>
+            <button class="btn primary" id="nh-go" data-testid="new.build" type="submit"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg><span>Построить фасады</span></button>
           </div>
         </form>
       </div>

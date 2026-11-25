@@ -1,0 +1,7 @@
+Gen Facade integrates agent-braille from https://github.com/blurman-ai/agent-braille
+at e7e5b59b37253f39d1c8fd35e7f75180673a9e12, under Apache-2.0 (upstream/LICENSE).
+
+The files under upstream/ are unmodified copies of the upstream CLI, libraries,
+runtime, dependencies lock, and their documentation. agent.js bundles the runtime
+from viewer-entry.ts using build.sh. The FastAPI integration and viewer scenario
+were initially based on the Welta port at 3b60b5a.

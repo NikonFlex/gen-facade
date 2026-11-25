@@ -25,12 +25,13 @@ train = ["torch", "matplotlib"]
 visual = ["torch", "torch-fidelity>=0.4"]
 
 [tool.setuptools.packages.find]
-include = ["genfacade*"]
+include = ["genfacade*", "braille"]
 
 [tool.setuptools.package-data]
 # настройки по умолчанию — внутри пакета, чтобы работали и при обычной установке
 "genfacade.config" = ["*.toml", "*.css"]
 "genfacade.viewer" = ["static/*"]
+"braille" = ["agent.js", "NOTICE", "upstream/LICENSE"]
 "genfacade.models" = ["stub_data/*.json"]
 
 [tool.pytest.ini_options]
