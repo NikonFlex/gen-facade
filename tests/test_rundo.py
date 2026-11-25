@@ -318,6 +318,14 @@ def test_full_pipeline_e2e_with_fake_bb(tmp_path):
         receipt = _json(exchange / f"{name}.receipt.json")
         assert receipt["stage"] == name
         assert receipt["status"] == "passed"
+    request_input = _json(exchange / "requirements.input.json")["input"]
+    assert "pr.json" in request_input["request"]
+    assert "после приёмки" in request_input["request"]
+    evidence = _json(exchange / "acceptance.input.json")["input"]["testOutput"]
+    assert ("tests/test_demo.py::test_compatibility PASSED\n"
+            '    def test_compatibility() -> None:\n'
+            '        assert len("т") == 1') in evidence
+
     requirements = _json(exchange / "requirements.receipt.json")
     plan = _json(exchange / "plan.receipt.json")
     acceptance = _json(exchange / "acceptance.receipt.json")
@@ -466,3 +474,13 @@ def test_draft_cannot_link_to_a_different_issue(tmp_path):
     )
     assert result.returncode == 1
     assert "нет ссылки на задачу #137" in result.stderr
+
+
+def test_acceptance_requires_a_pass_for_the_declared_evidence_test(tmp_path):
+    _, _, log, result, _ = _case(
+        tmp_path, {**THREE_KNOWN, "evidence_node": "tests/test_demo.py::test_absent"},
+        success=False,
+    )
+    assert result.returncode == 1
+    assert "нет успешной проверки tests/test_demo.py::test_absent" in result.stderr
+    assert not any(argv[4] == "jev.workflow.acceptance" for argv in _rpcs(_entries(log)))

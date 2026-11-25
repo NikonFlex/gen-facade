@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import os
 import re
@@ -9,10 +10,11 @@ import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from textwrap import indent
 from typing import Any
 from xml.etree import ElementTree
 
-from tools.bb.rundo.artifacts import RedNode, truncate
+from tools.bb.rundo.artifacts import RedNode, evidence_tests, truncate
 from tools.bb.rundo.config import (
     CHECK_COMMAND,
     MAX_EVIDENCE,
@@ -26,6 +28,7 @@ MIN_FRAGMENT = 200
 SKIP_RESERVE_MAX = 4000
 BRIEF_LINES = 7
 BRIEF_LINE_CHARS = 220
+TEST_SOURCE_CHARS = 900
 
 
 class EvidenceError(RuntimeError):
@@ -118,12 +121,17 @@ class Evidence:
         for label in ("red", "green", "quick"):
             parts.append(f"[{label}]")
             parts.extend(self._brief_log(self.exchange / f"{label}.log", label))
+        tests = self._test_results()
+        selected = evidence_tests(plan)
+        for node_id in selected:
+            result = tests.get(node_id)
+            if result != "PASSED":
+                raise EvidenceError(f"tests.log: нет успешной проверки {node_id}: {result}")
+            parts.extend((f"{node_id} {result}", _test_source(self.worktree, node_id)))
+        parts.append("[tests] остальные результаты")
         prefix = "\n".join(parts)
-        planned = sum(1 for item in plan["paths"] if item["purpose"] == "test")
-        header = f"[tests] плановых путей: {planned}"
-        budget = MAX_EVIDENCE - len(prefix) - len(header) - 2
-        tests = _fit_lines(self._tests_lines(limit=400), budget)
-        return truncate("\n".join([prefix, header, *tests]))
+        other = [f"{node} {outcome}" for node, outcome in tests.items() if node not in selected]
+        return truncate("\n".join([prefix, *_fit_lines(other, MAX_EVIDENCE - len(prefix) - 1)]))
 
     def _diff_text(self, paths: Sequence[str]) -> str:
         return _git_bytes(
@@ -191,21 +199,33 @@ class Evidence:
             lines = [line.strip() for line in tail]
         return [line[:BRIEF_LINE_CHARS] for line in lines[:BRIEF_LINES]]
 
-    def _tests_lines(self, limit: int = 80) -> list[str]:
+    def _test_results(self) -> dict[str, str]:
         path = self.exchange / "tests.log"
         if not path.is_file():
-            return ["нет прогона по путям test"]
-        outcome = re.compile(r"^(?P<node>\S+::\S+)\s+(?P<state>PASSED|FAILED|ERROR|SKIPPED)\b")
-        lines: list[str] = []
+            raise EvidenceError(f"нет прогона по путям test: {path}")
+        outcome = re.compile(r"^(?P<node>.+::.+?)\s+(?P<state>PASSED|FAILED|ERROR|SKIPPED)\b")
+        results = {}
         for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-            match = outcome.match(line.strip())
-            if match:
-                lines.append(f"{match['node']} {match['state']}")
-        if not lines:
-            return ["названий в tests.log нет"]
-        if len(lines) > limit:
-            return [*lines[:limit], f"... ещё {len(lines) - limit}"]
-        return lines
+            if match := outcome.match(line.strip()):
+                results[match["node"]] = match["state"]
+        return results
+
+
+def _test_source(worktree: Path, node_id: str) -> str:
+    path, *names = node_id.partition("[")[0].split("::")
+    source = (worktree / path).read_text(encoding="utf-8")
+    node = ast.parse(source, filename=path)
+    for name in names:
+        node = next((child for child in node.body if getattr(child, "name", None) == name), None)
+        if node is None:
+            raise EvidenceError(f"не найден исходник проверки {node_id}")
+    fragment = ast.get_source_segment(source, node)
+    if not fragment:
+        raise EvidenceError(f"пустой исходник проверки {node_id}")
+    if len(fragment) > TEST_SOURCE_CHARS:
+        fragment = fragment[:TEST_SOURCE_CHARS].rstrip() + "\n[исходник сокращён]"
+    return indent(fragment, "    ")
+
 
 def worktree_add(repo: Path, path: Path, base: str) -> None:
     """Чистый worktree от закреплённой базы; единственный git-помощник создания."""

@@ -49,7 +49,7 @@ REQUIREMENTS = [
     {"id": "R4", "text": "Контроллер подтверждает ожидаемое красное падение."},
     {"id": "R5", "text": "Реализация проходит ту же проверку и быструю проверку проекта."},
     {"id": "R6", "text": "Jev v2 связывает требования, план и приёмку с ревизией."},
-    {"id": "R7", "text": "Черновик PR пишет отдельная роль после текущей приёмки."},
+    {"id": "R7", "text": "К приёмке допускается тот же снимок, который прошёл проверки."},
 ]
 
 STEPS = [
@@ -57,7 +57,7 @@ STEPS = [
     {"text": "Объяснить необходимость Gemini и сверить хеш.", "requirementIds": ["R3"]},
     {"text": "Подтвердить красное падение до кода.", "requirementIds": ["R4"]},
     {"text": "Дождаться зелёной проверки и быстрой проверки.", "requirementIds": ["R5"]},
-    {"text": "Связать стадии Jev и написать черновик PR.", "requirementIds": ["R6", "R7"]},
+    {"text": "Связать стадии Jev и сверить проверенный снимок.", "requirementIds": ["R6", "R7"]},
 ]
 
 RED_NODE = "tests/test_demo.py::test_add_sums"
@@ -76,6 +76,10 @@ def {name}() -> None:
         add = None
     assert add is not None, {marker!r}
     assert add(2, 3) == 5
+
+
+def test_compatibility() -> None:
+    assert len("т") == 1
 '''
 
 IMPLEMENTATION_FILE = "def add(a: int, b: int) -> int:\n    return a + b\n"
@@ -146,6 +150,7 @@ def _plan(knobs: dict) -> dict:
         "paths": paths,
         "contract": knobs.get("contract", "known"),
         "red": {"nodeId": RED_NODE, "marker": RED_MARKER},
+        "evidenceTests": [knobs.get("evidence_node", "tests/test_demo.py::test_compatibility")],
     }
     if knobs.get("incomplete") == "red":
         plan.pop("red")

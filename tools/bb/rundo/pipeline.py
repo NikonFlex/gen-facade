@@ -420,9 +420,10 @@ class Pipeline:
         parent = None
         receipt = self._load_receipt("requirements", parent)
         if receipt is None:
+            request = f"{prompts.ACCEPTANCE_SCOPE}\n\n{self._request_text()}"
             receipt = self._rpc("requirements", {
                 "threadId": self.state.parent,
-                "input": {"request": artifacts.truncate(self._request_text()),
+                "input": {"request": artifacts.truncate(request),
                           "requirements": plan["requirements"]},
             }, parent)
         self._verify_digest("requirements", receipt)

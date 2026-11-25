@@ -9,12 +9,20 @@ from dataclasses import dataclass
 
 from tools.bb.rundo.config import Role
 
+ACCEPTANCE_SCOPE = (
+    "В требования и шаги Jev входят результат задачи и проверки, выполнимые до приёмки. "
+    "Артефакты и действия самого Рундо проверяет контроллер. В частности, локальный "
+    "черновик pr.json, его форму и ссылку на задачу контроллер проверяет после приёмки. "
+    "Такие условия поставки не включай в R-ID и шаги Jev."
+)
+
 PLAN_SCHEMA = """{
   "requirements": [{"id": "R1", "text": "..."}],
   "steps": [{"text": "...", "requirementIds": ["R1"]}],
   "spec": {"refs": ["openspec/specs/..."], "gap": false},
   "paths": [{"path": "genfacade/...", "purpose": "implementation"}],
   "contract": "known | new | unknown",
+  "evidenceTests": ["tests/test_....py::test_existing_compatibility"],
   "red": {"nodeId": "tests/test_....py::test_name", "marker": "буквальный текст падения"}
 }"""
 
@@ -41,6 +49,11 @@ def plan_prompt(context: PromptContext) -> str:
         "Прочитай постановку и применимую спеку, затем запиши plan.json ровно такой формы:\n"
         f"{PLAN_SCHEMA}\n\n"
         "Требования — из постановки, каждый шаг ссылается на их R-ID и покрывает все.\n"
+        f"{ACCEPTANCE_SCOPE}\n"
+        "evidenceTests — точные node ID до восьми тестов, в том числе существующих, чьи\n"
+        "утверждения нужны Jev помимо red.nodeId. Объяви файлы этих тестов в paths как test.\n"
+        "В шагах назови, какие проверки доказывают каждый R-ID. Пустой список допустим,\n"
+        "если красный и зелёный прогоны покрывают все критерии.\n"
         "paths — точные относительные пути с назначением spec, task, test или implementation.\n"
         "red.nodeId — точный pytest node ID существующего или будущего теста, который\n"
         "напишет следующий DeepSeek на этапе красной проверки; red.marker — непустая\n"
@@ -77,7 +90,7 @@ def implementation_prompt(context: PromptContext) -> str:
         "Прочитай plan.json и gemini.json, если он существует. Реализуй шаги плана\n"
         "в объявленных путях с учётом ревью.\n"
         "Файл теста не меняй ни на байт: контроллер сверяет его хеш.\n"
-        "Тест должен пройти, `sh tools/check.sh --quick` — завершиться успехом.\n"
+        "Можешь запустить целевой тест. Быстрый прогон check.sh запустит контроллер.\n"
         "Ничего не коммить; правки — только в worktree.\n"
     )
 

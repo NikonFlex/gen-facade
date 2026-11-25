@@ -24,6 +24,7 @@ from tools.bb.rundo.config import (
 
 MAX_ITEMS = 12
 MAX_ITEM_TEXT = 1_000
+MAX_EVIDENCE_TESTS = 8
 GEMINI_VERDICTS = frozenset({"approved", "changes_requested", "rejected"})
 
 
@@ -72,6 +73,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
     node = red_node(plan)
     require(node.path in paths_with_purpose(plan, "test"),
             f"plan.red.nodeId: тест {node.path} не объявлен в paths")
+    evidence_tests(plan)
 
 
 def _plan_requirements(plan: dict[str, Any]) -> set[str]:
@@ -167,6 +169,21 @@ def red_node(plan: dict[str, Any]) -> RedNode:
         raise ArtifactError(f"plan.red.nodeId: {error}") from error
     require(bool(name.strip()), "plan.red.nodeId: нет имени теста")
     return RedNode(node_id=f"{path}::{name}", path=path, marker=red["marker"])
+
+
+def evidence_tests(plan: dict[str, Any]) -> tuple[str, ...]:
+    items = plan.get("evidenceTests", [])
+    require(isinstance(items, list) and len(items) <= MAX_EVIDENCE_TESTS,
+            f"plan.evidenceTests: нужен список до {MAX_EVIDENCE_TESTS} тестов")
+    test_paths = paths_with_purpose(plan, "test")
+    ids = []
+    for item in items:
+        require(isinstance(item, str), "plan.evidenceTests: нужен строковый node ID")
+        path, sep, name = item.partition("::")
+        require(sep and name.strip() and path in test_paths,
+                f"plan.evidenceTests: {item!r} не указывает на объявленный тест")
+        ids.append(item)
+    return tuple(dict.fromkeys([red_node(plan).node_id, *ids]))
 
 
 def unique_path_count(paths: list[dict[str, Any]]) -> int:
