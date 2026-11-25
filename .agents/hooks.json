@@ -1,0 +1,23 @@
+{
+  "genfacade-guard": {
+    "PreToolUse": [
+      {
+        "matcher": "^(run_command|read_file)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ./guards/guard.py agy"
+          }
+        ]
+      }
+    ]
+  },
+  "genfacade-task-reminder": {
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "python3 ../tools/claude_hooks.py agy-reminder"
+      }
+    ]
+  }
+}

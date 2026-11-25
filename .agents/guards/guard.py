@@ -1,7 +1,8 @@
-"""Сторожа: команду агента проверяют до выполнения — одна логика на Claude Code, Codex, Cursor.
+"""Сторожа: общая проверка до выполнения для Claude Code, Codex, Cursor и Antigravity.
 
     python3 .agents/guards/guard.py claude    PreToolUse (.claude/settings.json)
     python3 .agents/guards/guard.py codex     PreToolUse (.codex/hooks.json)
+    python3 .agents/guards/guard.py agy       PreToolUse (.agents/hooks.json)
     python3 .agents/guards/guard.py cursor    beforeShellExecution, beforeReadFile (.cursor/)
     python3 .agents/guards/guard.py --write-codex-rules   пересобрать .codex/rules/default.rules
     python3 .agents/guards/guard.py --selftest
@@ -336,8 +337,23 @@ def to_cursor(verdict: Verdict, reason: str) -> int:
     return 0
 
 
+def from_agy(event: dict) -> Call:
+    tool = event.get("toolCall") or {}
+    args = tool.get("args") or {}
+    if tool.get("name") == "run_command":
+        return Call(command=args.get("CommandLine", ""))
+    if tool.get("name") == "read_file":
+        return Call(path=args.get("Path", ""))
+    return Call()
+
+
+def to_agy(verdict: Verdict, reason: str) -> int:
+    print(json.dumps({"decision": verdict.value, "reason": reason}, ensure_ascii=False))
+    return 0
+
+
 ENVS = {"claude": (from_claude, to_claude), "codex": (from_claude, to_codex),
-        "cursor": (from_cursor, to_cursor)}
+        "cursor": (from_cursor, to_cursor), "agy": (from_agy, to_agy)}
 
 
 def codex_rules() -> str:

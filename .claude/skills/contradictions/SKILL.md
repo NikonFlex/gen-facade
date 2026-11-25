@@ -1,6 +1,6 @@
 ---
 name: contradictions
-description: Найти противоречия и дыры в контексте проекта — AGENTS.md, CLAUDE.md, правила, навыки, docs, спеки, код и комментарии — и чем каждое мешает работе. Вызывать, когда Claude путается, задаёт вопросы, ответ на которые должен быть в репо, или перед крупной задачей.
+description: Найти противоречия и дыры в контексте проекта — AGENTS.md, CLAUDE.md, правила, навыки, docs, спеки, код и комментарии — и чем каждое мешает работе. Вызывать, когда агент путается, задаёт вопросы, ответ на которые должен быть в репо, или перед крупной задачей.
 effort: max
 ---
 
@@ -10,7 +10,7 @@ effort: max
 
 ## Что читать
 
-- `AGENTS.md`, `CLAUDE.md`, `docs/agents/*.md`, `.claude/skills/*/SKILL.md`,
+- `AGENTS.md`, `CLAUDE.md`, `docs/agents/*.md`, `.agents/skills/*/SKILL.md`,
   `.claude/settings.json`, `.codex/`, `.cursor/`, `.agents/guards/`;
 - `openspec/` целиком, `docs/*.md`, `docs/shared/`, `docs/decisions.md`, `tests/scenarios/README.md`;
 - код: структура каталогов, точки входа, конфиги; комментарии и docstring рядом с кодом,
