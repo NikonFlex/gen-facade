@@ -35,7 +35,9 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-MARK = "<!-- ↓↓↓ ниже наше: скрипт эту часть не трогает ↓↓↓ -->"
+from project_config import TASK_MARK
+
+MARK = TASK_MARK
 
 TEMPLATE = f"""{MARK}
 

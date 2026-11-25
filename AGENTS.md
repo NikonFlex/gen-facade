@@ -75,6 +75,7 @@
 
 ## Задачи
 
+«Реализуй задачу #N через Рундо» — запустить в BB `python3 -m tools.bb.rundo run N`.
 Задачи GitHub — копией в `docs/tasks/gf-0012.md` (префикс — `.backlog.json`), скрипт
 `tools/backlog.py`. Устройство файла задачи и порядок — [docs/agents/tasks.md](docs/agents/tasks.md).
 
@@ -125,6 +126,5 @@ Claude Code и Cursor: запись в GitHub и push без «да», PR без
 в BB — прочитать до правки. Навыки BB видны через `.bb/skills/`, источник — `.agents/skills/`.
 
 ## Журнал
-
 `docs/journal/JOURNAL.md` — эпизоды по датам, прежде всего свои промахи; `INSIGHTS.md` — уроки
 одной строкой, читать перед нетривиальной работой. Урок для правила — предложить хозяину PR.
