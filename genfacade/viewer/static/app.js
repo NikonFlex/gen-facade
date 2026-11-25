@@ -246,6 +246,7 @@ function showTab(tab) {
   Object.assign(state, { meta: null, runId: null, step: null, stage: null });
   $("run").hidden = true;
   for (const [name, t] of Object.entries(TABS)) $(t.section).hidden = name !== tab;
+  $("viewer-screen").dataset.testid = `screen.${tab}`;
   markCurrent($("topbar"), tab);
   $("run-actions").replaceChildren();
   $("tooltip").hidden = true;
@@ -273,6 +274,7 @@ async function openRun(id, step = null) {
   state.runId = id;
   for (const t of Object.values(TABS)) $(t.section).hidden = true;
   $("run").hidden = false;
+  $("viewer-screen").dataset.testid = "screen.run";
   markCurrent($("topbar"), tabOfRun());
   renderHead();
   const done = state.meta.steps.filter((s) => s.file);
@@ -330,6 +332,7 @@ function renderStepper() {
         : "Шаг ещё не написан — появится на следующих этапах",
     }, `<span class="step-n">${s.n || "⌂"}</span>${s.title}`);
     btn.dataset.key = s.key;
+    btn.dataset.testid = `run.step-${s.key}`;
     btn.addEventListener("click", () => showStep(s.key));
     return i ? [el("span", { className: "step-link" }), btn] : [btn];
   });
@@ -455,6 +458,7 @@ async function renderSvgStep(step) {
   state.stage = new SvgStage(wrap, { tooltip: $("tooltip"), labels: state.options, onZoom: (p) => { zoomVal.textContent = `${p}%`; } });
   await state.stage.load(`/files/${state.runId}/${step.file}`);
   if (stale(shown)) return;
+  wrap.dataset.testid = `run.svg-${step.n}`;
   applyLayers(step.n);
   if (step.n === 5 && state.meta.violations) await violationsChip($("stage").querySelector(".toolbar"));
 }

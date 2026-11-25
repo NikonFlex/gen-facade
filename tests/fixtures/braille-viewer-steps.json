@@ -1,0 +1,6 @@
+[
+  {"goto": "/#new", "after": {"screen": "new", "shown": ["new.plan", "new.build"]}},
+  {"fill": {"testid": "new.plan"}, "value": "simple_house", "after": {"screen": "new"}},
+  {"click": {"testid": "new.build"}, "after": {"screen": "run", "shown": ["run.step-6"]}},
+  {"click": {"testid": "run.step-6"}, "after": {"screen": "run", "shown": ["run.svg-6"]}}
+]
