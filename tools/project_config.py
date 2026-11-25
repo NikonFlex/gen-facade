@@ -6,6 +6,8 @@ import json
 import re
 from pathlib import Path
 
+TASK_MARK = "<!-- ↓↓↓ ниже наше: скрипт эту часть не трогает ↓↓↓ -->"
+
 
 def backlog_config(root: Path) -> dict:
     """Префикс и папка задач — из .backlog.json, как у tools/backlog.py."""
