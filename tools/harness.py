@@ -2,10 +2,10 @@
 
     python3 tools/harness.py
 
-Печатает: разложены ли git-хуки и `git ticket`, подключены ли сторожа в Claude Code, Codex
-и Cursor, совпадают ли собранные правила, стоит ли gitleaks; затем гоняет `--selftest`
-каждого прибора и сторожа. Код 1 — что-то из этого не так. Сетевые проверки (валидатор
-OpenSpec, jscpd) — в `sh tools/check.sh`.
+Печатает: разложены ли git-хуки и `git ticket`, подключены ли сторожа в Claude Code, Codex,
+Cursor и Antigravity, есть ли настройка BB, совпадают ли правила и навыки, стоит ли gitleaks.
+Затем гоняет `--selftest` каждого прибора и сторожа. Код 1 — что-то из этого не так.
+Сетевые проверки (валидатор OpenSpec, jscpd) — в `sh tools/check.sh`.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from script_common import ROOT, git_env
 WIRING = {
     "Claude Code": (".claude/settings.json", 'guard.py\\" claude'),
     "Codex": (".codex/hooks.json", 'guard.py\\" codex'),
+    "Antigravity": (".agents/hooks.json", "guard.py agy"),
     "Cursor": (".cursor/hooks.json", 'guard.py\\" cursor'),
 }
 SELFTESTS = [
@@ -50,6 +51,7 @@ def state() -> list[tuple[bool, str]]:
              "(sh tools/install_hooks.sh)")]
     number = ticket_number(ROOT)
     rows.append((True, f"git ticket: {f'#{number}' if number else '— (git ticket <номер>)'}"))
+    rows.append(((ROOT / ".bb-env-setup.sh").is_file(), "настройка дерева BB: .bb-env-setup.sh"))
     for env, (path, needle) in WIRING.items():
         file = ROOT / path
         wired = file.exists() and needle in file.read_text(encoding="utf-8")

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Хуки Claude Code этого проекта (подключены в .claude/settings.json).
+"""Хуки проекта для Claude Code и Antigravity.
 
     python3 tools/claude_hooks.py after-compact   SessionStart, matcher compact
     python3 tools/claude_hooks.py context         UserPromptSubmit: JSON на stdin
+    python3 tools/claude_hooks.py agy-reminder    PreInvocation Antigravity
     python3 tools/claude_hooks.py --selftest
 
 after-compact — после сжатия контекста напомнить, над какой задачей работали: номер — из
@@ -26,7 +27,7 @@ from pathlib import Path
 
 from backlog import INDEX, task_path
 from project_config import backlog_config, branch_number, git_dir, ticket_number
-from script_common import report, run_script
+from script_common import ROOT, output, report, run_script
 
 SECTIONS = ("Чем возобновлять", "Что осталось")
 
@@ -114,6 +115,24 @@ def context_hook(root: Path, call: dict) -> str:
     return context_line(used, cfg)
 
 
+def agy_reminder(root: Path, event: dict) -> dict:
+    if event.get("invocationNum", 1) != 1:
+        return {}
+    message = output(root, "sh", ".claude/hooks/task-reminder.sh").strip()
+    return {"injectSteps": [{"systemMessage": {"systemMessage": message}}]}
+
+
+def check_agy() -> list[str]:
+    first = agy_reminder(ROOT, {"invocationNum": 1})
+    steps = first.get("injectSteps", [])
+    return [why for ok, why in [
+        (len(steps) == 1 and "docs/tasks/" in steps[0]["systemMessage"]["systemMessage"],
+         "Antigravity: нет напоминания в первом вызове"),
+        (not agy_reminder(ROOT, {"invocationNum": 2}),
+         "Antigravity: лишнее напоминание в повторном вызове"),
+    ] if not ok]
+
+
 def selftest() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -133,9 +152,9 @@ def selftest() -> int:
             ("ab#12 — Парсер" in reminder(root, "agent/12-parser"), "ветка agent/12-…"),
             ("файла задачи нет" in reminder(root, "99-x"), "нет файла задачи"),
         ] if not ok]
-    bad += check_context()
+    bad += check_context() + check_agy()
     return report(bad, "after-compact: задача по ticket и ветке, разделы; "
-                       "context: токены основной сессии, пороги")
+                       "context: токены основной сессии, пороги; Antigravity: напоминание о задаче")
 
 
 def check_context() -> list[str]:
@@ -168,6 +187,9 @@ def dispatch(root: Path) -> int:
     if sys.argv[1:] == ["context"]:
         if line := context_hook(root, json.load(sys.stdin)):
             print(line)
+        return 0
+    if sys.argv[1:] == ["agy-reminder"]:
+        print(json.dumps(agy_reminder(root, json.load(sys.stdin)), ensure_ascii=False))
         return 0
     print(__doc__)
     return 2

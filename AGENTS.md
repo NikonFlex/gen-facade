@@ -3,11 +3,9 @@
 ИТМО, 2026/27. Модуль, который по векторному плану дома и тексту строит все фасады дома
 векторным чертежом в цвете; встаёт после GenPlan. Инженер и хозяин репозитория — Никон
 Парвицкий; продакт — научруки: Валерия Ефимова (тема, ТЗ, защита) и Егор Баженов (ведёт
-работу, GenPlan); агенты — Claude Code, Codex, Cursor. Стек — Python + PyTorch (ТЗ).
+работу, GenPlan). Агенты — Codex, Antigravity, OpenCode в BB, Claude Code и Cursor. Стек — Python + PyTorch.
 
-Здесь — только то, что агенту нужно до первого действия. Процедуры — `docs/agents/` и
-`docs/shared/SDD.md` (как он ложится на диплом — его раздел «Диплом»), почему правила такие —
-`docs/WHY.md`. Правило меняется PR с диффом; до слияния не действует.
+Процедуры — `docs/agents/` и раздел «Диплом» в `docs/shared/SDD.md`. Обоснование — `docs/WHY.md`. Правило меняется после слияния PR с диффом.
 
 Требования — только из [openspec/specs/](openspec/README.md), а не из `docs/incoming/`.
 Как строим — `docs/dev-plan.md`. База знаний — [docs/](docs/README.md).
@@ -100,11 +98,12 @@
 ## Границы действий
 
 Читать, измерять, диагностировать — свободно. Запись наружу (GitHub, Telegram научрукам) —
-по «да» хозяина. Сторожа `.agents/guards/` перехватывают команды до выполнения во всех трёх
-средах: запись в GitHub и push без «да», PR без «Локального повтора» и `Closes`/`Part of`,
-`.env`, слова закрытия в коммите, отключённые git-хуки. Git-хуки (`sh tools/install_hooks.sh`):
-`pre-commit` — gitleaks и `check.sh --quick` (по очереди на машине, `tools/hook_lock.sh`),
-`commit-msg` — форма и номер задачи; CI повторяет оба по коммитам PR; `post-commit` — база testmon фоном. Состояние обвязки — `python3 tools/harness.py`.
+по «да» хозяина. Сторожа `.agents/guards/` перехватывают команды в Codex, Antigravity,
+Claude Code и Cursor: запись в GitHub и push без «да», PR без «Локального повтора» и `Closes`/`Part of`,
+`.env`, слова закрытия в коммите, отключённые git-хуки. OpenCode — в режиме `accept-edits`, те же
+ограничения выполняет по правилам проекта. Git-хуки ставит `sh tools/install_hooks.sh`.
+`pre-commit` запускает gitleaks и `check.sh --quick` по очереди (`tools/hook_lock.sh`).
+`commit-msg` проверяет форму и номер задачи. CI повторяет оба. `post-commit` обновляет testmon.
 
 ## Ключи и деньги
 
@@ -115,14 +114,15 @@
 
 ## Команды
 
-Прогон — `genfacade run tests/fixtures/simple_house.svg -t "…"` (трасса — `outputs/runs/`);
-смотрелка — `genfacade serve`; тесты — `python3 -m pytest`; проверки — `sh tools/check.sh`.
+Прогон — `genfacade run tests/fixtures/simple_house.svg -t "…"` (трасса — `outputs/runs/`).
+Смотрелка — `genfacade serve`, тесты — `python3 -m pytest`, проверки — `sh tools/check.sh` и `python3 tools/harness.py`.
 
 ## Код, спеки, задачи
 
 Перед правкой кода — [code.md](docs/agents/code.md), [scheme.md](docs/agents/scheme.md), [чистый
 контур](docs/clean-contour.md) (проверка — `clean-contour-check`); спеки — [specs.md](docs/agents/specs.md),
-задачи — [tasks.md](docs/agents/tasks.md). Claude Code и Cursor подгружают их сами; Codex — прочитать.
+задачи — [tasks.md](docs/agents/tasks.md). Claude Code и Cursor подгружают правила по путям;
+в BB — прочитать до правки. Навыки BB видны через `.bb/skills/`, источник — `.agents/skills/`.
 
 ## Журнал
 

@@ -4,7 +4,7 @@
     "CLAUDE.md",
     "README.md",
     "docs/agents/*.md",
-    ".claude/skills/*/SKILL.md",
+    ".agents/skills/*/SKILL.md",
     "docs/*.md",
     "docs/examples/tasks/README.md",
     "docs/incoming/README.md",
@@ -16,7 +16,7 @@
   ],
   "skip_docs": [
     "docs/clean-contour.md",
-    ".claude/skills/clean-contour-check/SKILL.md",
+    ".agents/skills/clean-contour-check/SKILL.md",
     "docs/decisions.md",
     "docs/lab-repos.md",
     "docs/methods.md",

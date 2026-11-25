@@ -16,6 +16,7 @@ from pathlib import Path
 
 from guard import (
     CODEX_RULES,
+    ENVS,
     ROOT,
     Call,
     Verdict,
@@ -181,16 +182,38 @@ def formats() -> list[str]:
     return bad
 
 
+def agy_formats(root: Path) -> list[str]:
+    if "agy" not in ENVS:
+        return ["Antigravity: адаптер не зарегистрирован"]
+    source, target = ENVS["agy"]
+    calls = [
+        ("read_file", {"Path": str(root / ".env")}, Verdict.DENY, "ключами"),
+        ("read_file", {"Path": ".env.example"}, Verdict.ALLOW, ""),
+        ("run_command", {"CommandLine": "cat .env"}, Verdict.DENY, "ключами"),
+        ("run_command", {"CommandLine": "git push"}, Verdict.ASK, "запись в GitHub"),
+        ("run_command", {"CommandLine": "git status"}, Verdict.ALLOW, ""),
+    ]
+    bad = []
+    for name, args, expected, why in calls:
+        event = {"hookEventName": "PreToolUse", "toolCall": {"name": name, "args": args}}
+        with redirect_stdout(io.StringIO()) as out:
+            code = target(*decide(source(event), root))
+        response = json.loads(out.getvalue())
+        if code or response["decision"] != expected.value or why not in response["reason"]:
+            bad.append(f"Antigravity: {name} {args} — ждали {expected} «{why}», ответ {response}")
+    return bad
+
+
 def selftest() -> int:
     state = os.environ.get("STAND_STATE_DIR")
     with tempfile.TemporaryDirectory() as tmp:
         root = project(Path(tmp) / "base", repeat=True, gated=False)
         bad = (cases(root) + cases(root, AGENT_CASES) + pr_and_push(Path(tmp))
-               + corrupt_receipts(Path(tmp)) + formats())
+               + corrupt_receipts(Path(tmp)) + formats() + agy_formats(root))
     if state is None:
         os.environ.pop("STAND_STATE_DIR", None)
     else:
         os.environ["STAND_STATE_DIR"] = state
     return report(bad, f"{len(CASES)} входов сторожей, {len(AGENT_CASES)} запусков субагента, "
                        "PR без «Локального повтора», квитанция push (и битые строки журнала), "
-                       "форматы Claude Code / Codex / Cursor, правила Codex")
+                       "форматы Claude Code / Codex / Cursor / Antigravity, правила Codex")
